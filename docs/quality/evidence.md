@@ -19,12 +19,12 @@
 | ID | 验收 | 当前状态 | 证据位置 |
 |---|---|---|---|
 | QG-01 | 当前迭代、总体目标和有效期明确 | collected | `.proqaid/orchestrator/current-iteration.md` |
-| QG-02 | Product/Architecture/Interface/Quality/Delivery/Review 全覆盖 | collected | `.proqaid/<role>/`；Review 待运行 |
+| QG-02 | Product/Architecture/Interface/Quality/Delivery/Review 全覆盖 | passed | 六个常驻角色均完成；最终 Review 为 `pass-with-accepted-findings` |
 | QG-03 | Codex/Claude 工具硬约束语义相同 | collected | `.codex/AGENTS.md`、`.claude/CLAUDE.md` |
 | QG-04 | 每个角色 context 声明 docs 产物、用途和文件边界 | collected | `.proqaid/<role>/context.md` |
-| QG-05 | Review 阻塞/重要发现全部路由 | collected | Review 为 `pass-with-findings`；R-I-01..R-I-05 已进入 Orchestrator 处理记录 |
-| QG-06 | 清理与 Git 变更清单完整 | collected | cleanup 已记录扫描；初始 Git 基线选择等待人类授权 |
-| QG-07 | GitHub/测试机/密钥目录未被访问 | collected | Delivery/Orchestrator 声明；仓库密钥扩展名和常见密钥标记扫描无命中 |
+| QG-05 | Review 阻塞/重要发现全部路由 | passed | 最终 Review 为 `pass-with-accepted-findings`；R-I-01..R-I-05 已纠正或由人类接受 |
+| QG-06 | 清理与 Git 变更清单完整 | passed | `.planning/` 已清理；allowlist Git 基线已推送，远端提交与 10 文件树均验证一致 |
+| QG-07 | 外部系统与密钥访问符合授权边界 | passed | GitHub 仓库创建与 allowlist push 已获授权；测试机和 `C:\git\key` 未访问；仓库敏感标记扫描无命中 |
 | QG-08 | 无法证明的模型应用标为 unverified | collected | dispatch log 与各角色输出 |
 
 ## 后续 Phase 0 证据

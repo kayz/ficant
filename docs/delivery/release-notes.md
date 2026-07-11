@@ -24,6 +24,7 @@
 
 - Private GitHub repository `https://github.com/kayz/ficant` was created for the allowlisted first-version baseline.
 - The GitHub baseline contains only `.gitignore`, `README.md`, `src/`, `docs/`, and `result/`; all other local project/governance material is excluded by `.gitignore`.
+- First content commit `affce937b30ba14b59777691ec8d311dbb5161ba` was pushed to `main` and matched the remote commit and 10-file tree.
 - Test host `47.100.66.40` is recorded as unverified/unused context; no connection or deployment occurred.
 - Key directory `C:\git\key` is recorded as unverified/unused context; it was not read or enumerated.
 

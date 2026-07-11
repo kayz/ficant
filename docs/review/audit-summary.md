@@ -16,7 +16,7 @@ ficant 的治理初始化基线内部一致，没有发现阻塞缺陷。Product
 |---|---|---|
 | R-I-01 | latest Review inbox 停留在 round-2 | 已由 Orchestrator 更新到 round-6 |
 | R-I-02 | Interface round-2 调度状态仍为 dispatched | 已标记完成并引用 round-2 哈希证据 |
-| R-I-03 | Quality、checklist、cleanup、Git inventory 尚未收口 | 已完成本地 allowlist 基线、cleanup 和精确 inventory；远端 push 后记录验证结果 |
+| R-I-03 | Quality、checklist、cleanup、Git inventory 尚未收口 | 已完成 cleanup、精确 inventory、allowlist push 和远端树验证 |
 | R-I-04 | `.planning/` 仍是活动执行记忆 | 已删除并写入 cleanup |
 | R-I-05 | README/UI-DM 及大部分初始化文件未跟踪，Git 无法证明前置状态或变更差异 | 人类已接受历史证据限制，并授权建立仅含 README/src/docs/result 与 `.gitignore` 的干净初始基线 |
 
@@ -36,10 +36,19 @@ ficant 的治理初始化基线内部一致，没有发现阻塞缺陷。Product
 ## 最终预推送 Review
 
 - Verdict：`pass-with-accepted-findings`。
-- 发布分支必须显式使用独立的 parentless `main`，不得推送本地旧 `master`。
+- 发布历史必须从独立的 parentless `main` 根提交开始，不得包含或推送本地旧 `master` 历史。
 - `main` 只允许包含 `.gitignore`、`README.md`、`src/**`、`docs/**`、`result/**`。
 - 本地治理与设计材料必须保持 ignored 且不出现在远端树中。
 - 实际 Review 模型为 `unverified fallback`；没有模型证明时不声明具体回退等级。
+
+## GitHub 发布验证
+
+- 私有仓库：`https://github.com/kayz/ficant`。
+- 默认分支：`main`。
+- 首个内容提交：`affce937b30ba14b59777691ec8d311dbb5161ba`。
+- 首次推送后，本地和远端提交哈希一致。
+- GitHub 远端树与本地树均为 10 个允许文件，差异数为 0。
+- 本地 `.proqaid`、`.codex`、`.claude`、`UI-DM`、iteration checklist、hidden 等未出现在远端树中。
 
 ## Validity
 
