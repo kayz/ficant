@@ -1,0 +1,11 @@
+# GitHub release allowlist. Everything else remains local.
+/*
+
+!/.gitignore
+!/README.md
+!/src/
+!/src/**
+!/docs/
+!/docs/**
+!/result/
+!/result/**
