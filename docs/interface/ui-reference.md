@@ -1,105 +1,93 @@
-# DMQuant UI 参考
+# Platform Shell 与多 WebApp 界面参考
 
-**状态：** 首个 WebApp 目标体验；静态原型不是生产实现  
-**来源：** `UI-DM/`、`README.md`、iteration-1 Interface 评审
+**状态：** iteration-2 已实现界面边界
 
-## 产品画布
+**详细页面设计：** `web-dm/webapps/<app-id>/design.md`
 
-DMQuant 使用三栏研究工作台：
+**后台合同：** `interface/README.md` 与 `interface/proto/`
 
-- 左栏：策略与版本树、状态、版本操作和当前用户。
-- 中栏：参数带、高级设置、任务/校验状态、指标与产物 Tab。
-- 右栏：AI 研究对话、生成步骤、代码与应用动作。
-
-`dmquant-extended-design.html` 顶部灰色斜纹的 `REVIEW / 仅评审` 工具条，以及手动切换 state/chat/role/coverage 的按钮，不属于产品 UI，禁止实现。原型中的硬编码示例值也不是生产默认数据。
-
-## 核心用户流程
+## 目录与所有权
 
 ```text
-登录/鉴权
-→ 新建或打开策略会话
-→ AI 流式生成草稿、代码、检查和试跑摘要
-→ 应用参数 / 保存策略版本
-→ 用户复核参数与高级设置
-→ 幂等提交异步回测
-→ queued / running / cache / succeeded / failed
-→ 查看指标、校验、复现指纹、曲线、信号、流水和文件
-→ 编辑策略源码并保存为新版本后重跑
+web-dm/
+├── platform-shell/                 # 共享宿主、会话、Registry、加载和错误边界
+├── packages/contracts-generated/   # 根 interface/ 生成的 TypeScript consumer
+└── webapps/
+    └── dmquant/design.md            # 首个 WebApp 的中文目标设计
+
+interface/                           # Rust/Python/TypeScript 共用后台合同
 ```
 
-## 状态模型
+新增 WebApp 的页面设计、源码和测试都进入 `web-dm/webapps/<app-id>/`。共享 Shell 不承载具体研究产品流程，根 `interface/` 不放页面设计；WebApp 也不得建立平行后台 DTO 或服务。
 
-| 区域 | 状态 | 界面要求 |
-|---|---|---|
-| 对话 | empty | 引导文案与示例 prompt |
-| 对话 | streaming | 打字/阶段反馈，发送禁用，允许错误恢复 |
-| 对话 | failed | 错误码、`trace_id`、复制和重试 |
-| 提交 | submitting | 防重复、显示提交中、使用幂等键 |
-| 任务 | queued/running | 阶段、进度；排队超阈值显示原因 |
-| 任务 | cache | 明确“命中缓存，未重算”和复用 run 身份 |
-| 任务 | succeeded | 指标、校验、序列、Artifact 和复现信息 |
-| 任务 | failed | 原因、错误码、`trace_id`；有权限时仍可访问已持久化策略源码 |
-| 内容 | empty/loading/error | 每个 Tab 有可区分状态，长任务不能只显示无限 spinner |
+## 已实现 Platform Shell 流程
 
-回测主体状态互斥，由后端任务与运行契约驱动，不能依靠原型的 `data-*` 评审开关。
+```text
+读取当前会话
+→ 必要时刷新即将过期的会话
+→ 读取服务端裁剪后的 App Registry
+→ 请求指定应用的短期启动授权
+→ 校验启动边界
+→ iframe 加载并用 postMessage 交付短期 credential
+→ 到期前刷新，退出/过期/失败时撤权
+```
 
-## 参数与提交
+Shell 已区分以下可观察状态：
 
-默认参数带保持简洁；契约必填但低频字段放入高级设置：策略 ID/版本、交易日历、撮合模型、再投资利率、初始资金、杠杆上限、模式与随机种子。AI 回填字段显示来源但允许用户修改。
+- 会话检查、有效、即将过期刷新、过期和读取失败；
+- Registry 加载、空、成功和失败；
+- 应用授权中、就绪、禁止、不可用和内容加载失败；
+- 操作切换或组件卸载时取消过期请求，迟到响应不能把旧授权重新写回页面；
+- 返回应用目录后恢复到先前打开按钮的键盘焦点。
 
-实施前必须冻结：时间区间字段、`K线数量` 的真实语义、频率/日历兼容、Universe 搜索/规则模式、覆盖范围告警和所有默认值来源。
+客户端只消费服务端返回的可见应用、capability 和 scopes，不根据 `researcher`、`viewer` 等前端字符串推导最终授权。
 
-## 角色与权限
+## gRPC-Web 合同
 
-- `researcher` 可在平台授权范围内生成、保存和提交回测。
-- `viewer` 为只读，提交控件必须禁用并解释所缺角色，不能显示裸 403。
-- 导出、下载、编辑、删除和发布由后端 RBAC/ABAC 决定，并产生审计结果。
-- 删除策略/版本必须二次确认并说明影响；不可变研究证据的删除/弃用语义由平台契约决定。
+浏览器使用从 `interface/` 机械生成的 `ficant.app.v1.PlatformService` consumer，真实 Rust 服务提供七个 RPC：
 
-## 产物规则
+1. `GetAppRegistry`
+2. `GetCurrentSession`
+3. `RefreshSession`
+4. `RevokeSession`
+5. `AuthorizeAppLaunch`
+6. `RefreshAppLaunch`
+7. `RevokeAppLaunch`
 
-- 策略源码属于已持久化版本，在草稿/失败状态下仍可按权限查看或下载。
-- 运行派生的曲线、指标、流水和报告只在成功或合法缓存结果存在时展示。
-- 编辑源码必须创建新版本，不能覆盖历史版本。
-- 文件下载、导出和破坏性操作必须审计。
-- 复现卡展示规范化指纹和参数快照，不能泄露密钥或敏感输入。
+gRPC-Web base URL 禁止 userinfo、query 和 fragment，生产使用 HTTPS，本机回环开发可使用 HTTP。Rust transport 只允许配置中的精确 CORS origin；preflight 只开放 POST 和冻结 header 集合。
 
-## API 到 UI 的设计映射
+## iframe 启动边界
 
-| UI 动作/状态 | 目标平台能力 | 契约状态 |
-|---|---|---|
-| AI 草稿和步骤 | Protobuf 定义的流式 Agent 服务 | 待 Phase 0 冻结；不建立平行 SSE/REST 契约 |
-| 保存策略版本 | 版本化 `StrategySpec`/能力资产服务 | 待契约 |
-| 提交回测 | 幂等 Experiment/Task 提交 | 待契约 |
-| 轮询/订阅任务 | Task 状态、phase、progress、queue reason | 待契约 |
-| 结果详情 | `ExperimentRun`、指标、校验和 fingerprint 投影 | 待契约 |
-| NAV/信号序列 | 类型化 Artifact/series 读取 | 待契约 |
-| 标的搜索 | 平台对象/Instrument 查询 | 待契约 |
+Shell 在创建 iframe 前同时校验 Registry descriptor 与短期 grant：
 
-UI-DM 中现有方法名是目标体验描述，不证明当前 API 存在。
+- `app_id`、`entrypoint`、`allowed_origin` 必须精确一致；entrypoint 是同 origin 下不含 query/fragment 的绝对路径；
+- grant scopes 只能是 Registry capabilities 的子集；credential 非空且 issued/expires 时间有效；
+- origin 必须是 HTTPS 精确 origin，本机回环测试除外；token 不进入 URL、referrer 或 `localStorage`；
+- sandbox 只能使用批准 token，且禁止同时开放 `allow-scripts` 与 `allow-same-origin`；
+- CSP 必须以 `default-src 'none'` 收口，拒绝 wildcard、重复/未知指令和非安全来源；
+- iframe 使用 `referrerPolicy=no-referrer`，加载后只向精确 `allowed_origin` 发送 `ficant.app.launch.v1` credential；
+- grant 刷新必须延长有效期。边界失败、iframe error、过期、返回目录或卸载都会撤销应用授权。
 
-## 错误与内容规范
+## 错误与恢复
 
-- 错误显示稳定 `code` 和可复制 `trace_id`，并提供可执行恢复路径。
-- 权限错误说明所缺角色或对象权限。
-- 收益率展示为百分比但协议使用明确小数口径；金额千分位；久期 `Y`；时间按约定时区。
-- 状态不能只用颜色表达；文案和单位必须与平台契约一致。
+Platform Service 返回 `SafeError(code, safe_message, trace_id, retryable)`。Shell：
 
-## 无障碍验收要求
+- 显示稳定错误码和安全消息；存在 `trace_id` 时允许复制；
+- 只在 `retryable=true` 且当前流程提供恢复动作时显示重试；
+- 区分认证过期、禁止、资源不存在、暂时不可用和本地边界校验失败；
+- 网络失败只显示安全的“平台连接暂时不可用”，不暴露 raw cause、stack、credential 或服务端内部信息。
 
-后续实现至少提供以下证据：
+Phase1 领域错误使用 `ficant.core.v1.ErrorDetail` 的独立 core mapper；当前 Platform Shell 没有伪造尚不存在的 Phase1 业务 RPC 或结果页面。
 
-- 全流程键盘操作、可见焦点和合理焦点顺序。
-- 语义化控件、可访问名称、状态/错误 live region。
-- 图表的文本摘要或表格替代。
-- WCAG 2.2 AA 对比度、200% 缩放、reduced-motion。
-- 状态不只依赖红/绿色，拖拽/分栏具有等价键盘方式。
+## 可访问性现状
 
-静态 HTML 不能作为无障碍通过证据。
+当前 Shell 已实现语义化状态/错误区域、polite live region、可见焦点、键盘进入/退出 iframe、iframe title、非颜色状态表达、200% 缩放和 reduced-motion 支持。自动化界面验收覆盖 Registry/会话/授权状态、权限边界、焦点与真实 gRPC-Web 路径；后续 WebApp 仍须为自己的页面补充独立可访问性验收。
 
-## 明确延期
+## DMQuant 与明确延期
 
-归因瀑布、DV01 暴露、月度热力图、收益分布、寻优、信号墙和多 run 对比均不在首轮 DMQuant 范围。原型中的“对比”按钮不应进入产品，直至获得独立清单和契约。
+DMQuant 的登录后研究流程仍以 `web-dm/webapps/dmquant/design.md` 为唯一页面设计。AI 草稿、参数编辑、策略版本、异步回测、指标/曲线/Artifact 浏览、归因、寻优和多 run 对比均不在 iteration-2；旧静态原型的评审工具条、手工状态开关和硬编码示例数据不得进入产品。
+
+Phase 2 固定收益算法也不属于当前页面能力。界面不得展示看似真实但没有后台合同与业务闭环的定价、DV01、基差、IRR 或 CTD 结果。
 
 ## Validity
 

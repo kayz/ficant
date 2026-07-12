@@ -1,0 +1,1 @@
+{"artifacts":[{"name":"rust-ok","version":"1.0.0","purl":"pkg:cargo/rust-ok@1.0.0"},{"name":"python-ok","version":"1.0.0","purl":"pkg:pypi/python-ok@1.0.0"},{"name":"web-ok","version":"1.0.0","purl":"pkg:npm/web-ok@1.0.0"}]}

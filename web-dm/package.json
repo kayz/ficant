@@ -1,0 +1,28 @@
+{
+  "name": "@ficant/web-dm",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.12.4",
+  "engines": {
+    "node": "22.17.0",
+    "pnpm": "10.12.4"
+  },
+  "scripts": {
+    "build": "pnpm --filter @ficant/platform-shell build",
+    "typecheck": "pnpm --filter @ficant/platform-shell typecheck",
+    "test": "pnpm --filter @ficant/platform-shell test",
+    "test:e2e": "playwright test",
+    "test:e2e:grpc": "playwright test --config playwright.grpc.config.ts"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.5.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

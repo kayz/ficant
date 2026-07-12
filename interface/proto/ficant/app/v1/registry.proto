@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package ficant.app.v1;
+
+import "ficant/app/v1/session.proto";
+import "google/protobuf/timestamp.proto";
+
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  ERROR_CODE_UNAUTHENTICATED = 1;
+  ERROR_CODE_FORBIDDEN = 2;
+  ERROR_CODE_NOT_FOUND = 3;
+  ERROR_CODE_INVALID_REQUEST = 4;
+  ERROR_CODE_EXPIRED = 5;
+  ERROR_CODE_UNAVAILABLE = 6;
+  ERROR_CODE_INTERNAL = 7;
+}
+
+message SafeError {
+  ErrorCode code = 1;
+  string safe_message = 2;
+  string trace_id = 3;
+  bool retryable = 4;
+}
+
+message CspDirective {
+  string name = 1;
+  repeated string values = 2;
+}
+
+message AppDescriptor {
+  string app_id = 1;
+  string display_name = 2;
+  string entrypoint = 3;
+  string allowed_origin = 4;
+  repeated string capabilities = 5;
+}
+
+message AppRegistry {
+  repeated AppDescriptor apps = 1;
+}
+
+message AppLaunchGrant {
+  string app_id = 1;
+  string entrypoint = 2;
+  string allowed_origin = 3;
+  repeated string scopes = 4;
+  google.protobuf.Timestamp issued_at = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  bytes launch_credential = 7;
+  repeated CspDirective csp_directives = 8;
+  repeated string sandbox_tokens = 9;
+}
+
+message AppLaunchRevocation {
+  string app_id = 1;
+  google.protobuf.Timestamp revoked_at = 2;
+}
+
+message GetAppRegistryRequest {}
+
+message GetAppRegistryResponse {
+  oneof result {
+    AppRegistry registry = 1;
+    SafeError error = 2;
+  }
+}
+
+message GetCurrentSessionRequest {}
+
+message GetCurrentSessionResponse {
+  oneof result {
+    Session session = 1;
+    SafeError error = 2;
+  }
+}
+
+message RefreshSessionRequest {}
+
+message RefreshSessionResponse {
+  oneof result {
+    Session session = 1;
+    SafeError error = 2;
+  }
+}
+
+message RevokeSessionRequest {}
+
+message RevokeSessionResponse {
+  oneof result {
+    SessionRevocation revocation = 1;
+    SafeError error = 2;
+  }
+}
+
+message AuthorizeAppLaunchRequest {
+  string app_id = 1;
+}
+
+message RefreshAppLaunchRequest {
+  string app_id = 1;
+}
+
+message AppLaunchAuthorizationResponse {
+  oneof result {
+    AppLaunchGrant grant = 1;
+    SafeError error = 2;
+  }
+}
+
+message RevokeAppLaunchRequest {
+  string app_id = 1;
+}
+
+message RevokeAppLaunchResponse {
+  oneof result {
+    AppLaunchRevocation revocation = 1;
+    SafeError error = 2;
+  }
+}
+
+service PlatformService {
+  rpc GetAppRegistry(GetAppRegistryRequest) returns (GetAppRegistryResponse);
+  rpc GetCurrentSession(GetCurrentSessionRequest) returns (GetCurrentSessionResponse);
+  rpc RefreshSession(RefreshSessionRequest) returns (RefreshSessionResponse);
+  rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse);
+  rpc AuthorizeAppLaunch(AuthorizeAppLaunchRequest) returns (AppLaunchAuthorizationResponse);
+  rpc RefreshAppLaunch(RefreshAppLaunchRequest) returns (AppLaunchAuthorizationResponse);
+  rpc RevokeAppLaunch(RevokeAppLaunchRequest) returns (RevokeAppLaunchResponse);
+}

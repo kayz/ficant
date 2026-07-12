@@ -1,103 +1,124 @@
 # ficant 架构与数据字典
 
-**状态：** 目标架构字典；当前无实现 Schema  
-**来源：** `README.md`、`UI-DM/`、iteration-1 Architecture 评审
+**状态：** Phase 0 / Phase 1 已实现架构字典
 
-## 状态标记
+**权威边界：** `README.md` 定义系统约束，`interface/` 定义跨边界字段，Rust Domain/Application 定义业务不变量，Migration 定义持久映射
 
-| 标记 | 含义 |
-|---|---|
-| 约束 | README 已冻结且不得无 ADR 偏离的系统事实 |
-| 设计 | 目标语义已经描述，但没有生产实现或 Schema 证据 |
-| 待契约 | Phase 0 必须冻结的字段、枚举或协议 |
-| 已验证实现 | 有源码、生成物和测试证据；iteration-1 中没有此类条目 |
-
-## 系统边界与依赖方向
+## 模块与依赖方向
 
 ```text
-Static React WebApps / Python SDK / Agent Tools
-                 ↓ Protobuf contracts + gRPC-Web/gRPC
-Rust API / Application / Domain / Infrastructure
-                 ↓ stable C ABI only when numerical kernels require it
-C++20 numerical library
-
-Generated Python 3.12 nodes
-                 ↓ typed Arrow input + Protobuf output in gVisor
-Rust deterministic runtime validates and records facts
+web-dm/* / Python consumer / Agent Tools
+                    ↓ 统一 Protobuf + gRPC-Web/gRPC
+Rust API → Application → Domain
+             ↓ ports       ↑ 无基础设施依赖
+PostgreSQL repositories + MinIO content-addressed store
+                    ↓
+C++20 stable C ABI（Phase 2 数值算法边界，本轮只有构建/ABI基线）
 ```
 
-Rust `domain` 不依赖数据库、网络、文件系统、模型服务或 Web 框架。WebApp 不携带独立后台。C++ 不承载业务编排；Python 不进入平台主进程或直接访问数据库、密钥、Artifact Store、RunJournal。
+- Rust `domain` 不依赖数据库、网络、文件系统或 Web 框架。
+- Application 持有授权、opaque proof、幂等 fingerprint 和事务意图；Storage 复核 proof 并执行持久化。
+- Python 不进入平台主进程，也不直接访问数据库、密钥、对象存储或 RunJournal。
+- WebApp 代码和设计位于 `web-dm/webapps/<app-id>/`，共享宿主位于 `web-dm/platform-shell/`；后台合同只在根 `interface/` 定义。
 
-## 三层领域知识
+## Phase 1 核心对象
 
-| 层 | 定义 | 生命周期 |
+| 对象组 | 已实现对象 | 关键不变量 |
 |---|---|---|
-| 领域不变量 | 时间、单位、现金流、事件顺序、点时性、血缘 | Rust 固化 |
-| `MarketRulePack` | 合约、时段、交割、节假日等带来源与生效日期的规则 | 版本化 |
-| ResearchNode 研究方法 | 曲线、因子、模型、组合、成本、撮合与归因方法 | 可生成、替换、验证和发布 |
+| Definition | `Instrument`、`Bond`、`FuturesContract`、`Calendar`、`Unit`、`MarketRulePack` | ID + 正整数版本；修改追加新版本；支持精确版本、as-of 和稳定 cursor 分页 |
+| Market Fact | `Cashflow`、`Quote`、`Trade`、`Valuation`、`CurveSnapshot` | 绑定精确 Instrument/Unit/来源 revision；更正追加新 revision，不覆盖旧事实 |
+| Snapshot | `DataSnapshot`、`UniverseSnapshot` | 内容寻址、所有者和非空血缘；发布后不可变 |
+| Run/Evidence | `ExperimentRun`、`RunJournal` | 固定 Snapshot、RulePack、镜像、参数与 seed；Journal 追加且可重放 |
+| Publication | `Artifact`、`SignalSet` | 不同根 ID；内容哈希、大小、类型、所有者与完整血缘一致 |
 
-## Definition / Run / Artifact
+以上共 17 个 README Phase 1 对象；`ficant.app.v1` 的 Platform Shell 会话/Registry 合同不计入该数字。
 
-- **Definition：** 方法和参数的版本化定义；修改产生新版本。
-- **Run：** 某次确定性执行；重跑产生新 Run。
-- **Artifact：** 不可变结果；发布后不覆盖。
+## Snapshot、Artifact 与 SignalSet
 
-任何正式 `SignalSet` 必须追溯到策略、ResearchGraph、因子/模型、Universe、DataSnapshot、规则包、能力版本、运行镜像和 ExperimentRun。
-
-## 核心对象
-
-| 对象 | 类别 | 当前定义 | 关键规则 |
-|---|---|---|---|
-| `DataSnapshot` | Artifact | 某研究时点可见数据的不可变快照 | 来源、版本、点时性、Manifest、内容哈希 |
-| `UniverseSnapshot` | Artifact | 某次研究使用的证券集合 | 不随外部证券池变化 |
-| `DomainPack` | Definition | 对象、契约、规则、参考算法和不变量测试的领域交付单元 | Protobuf 描述、内容哈希、有效期 |
-| `MarketRulePack` | Definition | 带来源和生效区间的市场规则 | 历史实验绑定当时版本 |
-| `ResearchGraph` | Definition | 强类型研究 DAG | 修改创建新版本，不覆盖原图 |
-| `ResearchNodeContract` | Definition | 节点 I/O、状态、参数、确定性、权限和资源契约 | Protobuf 唯一边界契约 |
-| `ResearchPatchSpec` | Definition | 对研究图的结构化变更意图 | 生成新图版本 |
-| `CapabilityArtifact` | Artifact | 已产物化的生成式研究能力 | 源码/依赖/模型/提示/测试/权限可追踪 |
-| `ExperimentRun` | Run | ResearchGraph 的一次受控执行 | 固定输入、规则、环境和种子 |
-| `RunJournal` | Evidence | 运行事件与模型/工具调用账本 | 追加、可审计、可重放 |
-| `SimulationResult` | Artifact | 仿真输出 | 正式成交事实由 Rust 引擎验证生成 |
-| `ReportArtifact` | Artifact | 研究报告 | 绑定完整运行血缘 |
-| `SignalSet` | Artifact | 受治理的研究信号 | 平台正式输出，不是订单 |
-| `TargetExposure` | Artifact | 目标风险或敞口 | 由下游决定如何转为订单 |
-
-## DMQuant 临时名称到平台概念
-
-| DMQuant/UI 名称 | 平台目标概念 | 状态 |
+| 对象 | 正式对象存储角色 | 语义 |
 |---|---|---|
-| strategy / version | `StrategySpec` 版本 | 待契约 |
-| task / `TaskInfo` | 异步 Job/Task 状态投影 | 待契约 |
-| run / `RunInfo` | `ExperimentRun` + 结果摘要 | 待契约 |
-| series(nav/signals) | 运行产物的类型化序列投影 | 待契约 |
-| strategy file | `CapabilityArtifact` 或策略源码包引用 | 待确认生命周期和权限 |
-| backtest artifact | `SimulationResult` / `ReportArtifact` / 其他 Artifact | 待契约 |
-| `SubmitAck` | 幂等提交确认与缓存身份 | 待契约 |
-| `ApiError` | Protobuf 错误信封、错误码与 `trace_id` | 待契约 |
-| fingerprint | 数据、策略、环境、引擎等复现标识 | 待冻结组成与哈希规则 |
+| `DataSnapshot` | `data_parquet` + `data_manifest` | `blob_content_hash` 指向数据内容，`manifest_hash` 指向 Manifest；二者必须分别有 verified durable ref；`schema_hash` 只是摘要 |
+| `UniverseSnapshot` | `universe_members_manifest` | `content_hash` 指向成员 Manifest；Instrument version 必须非空、排序且唯一 |
+| `Artifact` | `artifact_payload` | 记录 kind、media type、hash、非零 size 和完整 lineage |
+| `SignalSet` | `signal_payload` | 使用独立 ID，通过 content-addressed lineage ref 指向 kind=`SignalSet` 的 Artifact；二者共享同一已验证 payload，但不是同一对象 |
 
-UI-DM 中的 OpenAPI 生成类型和 SSE 事件名只能作为界面抽象或临时别名。正式跨边界契约必须由 Protobuf 产生，浏览器传输必须与 gRPC-Web 基线一致。
+SignalSet 除承载 Artifact 自身引用外的 lineage 集合必须与持久化 Artifact 的完整 lineage 一致；Snapshot、Run、RulePack、tenant、owner、hash 或 size 任一漂移都 fail closed。
 
-## 统一数据规则
+## 单位与 Decimal
 
-- ID、版本、内容哈希和租户/所有者字段必须明确。
-- 价格、收益率、金额和风险量使用 Decimal/明确单位，禁止隐式 float 语义。
-- 持久化时间使用 UTC，展示层按市场/用户时区呈现；交易日历和估值时点必须显式。
-- 状态枚举只能单向进入终态；删除、弃用、引用保护和审计语义必须冻结。
-- 错误必须携带稳定业务码和 `trace_id`，不能用 UI 文案替代协议。
-- 权限由平台 RBAC + ABAC 执行，客户端禁用按钮不是授权证据。
+协议中的 Decimal 唯一表示为 `coefficient(string) + scale + UnitRef`，禁止隐式 float。Application 先读取同租户精确 Unit version，形成不可伪造的 resolved proof；Storage 在任何写入前用持久 Definition 再复核 dimension、scale 和有效 precision。
 
-## Phase 0 必须关闭的契约缺口
+| Market Fact 字段 | 必须使用的 Unit dimension |
+|---|---|
+| Cashflow amount | `currency` |
+| Quote bid / ask | `price` |
+| Trade price | `price` |
+| Trade quantity | `notional` |
+| iteration-2 Valuation values | `price` |
 
-1. Protobuf package、兼容策略和 Rust/Python/TypeScript 生成检查。
-2. AI 草稿流式消息顺序、断线恢复、完成和错误语义。
-3. 策略版本、幂等提交、任务阶段、取消、缓存身份和失败结果保留。
-4. 结果序列、文件/Artifact、校验报告、复现指纹和错误信封。
-5. 租户与对象授权、导出/下载/删除审计。
-6. 时间、单位、分页、未成交原因、排队原因与 Domain Pack 兼容。
+其他 Valuation measure 在后续 Domain Pack 明确前拒绝；本轮不引入换算、汇率或价格归一化。
 
-这些条目是设计缺口，不是已存在 Schema。
+## RulePack 生效语义
+
+`MarketRulePack` 采用显式精确版本和半开区间：
+
+```text
+effective_from <= subject_time < effective_to
+```
+
+- Valuation 的 subject time 是自身 `valuation_at`。
+- ExperimentRun/Phase1 的 run market time 是所绑定 `DataSnapshot.as_of`。
+- 不使用执行时钟、Journal 时间、Snapshot `visible_at`、Signal `valid_from` 或某笔 Trade 时间代替。
+
+Application 在任何可变 I/O 前解析 exact version 并形成 opaque proof；Storage 在事务第一步复核真实持久 RulePack 与区间。coverage miss 返回不可重试的 `ValidationFailed`，身份/版本/tenant/proof 漂移返回不可重试的 `LineageIncomplete`。这里只验证绑定与生效区间，不执行规则内容，也不是 Phase 2 定价引擎。
+
+## Run 与 Journal
+
+- `ExperimentRun` 初始为 `Created/revision=1`，合法成功路径为 `Created(1) → Running(2) → Succeeded(3)`；`expected_revision` 指变更前 revision。
+- Phase1 首次 Snapshot→Run 使用 candidate proof，把尚未提交的 DataSnapshot 精确绑定到 Run；独立 CreateRun 则只读取已持久 Snapshot。
+- RunJournal 的 sequence 从 1 连续增长。sequence 1 的 `prev_hash` 必须 absent/`NULL`；后续事件必须引用前一事件的真实 hash，不能用零哈希代替 absent。
+- 当前完整成功链包含 `RunCreated`、`RunStarted`、`ArtifactPublished`、`SignalSetPublished`、`RunSucceeded` 五个规范事件，可在重启后分页读取并确定性重放。
+
+## Phase 1 事务与跨存储职责
+
+Application 先完成 scope、owner、Unit、RulePack、Snapshot、Artifact/Signal 与 lineage 校验，再验证并 promote MinIO staging 内容；随后提交一个 storage-owned PostgreSQL 事务：
+
+```text
+Market Fact
+→ DataSnapshot + UniverseSnapshot metadata/durable refs
+→ ExperimentRun + 两次状态转换
+→ Artifact + SignalSet
+→ 五条 RunJournal 事件
+```
+
+PostgreSQL 负责 tenant-scoped metadata、版本/revision、血缘、durable blob ref、幂等键、并发约束和这一业务单元的原子提交。MinIO 负责按 SHA-256 内容寻址的不可变 bytes、staging/verify/promote 与 orphan 清理。不能把两种存储描述成一个分布式事务：PG 失败后的已 promote 但未引用对象由 orphan 机制回收，正式 metadata/Run/Journal 不产生半状态。
+
+## 已发布内容读取
+
+metadata/resource 不存在返回 `NotFound`。metadata 和 durable ref 已存在时，正式业务读取必须使用 non-optional required read：
+
+| 读取 | 必须复核 |
+|---|---|
+| Artifact | tenant、owner、对象角色、ID、payload hash/size、lineage |
+| SignalSet | 独立 Signal/Artifact 身份、Artifact kind、同一 payload、完整 lineage |
+| DataSnapshot | data Parquet 与 Manifest 两个角色都成功 |
+| UniverseSnapshot | members Manifest 成功 |
+
+对象缺失、hash mismatch 或 size mismatch 都返回 `HashMismatch/retryable=false`，并恰好发出一次 `storage.published_content_integrity_failure` 结构化事件。事件只包含安全的 tenant、resource kind/id、blob role、expected hash/size、reason 和 trace context；不输出 bucket/key、credential、raw bytes、SQL 或 stack。无法判断完整性的 MinIO/网络故障才是 `StorageUnavailable`。
+
+`probe_verified` 仍可用于 orphan/reconciliation 和未发布探测，但不得进入已发布内容的正式业务读。
+
+## 错误与授权
+
+- scope 同时绑定 tenant、actor 和可访问 owners；所有 Definition、Fact、Snapshot、Run 和 Publication 必须在相同授权边界内。
+- Application 稳定错误映射到 `ficant.core.v1.ErrorDetail`、gRPC code、retryable 与安全 trace；`StateConflict` 对外使用既有 `ImmutableViolation/FailedPrecondition`，不新增平行枚举。
+- 浏览器 Shell 的 `ficant.app.v1.SafeError` 是 Platform Service 的安全错误信封；它与 Phase1 core business error mapper 各自服务不同接口边界，不应混写。
+
+## Phase 2 与后续边界
+
+本轮没有实现现金流生成、定价、收益率、久期/DV01、曲线插值、基差/IRR/CTD 或套保算法。现有 C++ 工程只证明固定 Clang/CMake/Ninja 构建和稳定 C ABI 基线。
+
+Storage 当前经 `minio 0.4.0` 可达 `async-std 1.13.2`。该停止维护风险只按 D-026 为 iteration-2 限定接受，不是架构长期背书；必须在 iteration-3 入口或首次外部发布前（较早者）重新评估替换方案，禁止让此接受自动继承到其他版本或依赖。
 
 ## Validity
 

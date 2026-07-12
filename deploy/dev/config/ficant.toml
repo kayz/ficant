@@ -1,0 +1,14 @@
+[server]
+bind = "0.0.0.0:8080"
+health_path = "/server-health"
+readiness_path = "/server-ready"
+
+[worker]
+bind = "0.0.0.0:8080"
+health_path = "/worker-health"
+readiness_path = "/worker-ready"
+
+[web]
+bind = "0.0.0.0:8080"
+health_path = "/web-health"
+readiness_path = "/web-ready"

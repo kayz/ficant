@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package ficant.research.v1;
+
+import "ficant/core/v1/common.proto";
+
+enum JournalEventType {
+  JOURNAL_EVENT_TYPE_UNSPECIFIED = 0;
+  JOURNAL_EVENT_TYPE_RUN_CREATED = 1;
+  JOURNAL_EVENT_TYPE_RUN_STARTED = 2;
+  JOURNAL_EVENT_TYPE_RUN_SUCCEEDED = 3;
+  JOURNAL_EVENT_TYPE_RUN_FAILED = 4;
+  JOURNAL_EVENT_TYPE_RUN_CANCELLED = 5;
+  JOURNAL_EVENT_TYPE_ARTIFACT_PUBLISHED = 6;
+  JOURNAL_EVENT_TYPE_SIGNAL_SET_PUBLISHED = 7;
+}
+
+message RunJournal {
+  ficant.core.v1.Ulid journal_event_id = 1;
+  ficant.core.v1.Ulid run_id = 2;
+  uint64 sequence = 3;
+  JournalEventType event_type = 4;
+  ficant.core.v1.MarketTime occurred_at = 5;
+  string payload_type = 6;
+  string payload_schema = 7;
+  bytes payload = 8;
+  ficant.core.v1.Sha256 prev_hash = 9;
+  ficant.core.v1.Sha256 event_hash = 10;
+}

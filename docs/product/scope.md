@@ -1,71 +1,74 @@
 # ficant 产品范围
 
-**状态：** 当前产品与范围基线  
-**实现状态：** 设计与治理阶段；没有生产源码或已验证产品行为  
-**来源：** `README.md`、`UI-DM/`、iteration-1 Product 评审
+**状态：** Phase 0 / Phase 1 当前实现范围
 
-## 产品与用户
+**实现状态：** 已形成可运行候选；最终验收事实以 Quality、Delivery 与 Review 的退出证据为准
 
-ficant 是面向专业投资研究团队的 AI 原生量化研究平台。它连接外部数据源，把数据、领域知识、研究方法、因子、模型、策略、仿真和信号组织为可版本、可追踪、可复现的研究资产，并通过 WebApp、Python SDK 和 AI Agent 提供能力。
+**来源：** `README.md`、`interface/`、`web-dm/` 与当前生产实现
 
-首个体验资料体现两类用户：
+## 产品定位与终点
 
-- **researcher：** 表达研究意图、生成与修改策略、提交回测、检查证据并发布受治理的研究产物。
-- **viewer：** 只读查看已授权的研究与结果，不能提交回测；导出、下载、编辑和删除仍须由平台 RBAC/ABAC 决定，不能只依赖前端隐藏控件。
+ficant 是面向专业投资研究团队的 AI 原生量化研究平台。平台把数据、领域知识、研究方法、运行和结果组织为可版本化、可追踪、可复现的研究资产，并通过统一后台合同向 WebApp、Python SDK 和 Agent 提供能力。
 
-## 正式产品终点
+正式产品终点保持为 `ResearchArtifact`、`SimulationResult`、`ReportArtifact`、`SignalSet` 和 `TargetExposure`。平台不拥有订单和外部交易执行，不建设 OMS、EMS、对外报单、清算、结算或投资组合会计。
 
-ficant 的正式输出是：
+首个市场仍是中国国债现券与国债期货；但 iteration-2 只交付 Phase 0 仓库/合同基线和 Phase 1 领域内核，不把后续固定收益算法或完整研究产品页面包装成已实现能力。
 
-- `ResearchArtifact`
-- `SimulationResult`
-- `ReportArtifact`
-- `SignalSet`
-- `TargetExposure`
+## Phase 0 已落地边界
 
-平台不拥有订单和外部交易执行，不建设 OMS、EMS、对外报单、清算、结算或投资组合会计。
+- Rust Workspace 是唯一后台实现；Python 只承担生成节点运行时/合同消费，C++20 只保留稳定 C ABI 数值库边界。
+- `interface/` 是后台 Protobuf 唯一来源，并生成 Rust、Python、TypeScript consumer；不建立平行 REST/OpenAPI DTO。
+- PostgreSQL Migration、MinIO 内容寻址对象、开发 Compose、固定工具链和多语言构建已进入发布候选。
+- React Platform Shell 已实现真实 Rust gRPC-Web 路径、会话、应用目录和短期应用启动授权。
+- 多 WebApp 的页面设计、代码和测试统一位于 `web-dm/`；后台接口设计保留在根 `interface/`，避免未来 WebApp 各自复制后台合同。
 
-## 首个市场与范围
+## Phase 1 已落地业务切片
 
-首个市场是中国国债现券与国债期货，覆盖国债现金流、定价与风险、收益率曲线、资金成本、可交割券、转换因子、基差/IRR/CTD、套保、曲线风险、仿真、回测、归因与信号。
-
-首版不覆盖完整信用债、ABS、可转债、利率互换生命周期、一级发行、真实询价通讯和真实清算交割。
-
-## 核心业务概念
-
-- **Definition / Run / Artifact：** 定义版本化，运行不覆盖，正式产物不可变。
-- **DataSnapshot：** 冻结研究所见数据、来源、版本与点时可见性。
-- **ResearchGraph：** 以强类型 DAG 表达研究过程。
-- **CapabilityArtifact：** 把经校验的生成式研究能力保存为可追溯资产。
-- **ExperimentRun / RunJournal：** 记录确定性执行和完整证据。
-- **SignalSet / TargetExposure：** 平台对下游的治理终点。
-
-## WebApp 边界
-
-WebApp 可以定义独立研究体验，但不能重新定义平台事实。它必须复用平台身份权限、领域对象、数据快照、ResearchGraph、实验、证据账本、AI 工具和信号发布机制；不得自建后台、直连外部数据库、绕过快照/研究图或发布无血缘信号。
-
-## DMQuant 首个体验
-
-DMQuant 当前是首个 WebApp 的目标体验设计，不是已实现产品。其预期业务闭环是：
+当前实现覆盖 README 列出的 17 个核心对象，并完成一条真实业务链：
 
 ```text
-研究员表达意图
-→ AI 生成草稿与检查/试跑信息
-→ 用户应用或修改参数并保存策略版本
-→ 幂等提交异步回测
-→ 查看运行状态、指标、序列、校验和复现指纹
-→ 查看/下载有权限的策略源码与成功运行产物
-→ 编辑后生成新版本并重新回测
+市场事实
+→ DataSnapshot / UniverseSnapshot
+→ ExperimentRun
+→ Artifact / SignalSet
+→ RunJournal
+→ 重启后 required read 与确定性重放
 ```
 
-完整验收必须同时覆盖成功、缓存、失败、警告、只读权限、审计动作和可复现性。静态 HTML 中的写死数据与交互不是行为证据。
+这条链路使用真实 PostgreSQL 与 MinIO，约束租户/所有者、精确版本、单位、规则生效时间、内容哈希、大小、血缘、幂等、并发和不可变性。已发布内容的正式读取是 required read：metadata 存在而对象缺失、哈希漂移或大小漂移属于完整性损失，不会被解释为“未找到”。
 
-## 事实、假设与待决策项
+`Artifact` 与 `SignalSet` 是不同身份的根对象；`SignalSet` 通过内容寻址引用真实 Artifact，并与 Snapshot、Run、RulePack 和输入产物形成可复核血缘。平台输出仍然是信号和研究证据，不是订单。
 
-- **事实：** 当前仓库没有生产源码或运行时；`README.md` 是唯一系统技术基线。
-- **设计要求：** DMQuant 通过平台 Protobuf 生成契约和 gRPC-Web 使用能力，不能建立平行 OpenAPI/REST 后台体系。
-- **未验证来源：** UI-DM 中出现的 `experiences/dm-ai/`、hooks、API client、生成类型和后端方法名可能源于外部/先前设计，也可能仅是目标名称；当前仓库无法证明其实现存在。
-- **实施前人类决策：** 明确 DMQuant 与 Rates Research Lab、CGB Futures Lab 的产品层级、路线阶段及首个必须闭环的研究场景。
+## WebApp 产品边界
+
+当前可用产品界面是 Platform Shell，不是完整 DMQuant：
+
+- 从服务端读取当前会话和可见应用，不从前端角色字符串推导最终授权；
+- 通过短期授权加载 iframe 应用，校验精确 origin、entrypoint、capability、CSP、sandbox 和有效期；
+- 区分会话、目录、授权、不可用、拒绝、加载失败等状态，并展示安全错误码、`trace_id` 与允许的恢复动作；
+- token 不进入 URL 或 `localStorage`，应用退出、过期和边界失败会触发撤权。
+
+`web-dm/webapps/dmquant/design.md` 仍描述首个业务 WebApp 的后续目标。AI 草稿、策略版本、异步回测、指标/产物浏览和编辑重跑尚未实现，不得用 Platform Shell 或静态原型冒充该业务闭环。
+
+## 多 WebApp 目录约定
+
+```text
+web-dm/
+├── platform-shell/                 # 共享宿主、会话、Registry 与 iframe 边界
+├── packages/contracts-generated/   # 从根 interface/ 机械生成
+└── webapps/<app-id>/                # 每个 WebApp 的中文设计、源码与测试
+
+interface/                           # 所有 WebApp 共用的后台 Protobuf 合同
+```
+
+WebApp 可以定义独立研究体验，但不能自建身份权限、直连外部数据库、绕过 Snapshot/ResearchGraph、覆盖共享事实或携带平行后台。
+
+## 明确不在本轮范围
+
+- Phase 2 的现金流生成、应计利息、净价/全价、收益率、久期、DV01、曲线、基差、IRR、CTD 与套保算法；当前 C++ 仅证明固定工具链、可重放构建和 ABI 边界。
+- 完整 DMQuant 策略生成、回测、Artifact 浏览、多 run 比较及静态原型中的高级分析页面。
+- openGauss 迁移、GeneratedNode/gVisor 业务运行、OMS/EMS 和任何外部交易执行。
+- 信用债、ABS、可转债、完整利率互换生命周期、真实询价通讯与清算交割。
 
 ## Validity
 

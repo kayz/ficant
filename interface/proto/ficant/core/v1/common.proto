@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package ficant.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Ulid carries the canonical 26-character ULID string. Services validate the
+// alphabet, length, and canonical uppercase representation.
+message Ulid {
+  string value = 1;
+}
+
+// VersionRef identifies one immutable version of a definition.
+message VersionRef {
+  Ulid id = 1;
+  uint64 version = 2;
+}
+
+// Sha256 carries exactly 32 hash bytes. Hex rendering is an adapter concern.
+message Sha256 {
+  bytes value = 1;
+}
+
+// OwnerRef scopes a root object to a tenant and owner.
+message OwnerRef {
+  Ulid tenant_id = 1;
+  Ulid owner_id = 2;
+}
+
+// UnitRef identifies the immutable Unit definition used by a decimal value.
+message UnitRef {
+  Ulid unit_id = 1;
+  uint64 version = 2;
+}
+
+// LineageRef points to an immutable object version and/or content hash.
+message LineageRef {
+  Ulid object_id = 1;
+  uint64 version = 2;
+  Sha256 content_hash = 3;
+}
+
+// DecimalValue is the only cross-boundary decimal representation.
+// coefficient is a normalized base-10 integer string; scale is non-negative.
+message DecimalValue {
+  string coefficient = 1;
+  uint32 scale = 2;
+  UnitRef unit = 3;
+}
+
+// MarketTime pairs a UTC instant with the market's IANA timezone and local
+// trading date. local_trading_date uses ISO 8601 YYYY-MM-DD.
+message MarketTime {
+  google.protobuf.Timestamp instant = 1;
+  string market_timezone = 2;
+  string local_trading_date = 3;
+}
+
+message PageRequest {
+  uint32 page_size = 1;
+  string cursor = 2;
+}
+
+message PageResponse {
+  string next_cursor = 1;
+}

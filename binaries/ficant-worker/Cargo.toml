@@ -1,0 +1,11 @@
+[package]
+name = "ficant-worker"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+ficant-bootstrap = { path = "../ficant-bootstrap" }
+
+[lints]
+workspace = true

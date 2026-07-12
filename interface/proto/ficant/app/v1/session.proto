@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package ficant.app.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message Session {
+  string session_id = 1;
+  string subject_id = 2;
+  repeated string scopes = 3;
+  google.protobuf.Timestamp issued_at = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message SessionRevocation {
+  google.protobuf.Timestamp revoked_at = 1;
+}

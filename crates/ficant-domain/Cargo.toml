@@ -1,0 +1,20 @@
+[package]
+name = "ficant-domain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+rust_decimal = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+ulid = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package ficant.market.v1;
+
+import "ficant/core/v1/common.proto";
+
+enum VerificationStatus {
+  VERIFICATION_STATUS_UNSPECIFIED = 0;
+  VERIFICATION_STATUS_UNVERIFIED = 1;
+  VERIFICATION_STATUS_VERIFIED = 2;
+  VERIFICATION_STATUS_REJECTED = 3;
+}
+
+// MarketRulePack records a verified external rule input. It does not execute
+// pricing, curve construction, duration, DV01, or any Phase 2 algorithm.
+message MarketRulePack {
+  ficant.core.v1.Ulid rule_pack_id = 1;
+  uint64 version = 2;
+  ficant.core.v1.OwnerRef owner = 3;
+  string market = 4;
+  string rule_type = 5;
+  string source = 6;
+  ficant.core.v1.MarketTime effective_from = 7;
+  ficant.core.v1.MarketTime effective_to = 8;
+  VerificationStatus verification_status = 9;
+  ficant.core.v1.Sha256 content_hash = 10;
+}

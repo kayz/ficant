@@ -1,0 +1,248 @@
+{
+  "schema_version": 1,
+  "captured_utc": "2026-07-12T04:34:09Z",
+  "release_topology": {
+    "trusted_base": "42f570f309e20c867f65cffbce76e7f6d64d65d5",
+    "candidate_commit_count": 1,
+    "main_update": "fast-forward-only-after-final-review"
+  },
+  "cargo_reachability": {
+    "cargo_version": "1.96.1",
+    "command": ["tree", "--locked", "--all-features", "--target", "all", "--prefix", "none", "--format", "{p}"]
+  },
+  "first_party_packages": [
+      {
+          "name": "ficant-acceptance",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-acceptance@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "crates/ficant-acceptance"
+      },
+      {
+          "name": "ficant-api",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-api@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "crates/ficant-api"
+      },
+      {
+          "name": "ficant-application",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-application@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "crates/ficant-application"
+      },
+      {
+          "name": "ficant-bootstrap",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-bootstrap@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "binaries/ficant-bootstrap"
+      },
+      {
+          "name": "ficant-contract-tests",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-contract-tests@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "crates/ficant-contract-tests"
+      },
+      {
+          "name": "ficant-contracts",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-contracts@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "crates/ficant-contracts"
+      },
+      {
+          "name": "ficant-domain",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-domain@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "crates/ficant-domain"
+      },
+      {
+          "name": "ficant-node-runtime",
+          "version": "0.1.0",
+          "purl": "pkg:pypi/ficant-node-runtime@0.1.0",
+          "ecosystem": "PyPI",
+          "source": "python"
+      },
+      {
+          "name": "ficant-runtime",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-runtime@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "crates/ficant-runtime"
+      },
+      {
+          "name": "ficant-server",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-server@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "binaries/ficant-server"
+      },
+      {
+          "name": "ficant-storage",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-storage@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "crates/ficant-storage"
+      },
+      {
+          "name": "ficant-web",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-web@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "binaries/ficant-web"
+      },
+      {
+          "name": "ficant-worker",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-worker@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "binaries/ficant-worker"
+      }
+  ],
+  "license_scoped_exceptions": [
+    {
+      "purl": "pkg:cargo/webpki-roots@0.26.11",
+      "name": "webpki-roots",
+      "version": "0.26.11",
+      "license_expression": "CDLA-Permissive-2.0",
+      "source_locator": "https://crates.io/api/v1/crates/webpki-roots/0.26.11/download",
+      "source_integrity": "sha256:521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9",
+      "license_text_sha256": "d30183ec6610abca89d6095d5f1dc56ea50248a1001cbb4549fadc3a582f6f9a",
+      "attribution": "webpki-roots 0.26.11；Mozilla Contributors；信任根数据采用 CDLA-Permissive-2.0。"
+    },
+    {
+      "purl": "pkg:cargo/webpki-roots@1.0.8",
+      "name": "webpki-roots",
+      "version": "1.0.8",
+      "license_expression": "CDLA-Permissive-2.0",
+      "source_locator": "https://crates.io/api/v1/crates/webpki-roots/1.0.8/download",
+      "source_integrity": "sha256:bf85cb06032201fa7c6f829d7db5a7e5aa45bcc0655327713065f6f0576731bf",
+      "license_text_sha256": "d30183ec6610abca89d6095d5f1dc56ea50248a1001cbb4549fadc3a582f6f9a",
+      "attribution": "webpki-roots 1.0.8；Mozilla Contributors；信任根数据采用 CDLA-Permissive-2.0。"
+    },
+    {
+      "purl": "pkg:npm/caniuse-lite@1.0.30001805",
+      "name": "caniuse-lite",
+      "version": "1.0.30001805",
+      "license_expression": "CC-BY-4.0",
+      "source_locator": "https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001805.tgz",
+      "source_integrity": "sha512-52noaS3DubycKSXaU30TwPGIp+POyQSUVa5jBEq3vkRkY0kjyb3LQgvhU6WGyCcyXqVLWO0Cw0Q6BSdD0kUfVA==",
+      "license_text_sha256": "7183ef9749eb9b75e710a81a4c812a9405cc184f087500581a973e5929ac3f5e",
+      "attribution": "caniuse-lite 1.0.30001805；Can I Use 数据贡献者；数据采用 CC-BY-4.0。"
+    }
+  ],
+  "risk_acceptances": [
+    {
+      "id": "iteration-2-async-std-1.13.2",
+      "status": "accepted-unfixed",
+      "iteration": 2,
+      "purl": "pkg:cargo/async-std@1.13.2",
+      "name": "async-std",
+      "version": "1.13.2",
+      "source_locator": "https://crates.io/api/v1/crates/async-std/1.13.2/download",
+      "source_integrity": "sha256:2c8e079a4ab67ae52b7403632e4618815d6db36d2a010cfe41b02c1b1578f93b",
+      "reachable_via": {
+        "purl": "pkg:cargo/minio@0.4.0",
+        "name": "minio",
+        "version": "0.4.0",
+        "source_integrity": "sha256:cc93d8cbf49952a55414ac584a372cd785b6b988dca897b119bb8b0b3252f455"
+      },
+      "reassess_by": "iteration-3-entry-or-first-external-release"
+    }
+  ],
+  "tools": [
+    {
+      "name": "osv-scanner",
+      "version": "2.4.0",
+      "license": "Apache-2.0",
+      "asset": "osv-scanner_linux_amd64",
+      "url": "https://github.com/google/osv-scanner/releases/download/v2.4.0/osv-scanner_linux_amd64",
+      "sha256": "15314940c10d26af9c6649f150b8a47c1262e8fc7e17b1d1029b0e479e8ed8a0",
+      "checksum_url": "https://github.com/google/osv-scanner/releases/download/v2.4.0/osv-scanner_SHA256SUMS",
+      "checksum_asset_sha256": "9d6fff9bac4d77269c8b04a1b74b72cd087842106abd11d8e0426ab07b2dd441"
+    },
+    {
+      "name": "syft",
+      "version": "1.46.0",
+      "license": "Apache-2.0",
+      "asset": "syft_1.46.0_linux_amd64.tar.gz",
+      "url": "https://github.com/anchore/syft/releases/download/v1.46.0/syft_1.46.0_linux_amd64.tar.gz",
+      "sha256": "d654f678b709eb53c393d38519d5ed7d2e57205529404018614cfefa0fb2b5ca",
+      "checksum_url": "https://github.com/anchore/syft/releases/download/v1.46.0/syft_1.46.0_checksums.txt",
+      "checksum_asset_sha256": "2fefc202b2eccab83888cc91f5a364a75df0dd777afbbae5b5e23ebd93d81ac6"
+    },
+    {
+      "name": "gitleaks",
+      "version": "8.28.0",
+      "license": "MIT",
+      "asset": "gitleaks_8.28.0_linux_x64.tar.gz",
+      "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz",
+      "sha256": "a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb",
+      "checksum_url": "https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_checksums.txt",
+      "checksum_asset_sha256": "4ea55cd2e433edbe3151e0ff49b044df310e29967a38f38b68b1434a3660dcb8"
+    }
+  ],
+  "osv_snapshot": {
+    "schema_version": 1,
+    "aggregate_algorithm": "sha256 of UTF-8 lines ecosystem<TAB>generation<TAB>sha256<LF> in listed order",
+    "aggregate_sha256": "624fc7a35df8328ea4b79123ced39cd11a9e943d0e87aa682ea9e317e52dd851",
+    "databases": [
+      {
+        "ecosystem": "crates.io",
+        "generation": "1783752835905425",
+        "updated_utc": "2026-07-11T06:53:56.007Z",
+        "official_url": "https://storage.googleapis.com/download/storage/v1/b/osv-vulnerabilities/o/crates.io%2Fall.zip?generation=1783752835905425&alt=media",
+        "asset": "crates.io-all.zip",
+        "size": 3255613,
+        "sha256": "f882709ffbc3309f9801e2326457464f00da33898ccc96bb4bed2a42b96bafa5",
+        "gcs_md5_base64": "lsVqFhYt9EsGFDnjAUbFBQ==",
+        "gcs_crc32c_base64": "9UFXNA=="
+      },
+      {
+        "ecosystem": "PyPI",
+        "generation": "1783813078497842",
+        "updated_utc": "2026-07-11T23:37:58.611Z",
+        "official_url": "https://storage.googleapis.com/download/storage/v1/b/osv-vulnerabilities/o/PyPI%2Fall.zip?generation=1783813078497842&alt=media",
+        "asset": "PyPI-all.zip",
+        "size": 28994223,
+        "sha256": "72ea414ebe4a303e46a6c8f13ff6567068b3c4e2d45bcec82a8595c9724d6092",
+        "gcs_md5_base64": "E3FE2jxG4icBRTV8l40k/g==",
+        "gcs_crc32c_base64": "6pROKg=="
+      },
+      {
+        "ecosystem": "npm",
+        "generation": "1783814918772606",
+        "updated_utc": "2026-07-12T00:08:38.892Z",
+        "official_url": "https://storage.googleapis.com/download/storage/v1/b/osv-vulnerabilities/o/npm%2Fall.zip?generation=1783814918772606&alt=media",
+        "asset": "npm-all.zip",
+        "size": 210804679,
+        "sha256": "21dd4c9f930f41f7a8655eee844fc7b8dcd72200a2adc01ab706e02814a23ecf",
+        "gcs_md5_base64": "xbQFZixIrn0b/p+shKJ5Mg==",
+        "gcs_crc32c_base64": "jQUgzw=="
+      }
+    ]
+  },
+  "license_allowlist": [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "PSF-2.0",
+    "PostgreSQL",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Unlicense",
+    "Zlib"
+  ]
+}

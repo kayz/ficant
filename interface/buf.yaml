@@ -1,0 +1,14 @@
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+  ignore_only:
+    RPC_REQUEST_RESPONSE_UNIQUE:
+      - proto/ficant/app/v1/registry.proto
+    RPC_RESPONSE_STANDARD_NAME:
+      - proto/ficant/app/v1/registry.proto
+breaking:
+  use:
+    - FILE

@@ -1,0 +1,13 @@
+[package]
+name = "ficant-bootstrap"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+httparse = "=1.10.1"
+serde = { version = "=1.0.228", features = ["derive"] }
+toml = "=0.8.23"
+
+[lints]
+workspace = true

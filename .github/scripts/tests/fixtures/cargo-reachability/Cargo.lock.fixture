@@ -1,0 +1,16 @@
+version = 4
+
+[[package]]
+name = "reachable"
+version = "1.0.0"
+checksum = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+[[package]]
+name = "rsa"
+version = "0.9.10"
+checksum = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+[[package]]
+name = "sqlx-mysql"
+version = "0.8.6"
+checksum = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"

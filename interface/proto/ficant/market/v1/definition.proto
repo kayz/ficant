@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+package ficant.market.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/market/v1/instrument.proto";
+import "ficant/market/v1/rule.proto";
+import "google/protobuf/timestamp.proto";
+
+message Bond {
+  ficant.core.v1.VersionRef instrument = 1;
+  string issue_date = 2;
+  string maturity_date = 3;
+  ficant.core.v1.DecimalValue face_value = 4;
+}
+
+message FuturesContract {
+  ficant.core.v1.VersionRef instrument = 1;
+  ficant.core.v1.MarketTime last_trade_time = 2;
+  ficant.core.v1.MarketTime expiry_time = 3;
+  ficant.core.v1.MarketTime settlement_time = 4;
+  ficant.core.v1.DecimalValue multiplier = 5;
+  ficant.core.v1.VersionRef rule_pack = 6;
+}
+
+message CalendarSession {
+  string local_date = 1;
+  string open_local_time = 2;
+  string close_local_time = 3;
+  bool closed = 4;
+}
+
+message Calendar {
+  ficant.core.v1.Ulid calendar_id = 1;
+  uint64 version = 2;
+  ficant.core.v1.OwnerRef owner = 3;
+  string market = 4;
+  string market_timezone = 5;
+  ficant.core.v1.MarketTime effective_from = 6;
+  ficant.core.v1.MarketTime effective_to = 7;
+  repeated CalendarSession sessions = 8;
+}
+
+message Unit {
+  ficant.core.v1.Ulid unit_id = 1;
+  uint64 version = 2;
+  ficant.core.v1.OwnerRef owner = 3;
+  string code = 4;
+  string dimension = 5;
+  uint32 scale = 6;
+  uint32 precision = 7;
+}
+
+message AppendInstrumentRequest {
+  string idempotency_key = 1;
+  uint64 expected_latest_version = 2;
+  Instrument instrument = 3;
+}
+
+message AppendInstrumentResponse {
+  Instrument instrument = 1;
+}
+
+message AppendBondRequest {
+  string idempotency_key = 1;
+  uint64 expected_latest_version = 2;
+  Bond bond = 3;
+}
+
+message AppendBondResponse {
+  Bond bond = 1;
+}
+
+message AppendFuturesContractRequest {
+  string idempotency_key = 1;
+  uint64 expected_latest_version = 2;
+  FuturesContract futures_contract = 3;
+}
+
+message AppendFuturesContractResponse {
+  FuturesContract futures_contract = 1;
+}
+
+message AppendCalendarRequest {
+  string idempotency_key = 1;
+  uint64 expected_latest_version = 2;
+  Calendar calendar = 3;
+}
+
+message AppendCalendarResponse {
+  Calendar calendar = 1;
+}
+
+message AppendUnitRequest {
+  string idempotency_key = 1;
+  uint64 expected_latest_version = 2;
+  Unit unit = 3;
+}
+
+message AppendUnitResponse {
+  Unit unit = 1;
+}
+
+message AppendMarketRulePackRequest {
+  string idempotency_key = 1;
+  uint64 expected_latest_version = 2;
+  MarketRulePack market_rule_pack = 3;
+}
+
+message AppendMarketRulePackResponse {
+  MarketRulePack market_rule_pack = 1;
+}
+
+message MarketDefinition {
+  oneof definition {
+    Instrument instrument = 1;
+    Bond bond = 2;
+    FuturesContract futures_contract = 3;
+    Calendar calendar = 4;
+    Unit unit = 5;
+    MarketRulePack market_rule_pack = 6;
+  }
+}
+
+message GetDefinitionVersionRequest {
+  ficant.core.v1.Ulid definition_id = 1;
+  uint64 version = 2;
+}
+
+message GetDefinitionVersionResponse {
+  MarketDefinition definition = 1;
+}
+
+message ResolveDefinitionAsOfRequest {
+  ficant.core.v1.Ulid definition_id = 1;
+  google.protobuf.Timestamp as_of = 2;
+}
+
+message ResolveDefinitionAsOfResponse {
+  MarketDefinition definition = 1;
+}
+
+message ListDefinitionVersionsRequest {
+  ficant.core.v1.Ulid definition_id = 1;
+  ficant.core.v1.PageRequest page = 2;
+}
+
+message ListDefinitionVersionsResponse {
+  repeated MarketDefinition definitions = 1;
+  ficant.core.v1.PageResponse page = 2;
+}
+
+service MarketDefinitionService {
+  rpc AppendInstrument(AppendInstrumentRequest) returns (AppendInstrumentResponse);
+  rpc AppendBond(AppendBondRequest) returns (AppendBondResponse);
+  rpc AppendFuturesContract(AppendFuturesContractRequest) returns (AppendFuturesContractResponse);
+  rpc AppendCalendar(AppendCalendarRequest) returns (AppendCalendarResponse);
+  rpc AppendUnit(AppendUnitRequest) returns (AppendUnitResponse);
+  rpc AppendMarketRulePack(AppendMarketRulePackRequest) returns (AppendMarketRulePackResponse);
+  rpc GetDefinitionVersion(GetDefinitionVersionRequest) returns (GetDefinitionVersionResponse);
+  rpc ResolveDefinitionAsOf(ResolveDefinitionAsOfRequest) returns (ResolveDefinitionAsOfResponse);
+  rpc ListDefinitionVersions(ListDefinitionVersionsRequest) returns (ListDefinitionVersionsResponse);
+}

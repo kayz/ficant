@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package ficant.research.v1;
+
+import "ficant/core/v1/common.proto";
+
+message DataSnapshot {
+  ficant.core.v1.Ulid data_snapshot_id = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  ficant.core.v1.MarketTime visible_at = 3;
+  ficant.core.v1.MarketTime as_of = 4;
+  ficant.core.v1.Sha256 schema_hash = 5;
+  ficant.core.v1.Sha256 manifest_hash = 6;
+  ficant.core.v1.Sha256 blob_content_hash = 7;
+  repeated ficant.core.v1.LineageRef lineage = 8;
+}
+
+message UniverseSnapshot {
+  ficant.core.v1.Ulid universe_snapshot_id = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  repeated ficant.core.v1.VersionRef instrument_versions = 3;
+  ficant.core.v1.Sha256 filter_digest = 4;
+  ficant.core.v1.Sha256 content_hash = 5;
+  repeated ficant.core.v1.LineageRef lineage = 6;
+}
+
+message PublishDataSnapshotRequest {
+  string idempotency_key = 1;
+  DataSnapshot data_snapshot = 2;
+}
+
+message PublishDataSnapshotResponse {
+  DataSnapshot data_snapshot = 1;
+}
+
+message PublishUniverseSnapshotRequest {
+  string idempotency_key = 1;
+  UniverseSnapshot universe_snapshot = 2;
+}
+
+message PublishUniverseSnapshotResponse {
+  UniverseSnapshot universe_snapshot = 1;
+}
+
+message GetSnapshotRequest {
+  ficant.core.v1.Ulid snapshot_id = 1;
+}
+
+message GetSnapshotResponse {
+  oneof snapshot {
+    DataSnapshot data_snapshot = 1;
+    UniverseSnapshot universe_snapshot = 2;
+  }
+}
+
+service SnapshotService {
+  rpc PublishDataSnapshot(PublishDataSnapshotRequest) returns (PublishDataSnapshotResponse);
+  rpc PublishUniverseSnapshot(PublishUniverseSnapshotRequest) returns (PublishUniverseSnapshotResponse);
+  rpc GetSnapshot(GetSnapshotRequest) returns (GetSnapshotResponse);
+}

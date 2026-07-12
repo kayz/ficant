@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package ficant.research.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/research/v1/journal.proto";
+
+enum RunState {
+  RUN_STATE_UNSPECIFIED = 0;
+  RUN_STATE_CREATED = 1;
+  RUN_STATE_RUNNING = 2;
+  RUN_STATE_SUCCEEDED = 3;
+  RUN_STATE_FAILED = 4;
+  RUN_STATE_CANCELLED = 5;
+}
+
+message ExperimentRun {
+  ficant.core.v1.Ulid experiment_run_id = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  ficant.core.v1.LineageRef data_snapshot = 3;
+  ficant.core.v1.LineageRef universe_snapshot = 4;
+  repeated ficant.core.v1.VersionRef rule_packs = 5;
+  ficant.core.v1.Sha256 runtime_image_digest = 6;
+  ficant.core.v1.Sha256 parameters_hash = 7;
+  uint64 seed = 8;
+  RunState state = 9;
+  uint64 revision = 10;
+}
+
+message CreateRunRequest {
+  string idempotency_key = 1;
+  ExperimentRun run = 2;
+}
+
+message CreateRunResponse {
+  ExperimentRun run = 1;
+}
+
+message TransitionRunRequest {
+  ficant.core.v1.Ulid run_id = 1;
+  uint64 expected_revision = 2;
+  RunState next_state = 3;
+}
+
+message TransitionRunResponse {
+  ExperimentRun run = 1;
+}
+
+message GetRunRequest {
+  ficant.core.v1.Ulid run_id = 1;
+}
+
+message GetRunResponse {
+  ExperimentRun run = 1;
+}
+
+message ReadRunJournalRequest {
+  ficant.core.v1.Ulid run_id = 1;
+  uint64 from_sequence = 2;
+  ficant.core.v1.PageRequest page = 3;
+}
+
+message ReadRunJournalResponse {
+  repeated RunJournal events = 1;
+  ficant.core.v1.PageResponse page = 2;
+}
+
+service ExperimentService {
+  rpc CreateRun(CreateRunRequest) returns (CreateRunResponse);
+  rpc TransitionRun(TransitionRunRequest) returns (TransitionRunResponse);
+  rpc GetRun(GetRunRequest) returns (GetRunResponse);
+  rpc ReadRunJournal(ReadRunJournalRequest) returns (ReadRunJournalResponse);
+}

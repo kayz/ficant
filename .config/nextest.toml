@@ -1,0 +1,6 @@
+[test-groups.shared-postgres-minio]
+max-threads = 1
+
+[[profile.default.overrides]]
+filter = 'package(ficant-storage) | package(ficant-acceptance)'
+test-group = 'shared-postgres-minio'

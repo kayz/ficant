@@ -1,0 +1,13 @@
+[package]
+name = "ficant-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+ficant-domain = { path = "../ficant-domain" }
+sha2 = { workspace = true }
+
+[lints]
+workspace = true

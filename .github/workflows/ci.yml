@@ -1,0 +1,273 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repo-policy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - run: bash .github/scripts/tests/run-repo-policy-tests.sh
+      - run: bash .github/scripts/verify-repo-policy.sh --stage final
+      - run: python3 -m unittest python.tests.test_compose_security_gate -v
+
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Install frozen contract tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.96.1-x86_64-unknown-linux-gnu
+          rustup default 1.96.1-x86_64-unknown-linux-gnu
+          curl --retry 5 --retry-all-errors -fL -o /tmp/uv.tar.gz https://github.com/astral-sh/uv/releases/download/0.7.13/uv-x86_64-unknown-linux-gnu.tar.gz
+          echo '909278eb197c5ed0e9b5f16317d1255270d1f9ea4196e7179ce934d48c4c2545  /tmp/uv.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/uv.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv
+          docker create --name ficant-buf-tool bufbuild/buf@sha256:89fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26
+          docker cp ficant-buf-tool:/usr/local/bin/buf /tmp/buf
+          docker rm ficant-buf-tool
+          sudo install -m 0755 /tmp/buf /usr/local/bin/buf
+          curl --retry 5 --retry-all-errors -fL -o /tmp/node-v22.17.0-linux-x64.tar.xz https://nodejs.org/dist/v22.17.0/node-v22.17.0-linux-x64.tar.xz
+          [[ $(stat -c %s /tmp/node-v22.17.0-linux-x64.tar.xz) == '30482736' ]]
+          echo '325c0f1261e0c61bcae369a1274028e9cfb7ab7949c05512c5b1e630f7e80e12  /tmp/node-v22.17.0-linux-x64.tar.xz' | sha256sum -c -
+          tar -xJf /tmp/node-v22.17.0-linux-x64.tar.xz -C /tmp
+          export PATH="/tmp/node-v22.17.0-linux-x64/bin:$PATH"
+          echo '/tmp/node-v22.17.0-linux-x64/bin' >> "$GITHUB_PATH"
+          [[ $(node --version) == 'v22.17.0' ]]
+          corepack enable
+          corepack prepare pnpm@10.12.4 --activate
+      - run: bash .github/scripts/verify-contract-generation.sh
+
+  rust:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - run: >-
+          docker run --rm
+          --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu
+          --volume "${{ github.workspace }}:/workspace"
+          --workdir /workspace
+          rust@sha256:e18a79fc84dfcfc3ab5ba72290398a644c135c97eaa881447fddc354ee4701a3
+          sh -ec 'cargo build --workspace --all-targets --locked && cargo test --workspace --locked --exclude ficant-acceptance --exclude ficant-storage --exclude ficant-contract-tests && cargo test --locked -p ficant-storage --lib'
+
+  python:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - run: docker build --file python/node-runtime/Dockerfile --tag ficant-python-node-runtime:ci .
+      - run: docker run --rm ficant-python-node-runtime:ci
+
+  cpp:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Install frozen C++ tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Root identity enforced by the six-package closure tool: https://apt.llvm.org/noble/pool/main/l/llvm-toolchain-18/clang-18_18.1.8~++20240731025043+3b5b5c1ec4a3-1~exp1~20240731145144.92_amd64.deb size=119448 sha256=6b23c30bd68a86e9485cafd0806d3aa46a812089fba74d8283befa611825b42b
+          bash .github/scripts/setup-llvm-toolchain.sh --install
+          curl --retry 5 --retry-all-errors -fL -o /tmp/cmake.tar.gz https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-linux-x86_64.tar.gz
+          echo '5a1133ff103c71eb5120e2cc3de922733e7d8a26a98ae716397e8676adb367bf  /tmp/cmake.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/cmake.tar.gz -C /tmp
+          curl --retry 5 --retry-all-errors -fL -o /tmp/ninja.zip https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip
+          echo '6f98805688d19672bd699fbbfa2c2cf0fc054ac3df1f0e6a47664d963d530255  /tmp/ninja.zip' | sha256sum -c -
+          unzip -q /tmp/ninja.zip -d /tmp/ninja
+          echo '/tmp/cmake-3.31.6-linux-x86_64/bin' >> "$GITHUB_PATH"
+          echo '/tmp/ninja' >> "$GITHUB_PATH"
+      - run: cmake -S cpp/fixed-income-kernel -B build/cpp -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build/cpp --parallel
+      - run: ctest --test-dir build/cpp --output-on-failure
+
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Frozen Web build, Vitest, Playwright, and real gRPC-Web path
+        shell: bash
+        run: |
+          set -euo pipefail
+          signing_key=$(printf '01%.0s' {1..32})
+          trace_key=$(printf '02%.0s' {1..32})
+          docker run --detach --rm --name ficant-ci-grpc --network host \
+            --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu \
+            --env FICANT_GRPC_BIND=127.0.0.1:50051 \
+            --env FICANT_GRPC_WEB_ALLOWED_ORIGINS=http://127.0.0.1:4174 \
+            --env FICANT_PLATFORM_SIGNING_KEY_HEX="$signing_key" \
+            --env FICANT_PLATFORM_TRACE_KEY_HEX="$trace_key" \
+            --env FICANT_BOOTSTRAP_SUBJECT=ci-browser \
+            --env FICANT_BOOTSTRAP_BEARER_TOKEN=ci-grpc-test-token \
+            --env FICANT_BOOTSTRAP_SCOPES=apps:read \
+            --volume "${{ github.workspace }}:/workspace" --workdir /workspace \
+            rust@sha256:e18a79fc84dfcfc3ab5ba72290398a644c135c97eaa881447fddc354ee4701a3 \
+            sh -ec 'cargo run --locked -p ficant-server'
+          trap 'docker rm -f ficant-ci-grpc >/dev/null 2>&1 || true' EXIT
+          python3 - <<'PY'
+          import socket
+          import time
+
+          for _ in range(600):
+              with socket.socket() as client:
+                  if client.connect_ex(("127.0.0.1", 50051)) == 0:
+                      break
+              time.sleep(1)
+          else:
+              raise SystemExit("real gRPC-Web service did not become ready")
+          PY
+          docker run --rm --network host --ipc host \
+            --env CI=1 \
+            --env FICANT_GRPC_WEB_BASE_URL=http://127.0.0.1:50051 \
+            --env FICANT_GRPC_WEB_BEARER_TOKEN=ci-grpc-test-token \
+            --volume "${{ github.workspace }}:/workspace" --workdir /workspace/web-dm \
+            node@sha256:b04ce4ae4e95b522112c2e5c52f781471a5cbc3b594527bcddedee9bc48c03a0 \
+            sh -ec 'corepack enable && corepack prepare pnpm@10.12.4 --activate && corepack pnpm@10.12.4 install --frozen-lockfile && pnpm typecheck && pnpm build && pnpm test && pnpm exec playwright install --with-deps chromium && pnpm test:e2e && pnpm test:e2e:grpc'
+
+  migration:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74
+        env:
+          POSTGRES_DB: ficant
+          POSTGRES_USER: ficant
+          POSTGRES_PASSWORD: ficant-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ficant -d ficant"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Real serial migration stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --rm --name ficant-ci-minio --network host \
+            --env MINIO_ROOT_USER=ficant-ci --env MINIO_ROOT_PASSWORD=ficant-ci-password \
+            minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e server /data
+          trap 'docker rm -f ficant-ci-minio >/dev/null 2>&1 || true' EXIT
+          until docker run --rm --network host --entrypoint /bin/sh \
+            minio/mc@sha256:09f93f534cde415d192bb6084dd0e0ddd1715fb602f8a922ad121fd2bf0f8b44 \
+            -ec 'mc alias set local http://127.0.0.1:9000 ficant-ci ficant-ci-password && mc mb --ignore-existing local/ficant-ci'; do sleep 1; done
+          docker run --rm --network host \
+            --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu \
+            --env FICANT_TEST_DATABASE_URL=postgres://ficant:ficant-ci-password@127.0.0.1:5432/ficant \
+            --volume "${{ github.workspace }}:/workspace" --workdir /workspace \
+            rust@sha256:e18a79fc84dfcfc3ab5ba72290398a644c135c97eaa881447fddc354ee4701a3 \
+            cargo test --locked -p ficant-storage --test migration_acceptance -- --test-threads=1
+
+  business-loop:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74
+        env:
+          POSTGRES_DB: ficant
+          POSTGRES_USER: ficant
+          POSTGRES_PASSWORD: ficant-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ficant -d ficant"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Real serial Phase 1 business stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --rm --name ficant-ci-minio --network host \
+            --env MINIO_ROOT_USER=ficant-ci --env MINIO_ROOT_PASSWORD=ficant-ci-password \
+            minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e server /data
+          trap 'docker rm -f ficant-ci-minio >/dev/null 2>&1 || true' EXIT
+          until docker run --rm --network host --entrypoint /bin/sh \
+            minio/mc@sha256:09f93f534cde415d192bb6084dd0e0ddd1715fb602f8a922ad121fd2bf0f8b44 \
+            -ec 'mc alias set local http://127.0.0.1:9000 ficant-ci ficant-ci-password && mc mb --ignore-existing local/ficant-ci'; do sleep 1; done
+          # Derived OCI manifest verified at dbcff347; runtime inputs are unchanged through this SHA; this job does not rebuild it.
+          export FICANT_TEST_RUNTIME_IMAGE_DIGEST=sha256:8e97031468b2ad51ab8484d06d8af9d63f1b73f8c04654f17be40ac629076cd9
+          docker run --rm --network host \
+            --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu \
+            --env FICANT_TEST_DATABASE_URL=postgres://ficant:ficant-ci-password@127.0.0.1:5432/ficant \
+            --env FICANT_TEST_S3_ENDPOINT=http://127.0.0.1:9000 \
+            --env FICANT_TEST_S3_BUCKET=ficant-ci \
+            --env FICANT_TEST_S3_ACCESS_KEY=ficant-ci \
+            --env FICANT_TEST_S3_SECRET_KEY=ficant-ci-password \
+            --env FICANT_TEST_RUNTIME_IMAGE_DIGEST \
+            --volume "${{ github.workspace }}:/workspace" --workdir /workspace \
+            rust@sha256:e18a79fc84dfcfc3ab5ba72290398a644c135c97eaa881447fddc354ee4701a3 \
+            sh -ec 'cargo test --locked -p ficant-acceptance --test phase1_business_loop -- --test-threads=1 && cargo test --locked -p ficant-acceptance --test negative_invariants -- --test-threads=1'
+
+  supply-chain:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - run: bash .github/scripts/verify-supply-chain.sh
+        env:
+          FICANT_GATE_OUTPUT_DIR: ${{ runner.temp }}/ficant-supply-evidence
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ficant-supply-evidence
+          path: ${{ runner.temp }}/ficant-supply-evidence
+          if-no-files-found: error
+
+  reproducibility:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Install frozen reproducibility tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.96.1-x86_64-unknown-linux-gnu
+          rustup default 1.96.1-x86_64-unknown-linux-gnu
+          curl --retry 5 --retry-all-errors -fL -o /tmp/uv.tar.gz https://github.com/astral-sh/uv/releases/download/0.7.13/uv-x86_64-unknown-linux-gnu.tar.gz
+          echo '909278eb197c5ed0e9b5f16317d1255270d1f9ea4196e7179ce934d48c4c2545  /tmp/uv.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/uv.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv
+          bash .github/scripts/setup-llvm-toolchain.sh --install
+          curl --retry 5 --retry-all-errors -fL -o /tmp/cmake.tar.gz https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-linux-x86_64.tar.gz
+          echo '5a1133ff103c71eb5120e2cc3de922733e7d8a26a98ae716397e8676adb367bf  /tmp/cmake.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/cmake.tar.gz -C /tmp
+          curl --retry 5 --retry-all-errors -fL -o /tmp/ninja.zip https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip
+          echo '6f98805688d19672bd699fbbfa2c2cf0fc054ac3df1f0e6a47664d963d530255  /tmp/ninja.zip' | sha256sum -c -
+          unzip -q /tmp/ninja.zip -d /tmp/ninja
+          echo '/tmp/cmake-3.31.6-linux-x86_64/bin' >> "$GITHUB_PATH"
+          echo '/tmp/ninja' >> "$GITHUB_PATH"
+          curl --retry 5 --retry-all-errors -fL -o /tmp/node-v22.17.0-linux-x64.tar.xz https://nodejs.org/dist/v22.17.0/node-v22.17.0-linux-x64.tar.xz
+          [[ $(stat -c %s /tmp/node-v22.17.0-linux-x64.tar.xz) == '30482736' ]]
+          echo '325c0f1261e0c61bcae369a1274028e9cfb7ab7949c05512c5b1e630f7e80e12  /tmp/node-v22.17.0-linux-x64.tar.xz' | sha256sum -c -
+          tar -xJf /tmp/node-v22.17.0-linux-x64.tar.xz -C /tmp
+          export PATH="/tmp/node-v22.17.0-linux-x64/bin:$PATH"
+          echo '/tmp/node-v22.17.0-linux-x64/bin' >> "$GITHUB_PATH"
+          [[ $(node --version) == 'v22.17.0' ]]
+          corepack enable
+          corepack prepare pnpm@10.12.4 --activate
+      - run: bash .github/scripts/verify-reproducibility.sh

@@ -1,0 +1,72 @@
+use ficant_contracts::ficant::app::v1::{
+    GetAppRegistryRequest, GetCurrentSessionRequest, get_app_registry_response,
+    get_current_session_response, platform_service_server::PlatformService,
+};
+use ficant_server::{ServerSettings, build_platform_service};
+use std::collections::BTreeMap;
+use tonic::Request;
+
+const KEY: &str = "3031323334353637383961626364656630313233343536373839616263646566";
+
+fn values(bind: &str) -> BTreeMap<String, String> {
+    BTreeMap::from([
+        ("FICANT_GRPC_BIND".to_owned(), bind.to_owned()),
+        (
+            "FICANT_GRPC_WEB_ALLOWED_ORIGINS".to_owned(),
+            "http://127.0.0.1:4174".to_owned(),
+        ),
+        ("FICANT_PLATFORM_SIGNING_KEY_HEX".to_owned(), KEY.to_owned()),
+        ("FICANT_PLATFORM_TRACE_KEY_HEX".to_owned(), KEY.to_owned()),
+        (
+            "FICANT_LOOPBACK_SUBJECT".to_owned(),
+            "browser-user".to_owned(),
+        ),
+        ("FICANT_LOOPBACK_SCOPES".to_owned(), "rates:read".to_owned()),
+    ])
+}
+
+#[test]
+fn implicit_identity_is_rejected_on_non_loopback_bind() {
+    let error = ServerSettings::try_from_values(&values("0.0.0.0:50051"))
+        .expect_err("implicit identity on a non-loopback listener must fail closed");
+    assert!(error.to_string().contains("loopback"));
+}
+
+#[test]
+fn debug_output_never_contains_signing_or_trace_key() {
+    let settings = ServerSettings::try_from_values(&values("127.0.0.1:50051"))
+        .expect("loopback settings are valid");
+    let debug = format!("{settings:?}");
+    assert!(!debug.contains(KEY));
+    assert!(debug.contains("[REDACTED]"));
+}
+
+#[tokio::test]
+async fn production_composition_has_real_session_and_empty_registry_without_fake_app() {
+    let settings = ServerSettings::try_from_values(&values("127.0.0.1:50051"))
+        .expect("loopback settings are valid");
+    let service = build_platform_service(&settings).expect("service composes");
+
+    let session = service
+        .get_current_session(Request::new(GetCurrentSessionRequest {}))
+        .await
+        .expect("transport succeeds")
+        .into_inner();
+    assert!(matches!(
+        session.result,
+        Some(get_current_session_response::Result::Session(_))
+    ));
+
+    let registry = service
+        .get_app_registry(Request::new(GetAppRegistryRequest {}))
+        .await
+        .expect("transport succeeds")
+        .into_inner();
+    let Some(get_app_registry_response::Result::Registry(registry)) = registry.result else {
+        panic!("configured loopback subject receives registry");
+    };
+    assert!(
+        registry.apps.is_empty(),
+        "production composition must not install fixture apps"
+    );
+}

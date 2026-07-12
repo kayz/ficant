@@ -1,55 +1,35 @@
-# iteration-1 PROQAID 审计摘要
+# iteration-2 PROQAID 退出摘要
 
-**Review verdict：** `pass-with-accepted-findings`  
-**模型证明状态：** `unverified fallback`  
-**审计报告：** `.proqaid/review/audit-report.md`
+**迭代状态：** `closed-with-human-approved-review-deviation`
+
+**Review 状态：** `Review skipped by explicit human authorization`
+
+**权威治理记录：** `.proqaid/orchestrator/decisions.md` 的 D-027
 
 ## 结论
 
-ficant 的治理初始化基线内部一致，没有发现阻塞缺陷。Product、Architecture、Interface、Quality、Delivery 五个角色均完成有界输出，Orchestrator 已生成各角色当前文档；Codex/Claude 工具约束同步，生产/敏感目录为空，Review 未访问外部系统或密钥目录。
+用户明确授权跳过 iteration-2 剩余的候选 focused Review 与最终 Review audit。既有 Review 证据继续有效，但本摘要不追加 Review 轮次、不等待 Review verdict，也不伪造 `Review pass`。
 
-初次 Review 发现五项重要收尾问题。Orchestrator 完成纠正与路由后，用户接受了无法由 Git 反向证明初始化前状态这一历史限制，并授权建立干净的前向基线；最终预推送 Review 给出 `pass-with-accepted-findings`。
+该偏差只改变最终 Review 程序，不改变确定性退出门。iteration-2 已取得以下证据：
 
-## Findings 与处理状态
+- Ubuntu 24.04 GitHub Actions 十项 gate 全部成功；
+- 真实 PostgreSQL/MinIO Phase 1 业务闭环、Migration、required published-content read、完整性事件与确定性重放通过；
+- Rust、Python、C++、Web、Contract 与可重放构建通过；
+- Supply inventory 为 607 个第三方包与 13 个精确一方包，secret 扫描为零；
+- 七服务 Docker/Compose runtime、安全、重启持久性与零残留清理通过；
+- D-025 的发布候选为可信 `main` 基线的唯一单提交子节点，禁止 merge commit 与 force-push。
 
-| ID | 发现 | 处理状态 |
-|---|---|---|
-| R-I-01 | latest Review inbox 停留在 round-2 | 已由 Orchestrator 更新到 round-6 |
-| R-I-02 | Interface round-2 调度状态仍为 dispatched | 已标记完成并引用 round-2 哈希证据 |
-| R-I-03 | Quality、checklist、cleanup、Git inventory 尚未收口 | 已完成 cleanup、精确 inventory、allowlist push 和远端树验证 |
-| R-I-04 | `.planning/` 仍是活动执行记忆 | 已删除并写入 cleanup |
-| R-I-05 | README/UI-DM 及大部分初始化文件未跟踪，Git 无法证明前置状态或变更差异 | 人类已接受历史证据限制，并授权建立仅含 README/src/docs/result 与 `.gitignore` 的干净初始基线 |
+## 已接受风险
 
-## 已验证事实
+`async-std 1.13.2` 保持 `accepted-unfixed`，不得标记为已修复或忽略。必须在 iteration-3 入口或首次外部发布前（以较早者为准）重新评估替换方案。
 
-- Review 报告无 Blocking finding。
-- 五个生产/交付角色 latest/round-1 outbox 配对相同；Interface 纠正另有 round-2 审计文件。
-- `.codex/AGENTS.md` 与 `.claude/CLAUDE.md` 包含相同硬约束和相邻级模型回退政策。
-- `src/`、`hidden/`、`result/` 存在且为空。
-- 仓库内未发现常见私钥文件扩展名或密钥/token 标记。
-- 当前没有生产实现、测试、构建、部署或发布证据。
+## Review deviation
 
-## Git 基线决定
-
-人类已授权在 `github.com/kayz/ficant` 建立第一版，仅推送 `.gitignore`、`README.md`、`src/`、`docs/`、`result/`。UI-DM、PROQAID、工具约束、iteration checklist、hidden 与其他本地材料原地保留并由 `.gitignore` 排除。该基线证明提交后的当前树，不反向证明初始化前内容。
-
-## 最终预推送 Review
-
-- Verdict：`pass-with-accepted-findings`。
-- 发布历史必须从独立的 parentless `main` 根提交开始，不得包含或推送本地旧 `master` 历史。
-- `main` 只允许包含 `.gitignore`、`README.md`、`src/**`、`docs/**`、`result/**`。
-- 本地治理与设计材料必须保持 ignored 且不出现在远端树中。
-- 实际 Review 模型为 `unverified fallback`；没有模型证明时不声明具体回退等级。
-
-## GitHub 发布验证
-
-- 私有仓库：`https://github.com/kayz/ficant`。
-- 默认分支：`main`。
-- 首个内容提交：`affce937b30ba14b59777691ec8d311dbb5161ba`。
-- 首次推送后，本地和远端提交哈希一致。
-- GitHub 远端树与本地树均为 10 个允许文件，差异数为 0。
-- 本地 `.proqaid`、`.codex`、`.claude`、`UI-DM`、iteration checklist、hidden 等未出现在远端树中。
+- 状态：`Review skipped by explicit human authorization`。
+- 不存在 Review PASS 声明。
+- 既有 Review 证据保留，不再追加新的 Review 轮次。
+- 确定性 CI、业务、Migration、Supply、许可证、secret、漏洞、Compose、安全、清理与发布拓扑门均不因该偏差而跳过。
 
 ## Validity
 
-Valid: iteration-1 only
+Valid: iteration-2 only

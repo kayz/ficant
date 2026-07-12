@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package ficant.research.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/research/v1/signal.proto";
+
+enum ArtifactKind {
+  ARTIFACT_KIND_UNSPECIFIED = 0;
+  ARTIFACT_KIND_GENERIC = 1;
+  ARTIFACT_KIND_CURVE_SNAPSHOT = 2;
+  ARTIFACT_KIND_DATA_SNAPSHOT = 3;
+  ARTIFACT_KIND_UNIVERSE_SNAPSHOT = 4;
+  ARTIFACT_KIND_SIGNAL_SET = 5;
+}
+
+message Artifact {
+  ficant.core.v1.Ulid artifact_id = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  ArtifactKind kind = 3;
+  string media_type = 4;
+  ficant.core.v1.Sha256 content_hash = 5;
+  uint64 blob_size = 6;
+  repeated ficant.core.v1.LineageRef lineage = 7;
+}
+
+message PublishArtifactRequest {
+  string idempotency_key = 1;
+  Artifact artifact = 2;
+}
+
+message PublishArtifactResponse {
+  Artifact artifact = 1;
+}
+
+message GetArtifactRequest {
+  ficant.core.v1.Ulid artifact_id = 1;
+}
+
+message GetArtifactResponse {
+  Artifact artifact = 1;
+}
+
+message PublishSignalSetRequest {
+  string idempotency_key = 1;
+  SignalSet signal_set = 2;
+}
+
+message PublishSignalSetResponse {
+  SignalSet signal_set = 1;
+}
+
+message GetSignalSetRequest {
+  ficant.core.v1.Ulid signal_set_id = 1;
+}
+
+message GetSignalSetResponse {
+  SignalSet signal_set = 1;
+}
+
+message ReadArtifactLineageRequest {
+  ficant.core.v1.Ulid artifact_id = 1;
+  ficant.core.v1.PageRequest page = 2;
+}
+
+message ReadArtifactLineageResponse {
+  repeated ficant.core.v1.LineageRef lineage = 1;
+  ficant.core.v1.PageResponse page = 2;
+}
+
+message ReadSignalSetLineageRequest {
+  ficant.core.v1.Ulid signal_set_id = 1;
+  ficant.core.v1.PageRequest page = 2;
+}
+
+message ReadSignalSetLineageResponse {
+  repeated ficant.core.v1.LineageRef lineage = 1;
+  ficant.core.v1.PageResponse page = 2;
+}
+
+service ArtifactService {
+  rpc PublishArtifact(PublishArtifactRequest) returns (PublishArtifactResponse);
+  rpc GetArtifact(GetArtifactRequest) returns (GetArtifactResponse);
+  rpc PublishSignalSet(PublishSignalSetRequest) returns (PublishSignalSetResponse);
+  rpc GetSignalSet(GetSignalSetRequest) returns (GetSignalSetResponse);
+  rpc ReadArtifactLineage(ReadArtifactLineageRequest) returns (ReadArtifactLineageResponse);
+  rpc ReadSignalSetLineage(ReadSignalSetLineageRequest) returns (ReadSignalSetLineageResponse);
+}

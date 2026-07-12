@@ -1,0 +1,4 @@
+platform-shell/dist/
+platform-shell/tsconfig.tsbuildinfo
+playwright-report/
+test-results/

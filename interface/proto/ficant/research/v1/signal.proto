@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package ficant.research.v1;
+
+import "ficant/core/v1/common.proto";
+
+// SignalSet is an immutable, lineaged artifact subtype; it is not an Order.
+message SignalSet {
+  ficant.core.v1.Ulid signal_set_id = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  ficant.core.v1.LineageRef artifact = 3;
+  ficant.core.v1.Ulid experiment_run_id = 4;
+  ficant.core.v1.LineageRef data_snapshot = 5;
+  ficant.core.v1.LineageRef universe_snapshot = 6;
+  repeated ficant.core.v1.VersionRef rule_packs = 7;
+  repeated ficant.core.v1.LineageRef input_artifacts = 8;
+  ficant.core.v1.MarketTime valid_from = 9;
+  ficant.core.v1.MarketTime valid_to = 10;
+}

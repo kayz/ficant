@@ -1,0 +1,20 @@
+[package]
+name = "ficant-server"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+ficant-application = { path = "../../crates/ficant-application" }
+ficant-api = { path = "../../crates/ficant-api" }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+ficant-contracts = { path = "../../crates/ficant-contracts" }
+ficant-domain = { path = "../../crates/ficant-domain" }
+tonic = { workspace = true }
+
+[lints]
+workspace = true

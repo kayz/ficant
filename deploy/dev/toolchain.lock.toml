@@ -1,0 +1,118 @@
+[verification_host]
+os = "Ubuntu 24.04.4 LTS"
+architecture = "x86_64"
+image = "mcr.microsoft.com/dotnet/runtime-deps@sha256:c62d6267bf8f029da10d716163c274b158f5594b6cc7ee125a08efd64e776df6"
+
+[rust]
+version = "1.96.1"
+image = "rust@sha256:e18a79fc84dfcfc3ab5ba72290398a644c135c97eaa881447fddc354ee4701a3"
+license = "MIT OR Apache-2.0"
+
+[python]
+version = "3.12.11"
+image = "python@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7"
+source_sha256 = "c30bb24b7f1e9a19b11b55a546434f74e739bb4c271a3e3a80ff4380d49f7adb"
+license = "PSF-2.0"
+
+[uv]
+version = "0.7.13"
+url = "https://github.com/astral-sh/uv/releases/download/0.7.13/uv-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "909278eb197c5ed0e9b5f16317d1255270d1f9ea4196e7179ce934d48c4c2545"
+license = "MIT OR Apache-2.0"
+
+[clang]
+version = "18.1.8"
+package_version = "1:18.1.8~++20240731025043+3b5b5c1ec4a3-1~exp1~20240731145144.92"
+source = "llvm-toolchain-18"
+architecture = "amd64"
+repository = "https://apt.llvm.org/noble/"
+pool_prefix = "pool/main/l/llvm-toolchain-18/"
+index_url = "https://apt.llvm.org/noble/dists/llvm-toolchain-noble-18/main/binary-amd64/Packages.gz"
+index_size = 12613
+index_sha256 = "8cf692ec3dd86f484d2db39877b35a7f8124bb60b7f66c03f78e030fe33d3919"
+package = "clang-18_18.1.8~++20240731025043+3b5b5c1ec4a3-1~exp1~20240731145144.92_amd64.deb"
+url = "https://apt.llvm.org/noble/pool/main/l/llvm-toolchain-18/clang-18_18.1.8~++20240731025043+3b5b5c1ec4a3-1~exp1~20240731145144.92_amd64.deb"
+size = 119448
+sha256 = "6b23c30bd68a86e9485cafd0806d3aa46a812089fba74d8283befa611825b42b"
+license = "Apache-2.0 WITH LLVM-exception"
+packages = [
+  { name = "clang-18", filename = "pool/main/l/llvm-toolchain-18/clang-18_18.1.8~++20240731025043+3b5b5c1ec4a3-1~exp1~20240731145144.92_amd64.deb", size = 119448, sha256 = "6b23c30bd68a86e9485cafd0806d3aa46a812089fba74d8283befa611825b42b" },
+  { name = "libclang-cpp18", filename = "pool/main/l/llvm-toolchain-18/libclang-cpp18_18.1.8~++20240731025043+3b5b5c1ec4a3-1~exp1~20240731145144.92_amd64.deb", size = 13570716, sha256 = "6abcc0f657b09434acfa561afb73791323f326782a0ea513f9747ef49440941d" },
+  { name = "libllvm18", filename = "pool/main/l/llvm-toolchain-18/libllvm18_18.1.8~++20240731025043+3b5b5c1ec4a3-1~exp1~20240731145144.92_amd64.deb", size = 27514248, sha256 = "4c2ccb3bdca15e5741f57bb025a05d79cdd57becfd5e23633ce82f120007cece" },
+  { name = "libclang-common-18-dev", filename = "pool/main/l/llvm-toolchain-18/libclang-common-18-dev_18.1.8~++20240731025043+3b5b5c1ec4a3-1~exp1~20240731145144.92_amd64.deb", size = 738538, sha256 = "c8775e56339bcbf050994ed97ab4cc442350d3583a86cb29de4a06aec7576dde" },
+  { name = "llvm-18-linker-tools", filename = "pool/main/l/llvm-toolchain-18/llvm-18-linker-tools_18.1.8~++20240731025043+3b5b5c1ec4a3-1~exp1~20240731145144.92_amd64.deb", size = 1352656, sha256 = "cdef719cb8d8c37c1e85b8e230e022016c9b5a5df2e62b45b8a5f5a6f7c6c92b" },
+  { name = "libclang1-18", filename = "pool/main/l/llvm-toolchain-18/libclang1-18_18.1.8~++20240731025043+3b5b5c1ec4a3-1~exp1~20240731145144.92_amd64.deb", size = 7838186, sha256 = "208abb2defadc4bf204ffc4cd74da0419aa66ae00763ba6e4a7aae48a5bbfb46" },
+]
+system_dependency_allowlist = [
+  "binutils", "libc6", "libc6-dev", "libedit2", "libffi8", "libgcc-s1",
+  "libstdc++6", "libstdc++-13-dev", "libgcc-13-dev", "libobjc-13-dev",
+  "libtinfo6", "libxml2", "libzstd1", "zlib1g",
+]
+preinstalled_conflict = { name = "llvm-18-dev", version = "1:18.1.3-1ubuntu1", architecture = "amd64", runner = "ubuntu-24.04", broken_by = "libllvm18", operator = "<<", threshold = "1:18.1.8~++20240730104741" }
+
+[cmake]
+version = "3.31.6"
+url = "https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-linux-x86_64.tar.gz"
+sha256 = "5a1133ff103c71eb5120e2cc3de922733e7d8a26a98ae716397e8676adb367bf"
+license = "BSD-3-Clause"
+
+[ninja]
+version = "1.12.1"
+url = "https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip"
+sha256 = "6f98805688d19672bd699fbbfa2c2cf0fc054ac3df1f0e6a47664d963d530255"
+size = 123084
+license = "Apache-2.0"
+
+[node]
+version = "22.17.0"
+url = "https://nodejs.org/dist/v22.17.0/node-v22.17.0-linux-x64.tar.xz"
+sha256 = "325c0f1261e0c61bcae369a1274028e9cfb7ab7949c05512c5b1e630f7e80e12"
+size = 30482736
+image = "node@sha256:b04ce4ae4e95b522112c2e5c52f781471a5cbc3b594527bcddedee9bc48c03a0"
+license = "MIT"
+
+[pnpm]
+version = "10.12.4"
+url = "https://registry.npmjs.org/pnpm/-/pnpm-10.12.4.tgz"
+sha512 = "5ea8b0deed94ed68691c9bad4c955492705c5eeb8a87ef86bc62c74a26b037b08ff9570f108b2e4dbd1dd1a9186fea925e527f141c648e85af45631074680184"
+license = "MIT"
+
+[buf]
+version = "1.56.0"
+image = "bufbuild/buf@sha256:89fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26"
+license = "Apache-2.0"
+
+[docker]
+cli_version = "27.5.1"
+cli_url = "https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz"
+cli_sha256 = "4f798b3ee1e0140eab5bf30b0edc4e84f4cdb53255a429dc3bbae9524845d640"
+compose_version = "2.32.4"
+compose_url = "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64"
+compose_sha256_url = "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64.sha256"
+compose_sha256 = "ed1917fb54db184192ea9d0717bcd59e3662ea79db48bff36d3475516c480a6b"
+license = "Apache-2.0"
+
+[docker.host_runtime]
+client_version = "27.5.1"
+server_version = "27.5.1"
+server_os = "linux"
+server_architecture = "amd64"
+compose_version = "2.32.4-desktop.1"
+verification = "Host runtime evidence only; the desktop suffix is distinct from the frozen standalone Compose artifact"
+
+[docker.images.postgres]
+source_tag = "postgres:16.10-bookworm"
+repo_digest = "postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74"
+
+[docker.images.minio]
+source_tag = "minio/minio:RELEASE.2025-04-22T22-12-26Z"
+repo_digest = "minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e"
+linux_amd64_manifest = "sha256:3f97c5651cb6662b880c787a232b6b34fec8d8922e08d6617b25d241a21164bb"
+runtime_image = "ficant/minio-runtime:iteration-2"
+dockerfile = "deploy/dev/Minio.Dockerfile"
+runtime_user = "1000:1000"
+license = "AGPL-3.0-only"
+
+[docker.images.minio_client]
+source_tag = "minio/mc:RELEASE.2025-05-21T01-59-54Z"
+repo_digest = "minio/mc@sha256:09f93f534cde415d192bb6084dd0e0ddd1715fb602f8a922ad121fd2bf0f8b44"

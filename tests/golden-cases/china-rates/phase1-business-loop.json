@@ -1,0 +1,110 @@
+{
+  "schema": "ficant.fixture.china-rates.phase1.v1",
+  "fixture_id": "china-rates-phase1-wave-v1",
+  "idempotency_prefix": "china-rates-phase1-wave-v1",
+  "scope": {
+    "tenant_id": "01ARZ3NDEKTSV4RRFFQ69G5F01",
+    "owner_id": "01ARZ3NDEKTSV4RRFFQ69G5F02"
+  },
+  "ids": {
+    "units": {
+      "cny": "01ARZ3NDEKTSV4RRFFQ69G5F03",
+      "price": "01ARZ3NDEKTSV4RRFFQ69G5F04",
+      "face": "01ARZ3NDEKTSV4RRFFQ69G5F05",
+      "rate": "01ARZ3NDEKTSV4RRFFQ69G5F06"
+    },
+    "calendar": "01ARZ3NDEKTSV4RRFFQ69G5F07",
+    "rule_pack": "01ARZ3NDEKTSV4RRFFQ69G5F08",
+    "instrument": "01ARZ3NDEKTSV4RRFFQ69G5F09",
+    "cashflow": "01ARZ3NDEKTSV4RRFFQ69G5F10",
+    "quote": "01ARZ3NDEKTSV4RRFFQ69G5F11",
+    "trade": "01ARZ3NDEKTSV4RRFFQ69G5F12",
+    "valuation": "01ARZ3NDEKTSV4RRFFQ69G5F13",
+    "curve": "01ARZ3NDEKTSV4RRFFQ69G5F14",
+    "data_snapshot": "01ARZ3NDEKTSV4RRFFQ69G5F15",
+    "universe_snapshot": "01ARZ3NDEKTSV4RRFFQ69G5F16",
+    "run": "01ARZ3NDEKTSV4RRFFQ69G5F17",
+    "artifact": "01ARZ3NDEKTSV4RRFFQ69G5F18",
+    "signal": "01ARZ3NDEKTSV4RRFFQ69G5F19",
+    "journal": [
+      "01ARZ3NDEKTSV4RRFFQ69G5F21",
+      "01ARZ3NDEKTSV4RRFFQ69G5F22",
+      "01ARZ3NDEKTSV4RRFFQ69G5F23",
+      "01ARZ3NDEKTSV4RRFFQ69G5F24",
+      "01ARZ3NDEKTSV4RRFFQ69G5F25"
+    ]
+  },
+  "market": {
+    "code": "CIBM",
+    "timezone": "Asia/Shanghai",
+    "trading_date": "2025-01-15"
+  },
+  "units": [
+    {"key": "cny", "code": "CNY", "dimension": "currency", "scale": 2, "precision": 18},
+    {"key": "price", "code": "CNY_PER_100_FACE", "dimension": "price", "scale": 4, "precision": 18},
+    {"key": "face", "code": "FACE_CNY", "dimension": "notional", "scale": 2, "precision": 18},
+    {"key": "rate", "code": "DECIMAL_RATE", "dimension": "rate", "scale": 8, "precision": 18}
+  ],
+  "calendar": {
+    "effective_from": "2025-01-01T00:00:00Z",
+    "effective_to": "2025-12-31T15:59:59Z",
+    "session_open": "09:00:00",
+    "session_close": "15:30:00"
+  },
+  "rule_pack": {
+    "rule_type": "phase1_fixture",
+    "source": "china-rates-fixture-v1",
+    "content": "CIBM phase1 verified external rules v1"
+  },
+  "instrument": {
+    "symbol": "2400001.IB",
+    "issue_date": "2024-01-01",
+    "maturity_date": "2034-01-01",
+    "face_coefficient": "10000",
+    "face_scale": 2
+  },
+  "facts": {
+    "source_id": "china-rates-fixture-v1",
+    "cashflow": {"external_id": "CF-001", "payment_time": "2025-06-15T00:00:00Z", "coefficient": "250", "scale": 2, "schedule_id": "SOURCE-SCHEDULE-001", "sequence": 1},
+    "quote": {"external_id": "QUOTE-001", "observed_at": "2025-01-15T01:01:00Z", "received_at": "2025-01-15T01:01:01Z", "bid": "1012345", "ask": "1012500", "scale": 4},
+    "trade": {"external_id": "TRADE-001", "executed_at": "2025-01-15T01:02:00Z", "price": "1012400", "price_scale": 4, "quantity": "100000000", "quantity_scale": 2},
+    "valuation": {"external_id": "VALUATION-001", "valuation_at": "2025-01-15T07:00:00Z", "method": "external_fixture_mark", "value": "1012300", "scale": 4}
+  },
+  "curve": {
+    "as_of": "2025-01-15T07:00:00Z",
+    "kind": "external_cgb_zero_fixture",
+    "point_schema": "ficant.curve.points.v1",
+    "points": [
+      {"tenor": "1Y", "rate": "1500000", "scale": 8},
+      {"tenor": "5Y", "rate": "1750000", "scale": 8},
+      {"tenor": "10Y", "rate": "1900000", "scale": 8}
+    ]
+  },
+  "snapshots": {
+    "data_visible_at": "2025-01-15T07:05:00Z",
+    "data_as_of": "2025-01-15T07:00:00Z",
+    "data_schema": "ficant.data-snapshot.phase1.v1",
+    "data_payload": "cashflow=CF-001;quote=QUOTE-001;trade=TRADE-001;valuation=VALUATION-001;curve=external_cgb_zero_fixture",
+    "data_manifest": "schema=ficant.data-snapshot.phase1.v1;objects=F10,F11,F12,F13,F14",
+    "universe_filter": "instrument.symbol == 2400001.IB",
+    "universe_manifest": "instrument=2400001.IB;version=1"
+  },
+  "run": {
+    "seed": 2025071101,
+    "parameters": "fixture=china-rates-phase1-wave-v1;market=CIBM;date=2025-01-15",
+    "journal_occurred_at": "2025-01-15T07:16:00Z"
+  },
+  "artifact": {
+    "media_type": "application/vnd.ficant.signal-set",
+    "payload": "signal-set=01ARZ3NDEKTSV4RRFFQ69G5F19;run=01ARZ3NDEKTSV4RRFFQ69G5F17;state=SUCCEEDED"
+  },
+  "signal": {
+    "valid_from": "2025-01-15T07:15:00Z",
+    "valid_to": "2025-01-16T07:15:00Z"
+  },
+  "negative_cases": [
+    "Q2-INV-01", "Q2-INV-02", "Q2-INV-03", "Q2-INV-04",
+    "Q2-INV-05", "Q2-INV-06", "Q2-INV-07", "Q2-INV-08",
+    "Q2-INV-09", "Q2-INV-10", "Q2-INV-11", "Q2-INV-12"
+  ]
+}

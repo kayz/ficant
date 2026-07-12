@@ -1,0 +1,23 @@
+version: v2
+clean: true
+plugins:
+  - remote: buf.build/community/neoeinstein-prost:v0.5.0
+    revision: 2
+    out: crates/ficant-contracts/src/generated
+    opt:
+      - flat_output_dir
+  - remote: buf.build/community/neoeinstein-tonic:v0.5.0
+    revision: 4
+    out: crates/ficant-contracts/src/generated
+    opt:
+      - no_include
+      - flat_output_dir
+  - remote: buf.build/protocolbuffers/python:v31.1
+    revision: 2
+    out: python/node-contracts/src/ficant_contracts/generated
+  - remote: buf.build/bufbuild/es:v2.5.2
+    revision: 1
+    out: web-dm/packages/contracts-generated/src
+    opt:
+      - target=ts
+      - import_extension=none

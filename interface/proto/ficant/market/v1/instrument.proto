@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package ficant.market.v1;
+
+import "ficant/core/v1/common.proto";
+
+enum InstrumentKind {
+  INSTRUMENT_KIND_UNSPECIFIED = 0;
+  INSTRUMENT_KIND_BOND = 1;
+  INSTRUMENT_KIND_FUTURES = 2;
+  INSTRUMENT_KIND_OTHER = 3;
+}
+
+// Instrument is an immutable definition version.
+message Instrument {
+  ficant.core.v1.Ulid instrument_id = 1;
+  uint64 version = 2;
+  ficant.core.v1.OwnerRef owner = 3;
+  InstrumentKind kind = 4;
+  string market = 5;
+  string symbol = 6;
+  ficant.core.v1.UnitRef currency = 7;
+  ficant.core.v1.VersionRef calendar = 8;
+}

@@ -1,0 +1,15 @@
+[package]
+name = "ficant-application"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+async-trait = { workspace = true }
+ficant-domain = { path = "../ficant-domain" }
+ficant-runtime = { path = "../ficant-runtime" }
+ring = { workspace = true }
+
+[lints]
+workspace = true
