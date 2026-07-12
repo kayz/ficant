@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, hashlib, json, pathlib, re, sys
+import argparse, datetime, hashlib, json, pathlib, re, sys
 
 
 def fail(message):
@@ -32,11 +32,53 @@ def exact_policy(lock):
             "purl": "pkg:cargo/minio@0.4.0", "name": "minio", "version": "0.4.0",
             "source_integrity": "sha256:cc93d8cbf49952a55414ac584a372cd785b6b988dca897b119bb8b0b3252f455",
         },
-        "reassess_by": "iteration-3-entry-or-first-external-release",
+        "owner": "Architecture/Delivery",
+        "decision_date": "2026-07-13",
+        "expires_on": "2026-10-13",
+        "reassess_by": "iteration-3-entry-or-first-external-release-or-2026-10-13",
+        "advisory_ids": ["RUSTSEC-2025-0052"],
+        "advisory_type": {"informational": "unmaintained"},
+        "advisory_license": "CC0-1.0",
+        "advisory_source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2025-0052.json",
+        "patched_versions": [],
     }
+    try:
+        if datetime.date.today() > datetime.date.fromisoformat(item.get("expires_on", "")):
+            fail("iteration-2 risk acceptance expired")
+    except (TypeError, ValueError):
+        fail("iteration-2 risk acceptance expiry invalid")
     if item != expected:
         fail("iteration-2 risk acceptance policy drift")
     return item
+
+
+def validate_advisory(vulnerability, policy):
+    if not isinstance(vulnerability, dict) or vulnerability.get("id") not in policy["advisory_ids"]:
+        fail("async-std advisory ID drift")
+    if vulnerability.get("database_specific") != {"license": policy["advisory_license"]}:
+        fail("async-std advisory license metadata drift")
+    affected = vulnerability.get("affected")
+    if not isinstance(affected, list):
+        fail("async-std advisory affected metadata missing")
+    matching = [item for item in affected if isinstance(item, dict)
+                and item.get("package", {}).get("ecosystem") == "crates.io"
+                and item.get("package", {}).get("name") == policy["name"]]
+    if len(matching) != 1:
+        fail("async-std advisory affected package drift")
+    classification = matching[0].get("database_specific")
+    if classification != {
+        "categories": [],
+        "cvss": None,
+        "informational": policy["advisory_type"]["informational"],
+        "source": policy["advisory_source"],
+    }:
+        fail("async-std advisory informational classification drift")
+    ranges = matching[0].get("ranges")
+    if ranges != [{"type": "SEMVER", "events": [{"introduced": "0.0.0-0"}]}]:
+        fail("async-std advisory affected range drift")
+    patched = [event["fixed"] for item in ranges for event in item["events"] if "fixed" in event]
+    if patched != policy["patched_versions"]:
+        fail("async-std advisory patched versions drift")
 
 
 def evaluate(args):
@@ -52,8 +94,13 @@ def evaluate(args):
             package_key = (identity.get("name"), identity.get("version"))
             if identity.get("ecosystem") == "crates.io" and package_key == key:
                 for vulnerability in package.get("vulnerabilities", []) or []:
-                    accepted.append(str(vulnerability.get("id", "UNKNOWN")))
+                    accepted.append(vulnerability)
     if accepted:
+        accepted_ids = [str(vulnerability.get("id", "UNKNOWN")) for vulnerability in accepted]
+        if accepted_ids != policy["advisory_ids"]:
+            fail("async-std advisory set drift")
+        for vulnerability in accepted:
+            validate_advisory(vulnerability, policy)
         if key not in reachable:
             fail("accepted-unfixed package is not reachable")
         chain_path = pathlib.Path(args.chain)
@@ -73,7 +120,7 @@ def evaluate(args):
         "acceptances": [{
             "id": policy["id"], "purl": policy["purl"], "status": policy["status"],
             "reassess_by": policy["reassess_by"], "reachable_via": policy["reachable_via"],
-            "vulnerability_ids": sorted(set(accepted)),
+            "vulnerability_ids": policy["advisory_ids"],
         }] if accepted else [],
         "inputs": {
             "vulnerabilities_sha256": hashlib.sha256(pathlib.Path(args.vulnerabilities).read_bytes()).hexdigest(),

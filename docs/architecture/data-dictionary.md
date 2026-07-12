@@ -118,7 +118,7 @@ metadata/resource 不存在返回 `NotFound`。metadata 和 durable ref 已存�
 
 本轮没有实现现金流生成、定价、收益率、久期/DV01、曲线插值、基差/IRR/CTD 或套保算法。现有 C++ 工程只证明固定 Clang/CMake/Ninja 构建和稳定 C ABI 基线。
 
-Storage 当前经 `minio 0.4.0` 可达 `async-std 1.13.2`。该停止维护风险只按 D-026 为 iteration-2 限定接受，不是架构长期背书；必须在 iteration-3 入口或首次外部发布前（较早者）重新评估替换方案，禁止让此接受自动继承到其他版本或依赖。
+Storage 的发布 Workspace/生产 adapter 当前经 `minio 0.4.0` 可达 `async-std 1.13.2`，并在 put 请求签名/内容处理路径实际使用其 blocking runtime；当前 `ficant-server`/`ficant-worker` 组合根尚未直接装配该 adapter。2026-07-13 复核确认 RustSec 项为 `INFO / unmaintained`、无 patched version；`minio 0.4.0` 是 crates.io 最新版且上游 `master` 仍依赖 `async-std 1.13`，因此没有安全的小版本升级路径。该项按 D-026 作为“当前安全风险低、维护风险中等”的 `accepted-unfixed` 收束，不是架构长期背书。Architecture/Delivery 必须在 iteration-3 Entry Gate、首次外部发布或 2026-10-13 前（最早者）验证上游移除、受控 fork 或受维护 S3 SDK 迁移；禁止自动继承到其他版本、依赖链、调用边界或发布范围。
 
 ## Validity
 

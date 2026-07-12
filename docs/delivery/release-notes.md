@@ -31,13 +31,20 @@
 
 ## 当前交付判断
 
-当前已验收树的 Docker/Compose 专项结论为 `PASS`，前两轮 runtime blocker 均已由真实证据关闭。用户随后明确授权跳过剩余 Review；状态必须记录为 `Review skipped by explicit human authorization`，不得伪造 `Review pass`。全部确定性门与发布拓扑验证完成后，iteration-2 以 `closed-with-human-approved-review-deviation` 关闭。
+当前已验收树的 Docker/Compose 专项结论为 `PASS`，前两轮 runtime blocker 均已由真实证据关闭。2026-07-13 closure audit 不修改运行时、Compose、Migration 或业务行为；closure CI `29200796715` 十项全绿，独立 Quality 为 `PASS-WITH-ACCEPTED-RISK`，内部 Review 为 `pass-with-accepted-findings`。iteration-2 状态已收敛为 `CLOSED`。
 
-## Human-approved Review deviation
+## RUSTSEC-2025-0052 发布约束
 
-- 状态：`Review skipped by explicit human authorization`。
-- 既有 Review 证据继续有效，但不再追加新的 Review 轮次或等待 Review verdict。
-- 该偏差不豁免 CI、真实业务、Migration、数据完整性、Supply、secret、许可证、漏洞、Compose 安全或 D-025 单提交发布拓扑门。
+- 状态：`accepted-unfixed`；RustSec 类型为 `INFO / unmaintained`，不是已知可利用漏洞，也没有 patched version。
+- 发布 Workspace/生产 storage 代码链 `async-std 1.13.2 -> minio 0.4.0 -> ficant-storage` 可达；当前 server/worker 尚未直接装配该 adapter。接受不能写成 lock-only、已修复或 ignored。
+- `minio 0.4.0` 是 2026-07-13 的 crates.io 最新版，上游活跃但仍依赖 `async-std`，因此本轮不进行伪升级。
+- iteration-2 可以按内部开发切片收束；iteration-3 Entry Gate、首次外部发布或 2026-10-13 前（最早者）必须验证受维护替代方案，届时不得自动沿用 D-026。
+
+## Closure audit
+
+- 原先 `Review skipped by explicit human authorization` 只作为历史过程偏差保留；2026-07-13 已补齐新的独立 Quality 与内部 Review，不再是最终 lifecycle 状态。
+- 第一次 closure CI `29200599639` 因契约脚本引用干净单分支 clone 不可达的内部基线而失败；比较基线前移到已发布 `main@7378073` 后，run `29200796715` 的 Contract 与其余九项 required job 全部成功。
+- 状态 successor 只更新 Quality/Delivery/Review 文档事实；机器策略和生产边界不变，fast-forward `main` 前继续要求 required CI 与 targeted final Review。
 
 ## 有效期
 

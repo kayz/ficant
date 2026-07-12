@@ -1,6 +1,6 @@
 # ficant 验收与证据索引
 
-**当前结论：** iteration-2 的唯一 Quality 退出证据集已通过。最终 CI 在被验收发布树 `2d1fa3a1be11e563c486d7c67df349ec06faf4d0` 上完成 10/10 个 Ubuntu 24.04 job；真实 Phase 1 业务闭环及其 Q2 不变量保持通过。Delivery 的七服务 Compose 运行时与清理专项也已通过。用户明确授权跳过剩余 Review，最终状态使用 `closed-with-human-approved-review-deviation`；该授权不改变任何确定性质量门结论。
+**当前结论：** iteration-2 已 `CLOSED`。原 Phase 0/1 的真实业务、运行时与可重放证据保持有效；2026-07-13 closure audit 对 `RUSTSEC-2025-0052` 完成了精确机器门、真实对象存储验证和候选绑定 CI。独立 Quality verdict 为 `PASS-WITH-ACCEPTED-RISK`，内部 Review 为 `pass-with-accepted-findings`（C0/I0/M1）；唯一 accepted finding 是下述限时维护风险，不是未关闭 blocker。
 
 ## 状态词汇
 
@@ -25,7 +25,7 @@
 | 被验收树 | `2d1fa3a1be11e563c486d7c67df349ec06faf4d0`；与 integration commit `9f044b796a912746df2080c5d42bf696797c4424` 的树一致 |
 | 固定环境 | 10 个 job 均声明 `ubuntu-24.04`；执行器为 Ubuntu 24.04.4、runner image `ubuntu24/20260705.232` |
 | 执行时段 | 2026-07-12 `12:47:30Z` 至 `13:00:02Z` |
-| Quality verdict | **PASS**；Quality 完整证据与 Delivery Compose 专项均已收集；剩余 Review 已由用户明确授权跳过，不伪造 Review PASS |
+| Quality verdict | 原 Phase 0/1 **PASS**；2026-07-13 closure Quality 为 `PASS-WITH-ACCEPTED-RISK`，内部 Review 已补齐为 `pass-with-accepted-findings` |
 
 此前六次失败运行 `29183053454`、`29185252321`、`29185454751`、`29189267286`、`29189731911`、`29190374218` 只作为故障发现与修复追溯证据，不计入任何通过结论；最终通过结论只绑定上述 run、候选和树。
 
@@ -50,15 +50,41 @@ Delivery 在 commit `87db3897d82b0bea4e35eee3595178f366bbf041`、树 `e8fb65c5a8
 
 13 项一方内部包均在许可证锁中按名称、版本、purl 与 source 精确枚举，不存在名称前缀豁免，该分类不构成任何开源授权。供应链通过包含人类批准的 D-026：`async-std 1.13.2` 经 `minio 0.4.0` 可达，`RUSTSEC-2025-0052` 状态为 `accepted-unfixed`，仅限 iteration-2；它没有被标记为已修复，必须在 iteration-3 入口或首次外部发布前（以较早者为准）重新评估。供应链 artifact `ficant-supply-evidence` 同时绑定候选 commit 与树；三类敏感信息扫描均为 0 finding。
 
+## RUSTSEC-2025-0052 closure audit
+
+2026-07-13 的复核结论是：**当前安全风险低、维护风险中等，保留 `accepted-unfixed`，不得标记为已修复或忽略。**
+
+- RustSec 将该项分类为 `INFO / unmaintained`，说明 `async-std` 已停止维护；没有 CVSS、已知利用路径或 patched version。它不是已知内存安全、认证绕过、数据泄露或远程执行漏洞。
+- `cargo tree -i async-std --locked` 证明发布 Workspace/生产 storage 代码链为 `async-std 1.13.2 -> minio 0.4.0 -> ficant-storage`。`ficant-storage` 的正式 MinIO adapter 调用 `get_object`、`put_object_content` 和 `delete_object`；`minio` 的请求签名/内容处理路径实际调用 `async_std::task::spawn_blocking`，因此不能降级为 lock-only 或不可达。当前 `ficant-server`/`ficant-worker` 组合根尚未直接装配该 adapter，这降低当前运行暴露但不改变发布 Workspace 的风险归类。
+- 2026-07-13 crates.io API 显示 `minio 0.4.0` 仍为最新版；上游 `minio/minio-rs` 未归档且 2026-07-10 仍有提交，但最新版及 `master` 都继续无条件依赖 `async-std 1.13`。不存在可验证的 patch/minor 升级来消除该项。
+- 用其他 S3 SDK 或维护本地 fork 会改变 storage adapter、依赖树、错误映射、签名与真实 MinIO 验收边界，超出“以现状收束”范围；不能以未经完整业务回归的依赖替换冒充安全修复。
+- 当前补偿控制包括固定版本/lock、候选绑定的 SBOM/OSV/可达性门、MinIO 内网边界与凭证注入、不可变内容地址、正式读取 SHA-256/size/lineage fail-closed，以及真实 PostgreSQL/MinIO 业务与重启验收。它们降低当前暴露，但不消除上游停止维护的长期风险。
+
+处置决定：D-026 作为明确的维护风险被 iteration-2 接受，接受范围仅为已验收的 Phase 0/1 内部开发切片；在 **iteration-3 Entry Gate、首次外部发布或 2026-10-13（最早者）**，Architecture/Delivery 必须选择并验证“上游移除 `async-std`、受控 fork 或迁移到受维护 S3 SDK”之一。任何版本、依赖链、调用边界、advisory 集合/分类或发布范围变化都会使本接受立即失效；供应链门必须继续保留原始 RustSec finding 和 `accepted-unfixed` provenance。
+
+### Closure Quality 合同
+
+| ID | 验收 | 当前状态 |
+|---|---|---|
+| `QRS-01` | advisory 精确为 `RUSTSEC-2025-0052`、`informational=unmaintained`、无 patched version | `passed`；官方 RustSec/OSV 复核 |
+| `QRS-02` | `async-std 1.13.2 -> minio 0.4.0 -> ficant-storage` 可达链与实际 API 使用明确 | `passed`；Cargo tree、上游源码与本地 adapter 复核 |
+| `QRS-03` | 关闭前 24 小时内确认 crates.io 最新版与上游维护状态 | `passed`；2026-07-13 API 复核 |
+| `QRS-04` | 机器门只接受唯一 advisory；替换/追加 ID、security/unsound 漂移和过期全部 fail closed | `passed`；closure fixture 与 Supply job |
+| `QRS-05` | 真实 PostgreSQL/MinIO 的五项 `ficant-storage` 对象存储集成测试通过 | `passed`；5 passed、0 failed、0 ignored，专用资源清理为 0 |
+| `QRS-06` | Architecture/Delivery 所有权、2026-07-13 决策日及最早触发复核点写入机器策略 | `passed-with-accepted-risk`；最晚日期为 2026-10-13 |
+| `QRS-07` | 最终证据绑定同一 clean candidate commit/tree，Quality 与 Review 给出退出 verdict | `passed`；`f492eefb...` / tree `5debcd4b...`、CI `29200796715`、Supply artifact 与两个独立 verdict |
+
+Closure CI run [`29200796715`](https://github.com/kayz/ficant/actions/runs/29200796715) 在候选 `f492eefb19d7b60e74cbcc1b7a0b862b31bc3d1f` / tree `5debcd4b60b3585a4c168d3af0d5c92218ec528e` 上 10/10 job 成功。其 `accepted-unfixed.json` SHA-256 为 `76111880a5a61d4dbdf8c7c2274d0dbfbf24ab8c3d7b91b53dbd46aa906eb784`，只接受 `RUSTSEC-2025-0052`。最终状态 successor 只收敛本文档状态，不改变机器策略、生产代码、契约、Migration 或运行时；在 fast-forward `main` 前仍须通过同一 required CI 与 targeted final Review。
+
 ## 当前治理证据
 
 | ID | 验收 | 当前状态 | 证据位置 |
 |---|---|---|---|
 | QG-01 | 当前迭代、总体目标和有效期明确 | collected | `.proqaid/orchestrator/current-iteration.md` |
-| QG-02 | Product/Architecture/Interface/Quality/Delivery/Review 全覆盖 | accepted-deviation | Product/Architecture/Interface/Quality/Delivery 已完成；剩余 Review 由用户明确授权跳过，既有 Review 证据继续有效 |
+| QG-02 | Product/Architecture/Interface/Quality/Delivery/Review 全覆盖 | passed | Product/Architecture/Interface/Delivery 已完成；2026-07-13 closure Quality 与内部 Review 已补齐 |
 | QG-03 | Codex/Claude 工具硬约束语义相同 | collected | `.codex/AGENTS.md`、`.claude/CLAUDE.md` |
 | QG-04 | 每个角色 context 声明 docs 产物、用途和文件边界 | collected | `.proqaid/<role>/context.md` |
-| QG-05 | Review 阻塞/重要发现全部路由 | accepted-deviation | 既有 findings 已纠正或由人类接受；状态为 `Review skipped by explicit human authorization`，不得表述为 Review PASS |
+| QG-05 | Review 阻塞/重要发现全部路由 | passed | closure Review 为 `pass-with-accepted-findings`（C0/I0/M1）；M-01 文档措辞已纠正，唯一 accepted finding 为 D-026 |
 | QG-06 | 清理与 Git 变更清单完整 | collected | `repo-policy` 已通过；最终 worktree、临时分支、Compose 资源与迭代归档由退出清理门确认 |
 | QG-07 | 外部系统与密钥访问符合授权边界 | passed | GitHub 仓库创建与 allowlist push 已获授权；测试机和 `C:\git\key` 未访问；仓库敏感标记扫描无命中 |
 | QG-08 | 无法证明的模型应用标为 unverified | collected | dispatch log 与各角色输出 |

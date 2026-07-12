@@ -2,7 +2,7 @@
   "schema_version": 1,
   "captured_utc": "2026-07-12T04:34:09Z",
   "release_topology": {
-    "trusted_base": "42f570f309e20c867f65cffbce76e7f6d64d65d5",
+    "trusted_base": "737807302351fe8feee425a89d666caf3d611f96",
     "candidate_commit_count": 1,
     "main_update": "fast-forward-only-after-final-review"
   },
@@ -151,7 +151,19 @@
         "version": "0.4.0",
         "source_integrity": "sha256:cc93d8cbf49952a55414ac584a372cd785b6b988dca897b119bb8b0b3252f455"
       },
-      "reassess_by": "iteration-3-entry-or-first-external-release"
+      "owner": "Architecture/Delivery",
+      "decision_date": "2026-07-13",
+      "expires_on": "2026-10-13",
+      "reassess_by": "iteration-3-entry-or-first-external-release-or-2026-10-13",
+      "advisory_ids": [
+        "RUSTSEC-2025-0052"
+      ],
+      "advisory_type": {
+        "informational": "unmaintained"
+      },
+      "advisory_license": "CC0-1.0",
+      "advisory_source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2025-0052.json",
+      "patched_versions": []
     }
   ],
   "tools": [
