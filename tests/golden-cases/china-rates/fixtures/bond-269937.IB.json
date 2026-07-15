@@ -1,0 +1,27 @@
+{
+  "schema": "ficant.fixture.cgb-reference-v1.bond.v1",
+  "bond_id": "269937.IB",
+  "instrument_type": "discount",
+  "issue_date": "2026-06-18",
+  "maturity_date": "2026-12-17",
+  "coupon_rate_decimal": "0.000000000000",
+  "coupon_rate_percent": "0.000000000000",
+  "frequency": 0,
+  "frequency_name": "discount",
+  "coupon_anchors": [],
+  "source_reference_yield_percent": "0.916700000000",
+  "synthetic_yield_decimal": "0.011000000000",
+  "face_value": "100.000000000000",
+  "market_timezone": "Asia/Shanghai",
+  "valuation_at": "2026-07-13T15:00:00+08:00",
+  "settlement_date": "2026-07-14",
+  "convention": "cgb-reference-v1",
+  "calendar": "cgb-reference-calendar-v1",
+  "source_lineage": {
+    "source_manifest": "tests/golden-cases/china-rates/iteration-3-cgb-basic-info-source-manifest.json",
+    "object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+    "canonical_records_sha256": "8216f586cbec959a08bb62a5e00c2492c99dc01e641e0c876a918b710e9d50ff",
+    "record_count": 6,
+    "raw_third_party_data_retained": false
+  }
+}

@@ -9,13 +9,24 @@
 **唯一后台语言：** Rust  
 **研究节点语言：** Python  
 **数值库：** C++20，通过稳定 C ABI 接入 Rust  
-**部署环境：** Ubuntu 24.04 LTS x86_64  
+**普通开发环境：** Windows 11 + PowerShell 7
+**部署与兼容目标：** Linux x86_64（仅在明确的兼容、发布或 UAT 门禁验证）
 **开发数据库：** PostgreSQL 16  
 **信创目标数据库：** openGauss  
 **平台终点：** 研究结果、回测结果、SignalSet 与 TargetExposure  
 **平台不负责：** OMS、EMS、对外报单、订单管理、清算与结算
 
-> **当前状态（2026-07-12）：** Phase 0 与 Phase 1 已形成可运行、可重放的首个纵向切片：Rust 后台、PostgreSQL/MinIO 持久化、Migration、真实 Phase 1 业务闭环、四类构建、gRPC-Web Platform Shell、供应链门禁与七服务 Compose 已通过确定性验收。Phase 2 及完整 DMQuant、定价与交易能力仍未实现；本文其余愿景内容继续作为约束性后续范围。
+## 当前治理与迭代快照（2026-07-16）
+
+- 项目采用 HOQA。Human 始终负责目标、业务含义、接受标准、风险接受和特权操作；Orchestrator 始终负责计划、专业判断、编排、集成、确定性验证和关闭准备。
+- Quality 仅在迭代包含代码更新且需要非平凡自动化测试设计、执行、缺陷循环或测试报告时激活；Audit 仅在准备发布、形成正式发布候选或关闭发布范围时激活。纯文档、规划、治理整理或用户讨论不自动激活二者。
+- Worker 只是临时执行资源，仅在至少两个真正独立、有界且并行收益明确的任务存在时使用。Iteration 3B 是一条有依赖的顺序链，执行中未使用 Worker。
+- Iteration 1 已关闭，形成治理、产品/架构说明和初始发布证据；Iteration 2 已关闭，交付 Phase 0/1、真实 PostgreSQL/MinIO 业务闭环、四类构建、Web/契约/供应链门禁，并限时接受 `RUSTSEC-2025-0052` 风险。
+- Human 已确认 Iteration 3 umbrella + 3A..3D，并接受 3A。preserved `codex/i3-runner-ctest` 因历史失败缺少可绑定的当时状态而被明确拒绝；其受审功能以 HOQA-v3 权限和 schema 基线重新合入本地基线，Windows runner suite `108/108`、Wave 1 CTest `4/4`，均 `skipped=0`。
+- Iteration 3B 已按 Human 授权在一个迭代内顺序完成 Domain/Application、唯一 unsafe sys/C ABI/safe native、Arrow Artifact/Storage 三部分，形成统一本地候选与 Quality 结果，并于 2026-07-16 被 Human 接受：新增测试 7/7；受治理的主非环境库存 159/159、Storage library 3/3，连同 3B 端到端共 165/165；严格 Clippy 退出 0、Wave 1 CTest 4/4；固定 Arrow fixture SHA-256 为 `0d74da24...59ef6`。
+- Iteration 3C 已完成并获 Human 接受：Q-001..Q-036 机器映射完整；production-native 冻结用例 12/12、Oracle 自测 31/31、Storage 真实环境 31/31、Acceptance 真实环境 14/14、契约 11/11、health 5/5、Release/ASan CTest 各 4/4；四项候选缺陷已修复并重测，PostgreSQL/MinIO 与兼容性容器资源已清理，无开放 blocking defect。
+- 权威状态依次位于 [`.hoqa/state.toml`](.hoqa/state.toml)、[`iteration-3-checklist.md`](iteration-3-checklist.md) 和已接受的 [Architecture ADR](docs/architecture/adr/)；本 README 是系统技术基线，不替代迭代状态。
+- Iteration 3D 已获授权。Human 于 2026-07-16 将 `RUSTSEC-2025-0052` 限时接受至 2026-10-13，范围仅为本次私有 GitHub 源码 PR，并授权推送 `codex/iteration-3-release-candidate` 及创建面向 `main` 的 PR。草稿 PR #1 是本轮受控发布记录；其精确远程 HEAD 必须保持十项 CI 与外部只读 Audit 全绿。下一 Human 权限点是 merge；tag、GitHub Release、部署和 UAT 仍须分别授权。
 
 > 本文是 ficant 当前唯一的系统技术基线。除非通过正式 ADR 修改，后续设计和实现不得引入平行后台语言、平行数据库、平行 API 契约或平行运行体系。
 
@@ -804,7 +815,7 @@ WebApp 由平台 Shell 通过 iframe 加载，使用短期 App Token 调用 gRPC
 
 | 类别 | 唯一选择 | 用途 |
 |---|---|---|
-| 开发操作系统 | Ubuntu 24.04 LTS x86_64 | 本地开发、CI、集成测试和性能基线 |
+| 普通开发操作系统 | Windows 11 + PowerShell 7 | 主模型、开发 Worker、测试编写与普通测试执行 |
 | 后台语言 | Rust，Edition 2024 | 控制平面、数据接入、运行时、仿真、任务和审计 |
 | Rust 工具链 | `rust-toolchain.toml` 固定 stable 版本 | 保证可复现构建 |
 | 异步运行时 | Tokio | 网络、任务和异步 IO |
@@ -833,7 +844,7 @@ WebApp 由平台 Shell 通过 iframe 加载，使用短期 App Token 调用 gRPC
 | 前端框架 | React | Platform Console 和业务 WebApp |
 | 前端构建 | Vite + pnpm | 前端构建和依赖锁定 |
 | 图表 | Apache ECharts | 金融图表和研究可视化 |
-| 本地编排 | Docker Compose | 开发环境启动和集成测试 |
+| 本地 SIT 编排 | Windows Docker Desktop + Docker Compose | 阶段特定集成服务启动和测试 |
 | AI 代码隔离 | gVisor OCI Sandbox | GeneratedNode 安全运行 |
 | 任务队列 | PostgreSQL Lease Queue | 基于事务和 `SKIP LOCKED` 的任务领取 |
 | 工作流 | Rust Research State Machine | 实验状态、恢复、补偿和发布流程 |
@@ -889,6 +900,8 @@ C++ 只用于：
 C++ 不实现权限、实验、数据血缘、API、任务调度和业务状态机。
 
 所有 C++ 接口通过 C ABI 暴露，Rust 为每个接口提供安全封装、边界检查、Golden Case 和数值误差测试。
+
+Application 只能依赖领域化计算 port，具体数值 provider 通过独立 adapter 在 composition root 显式注入；FFI unsafe 只能存在于唯一 sys crate，平台派生计算结果不得冒充外部市场事实。数值边界见 [ADR-0002](docs/architecture/adr/0002-fixed-income-kernel-and-ffi-safety-boundary.md)，全局模块原则见 [ADR-0003](docs/architecture/adr/0003-deep-modules-and-explicit-internal-boundaries.md)。
 
 ### 9.3 Python 使用边界
 
@@ -962,19 +975,25 @@ PostgreSQL 不保存大规模行情矩阵和因子矩阵。
 
 ### 10.1 当前开发基线
 
-v0.1 只在以下环境开发和验收：
+v0.1 的普通开发与测试在 Windows 11 上使用 PowerShell 7、Windows Git/worktree
+和 Windows 路径。能力按任务和阶段检查，不把 SIT、发布或 Linux 工具链作为
+普通开发的统一准入条件：
 
 ```text
-Ubuntu 24.04 LTS x86_64
+Windows 11 + PowerShell 7
 Rust stable，版本由 rust-toolchain.toml 固定
 Python 3.12
-Clang 18 + CMake + Ninja
+VS LLVM 19.1.5（C++/ABI 主工具链）+ standalone Clang 18（回退）+ CMake + Ninja
 PostgreSQL 16
 MinIO
-Docker Engine + Docker Compose
+Docker Desktop + Docker Compose（仅在进入本地 SIT 时）
 gVisor
 Node.js 22 + pnpm
 ```
+
+Docker Desktop 的 PostgreSQL/MinIO 隔离环境由 Orchestrator 的 delivery work 在 SIT 阶段管理；
+Human 负责 Docker Desktop GUI、启动和管理员操作。命令从 Windows 执行，不要求 WSL Integration。Linux 只在明确命名的兼容、CI/container、
+发布或 UAT 门禁中验证；仓库现存 WSL runner/config/evidence 是历史来源，在另行退役前保留。
 
 首版不把国产 CPU、国产操作系统和国产容器平台纳入日常开发阻塞项，也不以其作为 v0.1 发布条件。
 
@@ -1051,7 +1070,7 @@ PostgreSQL 16 schema
 - `rust-toolchain.toml`；
 - Protobuf 契约仓库；
 - PostgreSQL 16 Migration；
-- Docker Compose 开发环境；
+- Windows Docker Desktop 阶段特定 SIT 环境；
 - MinIO Bucket 规范；
 - Python GeneratedNode 基础镜像；
 - React Platform Shell；
@@ -1316,7 +1335,7 @@ v0.1 必须形成以下纵向链路：
 
 v0.1 验收项：
 
-1. Ubuntu 24.04 LTS x86_64 上可一键启动开发环境；
+1. Windows 11 + PowerShell 7 可执行普通开发与测试；需要集成服务时由 Windows Docker Desktop 启动阶段特定 SIT 环境；
 2. 后台代码全部为 Rust；
 3. PostgreSQL 16 是唯一元数据数据库；
 4. 至少两个异构输入来源可创建统一快照；
@@ -1335,81 +1354,48 @@ v0.1 验收项：
 
 ## 13. 仓库结构
 
+当前权威结构如下。目录按语言、构建系统和所有权边界组织，不设置统一的根 `src/`；详细依据见 [ADR-0001](docs/architecture/adr/0001-polyglot-monorepo-source-ownership.md)。
+
 ```text
 ficant/
 ├── README.md
-├── rust-toolchain.toml
-├── Cargo.toml
-├── Cargo.lock
-├── proto/                         # 唯一跨边界契约
-│   ├── core/
-│   ├── market/
-│   ├── research/
-│   ├── simulation/
-│   ├── ai/
-│   └── app/
-├── crates/
+├── Cargo.toml / Cargo.lock         # Rust workspace 与依赖锁
+├── rust-toolchain.toml             # 固定 Rust 工具链
+├── interface/                      # 唯一 Protobuf 契约源及生成配置
+│   └── proto/ficant/{core,market,research,app}/
+├── crates/                         # Rust 库；各 crate 自有 src/ 与 tests/
 │   ├── ficant-domain/
 │   ├── ficant-application/
 │   ├── ficant-api/
 │   ├── ficant-storage/
-│   ├── ficant-data/
-│   ├── ficant-research/
 │   ├── ficant-runtime/
-│   ├── ficant-simulation/
-│   ├── ficant-ai/
-│   ├── ficant-sandbox/
-│   ├── ficant-signal/
-│   ├── ficant-app-registry/
-│   └── ficant-observability/
-├── binaries/
+│   ├── ficant-contracts/
+│   ├── ficant-contract-tests/
+│   └── ficant-acceptance/
+├── binaries/                       # Rust composition roots
+│   ├── ficant-bootstrap/
 │   ├── ficant-server/
 │   ├── ficant-worker/
-│   ├── ficant-sandbox/
 │   └── ficant-web/
-├── cpp/
+├── cpp/                            # C++20 数值库
 │   └── fixed-income-kernel/
-│       ├── include/
-│       ├── src/
-│       ├── tests/
-│       └── CMakeLists.txt
-├── python/
-│   ├── ficant-sdk/
+│       └── {include,src,tests}/
+├── python/                         # 节点运行时与生成契约，不含控制平面
 │   ├── node-runtime/
 │   ├── node-contracts/
-│   └── approved-wheelhouse/
-├── domain-packs/
-│   ├── core-quant/
-│   ├── china-rates/
-│   ├── cgb-futures/
-│   ├── venue-simulation/
-│   └── research-methods/
-├── web-dm/
+│   └── tests/
+├── web-dm/                         # pnpm workspace 与全部 WebApp
 │   ├── platform-shell/
-│   ├── platform-console/
-│   ├── rates-research-lab/
-│   └── cgb-futures-lab/
-├── migrations/
-│   ├── postgresql/
-│   └── opengauss/
-├── deploy/
-│   ├── dev/
-│   │   ├── docker-compose.yml
-│   │   └── config/
-│   └── xinchuang/
-├── tests/
-│   ├── golden-cases/
-│   ├── invariant-tests/
-│   ├── replay-tests/
-│   ├── sandbox-tests/
-│   └── migration-tests/
-└── docs/
-    ├── adr/
-    ├── rfc/
-    ├── domain/
-    ├── security/
-    └── operations/
+│   ├── packages/contracts-generated/
+│   └── webapps/dmquant/
+├── migrations/postgresql/
+├── deploy/dev/                    # Compose、镜像与固定工具链
+├── tests/golden-cases/            # 跨语言业务基准
+├── docs/{product,architecture,interface,quality,delivery,review}/
+└── .github/scripts/               # CI、供应链、Compose 与发布门禁
 ```
+
+规划中的 `ficant-data`、`ficant-research`、simulation/AI/sandbox crates、`domain-packs/`、Python SDK、Rates Research Lab、CGB Futures Lab、openGauss migration 与信创部署目录，仅在对应 Phase 进入并通过设计确认后创建。根 `proto/` 永久禁止；跨边界契约只在 `interface/` 定义。
 
 ---
 
@@ -1522,7 +1508,7 @@ Rust 使用 `tracing` 产生结构化事件，通过 OTLP 输出。
 | 前端 | TypeScript + React |
 | 契约 | Protobuf 3 |
 | API | gRPC + gRPC-Web |
-| 开发 OS | Ubuntu 24.04 LTS x86_64 |
+| 普通开发 OS | Windows 11 + PowerShell 7 |
 | 开发数据库 | PostgreSQL 16 |
 | 信创数据库 | openGauss |
 | 对象存储 | MinIO |
@@ -1542,7 +1528,7 @@ Rust 使用 `tracing` 产生结构化事件，通过 OTLP 输出。
 
 ```text
 1. 冻结 Protobuf 核心契约
-2. 建立 Rust Cargo Workspace 和 Docker Compose 开发环境
+2. 建立 Rust Cargo Workspace，并在进入 SIT 时准备 Windows Docker Desktop Compose 环境
 3. 完成 PostgreSQL 16 元数据模型与 RunJournal
 4. 实现国债现金流、定价和风险参考库
 5. 实现 DataSnapshot 和 Parquet 快照

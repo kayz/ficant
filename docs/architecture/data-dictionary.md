@@ -2,24 +2,37 @@
 
 **状态：** Phase 0 / Phase 1 已实现架构字典
 
-**权威边界：** `README.md` 定义系统约束，`interface/` 定义跨边界字段，Rust Domain/Application 定义业务不变量，Migration 定义持久映射
+**权威边界：** `README.md` 定义系统约束，`interface/` 定义跨边界字段，Rust Domain/Application 定义业务不变量，Migration 定义持久映射；架构选择与依据记录在 `docs/architecture/adr/`
 
 ## 模块与依赖方向
 
 ```text
 web-dm/* / Python consumer / Agent Tools
-                    ↓ 统一 Protobuf + gRPC-Web/gRPC
-Rust API → Application → Domain
-             ↓ ports       ↑ 无基础设施依赖
-PostgreSQL repositories + MinIO content-addressed store
-                    ↓
-C++20 stable C ABI（Phase 2 数值算法边界，本轮只有构建/ABI基线）
+                    ↓ 统一 interface/ Protobuf + gRPC-Web/gRPC
+Rust API ─────────→ Application ─────────→ Domain
+   │                    │                    ↑
+   └→ Contracts         └→ Runtime ──────────┘
+                            ↑
+Storage adapters/codecs ─→ narrow Application ports ─→ Domain
+
+iteration-3 目标边界：
+Application → BondAnalyticsEngine port ← ficant-fixed-income-native adapter
+                                              ↓
+                                       ficant-kernel-sys（唯一 unsafe）
+                                              ↓ C ABI
+                                       C++20 fixed-income-kernel
+ficant-worker composition root ──显式注入──→ native adapter
+Application → BondAnalyticsArtifactCodec port ← Storage Arrow codec
 ```
 
 - Rust `domain` 不依赖数据库、网络、文件系统或 Web 框架。
-- Application 持有授权、opaque proof、幂等 fingerprint 和事务意图；Storage 复核 proof 并执行持久化。
+- Application 持有授权、opaque proof、幂等 fingerprint 和事务意图，并调用纯 Rust Runtime policy；Runtime 只依赖 Domain。
+- Storage 实现 Application ports，并使用 Domain 类型完成持久映射；Application/Domain 不反向依赖 Storage。
+- API 依赖 Application 与机械生成的 Contracts；跨边界字段仍只由 `interface/` 定义。
 - Python 不进入平台主进程，也不直接访问数据库、密钥、对象存储或 RunJournal。
 - WebApp 代码和设计位于 `web-dm/webapps/<app-id>/`，共享宿主位于 `web-dm/platform-shell/`；后台合同只在根 `interface/` 定义。
+- 多语言目录所有权见 [ADR-0001](adr/0001-polyglot-monorepo-source-ownership.md)；数值内核、唯一 unsafe crate 和派生结果语义见 [ADR-0002](adr/0002-fixed-income-kernel-and-ffi-safety-boundary.md)。
+- 所有内部模块按 [ADR-0003](adr/0003-deep-modules-and-explicit-internal-boundaries.md) 声明职责、数据/错误所有权、允许/禁止依赖和 composition root；复杂性必须封装在模块内部。
 
 ## Phase 1 核心对象
 
@@ -118,7 +131,9 @@ metadata/resource 不存在返回 `NotFound`。metadata 和 durable ref 已存�
 
 本轮没有实现现金流生成、定价、收益率、久期/DV01、曲线插值、基差/IRR/CTD 或套保算法。现有 C++ 工程只证明固定 Clang/CMake/Ninja 构建和稳定 C ABI 基线。
 
-Storage 的发布 Workspace/生产 adapter 当前经 `minio 0.4.0` 可达 `async-std 1.13.2`，并在 put 请求签名/内容处理路径实际使用其 blocking runtime；当前 `ficant-server`/`ficant-worker` 组合根尚未直接装配该 adapter。2026-07-13 复核确认 RustSec 项为 `INFO / unmaintained`、无 patched version；`minio 0.4.0` 是 crates.io 最新版且上游 `master` 仍依赖 `async-std 1.13`，因此没有安全的小版本升级路径。该项按 D-026 作为“当前安全风险低、维护风险中等”的 `accepted-unfixed` 收束，不是架构长期背书。Architecture/Delivery 必须在 iteration-3 Entry Gate、首次外部发布或 2026-10-13 前（最早者）验证上游移除、受控 fork 或受维护 S3 SDK 迁移；禁止自动继承到其他版本、依赖链、调用边界或发布范围。
+iteration-3 的小范围 Phase 2A 不改变外部事实语义：平台生成的现金流与估值风险结果不得写成现有 `Cashflow` 或 `Valuation`。它们使用内部 `BondAnalyticsResult` 并作为内容寻址 Artifact 发布，绑定 Bond、MarketRulePack、估值时点、输入快照、算法版本和 ABI 版本；详见 [ADR-0002](adr/0002-fixed-income-kernel-and-ffi-safety-boundary.md)。
+
+Storage 的发布 Workspace/生产 adapter 当前经 `minio 0.4.0` 可达 `async-std 1.13.2`，并在 put 请求签名/内容处理路径实际使用其 blocking runtime；当前 `ficant-server`/`ficant-worker` 组合根尚未直接装配该 adapter。2026-07-13 复核确认 RustSec 项为 `INFO / unmaintained`、无 patched version；`minio 0.4.0` 是 crates.io 最新版且上游 `master` 仍依赖 `async-std 1.13`，因此没有安全的小版本升级路径。该项按 D-026 作为“当前安全风险低、维护风险中等”的 `accepted-unfixed` 收束，不是架构长期背书。Human/Orchestrator 必须在每次 iteration Align、首次外部发布或 2026-10-13 前（最早者）验证上游移除、受控 fork 或受维护 S3 SDK 迁移；禁止自动继承到其他版本、依赖链、调用边界或发布范围。
 
 ## Validity
 

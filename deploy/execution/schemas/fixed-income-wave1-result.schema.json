@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://greatquant.com/schemas/ficant/fixed-income-wave1-result-v1.json",
+  "title": "ficant fixed-income kernel Wave 1 runner result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version","status","action","task_id","environment","permission_profile","command_executor","model_invoked","worktree","base_sha","candidate_sha","capability_evidence_id","capability_evidence_path","tools","commands","tests","evidence_path","evidence","cleanup"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"const": "ready"},
+    "action": {"const": "fixed-income-wave1"},
+    "task_id": {"type":"string","pattern":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "environment": {"const":"windows"},
+    "permission_profile": {"const":"test-executor"},
+    "command_executor": {"const":"runner-managed"},
+    "model_invoked": {"const":false},
+    "worktree": {"$ref":"#/$defs/windowsPath"},
+    "base_sha": {"$ref":"#/$defs/sha"},
+    "candidate_sha": {"$ref":"#/$defs/sha"},
+    "capability_evidence_id": {"$ref":"#/$defs/prefixedHash"},
+    "capability_evidence_path": {"$ref":"#/$defs/windowsPath"},
+    "tools": {
+      "type":"object",
+      "additionalProperties":false,
+      "required":["cmake","ctest","ninja","vs-clang","vs-clang++","vs-clang-cl","vs-llvm-rc"],
+      "properties": {
+        "cmake":{"$ref":"#/$defs/tool"}, "ctest":{"$ref":"#/$defs/tool"},
+        "ninja":{"$ref":"#/$defs/tool"}, "vs-clang":{"$ref":"#/$defs/tool"},
+        "vs-clang++":{"$ref":"#/$defs/tool"}, "vs-clang-cl":{"$ref":"#/$defs/tool"},
+        "vs-llvm-rc":{"$ref":"#/$defs/tool"}
+      }
+    },
+    "commands": {
+      "type":"array", "minItems":3, "maxItems":3,
+      "prefixItems":[
+        {"$ref":"#/$defs/configureCommand"},
+        {"$ref":"#/$defs/buildCommand"},
+        {"$ref":"#/$defs/testCommand"}
+      ],
+      "items":false
+    },
+    "tests": {
+      "type":"object", "additionalProperties":false,
+      "required":["passed","failed","skipped","total"],
+      "properties":{"passed":{"const":4},"failed":{"const":0},"skipped":{"const":0},"total":{"const":4}}
+    },
+    "evidence_path": {"$ref":"#/$defs/windowsPath"},
+    "evidence": {"type":"array","minItems":4,"items":{"type":"object","additionalProperties":false,"required":["path","sha256"],"properties":{"path":{"$ref":"#/$defs/windowsPath"},"sha256":{"$ref":"#/$defs/hash"}}}},
+    "cleanup": {
+      "type":"object", "additionalProperties":false,
+      "required":["scratch_path","scratch_removed","source_clean_before","source_clean_after"],
+      "properties":{"scratch_path":{"$ref":"#/$defs/windowsPath"},"scratch_removed":{"const":true},"source_clean_before":{"const":true},"source_clean_after":{"const":true}}
+    }
+  },
+  "$defs": {
+    "windowsPath":{"type":"string","pattern":"^[A-Za-z]:\\\\"},
+    "sha":{"type":"string","pattern":"^[0-9a-f]{40}$"},
+    "hash":{"type":"string","pattern":"^[0-9a-f]{64}$"},
+    "prefixedHash":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},
+    "tool":{"type":"object","additionalProperties":false,"required":["path","version"],"properties":{"path":{"$ref":"#/$defs/windowsPath"},"version":{"type":"string","minLength":1}}},
+    "commandBase":{"type":"object","additionalProperties":false,"required":["catalog_identity","argv","cwd","exit_code","duration_ms","expected_tests","observed_tests","evidence_path"],"properties":{"catalog_identity":{"type":"string"},"argv":{"type":"array","minItems":1,"items":{"type":"string","minLength":1}},"cwd":{"$ref":"#/$defs/windowsPath"},"exit_code":{"const":0},"duration_ms":{"type":"integer","minimum":0},"expected_tests":{"type":"integer","minimum":0},"observed_tests":{"type":"integer","minimum":0},"evidence_path":{"$ref":"#/$defs/windowsPath"}}},
+    "configureCommand":{"allOf":[{"$ref":"#/$defs/commandBase"},{"properties":{"catalog_identity":{"const":"fixed-income-wave1-configure"},"expected_tests":{"const":0},"observed_tests":{"const":0}}}]},
+    "buildCommand":{"allOf":[{"$ref":"#/$defs/commandBase"},{"properties":{"catalog_identity":{"const":"fixed-income-wave1-build"},"expected_tests":{"const":0},"observed_tests":{"const":0}}}]},
+    "testCommand":{"allOf":[{"$ref":"#/$defs/commandBase"},{"properties":{"catalog_identity":{"const":"fixed-income-wave1-ctest"},"expected_tests":{"const":4},"observed_tests":{"const":4}}}]}
+  }
+}

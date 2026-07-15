@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://greatquant.com/schemas/ficant/windows-execution-result-v5.json",
+  "title": "ficant Windows execution result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version","status","checklist_id","task_id","profile","executor","command_executor","requested_model","actual_model","model_identity_source","permission_profile","requested_sandbox","effective_sandbox","environment","capability_evidence_id","capability_evidence_path","base_sha","candidate_sha","candidate_state","candidate_diff_sha256","changed_files","commands","tests","evidence_path","evidence","recovery","escalated","escalation_reason","blockers","summary","timings","cleanup"],
+  "properties": {
+    "schema_version":{"const":5}, "status":{"enum":["ready","blocked","failed"]}, "checklist_id":{"type":"string","minLength":1}, "task_id":{"type":"string","minLength":1},
+    "profile":{"enum":["strong","medium","fast"]}, "executor":{"enum":["codex","claude"]}, "command_executor":{"enum":["worker-direct","runner-managed"]},
+    "requested_model":{"type":"string","minLength":1}, "actual_model":{"type":"string","minLength":1}, "model_identity_source":{"enum":["explicit-cli-selection","provider-reported-actual","unverified"]},
+    "permission_profile":{"enum":["test-executor","test-author","development","quality","audit"]}, "requested_sandbox":{"enum":["read-only","workspace-write"]}, "effective_sandbox":{"enum":["read-only","workspace-write"]}, "environment":{"const":"windows"}, "capability_evidence_path":{"$ref":"#/$defs/windowsPath"},
+    "capability_evidence_id":{"$ref":"#/$defs/prefixedHash"}, "base_sha":{"$ref":"#/$defs/sha"}, "candidate_sha":{"$ref":"#/$defs/sha"}, "candidate_state":{"enum":["base-clean","uncommitted-diff","verified-diff","blocked-with-candidate"]}, "candidate_diff_sha256":{"$ref":"#/$defs/hash"},
+    "changed_files":{"type":"array","items":{"type":"string"},"uniqueItems":true},
+    "commands":{"type":"array","items":{"$ref":"#/$defs/commandEvidence"}},
+    "tests":{"type":"object","additionalProperties":false,"required":["passed","failed","skipped","total"],"properties":{"passed":{"type":"integer","minimum":0},"failed":{"type":"integer","minimum":0},"skipped":{"type":"integer","minimum":0},"total":{"type":"integer","minimum":0}}},
+    "evidence_path":{"$ref":"#/$defs/windowsPath"},
+    "evidence":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","sha256"],"properties":{"path":{"$ref":"#/$defs/windowsPath"},"sha256":{"$ref":"#/$defs/hash"}}}},
+    "recovery":{"type":"object","additionalProperties":false,"required":["correction_budget","correction_cycles_used","events"],"properties":{"correction_budget":{"type":"integer","minimum":0},"correction_cycles_used":{"type":"integer","minimum":0},"events":{"type":"array"}}}, "escalated":{"type":"boolean"}, "escalation_reason":{"type":["string","null"]}, "blockers":{"type":"array","items":{"type":"string"}}, "summary":{"type":"string"},
+    "timings":{"type":"object","additionalProperties":false,"required":["model_execution_ms","runner_validation_ms","total_ms"],"properties":{"model_execution_ms":{"type":"integer","minimum":0},"runner_validation_ms":{"type":"integer","minimum":0},"total_ms":{"type":"integer","minimum":0}}}, "cleanup":{"type":"object","additionalProperties":false,"required":["temporary_paths_removed","worktree_state_recorded"],"properties":{"temporary_paths_removed":{"type":"boolean"},"worktree_state_recorded":{"type":"boolean"}}}
+  },
+  "$defs": {
+    "windowsPath":{"type":"string","pattern":"^[A-Za-z]:\\\\"}, "sha":{"type":"string","pattern":"^[0-9a-f]{40}$"}, "hash":{"type":"string","pattern":"^[0-9a-f]{64}$"}, "prefixedHash":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},
+    "commandEvidence":{"type":"object","additionalProperties":false,"required":["kind","argv","cwd","exit_code","duration_ms","expected_tests","observed_tests"],"properties":{"kind":{"enum":["red","green","regression","preflight","worker"]},"catalog_identity":{"type":["string","null"],"enum":["git-status-porcelain","git-diff-check","git-rev-parse-head",null]},"argv":{"type":"array","minItems":1,"items":{"type":"string"}},"cwd":{"$ref":"#/$defs/windowsPath"},"exit_code":{"type":"integer"},"duration_ms":{"type":"integer","minimum":0},"expected_tests":{"type":"integer","minimum":0},"observed_tests":{"type":"integer","minimum":0}}}
+  }
+}

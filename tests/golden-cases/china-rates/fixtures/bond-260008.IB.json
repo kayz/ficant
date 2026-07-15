@@ -1,0 +1,28 @@
+{
+  "schema": "ficant.fixture.cgb-reference-v1.bond.v1",
+  "bond_id": "260008.IB",
+  "instrument_type": "fixed_rate",
+  "issue_date": "2026-04-15",
+  "maturity_date": "2031-04-15",
+  "coupon_rate_decimal": "0.015000000000",
+  "coupon_rate_percent": "1.500000000000",
+  "frequency": 1,
+  "frequency_name": "annual",
+  "coupon_anchors": [
+    "04-15"
+  ],
+  "synthetic_yield_decimal": "0.015500000000",
+  "face_value": "100.000000000000",
+  "market_timezone": "Asia/Shanghai",
+  "valuation_at": "2026-07-13T15:00:00+08:00",
+  "settlement_date": "2026-07-14",
+  "convention": "cgb-reference-v1",
+  "calendar": "cgb-reference-calendar-v1",
+  "source_lineage": {
+    "source_manifest": "tests/golden-cases/china-rates/iteration-3-cgb-basic-info-source-manifest.json",
+    "object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+    "canonical_records_sha256": "8216f586cbec959a08bb62a5e00c2492c99dc01e641e0c876a918b710e9d50ff",
+    "record_count": 6,
+    "raw_third_party_data_retained": false
+  }
+}

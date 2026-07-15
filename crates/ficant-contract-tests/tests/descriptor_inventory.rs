@@ -15,7 +15,7 @@ use ficant_contracts::ficant::core::v1::DecimalValue;
 use ficant_contracts::ficant::market::v1::{Instrument, InstrumentKind};
 use ficant_contracts::ficant::research::v1::{ExperimentRun, RunState};
 
-const BUF: &str = "/usr/local/bin/buf";
+const DEFAULT_BUF: &str = "/usr/local/bin/buf";
 const BUF_VERSION: &str = "1.56.0";
 
 static DESCRIPTOR_SET: OnceLock<FileDescriptorSet> = OnceLock::new();
@@ -282,7 +282,10 @@ fn build_descriptor() -> FileDescriptorSet {
         .and_then(Path::parent)
         .expect("contract test crate must remain two levels below the repository root");
 
-    let version = Command::new(BUF)
+    let buf = std::env::var_os("FICANT_BUF")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_BUF));
+    let version = Command::new(&buf)
         .arg("--version")
         .output()
         .expect("fixed Buf binary must be executable");
@@ -295,7 +298,7 @@ fn build_descriptor() -> FileDescriptorSet {
 
     let descriptor_path = descriptor_path();
     let _ = fs::remove_file(&descriptor_path);
-    let output = Command::new(BUF)
+    let output = Command::new(&buf)
         .args(["build", "interface", "--as-file-descriptor-set", "-o"])
         .arg(&descriptor_path)
         .current_dir(repo_root)

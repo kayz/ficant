@@ -10,6 +10,7 @@
     clippy::struct_field_names
 )]
 
+pub mod analytics;
 pub mod market;
 pub mod primitives;
 pub mod research;

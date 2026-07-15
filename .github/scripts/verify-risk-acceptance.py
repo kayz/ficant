@@ -17,12 +17,12 @@ def read(path):
 def exact_policy(lock):
     items = lock.get("risk_acceptances")
     if not isinstance(items, list) or len(items) != 1:
-        fail("iteration-2 risk acceptance set drift")
+        fail("iteration-3 risk acceptance set drift")
     item = items[0]
     expected = {
-        "id": "iteration-2-async-std-1.13.2",
+        "id": "iteration-3-async-std-1.13.2",
         "status": "accepted-unfixed",
-        "iteration": 2,
+        "iteration": 3,
         "purl": "pkg:cargo/async-std@1.13.2",
         "name": "async-std",
         "version": "1.13.2",
@@ -32,10 +32,16 @@ def exact_policy(lock):
             "purl": "pkg:cargo/minio@0.4.0", "name": "minio", "version": "0.4.0",
             "source_integrity": "sha256:cc93d8cbf49952a55414ac584a372cd785b6b988dca897b119bb8b0b3252f455",
         },
-        "owner": "Architecture/Delivery",
-        "decision_date": "2026-07-13",
+        "owner": "Human/Orchestrator",
+        "decision_date": "2026-07-16",
         "expires_on": "2026-10-13",
-        "reassess_by": "iteration-3-entry-or-first-external-release-or-2026-10-13",
+        "reassess_by": "before-runtime-or-external-deployment-or-2026-10-13",
+        "acceptance_scope": "private-github-source-pr-only",
+        "constraints": [
+            "no deployment or UAT",
+            "no merge, tag or GitHub Release under this acceptance",
+            "evaluate a replacement before runtime or external deployment",
+        ],
         "advisory_ids": ["RUSTSEC-2025-0052"],
         "advisory_type": {"informational": "unmaintained"},
         "advisory_license": "CC0-1.0",
@@ -44,11 +50,11 @@ def exact_policy(lock):
     }
     try:
         if datetime.date.today() > datetime.date.fromisoformat(item.get("expires_on", "")):
-            fail("iteration-2 risk acceptance expired")
+            fail("iteration-3 risk acceptance expired")
     except (TypeError, ValueError):
-        fail("iteration-2 risk acceptance expiry invalid")
+        fail("iteration-3 risk acceptance expiry invalid")
     if item != expected:
-        fail("iteration-2 risk acceptance policy drift")
+        fail("iteration-3 risk acceptance policy drift")
     return item
 
 

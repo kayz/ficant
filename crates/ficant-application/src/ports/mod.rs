@@ -1,4 +1,5 @@
 mod access;
+mod analytics;
 mod artifacts;
 mod blob_store;
 mod cursor;
@@ -15,6 +16,9 @@ mod snapshots;
 mod unit_resolution;
 
 pub use access::AccessScope;
+pub use analytics::{
+    BondAnalyticsArtifactCodec, BondAnalyticsEngine, EncodedBondAnalyticsArtifact,
+};
 pub use artifacts::{ArtifactRepository, PublishArtifact};
 pub use blob_store::{BeginBlobStage, BlobStore, StagedBlobRef, VerifiedBlobRef, VerifyBlobStage};
 pub use cursor::{AeadCursorCodec, Cursor, CursorKey};

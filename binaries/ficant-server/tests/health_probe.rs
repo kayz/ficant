@@ -84,6 +84,12 @@ fn run(arguments: &[&str], bind: &str, extra_environment: &[(&str, &str)]) -> Ou
         .args(arguments)
         .env_clear()
         .env("FICANT_GRPC_BIND", bind);
+    #[cfg(windows)]
+    for key in ["SystemRoot", "WINDIR"] {
+        if let Some(value) = std::env::var_os(key) {
+            command.env(key, value);
+        }
+    }
     for (key, value) in extra_environment {
         command.env(key, value);
     }

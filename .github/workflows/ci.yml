@@ -16,7 +16,7 @@ jobs:
           fetch-depth: 0
       - run: bash .github/scripts/tests/run-repo-policy-tests.sh
       - run: bash .github/scripts/verify-repo-policy.sh --stage final
-      - run: python3 -m unittest python.tests.test_compose_security_gate -v
+      - run: python3 .github/scripts/tests/test_compose_security_gate.py -v
 
   contract:
     runs-on: ubuntu-24.04
@@ -60,7 +60,7 @@ jobs:
           --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu
           --volume "${{ github.workspace }}:/workspace"
           --workdir /workspace
-          rust@sha256:e18a79fc84dfcfc3ab5ba72290398a644c135c97eaa881447fddc354ee4701a3
+          rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663
           sh -ec 'cargo build --workspace --all-targets --locked && cargo test --workspace --locked --exclude ficant-acceptance --exclude ficant-storage --exclude ficant-contract-tests && cargo test --locked -p ficant-storage --lib'
 
   python:
@@ -118,7 +118,7 @@ jobs:
             --env FICANT_BOOTSTRAP_BEARER_TOKEN=ci-grpc-test-token \
             --env FICANT_BOOTSTRAP_SCOPES=apps:read \
             --volume "${{ github.workspace }}:/workspace" --workdir /workspace \
-            rust@sha256:e18a79fc84dfcfc3ab5ba72290398a644c135c97eaa881447fddc354ee4701a3 \
+            rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 \
             sh -ec 'cargo run --locked -p ficant-server'
           trap 'docker rm -f ficant-ci-grpc >/dev/null 2>&1 || true' EXIT
           python3 - <<'PY'
@@ -174,7 +174,7 @@ jobs:
             --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu \
             --env FICANT_TEST_DATABASE_URL=postgres://ficant:ficant-ci-password@127.0.0.1:5432/ficant \
             --volume "${{ github.workspace }}:/workspace" --workdir /workspace \
-            rust@sha256:e18a79fc84dfcfc3ab5ba72290398a644c135c97eaa881447fddc354ee4701a3 \
+            rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 \
             cargo test --locked -p ficant-storage --test migration_acceptance -- --test-threads=1
 
   business-loop:
@@ -217,7 +217,7 @@ jobs:
             --env FICANT_TEST_S3_SECRET_KEY=ficant-ci-password \
             --env FICANT_TEST_RUNTIME_IMAGE_DIGEST \
             --volume "${{ github.workspace }}:/workspace" --workdir /workspace \
-            rust@sha256:e18a79fc84dfcfc3ab5ba72290398a644c135c97eaa881447fddc354ee4701a3 \
+            rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 \
             sh -ec 'cargo test --locked -p ficant-acceptance --test phase1_business_loop -- --test-threads=1 && cargo test --locked -p ficant-acceptance --test negative_invariants -- --test-threads=1'
 
   supply-chain:
@@ -226,6 +226,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - run: bash .github/scripts/verify-supply-chain.sh
         env:
           FICANT_GATE_OUTPUT_DIR: ${{ runner.temp }}/ficant-supply-evidence

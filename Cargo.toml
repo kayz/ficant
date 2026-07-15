@@ -16,6 +16,8 @@ pedantic = { level = "warn", priority = -1 }
 
 [workspace.dependencies]
 async-trait = "=0.1.89"
+arrow = { version = "=59.1.0", default-features = false, features = ["ipc"] }
+cc = "=1.2.67"
 chrono = { version = "=0.4.45", default-features = false, features = ["std"] }
 chrono-tz = { version = "=0.10.4", default-features = false, features = ["std"] }
 proptest = "=1.9.0"

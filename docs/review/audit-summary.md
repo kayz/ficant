@@ -1,5 +1,7 @@
 # iteration-2 PROQAID 退出摘要
 
+> **历史记录（superseded）：** 本文保留 iteration-2 在旧治理下的关闭事实。PROQAID、Review、角色路径和 verdict 不得用于驱动当前 HOQA 迭代；当前权威是 `.hoqa/state.toml` 与 `iteration-3-checklist.md`。
+
 **迭代状态：** `CLOSED`
 
 **Review 状态：** `pass-with-accepted-findings`（C0/I0/M1）

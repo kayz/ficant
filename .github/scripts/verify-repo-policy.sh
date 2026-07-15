@@ -89,7 +89,7 @@ validate_path_list() {
 
     if [[ $path == */* ]]; then
       case "$top" in
-        .config|.github|binaries|crates|cpp|deploy|docs|domain-packs|interface|migrations|python|result|src|tests|web-dm) ;;
+        .config|.github|.hoqa|binaries|crates|cpp|deploy|docs|domain-packs|interface|migrations|python|result|src|tests|web-dm) ;;
         *) record_failure "unknown release top-level directory: $top ($path)" ;;
       esac
     else
@@ -115,12 +115,12 @@ validate_path_list() {
         ;;
       *.py)
         case "$path" in
-          python/*|.github/scripts/verify-cargo-reachability.py|.github/scripts/verify-license-inventory.py|.github/scripts/verify-risk-acceptance.py) ;;
+          python/*|tests/oracle/china-rates/*|tests/iteration-3/verify_acceptance_matrix.py|deploy/execution/execution-validator.py|.github/scripts/compose_security_gate.py|.github/scripts/tests/test_compose_security_gate.py|.github/scripts/verify-cargo-reachability.py|.github/scripts/verify-license-inventory.py|.github/scripts/verify-risk-acceptance.py) ;;
           *) record_failure "Python is restricted to python/ or the exact CI gate tool allowlist: $path" ;;
         esac
         ;;
       *.c|*.cc|*.cpp|*.cxx|*.h|*.hh|*.hpp|*.hxx)
-        [[ $path == cpp/* ]] || record_failure "C/C++ is restricted to cpp/: $path"
+        [[ $path == cpp/* || $path == tests/oracle/china-rates/quantlib_oracle.cpp ]] || record_failure "C/C++ is restricted to cpp/ or the exact independent Oracle allowlist: $path"
         ;;
       *.js|*.jsx|*.ts|*.tsx)
         [[ $path == web-dm/* ]] || record_failure "JavaScript/TypeScript is restricted to web-dm/: $path"
@@ -186,7 +186,7 @@ validate_ci() {
   grep -Eq '^  compose-security:$' "$workflow" && record_failure "compose-security must not be an independent CI job"
   grep -Eq 'docker compose .*\b(up|down|ps|start|stop|restart)\b|docker inspect' "$workflow" && record_failure "live Compose/runtime inspection is forbidden in CI"
 
-  require_job_marker "$workflow" repo-policy 'python3 -m unittest python.tests.test_compose_security_gate'
+  require_job_marker "$workflow" repo-policy 'python3 .github/scripts/tests/test_compose_security_gate.py'
   require_job_marker "$workflow" repo-policy 'verify-repo-policy.sh --stage final'
   require_job_marker "$workflow" contract 'verify-contract-generation.sh'
   require_job_marker "$workflow" rust 'cargo test --workspace --locked'
@@ -207,6 +207,7 @@ validate_ci() {
   require_job_marker "$workflow" migration 'migration_acceptance'
   require_job_marker "$workflow" business-loop 'phase1_business_loop'
   require_job_marker "$workflow" business-loop 'negative_invariants'
+  require_job_marker "$workflow" supply-chain 'ref: ${{ github.event.pull_request.head.sha || github.sha }}'
   require_job_marker "$workflow" supply-chain 'verify-supply-chain.sh'
   require_job_marker "$workflow" reproducibility 'verify-reproducibility.sh'
 }
@@ -248,6 +249,8 @@ cd "$repo_root" || exit 2
 
 baseline_paths=(
   .gitattributes Cargo.toml Cargo.lock rust-toolchain.toml rustfmt.toml clippy.toml
+  .hoqa/SKILL.md .hoqa/references/contracts.md .hoqa/state.toml .hoqa/migration-map.md
+  .hoqa/history/proqaid-superseded/README.md
   binaries/ficant-bootstrap/Cargo.toml binaries/ficant-bootstrap/src/lib.rs
   binaries/ficant-server/Cargo.toml binaries/ficant-server/src/main.rs
   binaries/ficant-worker/Cargo.toml binaries/ficant-worker/src/main.rs

@@ -119,10 +119,6 @@ contracts_root = root / "node-contracts" / "src"
 if contracts_root.is_dir():
     for path in sorted(contracts_root.rglob("*.py")):
         wheel_entries[path.relative_to(contracts_root).as_posix()] = path.read_bytes()
-compose_gate = root / "compose_security_gate.py"
-if compose_gate.is_file():
-    wheel_entries["ficant_node_runtime/__init__.py"] = b""
-    wheel_entries["ficant_node_runtime/compose_security_gate.py"] = compose_gate.read_bytes()
 if not wheel_entries:
     for path in source_files:
         if path.suffix == ".py":

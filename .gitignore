@@ -10,6 +10,8 @@
 !/rustfmt.toml
 !/clippy.toml
 !/iteration-*-checklist.md
+!/.hoqa/
+!/.hoqa/**
 !/.config/
 !/.config/**
 !/.github/
@@ -32,16 +34,12 @@
 !/migrations/**
 !/python/
 !/python/**
-!/result/
-!/result/**
-!/src/
-!/src/**
 !/tests/
 !/tests/**
 !/web-dm/
 !/web-dm/**
 
-# Governance, private material, worker state, and stale UI design roots.
+# Superseded governance roots, private material, worker state, and stale UI design roots.
 **/.[Pp][Rr][Oo][Qq][Aa][Ii][Dd]/
 **/.[Ss][Uu][Pp][Ee][Rr][Pp][Oo][Ww][Ee][Rr][Ss]/
 **/.[Pp][Ll][Aa][Nn][Nn][Ii][Nn][Gg]/

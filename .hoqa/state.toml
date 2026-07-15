@@ -1,0 +1,301 @@
+schema_version = 1
+governance = "HOQA"
+authority = "iteration-3-checklist.md"
+technical_baseline = "README.md"
+architecture_decision = "docs/architecture/adr/0008-hoqa-governance-baseline.md"
+status = "ACTIVE_ITERATION_3D_RELEASE_PREPARATION"
+pause_reason = ""
+updated_on = "2026-07-16"
+
+[project]
+name = "ficant"
+outcome = "An AI-native quantitative research platform with versioned, traceable and reproducible research assets."
+product_boundary = "Research, simulation, reports, signals and target exposure; no OMS, EMS, order routing, clearing, settlement or portfolio accounting."
+source_ownership_adr = "docs/architecture/adr/0001-polyglot-monorepo-source-ownership.md"
+deep_module_adr = "docs/architecture/adr/0003-deep-modules-and-explicit-internal-boundaries.md"
+
+[current_activity]
+kind = "iteration-3d-formal-candidate-and-release-preparation"
+active_participants = ["Human", "Orchestrator"]
+quality_active = false
+quality_reason = "Quality completed the candidate-bound Q-001..Q-036 inventory, integrated execution, SIT defect loop and unified report; release-only workflow/governance changes remain Orchestrator delivery work, while implementation, test, Oracle, expected, tolerance or candidate-behavior changes reactivate Quality."
+audit_active = false
+audit_reason = "Audit runs as an external read-only check against the immutable Iteration 3D remote candidate; its verdict is not written back into the audited commit."
+workers_active = false
+workers_reason = "The Orchestrator and Quality can execute the bounded 3C inventory sequentially in the current workspace; no independent parallel Worker task is required."
+
+[iteration]
+id = 3
+outcome = "Deliver the frozen CGB fixed-rate and discount-bond analytics vertical slice through the C++20 kernel, stable C ABI, safe Rust adapter, deterministic Arrow Artifact encoding, lineage, persistence and replay."
+acceptance_ids = "Q-001..Q-036"
+non_goals = ["curves", "futures", "Web SDK", "Python SDK", "CLI", "new migrations", "SIMD", "production QuantLib", "public Protobuf changes", "fake success", "hard-coded production results", "test-only production paths", "stubs", "unresolved placeholders"]
+current_stage = "3D-release-preparation"
+implementation_resumption_authorized = false
+runner_3a_authorized = false
+
+[iteration.reorganization]
+proposal_id = "I3-SPLIT-2026-07-15"
+approved = true
+current_iteration_remains = 3
+preferred_numbering = "Keep Iteration 3 as the historical umbrella and use proposed suffixes 3A..3D for the remaining work."
+alternative_numbering = "Renumber the proposed remaining work as Iterations 4..7 only if the Human explicitly requests it."
+proposed_segments = ["3A runner convergence and Wave 1 evidence acceptance", "3B Rust vertical-slice implementation", "3C integrated automated verification and SIT", "3D formal candidate, release readiness and closure"]
+iteration_3b_execution_order = ["1 Domain/Application contracts and calculation port", "2 unique unsafe sys crate, C ABI and safe native adapter", "3 deterministic Arrow Artifact and stage/verify/publish/read/replay wiring"]
+authority = "iteration-3-checklist.md"
+next_checkpoint = "Keep draft PR #1 exact-head CI and external read-only Audit green, then stop for the separate Human merge decision; tag, GitHub Release, deployment and UAT remain unauthorized."
+approved_numbering = "Iteration 3 umbrella with suffix segments 3A..3D"
+authorized_segments = ["3A", "3B", "3C", "3D"]
+active_segment = "3D-formal-candidate-and-release-preparation"
+remaining_segments_authorized = true
+
+[iteration.segment_3b]
+status = "CLOSED_ACCEPTED"
+outcome = "Implement one complete Rust vertical slice across Domain/Application, the unique unsafe sys and safe native adapter, and deterministic Arrow Artifact publication/replay wiring."
+execution = "single iteration; parts 1, 2 and 3 execute sequentially without independent numbering or intermediate Human gates; one unified integration, Quality report and closure decision"
+ordered_parts = ["Domain/Application contracts and calculation port/use case", "unique unsafe sys crate, frozen C ABI and safe native adapter", "deterministic Arrow Artifact codec and stage/verify/publish/read/replay wiring"]
+scope = ["provider-neutral analytics Domain model", "Application engine and codec ports", "orchestrated analytics use case", "ficant-kernel-sys sole unsafe owner", "ficant-fixed-income-native safe adapter", "Arrow 59.1.0 IPC codec", "existing Artifact and BlobStore port wiring", "unit, ABI, dynamic-link, determinism and replay automation"]
+non_goals = ["public Protobuf changes", "new migration", "curves", "futures", "Web or Python SDK", "CLI", "production QuantLib", "SIT", "release", "UAT", "Oracle/expected/tolerance changes"]
+quality_framework = "Rust unit/integration tests plus accepted Windows runner Wave 1 evidence and dependency/unsafe/static gates"
+acceptance = ["all three ordered parts integrated in one candidate", "Domain and Application remain provider/FFI/Arrow/SQL/MinIO neutral", "unsafe exists only in ficant-kernel-sys", "safe adapter matches C++ and frozen identities", "Arrow payload is deterministic and lineage-bound", "stage/verify/publish/read/replay failure semantics are covered", "unified automated inventory exits 0 without unexplained skip", "no fake, stub, TODO or test-only production path"]
+result = "Human accepted the unified local 3B candidate on 2026-07-16. All three ordered parts are integrated and their governed deterministic inventories pass; environment-dependent integrated verification and SIT are delegated to authorized 3C."
+
+[iteration.segment_3c]
+status = "CLOSED_ACCEPTED"
+outcome = "Complete candidate-bound Q-001..Q-036 automation, real PostgreSQL/MinIO persistence and replay SIT, and converge all blocking defects into one locally validated candidate."
+scope = ["machine-readable Q-001..Q-036 inventory", "production-native numerical comparison against frozen expected and tolerances", "ABI, memory, unsafe, dependency and dynamic-link checks", "PostgreSQL 16 and MinIO stage/verify/publish/read/replay", "restart, tamper and cleanup", "applicable deterministic delivery gates", "unified Quality report"]
+non_goals = ["acceptance or tolerance changes", "public Protobuf changes", "new migrations", "UAT", "external release", "deployment", "credentials", "Iteration 3D Audit or closure"]
+quality_framework = "Candidate-bound Rust/C++/Python deterministic automation plus isolated Docker Desktop PostgreSQL 16 and MinIO SIT; structured defect classification and affected-inventory retest."
+acceptance = ["Q-001..Q-036 have executable machine-readable mappings and evidence", "frozen expected, Oracle and tolerances are unchanged", "real persistence and replay including restart, tamper and cleanup pass", "no unexplained skipped, fabricated or flaky success", "no open blocking defect", "isolated SIT resources are cleaned", "Quality issues one unified candidate-bound report"]
+human_checkpoint = "After the unified 3C Quality report; any acceptance/risk decision and authorization for 3D remain separate Human decisions."
+result = "The Q-001..Q-036 mapping, production-native golden comparison, deterministic inventories and isolated PostgreSQL/MinIO SIT pass. Four candidate defects were fixed and affected inventories retested; isolated resources were removed and no blocking defect remains."
+human_decision = "accepted on 2026-07-16; authorized Iteration 3D separately"
+
+[iteration.segment_3d]
+status = "ACTIVE"
+outcome = "Freeze one formal Iteration 3 candidate, complete release readiness and final consistency Audit, and prepare one controlled private-GitHub publication."
+scope = ["candidate commit, tree and parent identity", "one-squash-commit topology from current private GitHub main", "supply-chain, license, secret and reproducibility gates", "release notes and rollback", "final read-only consistency Audit", "Human risk and publication checkpoints"]
+non_goals = ["new business implementation", "acceptance or tolerance changes", "UAT", "deployment", "public release", "credential access", "automatic push, merge, tag or GitHub Release"]
+quality_framework = "Reuse accepted Iteration 3C Quality evidence unless the candidate's implementation or tests change; release mechanics are Orchestrator delivery work."
+acceptance = ["3C remains accepted and candidate code is unchanged except release/governance assets", "formal candidate has exactly one parent at current private GitHub main and one squashed commit", "applicable supply-chain, license, secret and reproducibility gates pass", "release notes and rollback are executable", "Audit returns a passing consistency verdict", "Human explicitly accepts remaining risk and authorizes publication"]
+human_checkpoint = "Completed on 2026-07-16 for the bounded risk acceptance and private candidate-branch push plus PR; merge, tag, GitHub Release, deployment and UAT remain separate Human checkpoints."
+human_decision = "On 2026-07-16 the Human accepted RUSTSEC-2025-0052 through 2026-10-13 for this private GitHub source PR only and authorized pushing codex/iteration-3-release-candidate plus opening a PR to main; merge, tag, GitHub Release, deployment and UAT remain unauthorized."
+
+[iteration.segment_3a]
+status = "CLOSED_ACCEPTED"
+outcome = "Prove and fix I3-RUNNER-001, accept or reject the preserved runner candidate, and bind Wave 1 CTest evidence to an accepted current candidate."
+scope = ["linked-worktree lifecycle root cause", "minimal runner fix", "PowerShell parse and focused regression", "full Windows runner suite", "candidate identity and cleanup", "Wave 1 CTest evidence binding"]
+non_goals = ["Wave 2 business implementation", "Oracle or tolerance changes", "SIT", "release", "UAT"]
+quality_framework = "existing deterministic PowerShell runner suite plus candidate-bound FixedIncomeWave1 action"
+acceptance = ["historical preserved candidate explicitly rejected because the recorded failure lacks candidate-bound provenance sufficient to prove a root cause", "reviewed functionality integrated as a new HOQA-v3 local-baseline candidate", "full runner suite exits 0 with zero skipped or unexplained failures", "Wave 1 4/4 evidence bound to the final integrated runner hashes", "scratch and temporary worktrees cleaned"]
+
+[participants.human]
+owns = ["intent", "business acceptance", "business choices", "risk acceptance", "privileged operations", "low-observability operations", "credentials"]
+current_checkpoint = "Human accepted 3C, authorized 3D, accepted the bounded carried risk and authorized the private candidate-branch push plus PR on 2026-07-16. Merge, tag, GitHub Release, deployment and UAT remain separate decisions."
+
+[participants.orchestrator]
+owns = ["plan", "Product lens", "Architecture lens", "Interface lens", "Development Worker routing", "integration", "deterministic validation", "delivery work", "Human Operator packages", "closure"]
+
+[participants.quality]
+activation = "non-trivial automated test strategy or coordinated automated execution"
+owns = ["test framework selection", "automation inventory", "Oracle and fixture test design", "Test Worker routing", "test execution consolidation", "test report", "bug list", "affected-inventory retest"]
+does_not_own = ["business acceptance", "Development Workers", "requirements", "deployment", "credentials", "release mechanics"]
+
+[participants.audit]
+activation = "final output documents are ready"
+owns = ["read-only document-to-intent-code-evidence consistency verdict"]
+does_not_own = ["implementation", "redesign", "editing", "agent review", "remediation routing"]
+
+[workers]
+activation = "two or more bounded tasks can progress independently and coordination cost is lower than expected speedup"
+development_owner = "Orchestrator"
+test_owner = "Quality"
+default_executor = "bounded internal temporary subagent"
+external_profiles = "explicit fallback, compatibility evidence or Human-selected executor only"
+contract = ["task ID", "exact base", "isolated workspace", "allowed and excluded paths", "frozen contracts", "self-test", "risk-based regression", "result fields", "timeout", "escalation", "cleanup"]
+
+[architecture]
+polyglot_source_layout = "Rust under crates/ and binaries/, C++ under cpp/, Python under python/, WebApp under web-dm/; no root src/."
+numerical_boundary = "C++20 kernel behind stable C ABI; ficant-kernel-sys is the only Rust unsafe owner; ficant-fixed-income-native is the safe adapter."
+dependency_boundary = "Domain and Application remain provider-, FFI-, Arrow-, QuantLib-, SQL- and MinIO-neutral through declared ports."
+oracle_boundary = "QuantLib 1.42.1 is an independent test Oracle only and is never a production dependency, type, fallback or API."
+public_interface = "Root interface/ is the sole public Protobuf source; iteration 3 does not change public Protobuf or migrations."
+
+[candidate]
+repository_head = "33b421095bc46b1351a00297cda1ee9ee7ec9b00"
+accepted_implementation_candidate = "2d266cc81a674bc5e0ed18136093434552d9f435"
+unchanged_business_base = "ddbc0cca8ce6e69963f3e04145f3a53ecb9863d5"
+wave1_cpp_integration = "768b400b19409e8233ac99b7427cd0b1c4cc5fbd"
+quantlib_golden_integration = "0485442eae5d03dc4aec6e29199d8f9b4073d2c3"
+
+[candidate.unintegrated_runner]
+branch = "codex/i3-runner-ctest"
+worktree = "C:/git/ficant/worktrees/i3-runner-ctest"
+base_sha = "33b421095bc46b1351a00297cda1ee9ee7ec9b00"
+state = "preserved-uncommitted-explicitly-rejected-for-acceptance"
+changed_scope = "deploy/execution only"
+verified_fact = "VS LLVM 19.1.5 CMake configure/build/CTest exited 0/0/0 with 4 passed, 0 failed and 0 skipped; source clean and scratch removed."
+blocking_fact = "The historical full-suite failure is real, but its artifacts do not preserve the then-current worktree registry, environment or exact candidate hash; its root cause is therefore unprovable and the preserved candidate was not accepted."
+result_evidence = "C:/Users/kermi/AppData/Local/ficant/runner-evidence/i3-wave1-vsllvm-worker-20260715/result.json"
+
+[candidate.integrated_runner_3a]
+state = "accepted-in-local-baseline-at-branch-head"
+base_sha = "33b421095bc46b1351a00297cda1ee9ee7ec9b00"
+scope = "deploy/execution only; HOQA schema version 3 and Quality/Audit permission model preserved"
+decision = "Human accepted the newly reviewed HOQA-v3 integration for the local baseline; do not accept or merge the preserved codex/i3-runner-ctest working tree as a candidate."
+runner_sha256 = "dffc1dfe95a1e220b4d67633bceee4c681cc9283aed3e6968bc35171f6f5c544"
+profiles_sha256 = "6b0bcade57e32310c2e001f510cd4205cc70bc11aeaf3ec7ab28569c8e9596ae"
+test_suite_sha256 = "30a327d261ad7c95f38cefb09bd8a10f28fd32d9b78ec8af025ed19df6950b63"
+result_schema_sha256 = "9fe00fd3feb1fd9a0e8ba7711f20432e26f8c3d22eb7fb1b0021e9cd085c0c61"
+capability_evidence = "C:/Users/kermi/AppData/Local/ficant/runner-evidence/capabilities/i3-3a-wave1-vsllvm-integrated-20260716.json"
+capability_evidence_id = "sha256:4352be12db9165e735dbdd17efd867aade1f50a412e9e3815fa7a6e2a39bd94d"
+wave1_result = "C:/Users/kermi/AppData/Local/ficant/runner-evidence/i3-3a-wave1-integrated-20260716-01/result.json"
+wave1_result_sha256 = "ac43d7682bfac758abf1054b31c055aee24017456d3bf94a05ec1fa810cb8289"
+
+[testing]
+framework_decision = "Quality selects or confirms the framework when the Test stage activates."
+frozen_semantics = "Existing user-confirmed Q-001..Q-036, expected values, Oracle results and tolerances cannot be changed to make implementation pass."
+oracle_inputs = ["versioned source data", "QuantLib 1.42.1", "manual cash-flow and present-value formulas", "price-yield round trip", "positive and negative 1bp finite differences"]
+defect_loop = "Quality submits a structured bug list; Orchestrator routes Development fixes; Quality reruns only affected automated inventory."
+accepted_historical_oracle_tests = "15 + 15 + 1 = 31/31 at ddbc0cc"
+test_data_manifest = "tests/golden-cases/china-rates/iteration-3-cgb-basic-info-source-manifest.json"
+
+[environment.development]
+owner = "Orchestrator"
+platform = "Windows 11 and PowerShell 7"
+git = "Windows Git linked worktrees"
+task_local_tools = "CMake 3.31.6, Ninja 1.12.1, standalone LLVM 18.1.8, VS LLVM 19.1.5, Rust 1.96.1"
+wsl = "historical compatibility asset only; not an ordinary development entry"
+
+[environment.sit]
+owner = "Orchestrator delivery work"
+human_boundary = "Human starts or administers Docker Desktop when required."
+runtime = "Windows Docker Desktop with isolated PostgreSQL 16 and MinIO services only when the Test/Operate acceptance requires SIT."
+
+[environment.uat]
+owner = "Human plus Orchestrator delivery work"
+target = "47.100.66.40"
+domain = "greatquant.com"
+application = "dm"
+timing = "post-iteration closure; UAT outcome does not affect iteration-3 closure"
+credential_boundary = "Never read, enumerate, copy, print, upload or commit C:/git/key; credentials never enter Worker contracts or the project."
+
+[[risks]]
+id = "RUSTSEC-2025-0052"
+status = "human-accepted-warning-private-source-pr-only"
+fact = "async-std 1.13.2 is reachable through minio 0.4.0 and remains an accepted-unfixed informational unmaintained risk; the 2026-07-16 acceptance covers only this private GitHub source PR."
+owner = "Human/Orchestrator"
+expires_on = "2026-10-13"
+reassess = "before runtime or external deployment, or on 2026-10-13, whichever occurs first"
+
+[[unresolved]]
+id = "HOQA-CONTRACT-TERMS-001"
+owner = "Orchestrator"
+blocking = false
+summary = "The active Windows contract schema retains the legacy field name mentor for compatibility; enforced values already map to Orchestrator, Quality and read-only Audit. Rename only in a future versioned contract-schema migration."
+
+[evidence.iteration1]
+status = "closed-historical"
+final_commit = "42f570f309e20c867f65cffbce76e7f6d64d65d5"
+final_tree = "94891a70b1df0e2befcad56246ef8c7c2c4bee8c"
+trusted_parent = "affce937b30ba14b59777691ec8d311dbb5161ba"
+
+[evidence.iteration2]
+status = "closed-historical"
+final_commit = "80f48706f37e3890224ca106fb763213d0beeb38"
+final_tree = "9dd6a136d453872dc37085bc55903eb90978fdf9"
+trusted_base = "737807302351fe8feee425a89d666caf3d611f96"
+candidate_ci = "29201419136"
+main_ci = "29201891313"
+accepted_risk = "RUSTSEC-2025-0052"
+
+[evidence.iteration2.contract]
+baseline_commit = "591dfcaf46eb9fdc8a68d879edbc542dd9ded448"
+descriptor_sha256 = "d1832ff40a3057d9ae11c7e7dcc8c847efbf13c76f4e18a14f8d905be3fdf1d0"
+descriptor_size = 59848
+
+[evidence.iteration2.business]
+candidate = "dbcff34793e79e73ed63872e28ed6298feedfbc4"
+quality_evidence_commit = "3dfe71b6ffe671317f97ef689c17fa5de7145d2f"
+nextest_run_id = "24556685-366c-4060-821d-bf94b58a6802"
+tests = "14 passed, 0 failed, 0 skipped"
+runtime_oci_manifest = "sha256:8e97031468b2ad51ab8484d06d8af9d63f1b73f8c04654f17be40ac629076cd9"
+
+[evidence.iteration2.supply]
+packages = "620 unique = 607 third-party + 13 exact first-party"
+secret_scans = "published base, candidate range and release tree all 0 findings"
+accepted_unfixed = "one exact RUSTSEC-2025-0052 acceptance"
+
+[evidence.iteration3]
+checklist = "iteration-3-checklist.md"
+architecture = ["docs/architecture/adr/0001-polyglot-monorepo-source-ownership.md", "docs/architecture/adr/0002-fixed-income-kernel-and-ffi-safety-boundary.md", "docs/architecture/adr/0003-deep-modules-and-explicit-internal-boundaries.md", "docs/architecture/adr/0004-cgb-reference-convention-and-independent-oracle.md", "docs/architecture/adr/0005-bond-analytics-contract-abi-and-artifact.md", "docs/architecture/adr/0007-windows-primary-development-and-phase-specific-environments.md", "docs/architecture/adr/0008-hoqa-governance-baseline.md"]
+historical_proqaid = ".hoqa/history/proqaid-superseded/README.md"
+
+[evidence.iteration3.segment_3a]
+status = "closed-human-accepted"
+preserved_candidate_decision = "rejected-unprovable-historical-failure-provenance"
+integrated_candidate = "accepted-local-baseline-at-branch-head"
+static_validation = "PowerShell AST parse 3/3; execution config and all JSON schemas valid; git diff --check exit 0"
+quality_runner_suite = "108 passed, 0 failed, 0 skipped; exit 0"
+quality_wave1 = "configure/build/CTest exit 0/0/0; 4 passed, 0 failed, 0 skipped"
+quality_bug_list = "closed: terminal-formatted PowerShell error output wrapped words with layout/ANSI markers; assertion changed to semantic fragments while preserving exit, HEAD-drift and no-result requirements"
+historical_failure_disposition = "not reproduced and not accepted as explained; source artifacts insufficient to bind it to an exact candidate state"
+capability_evidence = "C:/Users/kermi/AppData/Local/ficant/runner-evidence/capabilities/i3-3a-wave1-vsllvm-integrated-20260716.json"
+wave1_result = "C:/Users/kermi/AppData/Local/ficant/runner-evidence/i3-3a-wave1-integrated-20260716-01/result.json"
+cleanup = "target source clean before and after; runner scratch removed; no temporary test worktree remains"
+
+[evidence.iteration3.segment_3b]
+status = "closed-human-accepted"
+base_commit = "4033e827c9bf7040afb3e8f66e67e283a9ab2489"
+ordered_parts = "Domain/Application; ficant-kernel-sys and safe native adapter; Arrow Artifact and stage/verify/publish/read/replay"
+architecture = "Domain/Application contain no FFI, Arrow, SQL or MinIO dependency; ficant-kernel-sys is the only Rust unsafe owner; public Protobuf and migrations unchanged"
+arrow = "arrow 59.1.0; IPC V5; one file, one record batch, one row; frozen 39-field schema; Decimal128(38,12); fixture SHA-256 0d74da243ddd828afd47dfc4e26fc9615b3e62525dc52b646ef1440f17959ef6"
+quality_new_tests = "7 passed, 0 failed, 0 skipped: Domain invariants 3; Rust ABI layout 1; native/Arrow/lifecycle 3"
+quality_regression = "governed non-environment workspace inventory 159 passed, storage library 3 passed and Iteration 3B end-to-end inventory 3 passed (165 total); strict Clippy for five affected crates exited 0 with -D warnings"
+quality_cpp = "VS LLVM 19.1.5 configure/build/CTest exit 0/0/0; 4 passed, 0 failed, 0 skipped"
+full_workspace_disposition = "not claimed green: environment-dependent acceptance stopped 13/13 at missing FICANT_TEST_DATABASE_URL; existing server health probes failed 3/5 with WinSock 10106; descriptor inventory passed 2/11 and stopped 9/11 at missing fixed Buf path"
+quality_bug_list = "closed: test fixture ULID length; public API error docs; panic-free size conversion; explicit FFI cast lint boundaries; VS LLVM 19 build selection"
+scope_exclusions = "no SIT, deployment, release, push, public Protobuf, migration, Oracle, expected, tolerance or test-data changes"
+human_decision = "accepted on 2026-07-16; authorized Iteration 3C separately; no push, release or 3D authority"
+
+[evidence.iteration3.segment_3c]
+status = "implemented-validated-candidate-pending-human-acceptance"
+base_commit = "f0b16411067a0b5a5dfec5bbfefab3c07d7c558b"
+acceptance_matrix = "tests/iteration-3/acceptance-matrix.json; Q-001..Q-036 exactly once; verifier exit 0"
+frozen_assets = "expected e81a6cb0c941c85f0548f59952c9d7539af46818a6df2dc77bf897d814bc0f5c; manual Oracle 624fad7fbade6eea3f9679c9c4ce778c69dd8d297afb130e693a789c9b95e99a; QuantLib Oracle 3dfe5e359d9c95ad63e0620e14e63d14f733193cf095736abbeef1c06b846632; calendar 55a49129ed358113d0be855a00511f8e9b1fd74df6619b87c67600d9074e94db"
+oracle = "candidate contract 15/15, hardening 15/15 and validator 1/1; accepted historical official QuantLib 1.42.1 execution evidence reused because frozen inputs are unchanged and the local fetch/build workflow is Human-operator-only"
+production_golden = "12 frozen CGB price/yield cases exercised through the production native adapter; 1/1 Rust acceptance test passed"
+rust_quality = "main non-environment workspace command passed; real-storage ficant-storage tests 31/31; real-environment ficant-acceptance tests 14/14; server health probes 5/5"
+contract_quality = "fixed Rust and Buf digest Linux compatibility container; descriptor inventory 11/11; public Protobuf unchanged"
+cpp_quality = "VS LLVM 19.1.5 Release configure/build/CTest passed 4/4; ASan RelWithDebInfo static-runtime build/CTest passed 4/4; executable imports ficant_kernel.dll"
+static_quality = "affected production crates strict Clippy --no-deps exited 0; unsafe appears only in ficant-kernel-sys; Domain/Application dependency boundary and production QuantLib isolation passed"
+full_workspace_disposition = "not claimed as a whole-workspace strict-Clippy green result: generated Protobuf/tonic code has 196 pre-existing missing-documentation lints; affected handwritten production crates pass strict Clippy"
+quality_bug_list = "closed and retested: one-quantum dirty-price validation mismatch; type-specific persisted lineage; Windows health-probe Winsock environment; portable fixed-Buf selection for governed Linux compatibility execution"
+sit = "isolated Docker project ficant-i3c: PostgreSQL 16 and MinIO publish, verify, adapter restart, replay, tamper fail-closed, integrity event and cleanup passed; storage 31/31 and acceptance 14/14"
+cleanup = "docker compose down with volumes and orphans; 0 ficant-i3c containers, volumes or networks remain; compatibility container and extracted temporary Buf removed"
+remaining = "no blocking defect; formal Linux release supply-chain, reproducibility, SBOM/license, Audit, deployment and release gates belong to unauthorized 3D"
+scope_exclusions = "no public Protobuf, migration, Oracle, expected, tolerance, test-data, UAT, deployment, release, push or credential change"
+
+[evidence.iteration3.test_data]
+manifest = "tests/golden-cases/china-rates/iteration-3-cgb-basic-info-source-manifest.json"
+records = 6
+canonical_records_sha256 = "8216f586cbec959a08bb62a5e00c2492c99dc01e641e0c876a918b710e9d50ff"
+object_sha256 = "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf"
+immutable_uri = "s3://ficant-test-data/iteration-3/china-rates/dm-basic-info/8216f586cbec959a08bb62a5e00c2492c99dc01e641e0c876a918b710e9d50ff.json"
+raw_data_in_git = false
+
+[closure]
+conditions = ["frozen acceptance satisfied", "deterministic integrated validation passes", "Quality test report has no blocking defects", "applicable SIT and release-readiness evidence is candidate-bound", "final documents match Human intent, code and evidence", "Audit returns a passing consistency verdict", "Human accepts the business result and remaining risks"]
+uat_required = false
+business_implementation_may_resume_before_audit = true
+
+[governance_migration]
+source = "PROQAID"
+target = "HOQA"
+legacy_directory_removed = true
+active_directory = ".hoqa"
+historical_files_preserved = 36
+working_tree_state = "accepted-local-baseline-at-branch-head"
+deterministic_verification = "ready: config/schema parse; repo-policy tests and baseline/final; HOQA path policy; Windows runner 108/108 skipped 0; Wave 1 CTest 4/4 skipped 0; risk acceptance fixtures; git diff check; no business-path changes"
+audit_status = "pass"
+audit_blocking_findings = 0
+audit_nonblocking_finding = "HOQA-CONTRACT-TERMS-001"

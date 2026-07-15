@@ -78,6 +78,7 @@ check_ci_recovery_contracts() {
   grep -Fq 'cargo test --workspace --locked --exclude ficant-acceptance --exclude ficant-storage' <<<"$rust" || return 1
   grep -Fq -- '--exclude ficant-contract-tests' <<<"$rust" || return 1
   grep -Fq 'cargo test --locked -p ficant-storage --lib' <<<"$rust" || return 1
+  grep -Fq 'ref: ${{ github.event.pull_request.head.sha || github.sha }}' <<<"$supply" || return 1
   grep -Fq 'FICANT_GATE_OUTPUT_DIR: ${{ runner.temp }}/ficant-supply-evidence' <<<"$supply" || return 1
   grep -Fq 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' <<<"$supply" || return 1
   grep -Fq 'if-no-files-found: error' <<<"$supply" || return 1
@@ -283,9 +284,20 @@ expect_fail "unpinned image" "$gate" --check-ci "$tmp/unpinned-image.yml"
 printf '%s\n' Cargo.toml web-dm/package.json web-dm/pnpm-lock.yaml >"$tmp/safe-paths"
 "$gate" --check-path-list "$tmp/safe-paths"
 printf '%s\n' \
+  .hoqa/SKILL.md \
+  .hoqa/references/contracts.md \
+  .hoqa/state.toml \
+  .hoqa/migration-map.md \
+  .hoqa/history/proqaid-superseded/README.md >"$tmp/safe-hoqa-paths"
+"$gate" --check-path-list "$tmp/safe-hoqa-paths"
+expect_ignored .hoqa/state.toml false
+printf '%s\n' \
   .github/scripts/verify-cargo-reachability.py \
   .github/scripts/verify-license-inventory.py \
-  .github/scripts/verify-risk-acceptance.py >"$tmp/safe-python-gate-tools"
+  .github/scripts/verify-risk-acceptance.py \
+  deploy/execution/execution-validator.py \
+  tests/oracle/china-rates/validator.py \
+  tests/oracle/china-rates/quantlib_oracle.cpp >"$tmp/safe-python-gate-tools"
 "$gate" --check-path-list "$tmp/safe-python-gate-tools"
 printf '%s\n' crates/ficant-runtime/src/worker_pool.rs docs/secretary-notes.md docs/cache-policy.md >"$tmp/safe-component-names"
 "$gate" --check-path-list "$tmp/safe-component-names"
@@ -332,6 +344,21 @@ expected = {
 for key, value in expected.items():
     if lock.get(key) != value or str(value) not in workflow:
         raise SystemExit(f"Clang {key} drift between toolchain lock and CI")
+PY
+
+"$python" - "$toolchain_lock" "$workflow" "$repo/deploy/dev/RustService.Dockerfile" <<'PY'
+import pathlib
+import sys
+import tomllib
+
+lock_path, workflow_path, dockerfile_path = map(pathlib.Path, sys.argv[1:])
+image = tomllib.loads(lock_path.read_text(encoding="utf-8"))["rust"]["image"]
+workflow = workflow_path.read_text(encoding="utf-8")
+dockerfile = dockerfile_path.read_text(encoding="utf-8")
+if workflow.count(image) != 4:
+    raise SystemExit("Rust CI image must match the toolchain lock in all four jobs")
+if f"ARG RUST_IMAGE={image}" not in dockerfile:
+    raise SystemExit("Rust service build image must match the toolchain lock")
 PY
 
 printf '%s\n' Cargo.toml web-dm/package.json pnpm-lock.yaml >"$tmp/wrong-lock"

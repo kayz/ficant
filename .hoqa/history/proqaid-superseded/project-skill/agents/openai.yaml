@@ -1,0 +1,4 @@
+interface:
+  display_name: "PROQAID"
+  short_description: "Lightweight governed software iterations"
+  default_prompt: "Use $proqaid to bootstrap, recover, materially change, or close this iteration. Select Lite for a prototype or Governed for formal closure, reuse the current checklist, activate only affected roles and phases, and require executed worker self-test evidence without ceremonial RED/GREEN."
