@@ -1,0 +1,30 @@
+{
+  "schema_version": 4,
+  "checklist_id": "I3-TEST",
+  "task_id": "I3-TEST-001",
+  "ids": { "case": ["CASE-001"], "acceptance": ["ACC-001"], "defect": [] },
+  "profile": "fast",
+  "permission_profile": "test-author",
+  "model": { "requested": "gpt-5.3-codex-spark", "actual": "gpt-5.3-codex-spark", "actual_identity_required": true },
+  "model_admission_fingerprint": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "environment_fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "base_sha": "0000000000000000000000000000000000000000",
+  "worktree": "/mnt/c/git/ficant/worktrees/example",
+  "allowed_paths": ["tests/**"],
+  "forbidden_paths": ["deploy/**", "docs/**"],
+  "frozen_contracts": ["docs/architecture/adr/0006-windows-decision-plane-and-wsl-execution-plane.md"],
+  "expected_oracle": ["Quality-approved expected only"],
+  "context_files": ["iteration-3-checklist.md"],
+  "commands": { "red": ["false"], "green": ["true"], "regression": ["true"] },
+  "timeout_seconds": 300,
+  "result_path": "/tmp/ficant-execution-evidence/example/result.json",
+  "cleanup": ["remove temporary files after evidence capture", "preserve allowlisted recoverable candidate; restore unsafe state"],
+  "recovery_policy": {
+    "max_correction_cycles": 1,
+    "preserve_candidate_on_recoverable_blocker": true,
+    "immediate_stop_conditions": ["frozen boundary, expected, Oracle, tolerance, permission, path, credential, or scope change"]
+  },
+  "mentor": "Quality",
+  "escalation_conditions": ["frozen boundary change"],
+  "fallback": "strong profile through the same WSL runner"
+}

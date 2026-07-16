@@ -1,0 +1,40 @@
+schema_version = 3
+governance = "HOQA"
+admission_scope = "task-local"
+identity_excludes = ["captured_at"]
+
+[capabilities.ordinary_worker]
+phase = "execute-test"
+blocking = true
+requested_only = true
+environment = "windows"
+owner = "Orchestrator or Quality according to Worker type"
+checks = ["observed_version", "observed_path", "profile", "permission", "runner_config_hashes"]
+
+[capabilities.unrequested]
+phase = "all"
+blocking = false
+policy = "unrequested capabilities are irrelevant"
+
+[capabilities.sit]
+phase = "test-operate"
+blocking = false
+owner = "Orchestrator delivery work"
+human_boundary = "Docker Desktop GUI, startup, administrator and WSL Integration only"
+checks = ["docker_desktop_isolation", "service_health", "test_data", "cleanup"]
+
+[capabilities.release]
+phase = "operate"
+blocking = false
+owner = "Orchestrator delivery work"
+human_boundary = "authorization, credentials and low-observability operations"
+checks = ["packaging", "migration_rehearsal", "rollback_rehearsal", "runtime", "uat_handoff"]
+
+[evidence]
+scope = "task-local"
+root_environment = "FICANT_EVIDENCE_ROOT"
+default_scope = "windows-user-local-app-data"
+containment = "canonical-task-child"
+required_fields = ["capability_evidence_id", "captured_at", "environment", "powershell_version", "requested_capabilities", "tools", "runner_config_hashes"]
+identity_fields = ["environment", "requested_capabilities", "tools", "profile", "permission", "runner_config_hashes"]
+identity_excludes = ["captured_at"]

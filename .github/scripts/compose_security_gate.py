@@ -23,7 +23,7 @@ EXPECTED_IMAGES = {
     "minio-init": "minio/mc@sha256:09f93f534cde415d192bb6084dd0e0ddd1715fb602f8a922ad121fd2bf0f8b44",
 }
 MINIO_BASE_IMAGE = "minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e"
-MINIO_RUNTIME_IMAGE = "ficant/minio-runtime:iteration-2"
+MINIO_RUNTIME_IMAGE = "ficant/minio-runtime:dev"
 MINIO_RUNTIME_DOCKERFILE = "deploy/dev/Minio.Dockerfile"
 MINIO_RUNTIME_USER = "1000:1000"
 MINIO_LICENSE = "AGPL-3.0-only"

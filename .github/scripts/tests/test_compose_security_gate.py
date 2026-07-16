@@ -6,12 +6,15 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 import tomllib
 import unittest
 import uuid
 
-from python.compose_security_gate import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from compose_security_gate import (  # noqa: E402
     EXPECTED_SERVICES,
     is_non_root,
     validate_resolved,
@@ -19,7 +22,7 @@ from python.compose_security_gate import (
 )
 
 
-PROJECT = "ficant-iteration-2"
+PROJECT = "ficant-dev"
 
 PERSISTENCE_SERVICES = {"postgres", "minio"}
 INIT_SERVICES = {"minio-init", "migration"}
@@ -27,7 +30,7 @@ RUST_SERVICES = {"ficant-server", "ficant-worker", "ficant-web"}
 POSTGRES_IMAGE = "postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74"
 MINIO_IMAGE = "minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e"
 MC_IMAGE = "minio/mc@sha256:09f93f534cde415d192bb6084dd0e0ddd1715fb602f8a922ad121fd2bf0f8b44"
-MINIO_RUNTIME_IMAGE = "ficant/minio-runtime:iteration-2"
+MINIO_RUNTIME_IMAGE = "ficant/minio-runtime:dev"
 MINIO_RUNTIME_DOCKERFILE = "deploy/dev/Minio.Dockerfile"
 MINIO_AMD64_MANIFEST = "sha256:3f97c5651cb6662b880c787a232b6b34fec8d8922e08d6617b25d241a21164bb"
 

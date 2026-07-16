@@ -1,0 +1,136 @@
+# HOQA execution profile catalog. Participants make decisions; Workers execute bounded tasks.
+schema_version = 3
+governance = "HOQA"
+
+[planes.windows_execution]
+participants = ["Human", "Orchestrator", "Quality", "Audit"]
+orchestrator_lenses = ["Product", "Architecture", "Interface"]
+delivery_responsibility = "Orchestrator delivery work with Human privileged-operation boundary"
+ordinary_environment = "windows"
+stable_entry = "deploy/execution/invoke-worker.ps1"
+worker_result_channel = "forbidden; runner-owned"
+
+[planes.windows_execution.evidence]
+root_environment = "FICANT_EVIDENCE_ROOT"
+default_scope = "windows-user-local-app-data"
+layout = "task-id-child"
+cross_directory_move = false
+
+[worker_policy]
+activation = "two-or-more-independent-bounded-tasks-with-net-parallel-benefit"
+development_owner = "Orchestrator"
+test_owner = "Quality"
+completion_authority = false
+ordinary_executor = "bounded-internal-temporary-subagent"
+external_executor_use = "explicit-fallback-capacity-compatibility-or-human-selection"
+
+[worker_profiles.strong]
+executor = "codex"
+requested_model = "gpt-5.6-sol"
+model_identity_policy = "explicit-cli-selection"
+environment = "windows"
+default_permission = "development"
+
+[worker_profiles.medium]
+executor = "claude"
+requested_model = "sonnet"
+model_identity_policy = "provider-reported-identity-set-required"
+environment = "windows"
+default_permission = "development"
+
+[worker_profiles.fast]
+executor = "codex"
+requested_model = "gpt-5.3-codex-spark"
+model_identity_policy = "explicit-cli-selection"
+environment = "windows"
+default_permission = "test-author"
+
+[permission_profiles.test-executor]
+sandbox = "read-only"
+write_scope = "none"
+owner = "Quality"
+command_policy = "runner-owned-exact-read-only-catalog"
+command_catalog = ["git-status-porcelain", "git-diff-check", "git-rev-parse-head"]
+specialized_actions = ["fixed-income-wave1"]
+
+[permission_profiles.test-author]
+sandbox = "workspace-write"
+write_scope = "contract-allowlist"
+owner = "Quality"
+
+[permission_profiles.development]
+sandbox = "workspace-write"
+write_scope = "contract-allowlist"
+owner = "Orchestrator"
+
+[permission_profiles.quality]
+sandbox = "read-only"
+write_scope = "none"
+owner = "Quality"
+command_policy = "runner-owned-exact-read-only-catalog"
+command_catalog = ["git-status-porcelain", "git-diff-check", "git-rev-parse-head"]
+
+[permission_profiles.audit]
+sandbox = "read-only"
+write_scope = "none"
+owner = "Audit"
+command_policy = "runner-owned-exact-read-only-catalog"
+command_catalog = ["git-status-porcelain", "git-diff-check", "git-rev-parse-head"]
+
+[permission_profiles.release]
+sandbox = "human-operator"
+authority = "Human"
+contract_owner = "Orchestrator"
+credential_access = "human-only"
+
+[invocation.codex]
+fixed_arguments = ["--ignore-user-config", "-c", "windows.sandbox=\"elevated\""]
+requested_sandbox_is_separate = true
+
+[routing]
+bounded_mechanical = "fast"
+frozen_regular = "medium"
+high_risk_or_uncertain = "strong"
+boundary_change_action = "stop-and-return-to-orchestrator-or-human"
+worker_completion_authority = false
+
+[routing.escalation]
+fast_to_strong = ["expected_oracle_tolerance", "numerical", "ffi_memory", "security", "transaction_recovery", "unknown_root_cause", "scope_expansion", "weakened_assertions", "first_non_mechanical_failure", "orchestrator_or_quality_rejection", "frozen_boundary_change"]
+medium_to_strong = ["unknown_root_cause", "correction_budget_exhausted", "orchestrator_or_quality_rejection", "frozen_boundary_change"]
+
+[routing.self_recovery]
+fast_correction_cycles = 1
+medium_correction_cycles = 2
+strong_correction_cycles = 2
+preserve_recoverable_candidate = true
+
+[managed_executors.test-executor]
+owner = "Quality"
+executor = "windows-runner"
+permission = "test-executor"
+source_access = "read-only"
+command_mode = "runner-managed"
+brief_model = "gpt-5.3-codex-spark"
+
+[managed_executors.development]
+owner = "Orchestrator"
+executor = "windows-runner"
+permission = "development"
+source_access = "contract-allowlist"
+
+[managed_executors.delivery]
+owner = "Orchestrator"
+human_boundary = ["credentials", "docker-desktop-gui", "administrator", "uat-authorization", "low-observability-operations"]
+phase = "sit-release"
+ordinary_worker_access = false
+authority = ["phase-specific-sit", "packaging", "migration-rehearsal", "rollback-rehearsal", "release-preparation", "runtime-evidence"]
+excluded_authority = ["credential-access", "ordinary-worker-shell", "ordinary-worker-tools", "ordinary-worker-cache"]
+
+[judgment.quality]
+scope = ["automated-test-plan", "test-worker-routing", "completed-test-batch", "test-report", "bug-list"]
+excludes = ["business-acceptance", "development-worker-supervision", "final-iteration-verdict"]
+
+[judgment.audit]
+scope = ["final-document-to-human-intent-code-config-evidence-consistency"]
+mode = "independent-read-only"
+activation = "final-documents-and-candidate-evidence-ready"

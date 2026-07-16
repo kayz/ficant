@@ -5,7 +5,7 @@ image = "mcr.microsoft.com/dotnet/runtime-deps@sha256:c62d6267bf8f029da10d716163
 
 [rust]
 version = "1.96.1"
-image = "rust@sha256:e18a79fc84dfcfc3ab5ba72290398a644c135c97eaa881447fddc354ee4701a3"
+image = "rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663"
 license = "MIT OR Apache-2.0"
 
 [python]
@@ -108,7 +108,7 @@ repo_digest = "postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5
 source_tag = "minio/minio:RELEASE.2025-04-22T22-12-26Z"
 repo_digest = "minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e"
 linux_amd64_manifest = "sha256:3f97c5651cb6662b880c787a232b6b34fec8d8922e08d6617b25d241a21164bb"
-runtime_image = "ficant/minio-runtime:iteration-2"
+runtime_image = "ficant/minio-runtime:dev"
 dockerfile = "deploy/dev/Minio.Dockerfile"
 runtime_user = "1000:1000"
 license = "AGPL-3.0-only"

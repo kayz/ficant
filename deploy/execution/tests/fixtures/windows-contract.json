@@ -1,0 +1,33 @@
+{
+  "schema_version": 5,
+  "checklist_id": "I3-RUNNER-WIN",
+  "task_id": "I3-RUNNER-WIN-001",
+  "ids": { "case": ["WIN-001"], "acceptance": ["ADR-0007"], "defect": [] },
+  "profile": "strong",
+  "permission_profile": "development",
+  "model": { "requested": "gpt-5.6-sol", "actual_identity_required": true },
+  "base_sha": "8c4e9a0e553f093ebeec4e448865b64e783bb4cf",
+  "worktree": "C:\\git\\ficant\\worktrees\\i3-windows-recovery",
+  "capability_evidence_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "capability_evidence_path": "C:\\tmp\\ficant-evidence\\capabilities\\sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json",
+  "allowed_paths": ["deploy/execution/**"],
+  "forbidden_paths": ["crates/**", "C:\\git\\key\\**"],
+  "frozen_contracts": ["ADR-0007"],
+  "expected_oracle": ["task brief"],
+  "context_files": ["iteration-3-checklist.md"],
+  "objective": "Exercise the Windows runner fixture.",
+  "instructions": ["Do not create commits.", "Worker does not write the result channel."],
+  "commands": {
+    "red": [],
+    "green": [{ "argv": ["pwsh", "-NoProfile", "-File", "deploy/execution/tests/run-windows-tests.ps1"], "cwd": "C:\\git\\ficant\\worktrees\\i3-windows-recovery", "timeout_seconds": 300, "expected_tests": 1 }],
+    "regression": [{ "argv": ["git", "diff", "--check"], "cwd": "C:\\git\\ficant\\worktrees\\i3-windows-recovery", "timeout_seconds": 60, "expected_tests": 0 }]
+  },
+  "timeout_seconds": 600,
+  "result_path": "C:\\tmp\\ficant-evidence\\I3-RUNNER-WIN-001\\result.json",
+  "evidence_path": "C:\\tmp\\ficant-evidence\\I3-RUNNER-WIN-001",
+  "cleanup": ["remove runner temporary paths"],
+  "recovery_policy": { "max_correction_cycles": 2, "preserve_candidate_on_recoverable_blocker": true, "immediate_stop_conditions": ["scope change"] },
+  "mentor": "Orchestrator",
+  "escalation_conditions": ["frozen boundary change"],
+  "fallback": "return to Orchestrator"
+}

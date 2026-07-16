@@ -1,0 +1,18 @@
+[package]
+name = "ficant-fixed-income-native"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+chrono = { workspace = true }
+ficant-application = { path = "../ficant-application" }
+ficant-domain = { path = "../ficant-domain" }
+ficant-kernel-sys = { path = "../ficant-kernel-sys" }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+serde_json = { workspace = true }

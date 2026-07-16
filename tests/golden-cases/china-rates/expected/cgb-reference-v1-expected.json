@@ -1,0 +1,1983 @@
+{
+  "schema": "ficant.test-expected.cgb-reference-v1.v1",
+  "candidate_id": "I3-TW-ORACLE-REROUTE-1-R1",
+  "quality_status": "pending_quality_approval",
+  "convention": "cgb-reference-v1",
+  "calendar": "cgb-reference-calendar-v1",
+  "market_timezone": "Asia/Shanghai",
+  "valuation_at": "2026-07-13T15:00:00+08:00",
+  "settlement_date": "2026-07-14",
+  "face_value": "100.000000000000",
+  "source_lineage": {
+    "source_manifest": "tests/golden-cases/china-rates/iteration-3-cgb-basic-info-source-manifest.json",
+    "object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+    "canonical_records_sha256": "8216f586cbec959a08bb62a5e00c2492c99dc01e641e0c876a918b710e9d50ff",
+    "record_count": 6,
+    "raw_third_party_data_retained": false
+  },
+  "oracle_identity": {
+    "role": "frozen_target_contract_identity_not_oracle_execution_claim",
+    "result_schema": "ficant.bond-analytics.result.v1",
+    "engine": "ficant-fixed-income-native/0.1.0",
+    "algorithm": "ficant.cgb.fixed-rate.reference/1",
+    "abi": "FICANT_FIXED_INCOME_ABI_V1=1",
+    "calendar": {
+      "id": "cgb-reference-calendar-v1",
+      "requirement": "REFERENCE_REPLAY",
+      "resolution_scope": "per_result",
+      "resolution_policy": {
+        "exact_if": "all_required_dates_inside_frozen_exact_coverage",
+        "exact_resolution": "EXACT",
+        "otherwise_resolution": "PROVISIONAL_WEEKEND_ONLY"
+      },
+      "coverage": "2005-01-01..2026-12-31"
+    },
+    "rule_pack": {
+      "status": "pending_production_proof",
+      "id": null,
+      "version": null,
+      "content_sha256": null
+    },
+    "snapshot": {
+      "status": "source_manifest_only_no_production_snapshot_proof",
+      "source_manifest": "tests/golden-cases/china-rates/iteration-3-cgb-basic-info-source-manifest.json",
+      "source_manifest_sha256": "078c14aaa67bc3d819d0a089e415d13029e09d88d43d0946dbdf10e7e8221dd1",
+      "source_object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+      "canonical_records_sha256": "8216f586cbec959a08bb62a5e00c2492c99dc01e641e0c876a918b710e9d50ff",
+      "production_id": null,
+      "production_version": null,
+      "production_content_sha256": null
+    }
+  },
+  "cashflow_semantics": {
+    "sequence": "one_based_ascending_payment_eligible_cashflow",
+    "component_identity": "ordered_subset_of_coupon_then_principal",
+    "coupon": "coupon_amount_for_nominal_accrual_period",
+    "principal": "face_redemption_amount",
+    "total": "coupon_plus_principal",
+    "unit": "CNY_PER_100_FACE"
+  },
+  "tolerances": {
+    "date_cashflow_identity_unit_version_lineage": "exact",
+    "price_accrued_abs": "0.000000010000",
+    "ytm_abs": "0.000000000100",
+    "duration_convexity_rel": "0.000000010000",
+    "duration_convexity_abs_floor": "0.000000000100",
+    "dv01_abs": "0.000000010000",
+    "finite_difference_rel": "0.000100000000"
+  },
+  "provenance": {
+    "expected_source": "independent_manual_python_oracle",
+    "production_cpp_used": false,
+    "manual_formula_layer": "executed",
+    "price_yield_round_trip": "executed",
+    "centered_plus_minus_1bp": "executed",
+    "quantlib_required_version": "1.42.1",
+    "quantlib_agreement": "blocked_pending_independent_execution"
+  },
+  "acceptance_ids": [
+    "Q-001",
+    "Q-002",
+    "Q-003",
+    "Q-004",
+    "Q-005",
+    "Q-006",
+    "Q-007",
+    "Q-008",
+    "Q-009",
+    "Q-010",
+    "Q-011",
+    "Q-012",
+    "Q-013",
+    "Q-014",
+    "Q-015",
+    "Q-016",
+    "Q-017",
+    "Q-018",
+    "Q-019",
+    "Q-020",
+    "Q-021",
+    "Q-022",
+    "Q-023"
+  ],
+  "acceptance_mapping": {
+    "Q-001": {
+      "cases": [
+        "269937.IB:YIELD_IN"
+      ],
+      "invariants": [
+        "complete_case_result_and_frozen_identity"
+      ]
+    },
+    "Q-002": {
+      "cases": [
+        "269937.IB:PRICE_IN"
+      ],
+      "invariants": [
+        "complete_case_result_and_frozen_identity"
+      ]
+    },
+    "Q-003": {
+      "cases": [
+        "260013.IB:YIELD_IN"
+      ],
+      "invariants": [
+        "complete_case_result_and_frozen_identity"
+      ]
+    },
+    "Q-004": {
+      "cases": [
+        "260013.IB:PRICE_IN"
+      ],
+      "invariants": [
+        "complete_case_result_and_frozen_identity"
+      ]
+    },
+    "Q-005": {
+      "cases": [
+        "260011.IB:YIELD_IN"
+      ],
+      "invariants": [
+        "complete_case_result_and_frozen_identity"
+      ]
+    },
+    "Q-006": {
+      "cases": [
+        "260011.IB:PRICE_IN"
+      ],
+      "invariants": [
+        "complete_case_result_and_frozen_identity"
+      ]
+    },
+    "Q-007": {
+      "cases": [
+        "260008.IB:YIELD_IN"
+      ],
+      "invariants": [
+        "complete_case_result_and_frozen_identity"
+      ]
+    },
+    "Q-008": {
+      "cases": [
+        "260008.IB:PRICE_IN"
+      ],
+      "invariants": [
+        "complete_case_result_and_frozen_identity"
+      ]
+    },
+    "Q-009": {
+      "cases": [
+        "260012.IB:YIELD_IN"
+      ],
+      "invariants": [
+        "complete_case_result_and_frozen_identity"
+      ]
+    },
+    "Q-010": {
+      "cases": [
+        "260012.IB:PRICE_IN"
+      ],
+      "invariants": [
+        "complete_case_result_and_frozen_identity"
+      ]
+    },
+    "Q-011": {
+      "cases": [
+        "260010.IB:YIELD_IN"
+      ],
+      "invariants": [
+        "complete_case_result_and_frozen_identity"
+      ]
+    },
+    "Q-012": {
+      "cases": [
+        "260010.IB:PRICE_IN"
+      ],
+      "invariants": [
+        "complete_case_result_and_frozen_identity"
+      ]
+    },
+    "Q-013": {
+      "cases": [],
+      "invariants": [
+        "asia_shanghai_epoch_to_market_date"
+      ]
+    },
+    "Q-014": {
+      "cases": [],
+      "invariants": [
+        "adjusted_payment_date_cashflow_inclusion"
+      ]
+    },
+    "Q-015": {
+      "cases": [],
+      "invariants": [
+        "following_adjustment_no_extra_interest"
+      ]
+    },
+    "Q-016": {
+      "cases": [],
+      "invariants": [
+        "discount_actual_actual_split_by_calendar_year"
+      ]
+    },
+    "Q-017": {
+      "cases": [],
+      "invariants": [
+        "discount_single_simple_yield_redemption"
+      ]
+    },
+    "Q-018": {
+      "cases": [],
+      "invariants": [
+        "semiannual_nominal_coupon_anchors"
+      ]
+    },
+    "Q-019": {
+      "cases": [],
+      "invariants": [
+        "strict_settlement_payment_boundary"
+      ]
+    },
+    "Q-020": {
+      "cases": [],
+      "invariants": [
+        "cashflow_sequence_component_and_amount_identity"
+      ]
+    },
+    "Q-021": {
+      "cases": [],
+      "invariants": [
+        "price_yield_round_trip"
+      ]
+    },
+    "Q-022": {
+      "cases": [],
+      "invariants": [
+        "decimal12_round_half_even"
+      ]
+    },
+    "Q-023": {
+      "cases": [],
+      "invariants": [
+        "centered_plus_minus_1bp_risk"
+      ]
+    }
+  },
+  "results": {
+    "269937.IB:YIELD_IN": {
+      "bond_id": "269937.IB",
+      "mode": "YIELD_IN",
+      "input_value": "0.011000000000",
+      "settlement_date": "2026-07-14",
+      "identity": {
+        "bond_id": "269937.IB",
+        "mode": "YIELD_IN",
+        "result_schema": "ficant.bond-analytics.result.v1",
+        "engine": "ficant-fixed-income-native/0.1.0",
+        "algorithm": "ficant.cgb.fixed-rate.reference/1",
+        "abi": "FICANT_FIXED_INCOME_ABI_V1=1",
+        "convention": "cgb-reference-v1",
+        "calendar_id": "cgb-reference-calendar-v1",
+        "calendar_requirement": "REFERENCE_REPLAY",
+        "calendar_resolution": "EXACT",
+        "calendar_coverage": "2005-01-01..2026-12-31",
+        "market_timezone": "Asia/Shanghai",
+        "valuation_at": "2026-07-13T15:00:00+08:00",
+        "settlement_date": "2026-07-14",
+        "rule_pack_status": "pending_production_proof",
+        "rule_pack_content_sha256": null,
+        "snapshot_status": "source_manifest_only_no_production_snapshot_proof",
+        "snapshot_source_object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+        "snapshot_production_content_sha256": null
+      },
+      "cashflow_semantics": {
+        "sequence": "one_based_ascending_payment_eligible_cashflow",
+        "component_identity": "ordered_subset_of_coupon_then_principal",
+        "coupon": "coupon_amount_for_nominal_accrual_period",
+        "principal": "face_redemption_amount",
+        "total": "coupon_plus_principal",
+        "unit": "CNY_PER_100_FACE"
+      },
+      "cashflow_count": 1,
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-12-17",
+          "payment_date": "2026-12-17",
+          "components": [
+            "principal"
+          ],
+          "coupon": "0.000000000000",
+          "principal": "100.000000000000",
+          "total": "100.000000000000",
+          "time_years": "0.427397260274"
+        }
+      ],
+      "accrued_interest": "0.000000000000",
+      "clean_price": "99.532062958802",
+      "dirty_price": "99.532062958802",
+      "yield_to_maturity": "0.011000000000",
+      "macaulay_duration": "0.427397260274",
+      "modified_duration": "0.425397310180",
+      "convexity": "0.361925743017",
+      "dv01": "0.004234067194",
+      "round_trip": {
+        "yield_to_maturity": "0.011000000000",
+        "absolute_difference": "0.000000000000"
+      },
+      "finite_difference": {
+        "bump_decimal": "0.000100000000",
+        "price_minus_1bp": "99.536297206112",
+        "price_plus_1bp": "99.527829071724",
+        "dv01": "0.004234067194",
+        "dv01_relative_difference": "0.000000000000",
+        "convexity": "0.361925743672",
+        "convexity_relative_difference": "0.000000001810"
+      },
+      "units": {
+        "price_accrued_dv01": "CNY_PER_100_FACE",
+        "cashflow": "CNY_PER_100_FACE",
+        "yield": "DECIMAL_RATE",
+        "duration": "YEARS",
+        "convexity": "YEARS_SQUARED"
+      }
+    },
+    "269937.IB:PRICE_IN": {
+      "bond_id": "269937.IB",
+      "mode": "PRICE_IN",
+      "input_value": "99.532062958802",
+      "settlement_date": "2026-07-14",
+      "identity": {
+        "bond_id": "269937.IB",
+        "mode": "PRICE_IN",
+        "result_schema": "ficant.bond-analytics.result.v1",
+        "engine": "ficant-fixed-income-native/0.1.0",
+        "algorithm": "ficant.cgb.fixed-rate.reference/1",
+        "abi": "FICANT_FIXED_INCOME_ABI_V1=1",
+        "convention": "cgb-reference-v1",
+        "calendar_id": "cgb-reference-calendar-v1",
+        "calendar_requirement": "REFERENCE_REPLAY",
+        "calendar_resolution": "EXACT",
+        "calendar_coverage": "2005-01-01..2026-12-31",
+        "market_timezone": "Asia/Shanghai",
+        "valuation_at": "2026-07-13T15:00:00+08:00",
+        "settlement_date": "2026-07-14",
+        "rule_pack_status": "pending_production_proof",
+        "rule_pack_content_sha256": null,
+        "snapshot_status": "source_manifest_only_no_production_snapshot_proof",
+        "snapshot_source_object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+        "snapshot_production_content_sha256": null
+      },
+      "cashflow_semantics": {
+        "sequence": "one_based_ascending_payment_eligible_cashflow",
+        "component_identity": "ordered_subset_of_coupon_then_principal",
+        "coupon": "coupon_amount_for_nominal_accrual_period",
+        "principal": "face_redemption_amount",
+        "total": "coupon_plus_principal",
+        "unit": "CNY_PER_100_FACE"
+      },
+      "cashflow_count": 1,
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-12-17",
+          "payment_date": "2026-12-17",
+          "components": [
+            "principal"
+          ],
+          "coupon": "0.000000000000",
+          "principal": "100.000000000000",
+          "total": "100.000000000000",
+          "time_years": "0.427397260274"
+        }
+      ],
+      "accrued_interest": "0.000000000000",
+      "clean_price": "99.532062958802",
+      "dirty_price": "99.532062958802",
+      "yield_to_maturity": "0.011000000000",
+      "macaulay_duration": "0.427397260274",
+      "modified_duration": "0.425397310180",
+      "convexity": "0.361925743017",
+      "dv01": "0.004234067194",
+      "round_trip": {
+        "yield_to_maturity": "0.011000000000",
+        "absolute_difference": "0.000000000000"
+      },
+      "finite_difference": {
+        "bump_decimal": "0.000100000000",
+        "price_minus_1bp": "99.536297206112",
+        "price_plus_1bp": "99.527829071724",
+        "dv01": "0.004234067194",
+        "dv01_relative_difference": "0.000000000000",
+        "convexity": "0.361925745560",
+        "convexity_relative_difference": "0.000000007026"
+      },
+      "units": {
+        "price_accrued_dv01": "CNY_PER_100_FACE",
+        "cashflow": "CNY_PER_100_FACE",
+        "yield": "DECIMAL_RATE",
+        "duration": "YEARS",
+        "convexity": "YEARS_SQUARED"
+      }
+    },
+    "260013.IB:YIELD_IN": {
+      "bond_id": "260013.IB",
+      "mode": "YIELD_IN",
+      "input_value": "0.013000000000",
+      "settlement_date": "2026-07-14",
+      "identity": {
+        "bond_id": "260013.IB",
+        "mode": "YIELD_IN",
+        "result_schema": "ficant.bond-analytics.result.v1",
+        "engine": "ficant-fixed-income-native/0.1.0",
+        "algorithm": "ficant.cgb.fixed-rate.reference/1",
+        "abi": "FICANT_FIXED_INCOME_ABI_V1=1",
+        "convention": "cgb-reference-v1",
+        "calendar_id": "cgb-reference-calendar-v1",
+        "calendar_requirement": "REFERENCE_REPLAY",
+        "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+        "calendar_coverage": "2005-01-01..2026-12-31",
+        "market_timezone": "Asia/Shanghai",
+        "valuation_at": "2026-07-13T15:00:00+08:00",
+        "settlement_date": "2026-07-14",
+        "rule_pack_status": "pending_production_proof",
+        "rule_pack_content_sha256": null,
+        "snapshot_status": "source_manifest_only_no_production_snapshot_proof",
+        "snapshot_source_object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+        "snapshot_production_content_sha256": null
+      },
+      "cashflow_semantics": {
+        "sequence": "one_based_ascending_payment_eligible_cashflow",
+        "component_identity": "ordered_subset_of_coupon_then_principal",
+        "coupon": "coupon_amount_for_nominal_accrual_period",
+        "principal": "face_redemption_amount",
+        "total": "coupon_plus_principal",
+        "unit": "CNY_PER_100_FACE"
+      },
+      "cashflow_count": 2,
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2027-06-25",
+          "payment_date": "2027-06-25",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.210000000000",
+          "principal": "0.000000000000",
+          "total": "1.210000000000",
+          "time_years": "0.947945205479"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2028-06-25",
+          "payment_date": "2028-06-26",
+          "components": [
+            "coupon",
+            "principal"
+          ],
+          "coupon": "1.210000000000",
+          "principal": "100.000000000000",
+          "total": "101.210000000000",
+          "time_years": "1.947945205479"
+        }
+      ],
+      "accrued_interest": "0.062986301370",
+      "clean_price": "99.827602841728",
+      "dirty_price": "99.890589143098",
+      "yield_to_maturity": "0.013000000000",
+      "macaulay_duration": "1.935979361140",
+      "modified_duration": "1.911134611194",
+      "convexity": "5.550565365752",
+      "dv01": "0.019090436584",
+      "round_trip": {
+        "yield_to_maturity": "0.013000000000",
+        "absolute_difference": "0.000000000000"
+      },
+      "finite_difference": {
+        "bump_decimal": "0.000100000000",
+        "price_minus_1bp": "99.909682351928",
+        "price_plus_1bp": "99.871501478760",
+        "dv01": "0.019090436584",
+        "dv01_relative_difference": "0.000000000000",
+        "convexity": "5.550565453664",
+        "convexity_relative_difference": "0.000000015839"
+      },
+      "units": {
+        "price_accrued_dv01": "CNY_PER_100_FACE",
+        "cashflow": "CNY_PER_100_FACE",
+        "yield": "DECIMAL_RATE",
+        "duration": "YEARS",
+        "convexity": "YEARS_SQUARED"
+      }
+    },
+    "260013.IB:PRICE_IN": {
+      "bond_id": "260013.IB",
+      "mode": "PRICE_IN",
+      "input_value": "99.827602841728",
+      "settlement_date": "2026-07-14",
+      "identity": {
+        "bond_id": "260013.IB",
+        "mode": "PRICE_IN",
+        "result_schema": "ficant.bond-analytics.result.v1",
+        "engine": "ficant-fixed-income-native/0.1.0",
+        "algorithm": "ficant.cgb.fixed-rate.reference/1",
+        "abi": "FICANT_FIXED_INCOME_ABI_V1=1",
+        "convention": "cgb-reference-v1",
+        "calendar_id": "cgb-reference-calendar-v1",
+        "calendar_requirement": "REFERENCE_REPLAY",
+        "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+        "calendar_coverage": "2005-01-01..2026-12-31",
+        "market_timezone": "Asia/Shanghai",
+        "valuation_at": "2026-07-13T15:00:00+08:00",
+        "settlement_date": "2026-07-14",
+        "rule_pack_status": "pending_production_proof",
+        "rule_pack_content_sha256": null,
+        "snapshot_status": "source_manifest_only_no_production_snapshot_proof",
+        "snapshot_source_object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+        "snapshot_production_content_sha256": null
+      },
+      "cashflow_semantics": {
+        "sequence": "one_based_ascending_payment_eligible_cashflow",
+        "component_identity": "ordered_subset_of_coupon_then_principal",
+        "coupon": "coupon_amount_for_nominal_accrual_period",
+        "principal": "face_redemption_amount",
+        "total": "coupon_plus_principal",
+        "unit": "CNY_PER_100_FACE"
+      },
+      "cashflow_count": 2,
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2027-06-25",
+          "payment_date": "2027-06-25",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.210000000000",
+          "principal": "0.000000000000",
+          "total": "1.210000000000",
+          "time_years": "0.947945205479"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2028-06-25",
+          "payment_date": "2028-06-26",
+          "components": [
+            "coupon",
+            "principal"
+          ],
+          "coupon": "1.210000000000",
+          "principal": "100.000000000000",
+          "total": "101.210000000000",
+          "time_years": "1.947945205479"
+        }
+      ],
+      "accrued_interest": "0.062986301370",
+      "clean_price": "99.827602841728",
+      "dirty_price": "99.890589143098",
+      "yield_to_maturity": "0.013000000000",
+      "macaulay_duration": "1.935979361140",
+      "modified_duration": "1.911134611194",
+      "convexity": "5.550565365752",
+      "dv01": "0.019090436584",
+      "round_trip": {
+        "yield_to_maturity": "0.013000000000",
+        "absolute_difference": "0.000000000000"
+      },
+      "finite_difference": {
+        "bump_decimal": "0.000100000000",
+        "price_minus_1bp": "99.909682351928",
+        "price_plus_1bp": "99.871501478759",
+        "dv01": "0.019090436584",
+        "dv01_relative_difference": "0.000000000000",
+        "convexity": "5.550564503897",
+        "convexity_relative_difference": "0.000000155273"
+      },
+      "units": {
+        "price_accrued_dv01": "CNY_PER_100_FACE",
+        "cashflow": "CNY_PER_100_FACE",
+        "yield": "DECIMAL_RATE",
+        "duration": "YEARS",
+        "convexity": "YEARS_SQUARED"
+      }
+    },
+    "260011.IB:YIELD_IN": {
+      "bond_id": "260011.IB",
+      "mode": "YIELD_IN",
+      "input_value": "0.013800000000",
+      "settlement_date": "2026-07-14",
+      "identity": {
+        "bond_id": "260011.IB",
+        "mode": "YIELD_IN",
+        "result_schema": "ficant.bond-analytics.result.v1",
+        "engine": "ficant-fixed-income-native/0.1.0",
+        "algorithm": "ficant.cgb.fixed-rate.reference/1",
+        "abi": "FICANT_FIXED_INCOME_ABI_V1=1",
+        "convention": "cgb-reference-v1",
+        "calendar_id": "cgb-reference-calendar-v1",
+        "calendar_requirement": "REFERENCE_REPLAY",
+        "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+        "calendar_coverage": "2005-01-01..2026-12-31",
+        "market_timezone": "Asia/Shanghai",
+        "valuation_at": "2026-07-13T15:00:00+08:00",
+        "settlement_date": "2026-07-14",
+        "rule_pack_status": "pending_production_proof",
+        "rule_pack_content_sha256": null,
+        "snapshot_status": "source_manifest_only_no_production_snapshot_proof",
+        "snapshot_source_object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+        "snapshot_production_content_sha256": null
+      },
+      "cashflow_semantics": {
+        "sequence": "one_based_ascending_payment_eligible_cashflow",
+        "component_identity": "ordered_subset_of_coupon_then_principal",
+        "coupon": "coupon_amount_for_nominal_accrual_period",
+        "principal": "face_redemption_amount",
+        "total": "coupon_plus_principal",
+        "unit": "CNY_PER_100_FACE"
+      },
+      "cashflow_count": 3,
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2027-05-25",
+          "payment_date": "2027-05-25",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.260000000000",
+          "principal": "0.000000000000",
+          "total": "1.260000000000",
+          "time_years": "0.863013698630"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2028-05-25",
+          "payment_date": "2028-05-25",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.260000000000",
+          "principal": "0.000000000000",
+          "total": "1.260000000000",
+          "time_years": "1.863013698630"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2029-05-25",
+          "payment_date": "2029-05-25",
+          "components": [
+            "coupon",
+            "principal"
+          ],
+          "coupon": "1.260000000000",
+          "principal": "100.000000000000",
+          "total": "101.260000000000",
+          "time_years": "2.863013698630"
+        }
+      ],
+      "accrued_interest": "0.172602739726",
+      "clean_price": "99.664376042560",
+      "dirty_price": "99.836978782286",
+      "yield_to_maturity": "0.013800000000",
+      "macaulay_duration": "2.825766945579",
+      "modified_duration": "2.787302175556",
+      "convexity": "10.577574120601",
+      "dv01": "0.027827583659",
+      "round_trip": {
+        "yield_to_maturity": "0.013800000000",
+        "absolute_difference": "0.000000000000"
+      },
+      "finite_difference": {
+        "bump_decimal": "0.000100000000",
+        "price_minus_1bp": "99.864811646110",
+        "price_plus_1bp": "99.809156478793",
+        "dv01": "0.027827583659",
+        "dv01_relative_difference": "0.000000000000",
+        "convexity": "10.577574364349",
+        "convexity_relative_difference": "0.000000023044"
+      },
+      "units": {
+        "price_accrued_dv01": "CNY_PER_100_FACE",
+        "cashflow": "CNY_PER_100_FACE",
+        "yield": "DECIMAL_RATE",
+        "duration": "YEARS",
+        "convexity": "YEARS_SQUARED"
+      }
+    },
+    "260011.IB:PRICE_IN": {
+      "bond_id": "260011.IB",
+      "mode": "PRICE_IN",
+      "input_value": "99.664376042560",
+      "settlement_date": "2026-07-14",
+      "identity": {
+        "bond_id": "260011.IB",
+        "mode": "PRICE_IN",
+        "result_schema": "ficant.bond-analytics.result.v1",
+        "engine": "ficant-fixed-income-native/0.1.0",
+        "algorithm": "ficant.cgb.fixed-rate.reference/1",
+        "abi": "FICANT_FIXED_INCOME_ABI_V1=1",
+        "convention": "cgb-reference-v1",
+        "calendar_id": "cgb-reference-calendar-v1",
+        "calendar_requirement": "REFERENCE_REPLAY",
+        "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+        "calendar_coverage": "2005-01-01..2026-12-31",
+        "market_timezone": "Asia/Shanghai",
+        "valuation_at": "2026-07-13T15:00:00+08:00",
+        "settlement_date": "2026-07-14",
+        "rule_pack_status": "pending_production_proof",
+        "rule_pack_content_sha256": null,
+        "snapshot_status": "source_manifest_only_no_production_snapshot_proof",
+        "snapshot_source_object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+        "snapshot_production_content_sha256": null
+      },
+      "cashflow_semantics": {
+        "sequence": "one_based_ascending_payment_eligible_cashflow",
+        "component_identity": "ordered_subset_of_coupon_then_principal",
+        "coupon": "coupon_amount_for_nominal_accrual_period",
+        "principal": "face_redemption_amount",
+        "total": "coupon_plus_principal",
+        "unit": "CNY_PER_100_FACE"
+      },
+      "cashflow_count": 3,
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2027-05-25",
+          "payment_date": "2027-05-25",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.260000000000",
+          "principal": "0.000000000000",
+          "total": "1.260000000000",
+          "time_years": "0.863013698630"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2028-05-25",
+          "payment_date": "2028-05-25",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.260000000000",
+          "principal": "0.000000000000",
+          "total": "1.260000000000",
+          "time_years": "1.863013698630"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2029-05-25",
+          "payment_date": "2029-05-25",
+          "components": [
+            "coupon",
+            "principal"
+          ],
+          "coupon": "1.260000000000",
+          "principal": "100.000000000000",
+          "total": "101.260000000000",
+          "time_years": "2.863013698630"
+        }
+      ],
+      "accrued_interest": "0.172602739726",
+      "clean_price": "99.664376042560",
+      "dirty_price": "99.836978782286",
+      "yield_to_maturity": "0.013800000000",
+      "macaulay_duration": "2.825766945579",
+      "modified_duration": "2.787302175556",
+      "convexity": "10.577574120601",
+      "dv01": "0.027827583659",
+      "round_trip": {
+        "yield_to_maturity": "0.013800000000",
+        "absolute_difference": "0.000000000000"
+      },
+      "finite_difference": {
+        "bump_decimal": "0.000100000000",
+        "price_minus_1bp": "99.864811646110",
+        "price_plus_1bp": "99.809156478793",
+        "dv01": "0.027827583659",
+        "dv01_relative_difference": "0.000000000000",
+        "convexity": "10.577573938192",
+        "convexity_relative_difference": "0.000000017245"
+      },
+      "units": {
+        "price_accrued_dv01": "CNY_PER_100_FACE",
+        "cashflow": "CNY_PER_100_FACE",
+        "yield": "DECIMAL_RATE",
+        "duration": "YEARS",
+        "convexity": "YEARS_SQUARED"
+      }
+    },
+    "260008.IB:YIELD_IN": {
+      "bond_id": "260008.IB",
+      "mode": "YIELD_IN",
+      "input_value": "0.015500000000",
+      "settlement_date": "2026-07-14",
+      "identity": {
+        "bond_id": "260008.IB",
+        "mode": "YIELD_IN",
+        "result_schema": "ficant.bond-analytics.result.v1",
+        "engine": "ficant-fixed-income-native/0.1.0",
+        "algorithm": "ficant.cgb.fixed-rate.reference/1",
+        "abi": "FICANT_FIXED_INCOME_ABI_V1=1",
+        "convention": "cgb-reference-v1",
+        "calendar_id": "cgb-reference-calendar-v1",
+        "calendar_requirement": "REFERENCE_REPLAY",
+        "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+        "calendar_coverage": "2005-01-01..2026-12-31",
+        "market_timezone": "Asia/Shanghai",
+        "valuation_at": "2026-07-13T15:00:00+08:00",
+        "settlement_date": "2026-07-14",
+        "rule_pack_status": "pending_production_proof",
+        "rule_pack_content_sha256": null,
+        "snapshot_status": "source_manifest_only_no_production_snapshot_proof",
+        "snapshot_source_object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+        "snapshot_production_content_sha256": null
+      },
+      "cashflow_semantics": {
+        "sequence": "one_based_ascending_payment_eligible_cashflow",
+        "component_identity": "ordered_subset_of_coupon_then_principal",
+        "coupon": "coupon_amount_for_nominal_accrual_period",
+        "principal": "face_redemption_amount",
+        "total": "coupon_plus_principal",
+        "unit": "CNY_PER_100_FACE"
+      },
+      "cashflow_count": 5,
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2027-04-15",
+          "payment_date": "2027-04-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.500000000000",
+          "principal": "0.000000000000",
+          "total": "1.500000000000",
+          "time_years": "0.753424657534"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2028-04-15",
+          "payment_date": "2028-04-17",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.500000000000",
+          "principal": "0.000000000000",
+          "total": "1.500000000000",
+          "time_years": "1.753424657534"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2029-04-15",
+          "payment_date": "2029-04-16",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.500000000000",
+          "principal": "0.000000000000",
+          "total": "1.500000000000",
+          "time_years": "2.753424657534"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2030-04-15",
+          "payment_date": "2030-04-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.500000000000",
+          "principal": "0.000000000000",
+          "total": "1.500000000000",
+          "time_years": "3.753424657534"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2031-04-15",
+          "payment_date": "2031-04-15",
+          "components": [
+            "coupon",
+            "principal"
+          ],
+          "coupon": "1.500000000000",
+          "principal": "100.000000000000",
+          "total": "101.500000000000",
+          "time_years": "4.753424657534"
+        }
+      ],
+      "accrued_interest": "0.369863013699",
+      "clean_price": "99.770427052063",
+      "dirty_price": "100.140290065762",
+      "yield_to_maturity": "0.015500000000",
+      "macaulay_duration": "4.607603387137",
+      "modified_duration": "4.537275615103",
+      "convexity": "25.460647798852",
+      "dv01": "0.045436412433",
+      "round_trip": {
+        "yield_to_maturity": "0.015500000000",
+        "absolute_difference": "0.000000000000"
+      },
+      "finite_difference": {
+        "bump_decimal": "0.000100000000",
+        "price_minus_1bp": "100.185739226379",
+        "price_plus_1bp": "100.094866401513",
+        "dv01": "0.045436412433",
+        "dv01_relative_difference": "0.000000000000",
+        "convexity": "25.460648868049",
+        "convexity_relative_difference": "0.000000041994"
+      },
+      "units": {
+        "price_accrued_dv01": "CNY_PER_100_FACE",
+        "cashflow": "CNY_PER_100_FACE",
+        "yield": "DECIMAL_RATE",
+        "duration": "YEARS",
+        "convexity": "YEARS_SQUARED"
+      }
+    },
+    "260008.IB:PRICE_IN": {
+      "bond_id": "260008.IB",
+      "mode": "PRICE_IN",
+      "input_value": "99.770427052063",
+      "settlement_date": "2026-07-14",
+      "identity": {
+        "bond_id": "260008.IB",
+        "mode": "PRICE_IN",
+        "result_schema": "ficant.bond-analytics.result.v1",
+        "engine": "ficant-fixed-income-native/0.1.0",
+        "algorithm": "ficant.cgb.fixed-rate.reference/1",
+        "abi": "FICANT_FIXED_INCOME_ABI_V1=1",
+        "convention": "cgb-reference-v1",
+        "calendar_id": "cgb-reference-calendar-v1",
+        "calendar_requirement": "REFERENCE_REPLAY",
+        "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+        "calendar_coverage": "2005-01-01..2026-12-31",
+        "market_timezone": "Asia/Shanghai",
+        "valuation_at": "2026-07-13T15:00:00+08:00",
+        "settlement_date": "2026-07-14",
+        "rule_pack_status": "pending_production_proof",
+        "rule_pack_content_sha256": null,
+        "snapshot_status": "source_manifest_only_no_production_snapshot_proof",
+        "snapshot_source_object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+        "snapshot_production_content_sha256": null
+      },
+      "cashflow_semantics": {
+        "sequence": "one_based_ascending_payment_eligible_cashflow",
+        "component_identity": "ordered_subset_of_coupon_then_principal",
+        "coupon": "coupon_amount_for_nominal_accrual_period",
+        "principal": "face_redemption_amount",
+        "total": "coupon_plus_principal",
+        "unit": "CNY_PER_100_FACE"
+      },
+      "cashflow_count": 5,
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2027-04-15",
+          "payment_date": "2027-04-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.500000000000",
+          "principal": "0.000000000000",
+          "total": "1.500000000000",
+          "time_years": "0.753424657534"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2028-04-15",
+          "payment_date": "2028-04-17",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.500000000000",
+          "principal": "0.000000000000",
+          "total": "1.500000000000",
+          "time_years": "1.753424657534"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2029-04-15",
+          "payment_date": "2029-04-16",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.500000000000",
+          "principal": "0.000000000000",
+          "total": "1.500000000000",
+          "time_years": "2.753424657534"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2030-04-15",
+          "payment_date": "2030-04-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.500000000000",
+          "principal": "0.000000000000",
+          "total": "1.500000000000",
+          "time_years": "3.753424657534"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2031-04-15",
+          "payment_date": "2031-04-15",
+          "components": [
+            "coupon",
+            "principal"
+          ],
+          "coupon": "1.500000000000",
+          "principal": "100.000000000000",
+          "total": "101.500000000000",
+          "time_years": "4.753424657534"
+        }
+      ],
+      "accrued_interest": "0.369863013699",
+      "clean_price": "99.770427052063",
+      "dirty_price": "100.140290065762",
+      "yield_to_maturity": "0.015500000000",
+      "macaulay_duration": "4.607603387137",
+      "modified_duration": "4.537275615103",
+      "convexity": "25.460647798851",
+      "dv01": "0.045436412433",
+      "round_trip": {
+        "yield_to_maturity": "0.015500000000",
+        "absolute_difference": "0.000000000000"
+      },
+      "finite_difference": {
+        "bump_decimal": "0.000100000000",
+        "price_minus_1bp": "100.185739226376",
+        "price_plus_1bp": "100.094866401510",
+        "dv01": "0.045436412433",
+        "dv01_relative_difference": "0.000000000000",
+        "convexity": "25.460643921764",
+        "convexity_relative_difference": "0.000000152278"
+      },
+      "units": {
+        "price_accrued_dv01": "CNY_PER_100_FACE",
+        "cashflow": "CNY_PER_100_FACE",
+        "yield": "DECIMAL_RATE",
+        "duration": "YEARS",
+        "convexity": "YEARS_SQUARED"
+      }
+    },
+    "260012.IB:YIELD_IN": {
+      "bond_id": "260012.IB",
+      "mode": "YIELD_IN",
+      "input_value": "0.016500000000",
+      "settlement_date": "2026-07-14",
+      "identity": {
+        "bond_id": "260012.IB",
+        "mode": "YIELD_IN",
+        "result_schema": "ficant.bond-analytics.result.v1",
+        "engine": "ficant-fixed-income-native/0.1.0",
+        "algorithm": "ficant.cgb.fixed-rate.reference/1",
+        "abi": "FICANT_FIXED_INCOME_ABI_V1=1",
+        "convention": "cgb-reference-v1",
+        "calendar_id": "cgb-reference-calendar-v1",
+        "calendar_requirement": "REFERENCE_REPLAY",
+        "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+        "calendar_coverage": "2005-01-01..2026-12-31",
+        "market_timezone": "Asia/Shanghai",
+        "valuation_at": "2026-07-13T15:00:00+08:00",
+        "settlement_date": "2026-07-14",
+        "rule_pack_status": "pending_production_proof",
+        "rule_pack_content_sha256": null,
+        "snapshot_status": "source_manifest_only_no_production_snapshot_proof",
+        "snapshot_source_object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+        "snapshot_production_content_sha256": null
+      },
+      "cashflow_semantics": {
+        "sequence": "one_based_ascending_payment_eligible_cashflow",
+        "component_identity": "ordered_subset_of_coupon_then_principal",
+        "coupon": "coupon_amount_for_nominal_accrual_period",
+        "principal": "face_redemption_amount",
+        "total": "coupon_plus_principal",
+        "unit": "CNY_PER_100_FACE"
+      },
+      "cashflow_count": 7,
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2027-06-15",
+          "payment_date": "2027-06-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "0.000000000000",
+          "total": "1.560000000000",
+          "time_years": "0.920547945205"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2028-06-15",
+          "payment_date": "2028-06-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "0.000000000000",
+          "total": "1.560000000000",
+          "time_years": "1.920547945205"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2029-06-15",
+          "payment_date": "2029-06-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "0.000000000000",
+          "total": "1.560000000000",
+          "time_years": "2.920547945205"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2030-06-15",
+          "payment_date": "2030-06-17",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "0.000000000000",
+          "total": "1.560000000000",
+          "time_years": "3.920547945205"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2031-06-15",
+          "payment_date": "2031-06-16",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "0.000000000000",
+          "total": "1.560000000000",
+          "time_years": "4.920547945205"
+        },
+        {
+          "sequence": 6,
+          "nominal_date": "2032-06-15",
+          "payment_date": "2032-06-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "0.000000000000",
+          "total": "1.560000000000",
+          "time_years": "5.920547945205"
+        },
+        {
+          "sequence": 7,
+          "nominal_date": "2033-06-15",
+          "payment_date": "2033-06-15",
+          "components": [
+            "coupon",
+            "principal"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "100.000000000000",
+          "total": "101.560000000000",
+          "time_years": "6.920547945205"
+        }
+      ],
+      "accrued_interest": "0.123945205479",
+      "clean_price": "99.415001005409",
+      "dirty_price": "99.538946210888",
+      "yield_to_maturity": "0.016500000000",
+      "macaulay_duration": "6.604981256535",
+      "modified_duration": "6.497768083163",
+      "convexity": "49.851359286254",
+      "dv01": "0.064678105974",
+      "round_trip": {
+        "yield_to_maturity": "0.016500000000",
+        "absolute_difference": "0.000000000000"
+      },
+      "finite_difference": {
+        "bump_decimal": "0.000100000000",
+        "price_minus_1bp": "99.603649127623",
+        "price_plus_1bp": "99.474292915676",
+        "dv01": "0.064678105974",
+        "dv01_relative_difference": "0.000000000000",
+        "convexity": "49.851362800394",
+        "convexity_relative_difference": "0.000000070492"
+      },
+      "units": {
+        "price_accrued_dv01": "CNY_PER_100_FACE",
+        "cashflow": "CNY_PER_100_FACE",
+        "yield": "DECIMAL_RATE",
+        "duration": "YEARS",
+        "convexity": "YEARS_SQUARED"
+      }
+    },
+    "260012.IB:PRICE_IN": {
+      "bond_id": "260012.IB",
+      "mode": "PRICE_IN",
+      "input_value": "99.415001005409",
+      "settlement_date": "2026-07-14",
+      "identity": {
+        "bond_id": "260012.IB",
+        "mode": "PRICE_IN",
+        "result_schema": "ficant.bond-analytics.result.v1",
+        "engine": "ficant-fixed-income-native/0.1.0",
+        "algorithm": "ficant.cgb.fixed-rate.reference/1",
+        "abi": "FICANT_FIXED_INCOME_ABI_V1=1",
+        "convention": "cgb-reference-v1",
+        "calendar_id": "cgb-reference-calendar-v1",
+        "calendar_requirement": "REFERENCE_REPLAY",
+        "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+        "calendar_coverage": "2005-01-01..2026-12-31",
+        "market_timezone": "Asia/Shanghai",
+        "valuation_at": "2026-07-13T15:00:00+08:00",
+        "settlement_date": "2026-07-14",
+        "rule_pack_status": "pending_production_proof",
+        "rule_pack_content_sha256": null,
+        "snapshot_status": "source_manifest_only_no_production_snapshot_proof",
+        "snapshot_source_object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+        "snapshot_production_content_sha256": null
+      },
+      "cashflow_semantics": {
+        "sequence": "one_based_ascending_payment_eligible_cashflow",
+        "component_identity": "ordered_subset_of_coupon_then_principal",
+        "coupon": "coupon_amount_for_nominal_accrual_period",
+        "principal": "face_redemption_amount",
+        "total": "coupon_plus_principal",
+        "unit": "CNY_PER_100_FACE"
+      },
+      "cashflow_count": 7,
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2027-06-15",
+          "payment_date": "2027-06-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "0.000000000000",
+          "total": "1.560000000000",
+          "time_years": "0.920547945205"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2028-06-15",
+          "payment_date": "2028-06-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "0.000000000000",
+          "total": "1.560000000000",
+          "time_years": "1.920547945205"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2029-06-15",
+          "payment_date": "2029-06-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "0.000000000000",
+          "total": "1.560000000000",
+          "time_years": "2.920547945205"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2030-06-15",
+          "payment_date": "2030-06-17",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "0.000000000000",
+          "total": "1.560000000000",
+          "time_years": "3.920547945205"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2031-06-15",
+          "payment_date": "2031-06-16",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "0.000000000000",
+          "total": "1.560000000000",
+          "time_years": "4.920547945205"
+        },
+        {
+          "sequence": 6,
+          "nominal_date": "2032-06-15",
+          "payment_date": "2032-06-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "0.000000000000",
+          "total": "1.560000000000",
+          "time_years": "5.920547945205"
+        },
+        {
+          "sequence": 7,
+          "nominal_date": "2033-06-15",
+          "payment_date": "2033-06-15",
+          "components": [
+            "coupon",
+            "principal"
+          ],
+          "coupon": "1.560000000000",
+          "principal": "100.000000000000",
+          "total": "101.560000000000",
+          "time_years": "6.920547945205"
+        }
+      ],
+      "accrued_interest": "0.123945205479",
+      "clean_price": "99.415001005409",
+      "dirty_price": "99.538946210888",
+      "yield_to_maturity": "0.016500000000",
+      "macaulay_duration": "6.604981256535",
+      "modified_duration": "6.497768083163",
+      "convexity": "49.851359286254",
+      "dv01": "0.064678105974",
+      "round_trip": {
+        "yield_to_maturity": "0.016500000000",
+        "absolute_difference": "0.000000000000"
+      },
+      "finite_difference": {
+        "bump_decimal": "0.000100000000",
+        "price_minus_1bp": "99.603649127623",
+        "price_plus_1bp": "99.474292915675",
+        "dv01": "0.064678105974",
+        "dv01_relative_difference": "0.000000000000",
+        "convexity": "49.851361976881",
+        "convexity_relative_difference": "0.000000053973"
+      },
+      "units": {
+        "price_accrued_dv01": "CNY_PER_100_FACE",
+        "cashflow": "CNY_PER_100_FACE",
+        "yield": "DECIMAL_RATE",
+        "duration": "YEARS",
+        "convexity": "YEARS_SQUARED"
+      }
+    },
+    "260010.IB:YIELD_IN": {
+      "bond_id": "260010.IB",
+      "mode": "YIELD_IN",
+      "input_value": "0.018000000000",
+      "settlement_date": "2026-07-14",
+      "identity": {
+        "bond_id": "260010.IB",
+        "mode": "YIELD_IN",
+        "result_schema": "ficant.bond-analytics.result.v1",
+        "engine": "ficant-fixed-income-native/0.1.0",
+        "algorithm": "ficant.cgb.fixed-rate.reference/1",
+        "abi": "FICANT_FIXED_INCOME_ABI_V1=1",
+        "convention": "cgb-reference-v1",
+        "calendar_id": "cgb-reference-calendar-v1",
+        "calendar_requirement": "REFERENCE_REPLAY",
+        "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+        "calendar_coverage": "2005-01-01..2026-12-31",
+        "market_timezone": "Asia/Shanghai",
+        "valuation_at": "2026-07-13T15:00:00+08:00",
+        "settlement_date": "2026-07-14",
+        "rule_pack_status": "pending_production_proof",
+        "rule_pack_content_sha256": null,
+        "snapshot_status": "source_manifest_only_no_production_snapshot_proof",
+        "snapshot_source_object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+        "snapshot_production_content_sha256": null
+      },
+      "cashflow_semantics": {
+        "sequence": "one_based_ascending_payment_eligible_cashflow",
+        "component_identity": "ordered_subset_of_coupon_then_principal",
+        "coupon": "coupon_amount_for_nominal_accrual_period",
+        "principal": "face_redemption_amount",
+        "total": "coupon_plus_principal",
+        "unit": "CNY_PER_100_FACE"
+      },
+      "cashflow_count": 20,
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-11-15",
+          "payment_date": "2026-11-16",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "0.336956521739"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2027-05-15",
+          "payment_date": "2027-05-17",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "0.836956521739"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2027-11-15",
+          "payment_date": "2027-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "1.336956521739"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2028-05-15",
+          "payment_date": "2028-05-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "1.836956521739"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2028-11-15",
+          "payment_date": "2028-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "2.336956521739"
+        },
+        {
+          "sequence": 6,
+          "nominal_date": "2029-05-15",
+          "payment_date": "2029-05-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "2.836956521739"
+        },
+        {
+          "sequence": 7,
+          "nominal_date": "2029-11-15",
+          "payment_date": "2029-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "3.336956521739"
+        },
+        {
+          "sequence": 8,
+          "nominal_date": "2030-05-15",
+          "payment_date": "2030-05-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "3.836956521739"
+        },
+        {
+          "sequence": 9,
+          "nominal_date": "2030-11-15",
+          "payment_date": "2030-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "4.336956521739"
+        },
+        {
+          "sequence": 10,
+          "nominal_date": "2031-05-15",
+          "payment_date": "2031-05-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "4.836956521739"
+        },
+        {
+          "sequence": 11,
+          "nominal_date": "2031-11-15",
+          "payment_date": "2031-11-17",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "5.336956521739"
+        },
+        {
+          "sequence": 12,
+          "nominal_date": "2032-05-15",
+          "payment_date": "2032-05-17",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "5.836956521739"
+        },
+        {
+          "sequence": 13,
+          "nominal_date": "2032-11-15",
+          "payment_date": "2032-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "6.336956521739"
+        },
+        {
+          "sequence": 14,
+          "nominal_date": "2033-05-15",
+          "payment_date": "2033-05-16",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "6.836956521739"
+        },
+        {
+          "sequence": 15,
+          "nominal_date": "2033-11-15",
+          "payment_date": "2033-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "7.336956521739"
+        },
+        {
+          "sequence": 16,
+          "nominal_date": "2034-05-15",
+          "payment_date": "2034-05-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "7.836956521739"
+        },
+        {
+          "sequence": 17,
+          "nominal_date": "2034-11-15",
+          "payment_date": "2034-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "8.336956521739"
+        },
+        {
+          "sequence": 18,
+          "nominal_date": "2035-05-15",
+          "payment_date": "2035-05-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "8.836956521739"
+        },
+        {
+          "sequence": 19,
+          "nominal_date": "2035-11-15",
+          "payment_date": "2035-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "9.336956521739"
+        },
+        {
+          "sequence": 20,
+          "nominal_date": "2036-05-15",
+          "payment_date": "2036-05-15",
+          "components": [
+            "coupon",
+            "principal"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "100.000000000000",
+          "total": "100.860000000000",
+          "time_years": "9.836956521739"
+        }
+      ],
+      "accrued_interest": "0.280434782609",
+      "clean_price": "99.280882361317",
+      "dirty_price": "99.561317143926",
+      "yield_to_maturity": "0.018000000000",
+      "macaulay_duration": "9.063340749492",
+      "modified_duration": "8.982498265106",
+      "convexity": "89.558450732468",
+      "dv01": "0.089430951597",
+      "round_trip": {
+        "yield_to_maturity": "0.018000000000",
+        "absolute_difference": "0.000000000000"
+      },
+      "finite_difference": {
+        "bump_decimal": "0.000100000000",
+        "price_minus_1bp": "99.650792678314",
+        "price_plus_1bp": "99.471930775120",
+        "dv01": "0.089430951597",
+        "dv01_relative_difference": "0.000000000000",
+        "convexity": "89.558459544712",
+        "convexity_relative_difference": "0.000000098397"
+      },
+      "units": {
+        "price_accrued_dv01": "CNY_PER_100_FACE",
+        "cashflow": "CNY_PER_100_FACE",
+        "yield": "DECIMAL_RATE",
+        "duration": "YEARS",
+        "convexity": "YEARS_SQUARED"
+      }
+    },
+    "260010.IB:PRICE_IN": {
+      "bond_id": "260010.IB",
+      "mode": "PRICE_IN",
+      "input_value": "99.280882361317",
+      "settlement_date": "2026-07-14",
+      "identity": {
+        "bond_id": "260010.IB",
+        "mode": "PRICE_IN",
+        "result_schema": "ficant.bond-analytics.result.v1",
+        "engine": "ficant-fixed-income-native/0.1.0",
+        "algorithm": "ficant.cgb.fixed-rate.reference/1",
+        "abi": "FICANT_FIXED_INCOME_ABI_V1=1",
+        "convention": "cgb-reference-v1",
+        "calendar_id": "cgb-reference-calendar-v1",
+        "calendar_requirement": "REFERENCE_REPLAY",
+        "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+        "calendar_coverage": "2005-01-01..2026-12-31",
+        "market_timezone": "Asia/Shanghai",
+        "valuation_at": "2026-07-13T15:00:00+08:00",
+        "settlement_date": "2026-07-14",
+        "rule_pack_status": "pending_production_proof",
+        "rule_pack_content_sha256": null,
+        "snapshot_status": "source_manifest_only_no_production_snapshot_proof",
+        "snapshot_source_object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+        "snapshot_production_content_sha256": null
+      },
+      "cashflow_semantics": {
+        "sequence": "one_based_ascending_payment_eligible_cashflow",
+        "component_identity": "ordered_subset_of_coupon_then_principal",
+        "coupon": "coupon_amount_for_nominal_accrual_period",
+        "principal": "face_redemption_amount",
+        "total": "coupon_plus_principal",
+        "unit": "CNY_PER_100_FACE"
+      },
+      "cashflow_count": 20,
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-11-15",
+          "payment_date": "2026-11-16",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "0.336956521739"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2027-05-15",
+          "payment_date": "2027-05-17",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "0.836956521739"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2027-11-15",
+          "payment_date": "2027-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "1.336956521739"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2028-05-15",
+          "payment_date": "2028-05-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "1.836956521739"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2028-11-15",
+          "payment_date": "2028-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "2.336956521739"
+        },
+        {
+          "sequence": 6,
+          "nominal_date": "2029-05-15",
+          "payment_date": "2029-05-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "2.836956521739"
+        },
+        {
+          "sequence": 7,
+          "nominal_date": "2029-11-15",
+          "payment_date": "2029-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "3.336956521739"
+        },
+        {
+          "sequence": 8,
+          "nominal_date": "2030-05-15",
+          "payment_date": "2030-05-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "3.836956521739"
+        },
+        {
+          "sequence": 9,
+          "nominal_date": "2030-11-15",
+          "payment_date": "2030-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "4.336956521739"
+        },
+        {
+          "sequence": 10,
+          "nominal_date": "2031-05-15",
+          "payment_date": "2031-05-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "4.836956521739"
+        },
+        {
+          "sequence": 11,
+          "nominal_date": "2031-11-15",
+          "payment_date": "2031-11-17",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "5.336956521739"
+        },
+        {
+          "sequence": 12,
+          "nominal_date": "2032-05-15",
+          "payment_date": "2032-05-17",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "5.836956521739"
+        },
+        {
+          "sequence": 13,
+          "nominal_date": "2032-11-15",
+          "payment_date": "2032-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "6.336956521739"
+        },
+        {
+          "sequence": 14,
+          "nominal_date": "2033-05-15",
+          "payment_date": "2033-05-16",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "6.836956521739"
+        },
+        {
+          "sequence": 15,
+          "nominal_date": "2033-11-15",
+          "payment_date": "2033-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "7.336956521739"
+        },
+        {
+          "sequence": 16,
+          "nominal_date": "2034-05-15",
+          "payment_date": "2034-05-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "7.836956521739"
+        },
+        {
+          "sequence": 17,
+          "nominal_date": "2034-11-15",
+          "payment_date": "2034-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "8.336956521739"
+        },
+        {
+          "sequence": 18,
+          "nominal_date": "2035-05-15",
+          "payment_date": "2035-05-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "8.836956521739"
+        },
+        {
+          "sequence": 19,
+          "nominal_date": "2035-11-15",
+          "payment_date": "2035-11-15",
+          "components": [
+            "coupon"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "0.000000000000",
+          "total": "0.860000000000",
+          "time_years": "9.336956521739"
+        },
+        {
+          "sequence": 20,
+          "nominal_date": "2036-05-15",
+          "payment_date": "2036-05-15",
+          "components": [
+            "coupon",
+            "principal"
+          ],
+          "coupon": "0.860000000000",
+          "principal": "100.000000000000",
+          "total": "100.860000000000",
+          "time_years": "9.836956521739"
+        }
+      ],
+      "accrued_interest": "0.280434782609",
+      "clean_price": "99.280882361317",
+      "dirty_price": "99.561317143926",
+      "yield_to_maturity": "0.018000000000",
+      "macaulay_duration": "9.063340749494",
+      "modified_duration": "8.982498265108",
+      "convexity": "89.558450732487",
+      "dv01": "0.089430951597",
+      "round_trip": {
+        "yield_to_maturity": "0.018000000000",
+        "absolute_difference": "0.000000000000"
+      },
+      "finite_difference": {
+        "bump_decimal": "0.000100000000",
+        "price_minus_1bp": "99.650792678332",
+        "price_plus_1bp": "99.471930775138",
+        "dv01": "0.089430951597",
+        "dv01_relative_difference": "0.000000000000",
+        "convexity": "89.558495955651",
+        "convexity_relative_difference": "0.000000504957"
+      },
+      "units": {
+        "price_accrued_dv01": "CNY_PER_100_FACE",
+        "cashflow": "CNY_PER_100_FACE",
+        "yield": "DECIMAL_RATE",
+        "duration": "YEARS",
+        "convexity": "YEARS_SQUARED"
+      }
+    }
+  }
+}

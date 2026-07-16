@@ -1,5 +1,35 @@
 # 交付发布说明
 
+## Iteration 3 私有 GitHub 发布准备（2026-07-16）
+
+### 发布目标与边界
+
+- 目标仓库为私有仓库 `kayz/ficant`，默认分支为 `main`；本轮只准备一个以 `main@80f48706f37e3890224ca106fb763213d0beeb38` 为唯一 parent 的 squash 候选。
+- 发布路径为推送 `codex/iteration-3-release-candidate` 后创建面向 `main` 的私有 PR，由 GitHub Actions `ci` 的十个 job 验证。Human 已于 2026-07-16 授权 push + PR；merge、tag 和 GitHub Release 仍是未授权的独立权限点。
+- 本次候选交付 Iteration 3 已接受的 CGB 固定利率/贴现债分析纵向切片、HOQA 治理基线、Windows runner、Q-001..Q-036 自动化、真实 PostgreSQL/MinIO SIT 和候选绑定的发布门禁；不包含 UAT、部署、曲线、期货、SDK/CLI、新 migration 或公共 Protobuf 变更。
+
+### 候选与证据绑定
+
+- 正式候选必须是当前私有 `main` 之上的一个 commit；commit、tree、parent 和供应链 evidence digest 在候选形成后记录于外部执行证据，避免候选文件自引用其自身 hash。
+- Iteration 3C 的冻结业务证据已由 Human 接受：Q-001..Q-036 映射完整，production-native 冻结用例 12/12、Oracle 自测 31/31、Storage 31/31、Acceptance 14/14、契约 11/11、health 5/5、Release/ASan CTest 各 4/4，无 blocking defect。
+- 3D 复用 3C Quality 报告；只有实现、测试、Oracle、expected、容差或候选行为发生变化时才重新激活 Quality。本轮发布/治理资产变化由 Orchestrator 运行 repo-policy、供应链、许可证、秘密扫描和可复现性门禁。
+
+### 风险检查点
+
+- `RUSTSEC-2025-0052` 仍是 `INFO / unmaintained`，没有 patched version。2026-07-10 发布的最新 `minio 0.4.0` 仍直接依赖 `async-std ^1.13`，当前 production Storage 依赖链可达。
+- Human 于 2026-07-16 重新评估并限时接受该风险至 2026-10-13，范围仅为本次私有 GitHub 源码 PR；该决定不沿用 Iteration 2 的旧接受记录。
+- 私有 GitHub 源码 PR 不等于生产部署，也不授权 UAT、运行时/外部部署、merge、tag 或 GitHub Release。任何运行时或外部部署前必须重新评估替代 S3 client；到期日仍为 2026-10-13。
+
+### 发布与回滚方案
+
+1. Orchestrator 在 Human 明确授权后只 push 已审计的单一 squash 候选分支，并创建面向 `main` 的 PR；不直接 push `main`。
+2. 等待候选精确 SHA 上全部十个 CI job 成功，复核 PR diff、candidate tree 和供应链 evidence，再由 Human 独立决定是否 merge。
+3. merge 前回滚仅需关闭 PR 并删除远程候选分支；`main` 不发生变化。
+4. merge 后如需回滚，创建对该单一 Iteration 3 commit 的显式 `git revert` PR，重新运行同一 CI；禁止改写私有 `main` 历史或强推。
+5. 本轮不创建 tag 或 GitHub Release。若后续需要版本 tag/Release，须另行确认版本号、release notes、制品和签名策略。
+
+> **历史记录（superseded）：** 本文保留 iteration-2 的 Delivery/Review 交付证据。旧治理责任和 verdict 只作历史审计；当前交付责任按 ADR-0008 由 Orchestrator delivery work 与 Human Operator 边界承接。
+
 ## 候选与证据绑定
 
 - GitHub Actions `ci` run [`29193249268`](https://github.com/kayz/ficant/actions/runs/29193249268) 于 2026-07-12 完成，repo-policy、contract、python、migration、rust、cpp、business-loop、supply-chain、web、reproducibility 十个 gate 均为 `success`。其候选为 `ef96c5edea11b0d5f6ebc693501f40a9b40df061`，树为 `2d1fa3a1be11e563c486d7c67df349ec06faf4d0`。

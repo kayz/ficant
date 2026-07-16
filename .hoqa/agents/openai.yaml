@@ -1,0 +1,4 @@
+interface:
+  display_name: "HOQA"
+  short_description: "Human-led delivery, automated quality, document audit"
+  default_prompt: "Use $hoqa to align human and model work, route Development Workers through Orchestrator, let Quality lead automated Test Workers and bug reporting, and use Audit for final document-intent-code consistency."

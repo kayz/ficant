@@ -1,4 +1,4 @@
-name: ficant-iteration-2
+name: ficant-dev
 
 x-secure-service: &secure-service
   init: true
@@ -57,7 +57,7 @@ services:
   minio:
     <<: *secure-service
     profiles: [dev]
-    image: ficant/minio-runtime:iteration-2
+    image: ficant/minio-runtime:dev
     build:
       context: ../..
       dockerfile: deploy/dev/Minio.Dockerfile

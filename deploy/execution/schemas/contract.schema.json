@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://greatquant.com/schemas/ficant/windows-execution-contract-v5.json",
+  "title": "ficant Windows execution contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version","checklist_id","task_id","ids","profile","permission_profile","model","base_sha","worktree","capability_evidence_id","capability_evidence_path","allowed_paths","forbidden_paths","frozen_contracts","expected_oracle","context_files","objective","instructions","commands","timeout_seconds","result_path","evidence_path","cleanup","recovery_policy","mentor","escalation_conditions","fallback"],
+  "properties": {
+    "schema_version": {"const": 5},
+    "checklist_id": {"type":"string","minLength":1}, "task_id": {"type":"string","minLength":1,"pattern":"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "ids": {"type":"object","additionalProperties":false,"required":["case","acceptance","defect"],"properties":{"case":{"type":"array","items":{"type":"string"}},"acceptance":{"type":"array","items":{"type":"string"}},"defect":{"type":"array","items":{"type":"string"}}}},
+    "profile": {"enum":["strong","medium","fast"]},
+    "permission_profile": {"enum":["test-executor","test-author","development","quality","audit"]},
+    "model": {"type":"object","additionalProperties":false,"required":["requested","actual_identity_required"],"properties":{"requested":{"type":"string","minLength":1},"actual_identity_required":{"const":true}}},
+    "base_sha": {"type":"string","pattern":"^[0-9a-f]{40}$"},
+    "worktree": {"$ref":"#/$defs/windowsPath"}, "result_path": {"$ref":"#/$defs/windowsPath"}, "evidence_path": {"$ref":"#/$defs/windowsPath"},
+    "capability_evidence_id": {"$ref":"#/$defs/hash"}, "capability_evidence_path": {"$ref":"#/$defs/windowsPath"},
+    "allowed_paths": {"$ref":"#/$defs/nonEmptyStrings"}, "forbidden_paths": {"$ref":"#/$defs/nonEmptyStrings"},
+    "frozen_contracts": {"$ref":"#/$defs/nonEmptyStrings"}, "expected_oracle": {"$ref":"#/$defs/nonEmptyStrings"}, "context_files": {"$ref":"#/$defs/nonEmptyStrings"},
+    "objective": {"type":"string","minLength":1}, "instructions": {"$ref":"#/$defs/nonEmptyStrings"},
+    "commands": {"type":"object","additionalProperties":false,"required":["red","green","regression"],"properties":{"red":{"type":"array","items":{"$ref":"#/$defs/command"}},"green":{"type":"array","minItems":1,"items":{"$ref":"#/$defs/command"}},"regression":{"type":"array","minItems":1,"items":{"$ref":"#/$defs/command"}}}},
+    "timeout_seconds": {"type":"integer","minimum":1,"maximum":7200}, "cleanup": {"$ref":"#/$defs/nonEmptyStrings"},
+    "recovery_policy": {"type":"object","additionalProperties":false,"required":["max_correction_cycles","preserve_candidate_on_recoverable_blocker","immediate_stop_conditions"],"properties":{"max_correction_cycles":{"type":"integer","minimum":0},"preserve_candidate_on_recoverable_blocker":{"type":"boolean"},"immediate_stop_conditions":{"$ref":"#/$defs/nonEmptyStrings"}}},
+    "mentor": {"enum":["Orchestrator","Quality","Audit"]}, "escalation_conditions": {"$ref":"#/$defs/nonEmptyStrings"}, "fallback": {"type":"string","minLength":1}
+  },
+  "$defs": {
+    "windowsPath": {"type":"string","pattern":"^[A-Za-z]:\\\\"}, "hash": {"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},
+    "nonEmptyStrings": {"type":"array","minItems":1,"items":{"type":"string","minLength":1}},
+    "command": {"type":"object","additionalProperties":false,"required":["argv","cwd","timeout_seconds","expected_tests"],"properties":{"argv":{"type":"array","minItems":1,"items":{"type":"string","minLength":1}},"cwd":{"$ref":"#/$defs/windowsPath"},"timeout_seconds":{"type":"integer","minimum":1},"expected_tests":{"type":"integer","minimum":0}}}
+  }
+}

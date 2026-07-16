@@ -4,7 +4,7 @@ set -euo pipefail
 
 scripts_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 lock_file="$scripts_dir/supply-chain.lock.json"
-SUPPLY_LOCK_SHA256=a7399a7627732af26d96c2ee86d6787207998a500ab114a438be2b25adf929b5
+SUPPLY_LOCK_SHA256=c40425c372131e92c0b8995b25cdbeefd5ee30130ccdd1d97c97d013d6d0fc53
 
 die() {
   printf 'supply-chain: %s\n' "$1" >&2
@@ -47,9 +47,9 @@ except Exception as exc:
 if data.get("schema_version") != 1 or len(data.get("tools", [])) != 3:
     print("supply-chain: invalid tool lock", file=sys.stderr); raise SystemExit(2)
 if data.get("release_topology") != {
-    "trusted_base": "737807302351fe8feee425a89d666caf3d611f96",
+    "trusted_base": "80f48706f37e3890224ca106fb763213d0beeb38",
     "candidate_commit_count": 1,
-    "main_update": "fast-forward-only-after-final-review",
+    "main_update": "fast-forward-only-after-final-consistency-audit",
 }:
     print("supply-chain: frozen release topology mismatch", file=sys.stderr); raise SystemExit(2)
 if data.get("cargo_reachability") != {
@@ -57,14 +57,14 @@ if data.get("cargo_reachability") != {
     "command": ["tree", "--locked", "--all-features", "--target", "all", "--prefix", "none", "--format", "{p}"],
 }:
     print("supply-chain: frozen Cargo reachability contract mismatch", file=sys.stderr); raise SystemExit(2)
-if len(data.get("first_party_packages", [])) != 13 or len({item.get("purl") for item in data["first_party_packages"]}) != 13:
+if len(data.get("first_party_packages", [])) != 15 or len({item.get("purl") for item in data["first_party_packages"]}) != 15:
     print("supply-chain: exact first-party policy mismatch", file=sys.stderr); raise SystemExit(2)
 if {item.get("purl") for item in data.get("license_scoped_exceptions", [])} != {
     "pkg:cargo/webpki-roots@0.26.11", "pkg:cargo/webpki-roots@1.0.8", "pkg:npm/caniuse-lite@1.0.30001805",
 }:
     print("supply-chain: scoped license exception set mismatch", file=sys.stderr); raise SystemExit(2)
 acceptances = data.get("risk_acceptances", [])
-if len(acceptances) != 1 or acceptances[0].get("id") != "iteration-2-async-std-1.13.2" or acceptances[0].get("status") != "accepted-unfixed":
+if len(acceptances) != 1 or acceptances[0].get("id") != "iteration-3-async-std-1.13.2" or acceptances[0].get("status") != "accepted-unfixed":
     print("supply-chain: accepted-unfixed policy mismatch", file=sys.stderr); raise SystemExit(2)
 expected_tools = {
     "osv-scanner": ("2.4.0", "Apache-2.0", "15314940c10d26af9c6649f150b8a47c1262e8fc7e17b1d1029b0e479e8ed8a0"),

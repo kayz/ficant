@@ -2,7 +2,7 @@
 
 **状态：** Phase 0 / Phase 1 当前实现范围
 
-**实现状态：** 已形成可运行候选；最终验收事实以 Quality、Delivery 与 Review 的退出证据为准
+**实现状态：** 已形成可运行候选；最终验收由 Human 基于 Orchestrator 的确定性证据、Quality test report 与最终一致性 Audit 决定
 
 **来源：** `README.md`、`interface/`、`web-dm/` 与当前生产实现
 

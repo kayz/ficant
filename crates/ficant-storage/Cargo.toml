@@ -6,7 +6,9 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+arrow = { workspace = true }
 async-trait = { workspace = true }
+chrono = { workspace = true }
 ficant-application = { path = "../ficant-application" }
 ficant-domain = { path = "../ficant-domain" }
 minio = { workspace = true }
@@ -15,3 +17,6 @@ tokio = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+ficant-fixed-income-native = { path = "../ficant-fixed-income-native" }

@@ -1,0 +1,49 @@
+{
+  "schema": "ficant.test-data-manifest.v1",
+  "dataset_id": "iteration-3-cgb-basic-info-2026-07-13",
+  "description": "Six China government bond basic-information records accepted by Delivery for iteration-3 Phase 2A Golden Case design.",
+  "source": {
+    "delivery_reference": "resource/data/iteration-3/cgb-basic-info-2026-07-13.json",
+    "original_filename": "cgb-basic-info-2026-07-13.json",
+    "received_at": "2026-07-13T03:47:15.1468571Z",
+    "raw_third_party_data_in_git": false,
+    "license": "not provided; restricted to internal development and test use",
+    "sensitivity": "third-party reference data; no credentials or personal data"
+  },
+  "content": {
+    "schema": "ficant.external-data.cgb-basic-info.v1",
+    "record_count": 6,
+    "size_bytes": 9729,
+    "object_sha256": "765d8afe8605562dbf1c4d2a23513de25e98945496f8d297565c1d943eed8faf",
+    "canonical_records_sha256": "8216f586cbec959a08bb62a5e00c2492c99dc01e641e0c876a918b710e9d50ff"
+  },
+  "immutable_object": {
+    "s3_uri": "s3://ficant-test-data/iteration-3/china-rates/dm-basic-info/8216f586cbec959a08bb62a5e00c2492c99dc01e641e0c876a918b710e9d50ff.json",
+    "read_uri": "http://127.0.0.1:19001/ficant-test-data/iteration-3/china-rates/dm-basic-info/8216f586cbec959a08bb62a5e00c2492c99dc01e641e0c876a918b710e9d50ff.json?versionId=88a3cd7a-0c9a-4e8a-914f-9ac2397232fc",
+    "version_id": "88a3cd7a-0c9a-4e8a-914f-9ac2397232fc",
+    "etag": "279da67a18a9a89cb4678072a8363680",
+    "uploaded_at": "2026-07-13T04:11:10Z",
+    "object_lock_mode": "GOVERNANCE",
+    "retain_until": "2036-07-13T04:11:10.331Z",
+    "access": "anonymous-read, credentialed-write; Quality receives no storage, data-source, VPS, or root credentials"
+  },
+  "canonicalization": {
+    "scope": "records array only",
+    "encoding": "UTF-8",
+    "json_keys": "sorted",
+    "json_separators": "compact",
+    "hash_algorithm": "SHA-256"
+  },
+  "quality_handoff": {
+    "timezone": "Asia/Shanghai",
+    "convention_profile": "cgb-reference-v1",
+    "bond_ids": [
+      "269937.IB",
+      "260013.IB",
+      "260011.IB",
+      "260008.IB",
+      "260012.IB",
+      "260010.IB"
+    ]
+  }
+}
