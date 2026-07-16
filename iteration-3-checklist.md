@@ -3,9 +3,9 @@
 ## 权威、状态与本次边界
 
 - 治理方法：`HOQA`；活动方法为 `.hoqa/SKILL.md`，机器可恢复状态为 `.hoqa/state.toml`，本文件是唯一迭代状态与范围明细。
-- 当前项目状态：`ACTIVE_ITERATION_3D_RELEASE_PREPARATION`。
+- 当前项目状态：`CLOSED_ITERATION_3`；没有活动迭代。
 - Human 已批准采用 Iteration 3 umbrella + 3A..3D，已接受 3A 和统一 3B，并授权完成 3C。3B 的三部分仍作为一个已接受迭代顺序执行并统一收口；不改变产品目标、架构边界、Oracle、expected、容差或风险决定。
-- Human 已接受 3C 并授权 3D；2026-07-16 又限时接受 `RUSTSEC-2025-0052`，并授权推送 `codex/iteration-3-release-candidate` 及创建面向 `main` 的私有 PR。Quality 已完成并退出；Audit 在最终文档与候选证据就绪后激活。merge、tag、GitHub Release、部署和 UAT 仍未授权。
+- Human 已接受 3A..3D；2026-07-16 限时接受 `RUSTSEC-2025-0052` 至 2026-10-13 的私有 GitHub 源码集成风险，并分别授权候选 push + PR 与 merge。Quality 已完成并退出，最终外部只读 Audit 通过；tag、GitHub Release、部署和 UAT 未授权。
 - `.proqaid` 已移除，`.hoqa` 是唯一活动治理入口；迁移与 3A 已随 Iteration 3 单提交候选固化，独立的 3A 候选从未作为远程集成或正式发布成果。
 
 ## HOQA 轻量激活规则
@@ -63,13 +63,13 @@
 | 非目标 | 曲线、期货、Web/Python SDK、CLI、新 migration、SIMD、生产 QuantLib、公共 Protobuf 变更、假成功、硬编码生产结果、测试专用生产路径、桩和未解决占位。 |
 | 包含代码更新 | 是；3A、3B 已接受；3C 允许仅为自动化覆盖或结构化 blocking defect 作有界更新；3D 仍禁止自动恢复。 |
 | Quality | 3A、3B 已完成各自范围；3C Quality 已完成集成自动化、SIT、缺陷分类、受影响清单重测与统一报告，当前不再激活。 |
-| 涉及发布 | 3D 已形成私有 GitHub 草稿 PR；这不是 merge、tag、GitHub Release、部署或 UAT。 |
-| Audit | 3D 对精确远程候选执行外部只读 Audit；verdict 不写回被审计提交，避免候选身份自引用。此前治理迁移 Audit 不等于 Iteration 3 产品关闭 Audit。 |
-| Human 检查点 | 3A、3B、3C 已接受；3D 剩余风险及候选分支 push + PR 已于 2026-07-16 获明确决定。merge、tag、GitHub Release、部署和 UAT 仍须分别确认。 |
+| 涉及发布 | 是；PR #1 已以 squash 合入私有 GitHub `main`。没有 tag、GitHub Release、部署或 UAT。 |
+| Audit | 最终候选执行了外部只读 Audit，结论 `pass`、0 blocking finding；verdict 不写回被审计提交，避免候选身份自引用。 |
+| Human 检查点 | Iteration 3 业务结果、剩余风险、候选发布与 merge 均已在 2026-07-16 获明确决定；下一检查点是讨论并授权新迭代。 |
 | 验收条件 | 一个最终集成候选满足 Q-001..Q-036、数值/ABI/内存/unsafe/血缘边界、真实持久化与重放、适用交付门、Quality 报告、最终 Audit 和 Human 业务/风险接受。 |
-| 当前状态 | `ACTIVE_ITERATION_3D_RELEASE_PREPARATION`；3A、3B、3C 已接受，3D 草稿 PR #1 是当前受控发布记录。原 Iteration 3 目标和架构边界不变。 |
-| 已有证据 | 既有 Wave 1/Oracle、3A 和 3B 证据保持；3C 新增 Q-001..Q-036 机器映射、production-native 冻结用例 12/12、Oracle 自测 31/31、Storage 真实环境 31/31、Acceptance 真实环境 14/14、契约 11/11、health 5/5、Release/ASan CTest 各 4/4、严格受影响 crate Clippy、unsafe/依赖/动态链接检查和清理证据。 |
-| 未完成事项和阻断 | 草稿 PR #1 的精确远程 HEAD 必须保持供应链、复现性、其余 CI 与外部只读 Audit 全绿；merge、tag、GitHub Release、部署和 UAT 不在本次授权内。 |
+| 当前状态 | `CLOSED_ACCEPTED`；3A、3B、3C、3D 均完成并接受，Iteration 3 umbrella 已关闭。 |
+| 已有证据 | 既有 Wave 1/Oracle、3A/3B/3C 证据保持；正式候选 `f300597`、tree `7e8d6c6`、PR CI `29464247114`、Audit pass、squash merge `6e346d0` 与 main CI `29472793718` 形成完整发布链。 |
+| 未完成事项和阻断 | 无 Iteration 3 blocking item；`RUSTSEC-2025-0052` 仍须在运行时/外部部署前或 2026-10-13 到期时重新评估。下一迭代未授权。 |
 
 ### Iteration 3 状态分层
 
@@ -78,13 +78,13 @@
 - **本地基线成果：** 3A 接受的是经 HOQA-v3 合并和验证、随后纳入 Iteration 3 单提交候选的本地成果；不得把 3A 独立描述为远程集成或正式发布成果。
 - **已完成并已接受：** 3B Rust 纵向实现按 Domain/Application → sys/C ABI/native → Arrow Artifact/Storage 顺序形成一个候选和一份统一 Quality 结果，并于 2026-07-16 被 Human 接受。
 - **已完成并已接受：** 3C 的 Q-001..Q-036 集成自动化、真实 PostgreSQL/MinIO SIT、环境问题分类、四项缺陷修复与受影响清单重测；无 blocking defect，隔离资源已清理。
-- **正在执行：** 3D 草稿 PR #1 的精确候选门禁、外部只读 Audit 与 Human merge 检查点准备。
-- **已获 Human 决定：** `RUSTSEC-2025-0052` 限时接受至 2026-10-13，仅覆盖私有 GitHub 源码 PR；候选分支 push + PR 已授权。
-- **尚未完成：** 对草稿 PR #1 精确远程 HEAD 保持候选绑定门禁、远程 PR CI 和外部只读 Audit 全绿；merge、tag、GitHub Release、部署和 UAT 未授权。
+- **已完成并已接受：** 3D 候选门禁、外部只读 Audit、私有 PR #1、squash merge 与最终 main CI。
+- **已获 Human 决定：** `RUSTSEC-2025-0052` 限时接受至 2026-10-13，仅覆盖私有 GitHub 源码集成；候选发布与 merge 已分别授权。
+- **尚未完成：** 没有 Iteration 3 未完成项；tag、GitHub Release、部署、UAT 和任何新迭代均未授权。
 
 ## 已确认的剩余工作拆分
 
-Human 已确认保留 Iteration 3 作为历史 umbrella，并以 `3A..3D` 表示剩余段。3A、3B、3C 已接受；3D 已授权。
+Human 已确认保留 Iteration 3 作为历史 umbrella，并以 `3A..3D` 表示其完成段；3A、3B、3C、3D 均已接受并关闭。
 
 ### Iteration 3A — runner 收敛与 Wave 1 证据接受
 
@@ -197,15 +197,15 @@ Human 已确认保留 Iteration 3 作为历史 umbrella，并以 `3A..3D` 表示
 | Audit | 是，只读检查最终文档、Human 意图、候选和证据一致性。 |
 | Human 检查点 | 接受最终业务结果、剩余风险和发布权限；凭证/低可观测操作只能由 Human 执行。 |
 | 验收条件 | 正式候选身份唯一；适用门禁与回滚准备完整；Quality 无阻断；Audit 通过；Human 接受；状态改为 `CLOSED`。UAT 位于关闭后且不影响关闭。 |
-| 当前状态 | `ACTIVE`，2026-07-16；Human 已接受 3C、授权进入 3D、限时接受剩余风险，并授权私有候选分支 push + PR。 |
-| 已有证据 | 已接受的 3C 候选与统一 Quality report；私有 GitHub `main` 保持 `80f4870`，草稿 PR #1 记录单一候选分支到 `main` 的受控发布，仓库没有 GitHub Release。精确候选 SHA、CI run 与 Audit verdict 由 GitHub/Operator package 外部绑定，避免写回候选造成自引用。 |
-| 未完成事项和阻断 | 草稿 PR #1 的精确远程 HEAD 必须保持供应链、可复现门、其余 CI 与只读 Audit 全绿，然后停止并等待 Human merge 决定；不得访问、枚举、复制、输出或提交 `C:/git/key`。 |
+| 当前状态 | `CLOSED_ACCEPTED`，2026-07-16；Human 已接受剩余风险、授权私有候选发布并随后明确授权 merge。 |
+| 已有证据 | 正式候选 `f300597a222e6442b52853eff046241a396aad4b`、tree `7e8d6c6139814e268e76e859ccba6c59ce2ec54c`、PR #1、候选 CI `29464247114`、Audit pass、squash merge `6e346d0dcb7b236289e1063fbb84f3372d689703` 和 main CI `29472793718`；没有 tag 或 GitHub Release。 |
+| 未完成事项和阻断 | 无 3D blocking item；风险替代方案须在运行时/外部部署前或到期日复评。不得访问、枚举、复制、输出或提交 `C:/git/key`。 |
 
 ## Human 决定与后续权限边界
 
-1. Human 于 2026-07-16 限时接受 production-reachable 的 `RUSTSEC-2025-0052` / `async-std 1.13.2` 风险至 2026-10-13；范围仅为本次私有 GitHub 源码 PR，任何运行时或外部部署前必须重新评估替代方案。
-2. Human 已授权推送 `codex/iteration-3-release-candidate` 并创建面向 `main` 的私有 PR。合并、tag、GitHub Release、部署和 UAT 仍须分别确认。
+1. Human 于 2026-07-16 限时接受 production-reachable 的 `RUSTSEC-2025-0052` / `async-std 1.13.2` 风险至 2026-10-13；范围仅为私有 GitHub 源码集成，任何运行时或外部部署前必须重新评估替代方案。
+2. Human 已分别授权候选 push + PR 与 squash merge。tag、GitHub Release、部署和 UAT 仍须另行确认。
 
-## 当前停止点
+## 当前停止点与下一轮
 
-草稿 PR #1 是当前停止前的受控发布记录。Orchestrator 只核对其精确远程 HEAD 的十项 CI 与外部只读 Audit；全绿后停止并等待 Human merge 决定，不自动合并、tag、创建 GitHub Release、部署或 UAT。
+Iteration 3 已关闭，没有活动迭代。下一步仅讨论候选目标、范围、非目标、Quality/Audit 激活条件与 Human 检查点；Human 明确授权前不恢复业务实现、自动化测试执行、部署或发布。

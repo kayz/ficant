@@ -3,7 +3,7 @@ governance = "HOQA"
 authority = "iteration-3-checklist.md"
 technical_baseline = "README.md"
 architecture_decision = "docs/architecture/adr/0008-hoqa-governance-baseline.md"
-status = "ACTIVE_ITERATION_3D_RELEASE_PREPARATION"
+status = "CLOSED_ITERATION_3"
 pause_reason = ""
 updated_on = "2026-07-16"
 
@@ -15,21 +15,21 @@ source_ownership_adr = "docs/architecture/adr/0001-polyglot-monorepo-source-owne
 deep_module_adr = "docs/architecture/adr/0003-deep-modules-and-explicit-internal-boundaries.md"
 
 [current_activity]
-kind = "iteration-3d-formal-candidate-and-release-preparation"
+kind = "iteration-3-closed-next-iteration-discussion"
 active_participants = ["Human", "Orchestrator"]
 quality_active = false
-quality_reason = "Quality completed the candidate-bound Q-001..Q-036 inventory, integrated execution, SIT defect loop and unified report; release-only workflow/governance changes remain Orchestrator delivery work, while implementation, test, Oracle, expected, tolerance or candidate-behavior changes reactivate Quality."
+quality_reason = "Quality completed the candidate-bound Q-001..Q-036 inventory, integrated execution, SIT defect loop and unified report; this closure changes only governance and release policy, while any future implementation or non-trivial automated testing reactivates Quality."
 audit_active = false
-audit_reason = "Audit runs as an external read-only check against the immutable Iteration 3D remote candidate; its verdict is not written back into the audited commit."
+audit_reason = "Iteration 3 candidate Audit passed externally with zero blocking findings; the closure-candidate verdict also remains external to the audited commit to avoid identity self-reference."
 workers_active = false
-workers_reason = "The Orchestrator and Quality can execute the bounded 3C inventory sequentially in the current workspace; no independent parallel Worker task is required."
+workers_reason = "Closure and next-iteration discussion are sequential governance work; no independent Worker task is required."
 
 [iteration]
 id = 3
 outcome = "Deliver the frozen CGB fixed-rate and discount-bond analytics vertical slice through the C++20 kernel, stable C ABI, safe Rust adapter, deterministic Arrow Artifact encoding, lineage, persistence and replay."
 acceptance_ids = "Q-001..Q-036"
 non_goals = ["curves", "futures", "Web SDK", "Python SDK", "CLI", "new migrations", "SIMD", "production QuantLib", "public Protobuf changes", "fake success", "hard-coded production results", "test-only production paths", "stubs", "unresolved placeholders"]
-current_stage = "3D-release-preparation"
+current_stage = "closed"
 implementation_resumption_authorized = false
 runner_3a_authorized = false
 
@@ -42,11 +42,11 @@ alternative_numbering = "Renumber the proposed remaining work as Iterations 4..7
 proposed_segments = ["3A runner convergence and Wave 1 evidence acceptance", "3B Rust vertical-slice implementation", "3C integrated automated verification and SIT", "3D formal candidate, release readiness and closure"]
 iteration_3b_execution_order = ["1 Domain/Application contracts and calculation port", "2 unique unsafe sys crate, C ABI and safe native adapter", "3 deterministic Arrow Artifact and stage/verify/publish/read/replay wiring"]
 authority = "iteration-3-checklist.md"
-next_checkpoint = "Keep draft PR #1 exact-head CI and external read-only Audit green, then stop for the separate Human merge decision; tag, GitHub Release, deployment and UAT remain unauthorized."
+next_checkpoint = "Discuss and explicitly authorize the next iteration before implementation, automated test execution, deployment or release work resumes."
 approved_numbering = "Iteration 3 umbrella with suffix segments 3A..3D"
 authorized_segments = ["3A", "3B", "3C", "3D"]
-active_segment = "3D-formal-candidate-and-release-preparation"
-remaining_segments_authorized = true
+active_segment = "none"
+remaining_segments_authorized = false
 
 [iteration.segment_3b]
 status = "CLOSED_ACCEPTED"
@@ -71,14 +71,14 @@ result = "The Q-001..Q-036 mapping, production-native golden comparison, determi
 human_decision = "accepted on 2026-07-16; authorized Iteration 3D separately"
 
 [iteration.segment_3d]
-status = "ACTIVE"
+status = "CLOSED_ACCEPTED"
 outcome = "Freeze one formal Iteration 3 candidate, complete release readiness and final consistency Audit, and prepare one controlled private-GitHub publication."
 scope = ["candidate commit, tree and parent identity", "one-squash-commit topology from current private GitHub main", "supply-chain, license, secret and reproducibility gates", "release notes and rollback", "final read-only consistency Audit", "Human risk and publication checkpoints"]
 non_goals = ["new business implementation", "acceptance or tolerance changes", "UAT", "deployment", "public release", "credential access", "automatic push, merge, tag or GitHub Release"]
 quality_framework = "Reuse accepted Iteration 3C Quality evidence unless the candidate's implementation or tests change; release mechanics are Orchestrator delivery work."
 acceptance = ["3C remains accepted and candidate code is unchanged except release/governance assets", "formal candidate has exactly one parent at current private GitHub main and one squashed commit", "applicable supply-chain, license, secret and reproducibility gates pass", "release notes and rollback are executable", "Audit returns a passing consistency verdict", "Human explicitly accepts remaining risk and authorizes publication"]
-human_checkpoint = "Completed on 2026-07-16 for the bounded risk acceptance and private candidate-branch push plus PR; merge, tag, GitHub Release, deployment and UAT remain separate Human checkpoints."
-human_decision = "On 2026-07-16 the Human accepted RUSTSEC-2025-0052 through 2026-10-13 for this private GitHub source PR only and authorized pushing codex/iteration-3-release-candidate plus opening a PR to main; merge, tag, GitHub Release, deployment and UAT remain unauthorized."
+human_checkpoint = "Completed on 2026-07-16 for bounded risk acceptance, private candidate publication and squash merge to main; tag, GitHub Release, deployment and UAT remain separate Human checkpoints."
+human_decision = "On 2026-07-16 the Human accepted RUSTSEC-2025-0052 through 2026-10-13 for private GitHub source integration, authorized candidate push plus PR, then separately authorized merge. No tag, GitHub Release, deployment or UAT was authorized."
 
 [iteration.segment_3a]
 status = "CLOSED_ACCEPTED"
@@ -90,7 +90,7 @@ acceptance = ["historical preserved candidate explicitly rejected because the re
 
 [participants.human]
 owns = ["intent", "business acceptance", "business choices", "risk acceptance", "privileged operations", "low-observability operations", "credentials"]
-current_checkpoint = "Human accepted 3C, authorized 3D, accepted the bounded carried risk and authorized the private candidate-branch push plus PR on 2026-07-16. Merge, tag, GitHub Release, deployment and UAT remain separate decisions."
+current_checkpoint = "Human accepted Iteration 3, the bounded carried risk and private GitHub source integration on 2026-07-16. Iteration 3 is closed; the next checkpoint is discussion and explicit authorization of a new iteration."
 
 [participants.orchestrator]
 owns = ["plan", "Product lens", "Architecture lens", "Interface lens", "Development Worker routing", "integration", "deterministic validation", "delivery work", "Human Operator packages", "closure"]
@@ -181,8 +181,8 @@ credential_boundary = "Never read, enumerate, copy, print, upload or commit C:/g
 
 [[risks]]
 id = "RUSTSEC-2025-0052"
-status = "human-accepted-warning-private-source-pr-only"
-fact = "async-std 1.13.2 is reachable through minio 0.4.0 and remains an accepted-unfixed informational unmaintained risk; the 2026-07-16 acceptance covers only this private GitHub source PR."
+status = "human-accepted-warning-private-source-integration-only"
+fact = "async-std 1.13.2 is reachable through minio 0.4.0 and remains an accepted-unfixed informational unmaintained risk; the 2026-07-16 decisions cover only private GitHub source integration, not runtime or external deployment."
 owner = "Human/Orchestrator"
 expires_on = "2026-10-13"
 reassess = "before runtime or external deployment, or on 2026-10-13, whichever occurs first"
@@ -258,7 +258,7 @@ scope_exclusions = "no SIT, deployment, release, push, public Protobuf, migratio
 human_decision = "accepted on 2026-07-16; authorized Iteration 3C separately; no push, release or 3D authority"
 
 [evidence.iteration3.segment_3c]
-status = "implemented-validated-candidate-pending-human-acceptance"
+status = "closed-human-accepted"
 base_commit = "f0b16411067a0b5a5dfec5bbfefab3c07d7c558b"
 acceptance_matrix = "tests/iteration-3/acceptance-matrix.json; Q-001..Q-036 exactly once; verifier exit 0"
 frozen_assets = "expected e81a6cb0c941c85f0548f59952c9d7539af46818a6df2dc77bf897d814bc0f5c; manual Oracle 624fad7fbade6eea3f9679c9c4ce778c69dd8d297afb130e693a789c9b95e99a; QuantLib Oracle 3dfe5e359d9c95ad63e0620e14e63d14f733193cf095736abbeef1c06b846632; calendar 55a49129ed358113d0be855a00511f8e9b1fd74df6619b87c67600d9074e94db"
@@ -272,8 +272,25 @@ full_workspace_disposition = "not claimed as a whole-workspace strict-Clippy gre
 quality_bug_list = "closed and retested: one-quantum dirty-price validation mismatch; type-specific persisted lineage; Windows health-probe Winsock environment; portable fixed-Buf selection for governed Linux compatibility execution"
 sit = "isolated Docker project ficant-i3c: PostgreSQL 16 and MinIO publish, verify, adapter restart, replay, tamper fail-closed, integrity event and cleanup passed; storage 31/31 and acceptance 14/14"
 cleanup = "docker compose down with volumes and orphans; 0 ficant-i3c containers, volumes or networks remain; compatibility container and extracted temporary Buf removed"
-remaining = "no blocking defect; formal Linux release supply-chain, reproducibility, SBOM/license, Audit, deployment and release gates belong to unauthorized 3D"
+remaining = "no blocking defect; Iteration 3D supply-chain, reproducibility, SBOM/license and Audit gates completed, while deployment and UAT remain unauthorized"
 scope_exclusions = "no public Protobuf, migration, Oracle, expected, tolerance, test-data, UAT, deployment, release, push or credential change"
+
+[evidence.iteration3.release]
+status = "closed-human-accepted-and-merged"
+candidate_commit = "f300597a222e6442b52853eff046241a396aad4b"
+candidate_tree = "7e8d6c6139814e268e76e859ccba6c59ce2ec54c"
+trusted_parent = "80f48706f37e3890224ca106fb763213d0beeb38"
+pull_request = 1
+candidate_ci = "29464247114"
+candidate_audit = "pass; 0 blocking findings"
+merge_commit = "6e346d0dcb7b236289e1063fbb84f3372d689703"
+main_tree = "7e8d6c6139814e268e76e859ccba6c59ce2ec54c"
+main_ci = "29472793718"
+merge_method = "squash"
+risk_acceptance = "iteration-3-async-std-1.13.2 through 2026-10-13 for private GitHub source integration only"
+quality_reactivated_for_closure = false
+tag_or_github_release_created = false
+deployment_or_uat_performed = false
 
 [evidence.iteration3.test_data]
 manifest = "tests/golden-cases/china-rates/iteration-3-cgb-basic-info-source-manifest.json"
@@ -284,6 +301,10 @@ immutable_uri = "s3://ficant-test-data/iteration-3/china-rates/dm-basic-info/821
 raw_data_in_git = false
 
 [closure]
+status = "closed-human-accepted"
+closed_on = "2026-07-16"
+no_active_iteration = true
+next_iteration_authorized = false
 conditions = ["frozen acceptance satisfied", "deterministic integrated validation passes", "Quality test report has no blocking defects", "applicable SIT and release-readiness evidence is candidate-bound", "final documents match Human intent, code and evidence", "Audit returns a passing consistency verdict", "Human accepts the business result and remaining risks"]
 uat_required = false
 business_implementation_may_resume_before_audit = true
