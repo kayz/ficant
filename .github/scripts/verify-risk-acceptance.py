@@ -36,10 +36,10 @@ def exact_policy(lock):
         "decision_date": "2026-07-16",
         "expires_on": "2026-10-13",
         "reassess_by": "before-runtime-or-external-deployment-or-2026-10-13",
-        "acceptance_scope": "private-github-source-integration-only",
+        "acceptance_scope": "private-github-source-integration-and-source-only-prerelease",
         "constraints": [
             "no deployment or UAT",
-            "no tag or GitHub Release under this acceptance",
+            "GitHub prerelease limited to v0.1.0-alpha.3 source archives with no attached binaries or signatures",
             "evaluate a replacement before runtime or external deployment",
         ],
         "advisory_ids": ["RUSTSEC-2025-0052"],

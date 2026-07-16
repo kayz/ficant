@@ -26,7 +26,7 @@
 - Iteration 3B 已按 Human 授权在一个迭代内顺序完成 Domain/Application、唯一 unsafe sys/C ABI/safe native、Arrow Artifact/Storage 三部分，形成统一本地候选与 Quality 结果，并于 2026-07-16 被 Human 接受：新增测试 7/7；受治理的主非环境库存 159/159、Storage library 3/3，连同 3B 端到端共 165/165；严格 Clippy 退出 0、Wave 1 CTest 4/4；固定 Arrow fixture SHA-256 为 `0d74da24...59ef6`。
 - Iteration 3C 已完成并获 Human 接受：Q-001..Q-036 机器映射完整；production-native 冻结用例 12/12、Oracle 自测 31/31、Storage 真实环境 31/31、Acceptance 真实环境 14/14、契约 11/11、health 5/5、Release/ASan CTest 各 4/4；四项候选缺陷已修复并重测，PostgreSQL/MinIO 与兼容性容器资源已清理，无开放 blocking defect。
 - 权威状态依次位于 [`.hoqa/state.toml`](.hoqa/state.toml)、[`iteration-3-checklist.md`](iteration-3-checklist.md) 和已接受的 [Architecture ADR](docs/architecture/adr/)；本 README 是系统技术基线，不替代迭代状态。
-- Iteration 3 已于 2026-07-16 完成并关闭：Human 接受 3A..3D、`RUSTSEC-2025-0052` 至 2026-10-13 的私有 GitHub 源码集成风险，并分别授权候选发布与 merge；PR #1 以 squash 合入 `main@6e346d0`，候选与 main 的十项 CI 及外部只读 Audit 全绿。未创建 tag 或 GitHub Release，也未部署或执行 UAT；下一迭代尚未授权，必须先与 Human 讨论目标、范围和验收。
+- Iteration 3 已于 2026-07-16 完成并关闭：Human 接受 3A..3D、`RUSTSEC-2025-0052` 至 2026-10-13 的私有 GitHub 源码集成风险，并分别授权候选发布与 merge；PR #1 以 squash 合入 `main@6e346d0`，收口 PR #2 合入 `main@1053aae`，精确候选与 main 的十项 CI 及外部只读 Audit 全绿。Human 随后单独授权 `v0.1.0-alpha.3` 私有、仅源码 GitHub Pre-release，并将风险范围扩展至该发布；不附二进制、不签名、不部署、不执行 UAT，实际发布状态以 GitHub tag/Release 页面为外部权威。下一迭代仍未授权。
 
 > 本文是 ficant 当前唯一的系统技术基线。除非通过正式 ADR 修改，后续设计和实现不得引入平行后台语言、平行数据库、平行 API 契约或平行运行体系。
 
