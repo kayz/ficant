@@ -178,7 +178,7 @@ jobs:
           scp "${scp_args[@]}" deploy/test/config/ficant.toml "$USER@$HOST:$ROOT/config/ficant.toml"
           scp "${scp_args[@]}" deploy/test/bin/*.sh "$USER@$HOST:$ROOT/bin/"
           scp "${scp_args[@]}" migrations/postgresql/*.sql "$USER@$HOST:$ROOT/releases/$SHA/migrations/"
-          ssh "${ssh_args[@]}" "$USER@$HOST" "chmod 0700 '$ROOT/bin/'*.sh && chmod 0600 '$ROOT/config/ficant.toml' '$ROOT/compose.test.yml'"
+          ssh "${ssh_args[@]}" "$USER@$HOST" "chmod 0700 '$ROOT/bin/'*.sh && chmod 0644 '$ROOT/config/ficant.toml' && chmod 0600 '$ROOT/compose.test.yml'"
       - name: Deploy exact image SHA
         shell: bash
         env:
