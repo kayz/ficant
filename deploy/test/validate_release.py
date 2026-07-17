@@ -14,8 +14,9 @@ EXPECTED_SERVICES = {
     "ficant-server",
     "ficant-worker",
     "ficant-web",
+    "ficant-ui",
 }
-APP_SERVICES = {"ficant-server", "ficant-worker", "ficant-web"}
+APP_SERVICES = {"ficant-server", "ficant-worker", "ficant-web", "ficant-ui"}
 POSTGRES_IMAGE = (
     "postgres@sha256:"
     "38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74"
@@ -82,4 +83,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
