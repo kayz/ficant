@@ -118,7 +118,7 @@ printf '\n# drift\n' >>"$tmp/Cargo.lock"
 expect_fail lock-drift verify "$tmp/pass.json" "$root/packages.syft.json" "$tmp/Cargo.lock" "$uv_lock" "$pnpm_lock"
 
 # A first-party package is an exact package/version/purl/source member of the
-# Syft universe; it receives an internal classification, never an OSS grant.
+# Syft universe and carries the project's exact MIT open-source grant.
 mkdir -p "$tmp/release/internal-component"
 printf 'internal source\n' >"$tmp/release/internal-component/source.txt"
 python3 - "$root/../../../supply-chain.lock.json" "$tmp/first-supply.json" "$root/packages.syft.json" "$tmp/first-syft.json" "$tmp/unresolved.json" <<'PY'
@@ -160,7 +160,7 @@ import json,pathlib,sys
 p=pathlib.Path(sys.argv[1]); d=json.loads(p.read_text()); exec(sys.argv[2],{"data":d}); p.write_text(json.dumps(d,sort_keys=True,separators=(",",":"))+"\n")
 PY
 }
-mutate_first first-source-drift 'next(x for x in data["packages"] if x["classification"]=="first-party-internal")["source_integrity"]="sha256:bad"'
+mutate_first first-source-drift 'next(x for x in data["packages"] if x["classification"]=="first-party-open-source")["source_integrity"]="sha256:bad"'
 expect_fail first-source-drift python3 "$tool" verify --inventory "$tmp/first-source-drift.json" --syft "$tmp/first-syft.json" --release-root "$tmp/release" --require-first-party --cargo-lock "$cargo_lock" --uv-lock "$uv_lock" --pnpm-lock "$pnpm_lock" --supply-lock "$tmp/first-supply.json"
 expect_fail first-missing python3 "$tool" finalize-first-party --inventory "$tmp/blocked.json" --syft "$root/packages.syft.json" --release-root "$tmp/release" --cargo-lock "$cargo_lock" --uv-lock "$uv_lock" --pnpm-lock "$pnpm_lock" --supply-lock "$tmp/first-supply.json" --output "$tmp/missing-final.json"
 

@@ -17,7 +17,9 @@ import urllib.error
 import urllib.request
 import zipfile
 
-GENERATOR = {"name": "ficant-license-inventory", "version": 2}
+GENERATOR = {"name": "ficant-license-inventory", "version": 3}
+FIRST_PARTY_CLASSIFICATION = "first-party-open-source"
+FIRST_PARTY_LICENSE = "MIT"
 ECOSYSTEMS = {"cargo": "crates.io", "pypi": "PyPI", "npm": "npm"}
 
 
@@ -71,7 +73,8 @@ def inventory_digest(packages):
 def tree_integrity(root, relative):
     base = pathlib.Path(root) / relative; entries = []
     if not base.is_dir(): fail(f"first-party source missing: {relative}")
-    for path in sorted(item for item in base.rglob("*") if item.is_file()):
+    files = (item for item in base.rglob("*") if item.is_file())
+    for path in sorted(files, key=lambda item: item.relative_to(base).as_posix().encode()):
         rel = path.relative_to(base)
         if any(part in {".git", "target", "node_modules", ".venv", "__pycache__", ".pytest_cache"} for part in rel.parts): continue
         entries.append({"path": rel.as_posix(), "sha256": checkout_independent_tree_sha256(path)})
@@ -397,7 +400,7 @@ def header(keys, packages, cargo_lock, uv_lock, pnpm_lock, supply_lock):
     syft = next(item for item in supply["tools"] if item["name"] == "syft")
     first_party_sources = sorted([
         {name: package[name] for name in ("purl", "source_locator", "source_integrity")}
-        for package in packages if package.get("classification") == "first-party-internal"
+        for package in packages if package.get("classification") == FIRST_PARTY_CLASSIFICATION
     ], key=lambda item: item["purl"])
     input_digest = hashlib.sha256(canonical({"locks": lock_hashes, "package_keys": keys, "first_party_sources": first_party_sources})).hexdigest()
     return {
@@ -479,7 +482,7 @@ def finalize_first_party(args):
         packages.append(item)
     for item in policy:
         package = {name: item[name] for name in ("purl", "ecosystem", "name", "version")}
-        package.update({"classification": "first-party-internal", "authorization": "internal-no-open-source-grant", "source_locator": f"release-tree:{item['source']}", "source_integrity": tree_integrity(args.release_root, item["source"])})
+        package.update({"classification": FIRST_PARTY_CLASSIFICATION, "license_expression": FIRST_PARTY_LICENSE, "source_locator": f"release-tree:{item['source']}", "source_integrity": tree_integrity(args.release_root, item["source"])})
         packages.append(package)
     packages.sort(key=lambda item: (item["ecosystem"], item["name"], item["version"], item["purl"]))
     package_keys = [{name: item[name] for name in ("purl", "ecosystem", "name", "version")} for item in packages]
@@ -515,9 +518,9 @@ def verify(args):
         if document.get("status") != "complete" or document.get("first_party_packages") != supply.get("first_party_packages"):
             fail("first-party policy binding missing")
     for package in packages:
-        if package.get("classification") == "first-party-internal":
+        if package.get("classification") == FIRST_PARTY_CLASSIFICATION:
             policy = first_policy.get(package.get("purl"))
-            if not args.release_root or not policy or package.get("authorization") != "internal-no-open-source-grant" or package.get("source_locator") != f"release-tree:{policy['source']}" or package.get("source_integrity") != tree_integrity(args.release_root, policy["source"]):
+            if not args.release_root or not policy or package.get("license_expression") != FIRST_PARTY_LICENSE or package.get("source_locator") != f"release-tree:{policy['source']}" or package.get("source_integrity") != tree_integrity(args.release_root, policy["source"]):
                 fail(f"first-party package binding mismatch: {package.get('purl')}")
             continue
         if args.require_first_party and package.get("classification") != "third-party": fail(f"third-party classification missing: {package.get('purl')}")
@@ -525,7 +528,7 @@ def verify(args):
         if not source_matches(package, package.get("source_locator"), package.get("source_integrity"), locked):
             fail(f"source integrity mismatch: {package.get('purl')}")
     for package in packages:
-        if package.get("classification") == "first-party-internal": continue
+        if package.get("classification") == FIRST_PARTY_CLASSIFICATION: continue
         scoped = [item for item in supply.get("license_scoped_exceptions", []) if item.get("purl") == package.get("purl")]
         scoped_allow = set()
         for item in scoped:

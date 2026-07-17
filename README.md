@@ -16,6 +16,10 @@
 **平台终点：** 研究结果、回测结果、SignalSet 与 TargetExposure  
 **平台不负责：** OMS、EMS、对外报单、订单管理、清算与结算
 
+## 开源许可证
+
+FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三方依赖和随项目分发的第三方材料仍分别适用其原有许可证与署名要求，详见 [`docs/delivery/third-party-notices.md`](docs/delivery/third-party-notices.md)。
+
 ## 当前治理与迭代快照（2026-07-16）
 
 - 项目采用 HOQA。Human 始终负责目标、业务含义、接受标准、风险接受和特权操作；Orchestrator 始终负责计划、专业判断、编排、集成、确定性验证和关闭准备。
@@ -1548,4 +1552,4 @@ Rust 使用 `tracing` 产生结构化事件，通过 OTLP 输出。
 10. 完成 SignalSet 发布边界
 ```
 
-项目许可证、贡献流程、发布节奏和运维手册将在首批代码进入仓库后补充。
+项目采用 MIT License；贡献流程、发布节奏和运维手册将随公开协作需要继续完善。

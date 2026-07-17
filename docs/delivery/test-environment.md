@@ -44,5 +44,5 @@
 - 应用 Secret 只保存在测试机 `/srv/ficant-test/.env`，权限为 `0600`。
 - 服务为非 root、只读根文件系统、`cap_drop=ALL`、`no-new-privileges`，并只发布到 `127.0.0.1`。
 - 当前主机 Docker 为 rootful；`ficant-deploy` 的 Docker group 成员资格具有较高主机权限。它比直接 root SSH 缩小了日常账号范围，但不等价于真正的 rootless 隔离。若测试机承载更多不互信项目，应迁移到 rootless Docker、独立 VM 或受限部署代理。
-- 私有仓库当前套餐不提供 main branch protection 和 Environment required reviewer；升级套餐或迁入合适 Organization 后必须补齐。
+- 公开仓库启用 main branch protection；GitHub `test` Environment 的 required reviewer 仍应按当前账户套餐能力配置，不能配置时由工作流授权门与人工合并流程兜底。
 

@@ -101,6 +101,7 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ needs.authorize.outputs.sha }}
             org.opencontainers.image.version=sha-${{ needs.authorize.outputs.sha }}
+            org.opencontainers.image.licenses=MIT
           cache-from: type=gha,scope=${{ matrix.package }}
           cache-to: type=gha,mode=max,scope=${{ matrix.package }}
           provenance: mode=max
@@ -134,6 +135,7 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ needs.authorize.outputs.sha }}
             org.opencontainers.image.version=sha-${{ needs.authorize.outputs.sha }}
+            org.opencontainers.image.licenses=MIT
           cache-from: type=gha,scope=ficant-ui
           cache-to: type=gha,mode=max,scope=ficant-ui
           provenance: mode=max

@@ -94,7 +94,7 @@ validate_path_list() {
       esac
     else
       case "$path" in
-        .gitignore|.gitattributes|README.md|Cargo.toml|Cargo.lock|rust-toolchain.toml|rustfmt.toml|clippy.toml|cicd.yml|iteration-[0-9]*-checklist.md) ;;
+        .gitignore|.gitattributes|README.md|LICENSE|Cargo.toml|Cargo.lock|rust-toolchain.toml|rustfmt.toml|clippy.toml|cicd.yml|iteration-[0-9]*-checklist.md) ;;
         *) record_failure "unknown release root file: $path" ;;
       esac
     fi
