@@ -3,6 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kayz/ficant.git",
+    "directory": "web-dm/platform-shell"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

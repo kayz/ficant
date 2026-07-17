@@ -1,10 +1,14 @@
 [project]
 name = "ficant-node-runtime"
 version = "0.1.0"
+license = "MIT"
 requires-python = "==3.12.*"
 dependencies = [
     "protobuf==6.33.5",
 ]
+
+[project.urls]
+Repository = "https://github.com/kayz/ficant"
 
 [dependency-groups]
 dev = [
