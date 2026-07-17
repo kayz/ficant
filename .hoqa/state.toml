@@ -5,7 +5,7 @@ technical_baseline = "README.md"
 architecture_decision = "docs/architecture/adr/0008-hoqa-governance-baseline.md"
 status = "CLOSED_ITERATION_3"
 pause_reason = ""
-updated_on = "2026-07-16"
+updated_on = "2026-07-17"
 
 [project]
 name = "ficant"
@@ -15,14 +15,14 @@ source_ownership_adr = "docs/architecture/adr/0001-polyglot-monorepo-source-owne
 deep_module_adr = "docs/architecture/adr/0003-deep-modules-and-explicit-internal-boundaries.md"
 
 [current_activity]
-kind = "iteration-3-closed-source-prerelease-authorization"
+kind = "post-iteration-test-release-authorization"
 active_participants = ["Human", "Orchestrator"]
 quality_active = false
-quality_reason = "Quality completed the candidate-bound Q-001..Q-036 inventory, integrated execution, SIT defect loop and unified report; this closure changes only governance and release policy, while any future implementation or non-trivial automated testing reactivates Quality."
+quality_reason = "The test-release change is delivery automation and preserves business code and acceptance semantics; project CI plus release-topology, image, health and smoke gates validate the candidate."
 audit_active = false
-audit_reason = "Iteration 3 and closure candidate Audits passed externally; the source-prerelease authorization candidate receives the same external read-only Audit before publication, without writing its verdict into the audited commit."
+audit_reason = "The first test release is bounded delivery automation after Iteration 3 closure; GitHub CI, GHCR provenance, vulnerability scans and deployment evidence are its external authorities."
 workers_active = false
-workers_reason = "Source-prerelease authorization, Audit, publication and verification are one sequential delivery path; no independent Worker task is required."
+workers_reason = "Central platform generation, GitHub publication and test-server deployment form one sequential release path."
 
 [iteration]
 id = 3
@@ -42,7 +42,7 @@ alternative_numbering = "Renumber the proposed remaining work as Iterations 4..7
 proposed_segments = ["3A runner convergence and Wave 1 evidence acceptance", "3B Rust vertical-slice implementation", "3C integrated automated verification and SIT", "3D formal candidate, release readiness and closure"]
 iteration_3b_execution_order = ["1 Domain/Application contracts and calculation port", "2 unique unsafe sys crate, C ABI and safe native adapter", "3 deterministic Arrow Artifact and stage/verify/publish/read/replay wiring"]
 authority = "iteration-3-checklist.md"
-next_checkpoint = "Publish only the authorized v0.1.0-alpha.3 source-only private GitHub prerelease; GitHub is the external publication-status authority, then return to next-iteration discussion."
+next_checkpoint = "Merge the tested delivery candidate, publish immutable GHCR images, deploy the GitHub test Environment, and verify health, smoke and rollback state; object storage, business UAT and production remain separate checkpoints."
 approved_numbering = "Iteration 3 umbrella with suffix segments 3A..3D"
 authorized_segments = ["3A", "3B", "3C", "3D"]
 active_segment = "none"
@@ -90,7 +90,7 @@ acceptance = ["historical preserved candidate explicitly rejected because the re
 
 [participants.human]
 owns = ["intent", "business acceptance", "business choices", "risk acceptance", "privileged operations", "low-observability operations", "credentials"]
-current_checkpoint = "Human accepted Iteration 3 and separately authorized v0.1.0-alpha.3 as a private source-only GitHub prerelease on 2026-07-16, including the bounded risk extension; deployment, UAT and any new iteration remain unauthorized."
+current_checkpoint = "On 2026-07-17 the Human authorized the first GitHub test release and test-server service setup. The authorization is limited to three runtime images whose dependency closures exclude minio/async-std, PostgreSQL migration, health and smoke; object storage, complete business UAT, production and a new business iteration remain unauthorized."
 
 [participants.orchestrator]
 owns = ["plan", "Product lens", "Architecture lens", "Interface lens", "Development Worker routing", "integration", "deterministic validation", "delivery work", "Human Operator packages", "closure"]
@@ -182,10 +182,10 @@ credential_boundary = "Never read, enumerate, copy, print, upload or commit C:/g
 [[risks]]
 id = "RUSTSEC-2025-0052"
 status = "human-accepted-warning-private-source-and-prerelease"
-fact = "async-std 1.13.2 is reachable through minio 0.4.0 and remains an accepted-unfixed informational unmaintained risk; the 2026-07-16 decisions cover private GitHub source integration and the source-only v0.1.0-alpha.3 prerelease, not runtime or external deployment."
+fact = "async-std 1.13.2 is reachable through minio 0.4.0 in the workspace and remains an accepted-unfixed informational unmaintained risk. The first test release is limited to ficant-server, ficant-worker and ficant-web; their locked dependency closures exclude minio and async-std, and the release topology contains no object-storage service or adapter."
 owner = "Human/Orchestrator"
 expires_on = "2026-10-13"
-reassess = "before runtime or external deployment, or on 2026-10-13, whichever occurs first"
+reassess = "before any object-storage runtime, or on 2026-10-13, whichever occurs first"
 
 [[unresolved]]
 id = "HOQA-CONTRACT-TERMS-001"
@@ -305,6 +305,21 @@ deployment = false
 uat = false
 risk_scope = "RUSTSEC-2025-0052 accepted through 2026-10-13 for this source-only prerelease; runtime and external deployment excluded"
 publication_status_authority = "GitHub tag and Release page; external evidence is not written back into the tagged commit"
+
+[test_release]
+version = "v0.1.0-test.1"
+kind = "private-github-test-environment"
+authorization_status = "human-authorized"
+authorized_on = "2026-07-17"
+target_branch = "main"
+image_packages = ["ficant-server", "ficant-worker", "ficant-web"]
+immutable_tag = "sha-<commit>"
+environment = "test"
+runtime_dependency_exclusion = ["minio", "async-std"]
+object_storage = false
+production = false
+uat = false
+deployment_evidence = "/srv/ficant-test/state/deployments/<commit>.json and GitHub deployment history"
 
 [evidence.iteration3.test_data]
 manifest = "tests/golden-cases/china-rates/iteration-3-cgb-basic-info-source-manifest.json"

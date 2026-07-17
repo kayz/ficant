@@ -94,7 +94,7 @@ validate_path_list() {
       esac
     else
       case "$path" in
-        .gitignore|.gitattributes|README.md|Cargo.toml|Cargo.lock|rust-toolchain.toml|rustfmt.toml|clippy.toml|iteration-[0-9]*-checklist.md) ;;
+        .gitignore|.gitattributes|README.md|Cargo.toml|Cargo.lock|rust-toolchain.toml|rustfmt.toml|clippy.toml|cicd.yml|iteration-[0-9]*-checklist.md) ;;
         *) record_failure "unknown release root file: $path" ;;
       esac
     fi
@@ -115,7 +115,7 @@ validate_path_list() {
         ;;
       *.py)
         case "$path" in
-          python/*|tests/oracle/china-rates/*|tests/iteration-3/verify_acceptance_matrix.py|deploy/execution/execution-validator.py|.github/scripts/compose_security_gate.py|.github/scripts/tests/test_compose_security_gate.py|.github/scripts/verify-cargo-reachability.py|.github/scripts/verify-license-inventory.py|.github/scripts/verify-risk-acceptance.py) ;;
+          python/*|tests/oracle/china-rates/*|tests/iteration-3/verify_acceptance_matrix.py|deploy/execution/execution-validator.py|deploy/test/validate_release.py|.github/scripts/compose_security_gate.py|.github/scripts/tests/test_compose_security_gate.py|.github/scripts/verify-cargo-reachability.py|.github/scripts/verify-license-inventory.py|.github/scripts/verify-risk-acceptance.py) ;;
           *) record_failure "Python is restricted to python/ or the exact CI gate tool allowlist: $path" ;;
         esac
         ;;
