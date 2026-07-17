@@ -5,6 +5,7 @@ RUN corepack enable && corepack prepare pnpm@10.12.4 --activate
 COPY web-dm/package.json web-dm/pnpm-lock.yaml web-dm/pnpm-workspace.yaml web-dm/.npmrc ./
 COPY web-dm/platform-shell/package.json platform-shell/package.json
 RUN pnpm install --frozen-lockfile
+COPY web-dm/packages/contracts-generated packages/contracts-generated
 COPY web-dm/platform-shell platform-shell
 ENV FICANT_UI_BASE_PATH=/ficant/
 ENV VITE_FICANT_GRPC_WEB_BASE_URL=/ficant-api
