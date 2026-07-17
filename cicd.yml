@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "project": {
+    "name": "ficant",
+    "repository": "kayz/ficant",
+    "default_branch": "main"
+  },
+  "ci": {
+    "required_workflow": "ci",
+    "cancel_outdated_runs": true
+  },
+  "images": [
+    {
+      "name": "ficant-server",
+      "dockerfile": "deploy/dev/RustService.Dockerfile",
+      "build_arg": "ficant-server"
+    },
+    {
+      "name": "ficant-worker",
+      "dockerfile": "deploy/dev/RustService.Dockerfile",
+      "build_arg": "ficant-worker"
+    },
+    {
+      "name": "ficant-web",
+      "dockerfile": "deploy/dev/RustService.Dockerfile",
+      "build_arg": "ficant-web"
+    }
+  ],
+  "deploy": {
+    "environment": "test",
+    "trigger": "main-ci-success",
+    "remote_root": "/srv/ficant-test",
+    "compose_file": "deploy/test/compose.test.yml",
+    "automatic_rollback": true
+  }
+}
+

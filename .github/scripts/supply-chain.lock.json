@@ -2,7 +2,7 @@
   "schema_version": 1,
   "captured_utc": "2026-07-12T04:34:09Z",
   "release_topology": {
-    "trusted_base": "1053aae1694040bff5a77263cb788f56fbe65f40",
+    "trusted_base": "7122038dfaf55c789db7a94a63fa0cd08e0ec967",
     "candidate_commit_count": 1,
     "main_update": "squash-merge-only-after-final-consistency-audit"
   },
@@ -168,12 +168,13 @@
       "owner": "Human/Orchestrator",
       "decision_date": "2026-07-16",
       "expires_on": "2026-10-13",
-      "reassess_by": "before-runtime-or-external-deployment-or-2026-10-13",
+      "reassess_by": "before-object-storage-runtime-or-2026-10-13",
       "acceptance_scope": "private-github-source-integration-and-source-only-prerelease",
       "constraints": [
-        "no deployment or UAT",
+        "test runtime is limited to ficant-server, ficant-worker, and ficant-web images whose locked dependency closures exclude minio and async-std",
+        "object-storage adapter deployment, complete business UAT, and production deployment remain prohibited",
         "GitHub prerelease limited to v0.1.0-alpha.3 source archives with no attached binaries or signatures",
-        "evaluate a replacement before runtime or external deployment"
+        "evaluate a replacement before any object-storage runtime"
       ],
       "advisory_ids": [
         "RUSTSEC-2025-0052"

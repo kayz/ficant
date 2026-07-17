@@ -30,6 +30,15 @@
 
 > 本文是 ficant 当前唯一的系统技术基线。除非通过正式 ADR 修改，后续设计和实现不得引入平行后台语言、平行数据库、平行 API 契约或平行运行体系。
 
+## GitHub 测试环境发布（2026-07-17）
+
+- 中央管理源位于私有仓库 `kayz/cicd` 的 `ficant/`；本仓库中的 `cicd.yml`、`.github/workflows/release-test.yml` 和 `deploy/test/` 是固定平台版本生成的业务接入文件。
+- `main` 的现有十项 `ci` 全部成功后，GitHub Linux Runner 从精确 Commit SHA 构建 `ficant-server`、`ficant-worker` 和 `ficant-web` 镜像，推送 `sha-<commit>` 与 `test-latest` 标签到 GHCR。测试机始终部署 SHA 标签，不依赖 `latest`。
+- GitHub `test` Environment 通过专用 SSH 身份连接测试机的 `ficant-deploy` 账号；测试机只拉镜像、执行版本化 PostgreSQL migration 和 Docker Compose，不现场编译源码。
+- 发布脚本记录 current、previous、镜像 SHA、部署时间、migration、健康检查和冒烟结果；失败时如存在 previous SHA，直接切回上一组镜像。
+- 首版运行拓扑明确不包含 MinIO 或对象存储 adapter。三个发布二进制的依赖闭包不包含 `minio`/`async-std`，因此既有 `RUSTSEC-2025-0052` 不进入该运行时；受维护的 S3 兼容实现完成选择和验证前，对象存储保持 fail-closed。
+- 该环境只证明发布链路和当前最小服务探针，不等于完整业务 UAT、生产发布或对象存储验收。
+
 ---
 
 ## 1. 产品定义

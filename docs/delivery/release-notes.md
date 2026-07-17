@@ -1,5 +1,14 @@
 # 交付发布说明
 
+## v0.1.0-test.1 GitHub 测试环境（2026-07-17）
+
+- Human 已授权第一个 GitHub `test` Environment 和 Linux 测试机发布链路；这是一项 Iteration 3 关闭后的 Delivery 活动，不恢复业务迭代。
+- 发布对象仅为 `ficant-server`、`ficant-worker`、`ficant-web` 三个 Linux 镜像。精确 `cargo tree --locked -p <binary>` 依赖闭包均排除 `minio` 和 `async-std`。
+- GitHub Runner 构建并推送 GHCR `sha-<commit>` 镜像、SBOM 和 provenance，Trivy 对可修复 HIGH/CRITICAL 运行时漏洞 fail-closed。
+- Linux 测试机不编译源码，只执行固定 PostgreSQL 镜像、八项版本化 migration、SHA 镜像拉取、Compose、健康和冒烟检查。
+- MinIO、对象存储 adapter、完整业务 UAT 和生产发布不在本次授权内。`RUSTSEC-2025-0052` 的源码接受范围不扩展到对象存储运行时；在任何对象存储运行时或 2026-10-13（取较早者）重新评估。
+- 自动回滚只切换已构建镜像；数据库 migration 不自动向下回滚，继续要求扩展—兼容—收缩。
+
 ## Iteration 3 私有 GitHub 发布与关闭（2026-07-16）
 
 ### 发布目标与边界
