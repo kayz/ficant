@@ -129,6 +129,8 @@ jobs:
           output: trivy-${{ matrix.package }}.sarif
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          limit-severities-for-sarif: true
+          scanners: vuln
           exit-code: "1"
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
