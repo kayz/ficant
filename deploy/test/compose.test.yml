@@ -124,6 +124,24 @@ services:
       ficant-server:
         condition: service_healthy
 
+  ficant-ui:
+    <<: *secure-service
+    image: ${FICANT_IMAGE_PREFIX:?FICANT_IMAGE_PREFIX is required}-ui:sha-${FICANT_DEPLOY_SHA:?FICANT_DEPLOY_SHA is required}
+    user: "101:101"
+    restart: unless-stopped
+    cpus: 0.50
+    mem_limit: 256m
+    ports:
+      - 127.0.0.1:${FICANT_UI_PORT:-28083}:8080
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      start_period: 3s
+      retries: 20
+    depends_on:
+      ficant-server:
+        condition: service_healthy
+
 volumes:
   postgres-data:
-

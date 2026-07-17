@@ -42,24 +42,24 @@ rollback_current() {
   if [[ "$current" =~ ^[0-9a-f]{40}$ ]]; then
     echo "Deployment failed; restoring $current." >&2
     export FICANT_DEPLOY_SHA=$current
-    "${compose[@]}" pull ficant-server ficant-worker ficant-web
-    "${compose[@]}" up -d --remove-orphans --wait --wait-timeout 180 postgres ficant-server ficant-worker ficant-web
+    "${compose[@]}" pull ficant-server ficant-worker ficant-web ficant-ui
+    "${compose[@]}" up -d --remove-orphans --wait --wait-timeout 180 postgres ficant-server ficant-worker ficant-web ficant-ui
     FICANT_DEPLOY_SHA=$current "$root/bin/healthcheck.sh"
     FICANT_DEPLOY_SHA=$current "$root/bin/smoke-test.sh"
     record failed true
   else
     echo 'First deployment failed; stopping application containers.' >&2
-    "${compose[@]}" stop ficant-server ficant-worker ficant-web || true
+    "${compose[@]}" stop ficant-server ficant-worker ficant-web ficant-ui || true
     record failed false
   fi
 }
 
 trap 'status=$?; if [[ $status -ne 0 ]]; then rollback_current || true; fi; exit $status' ERR
 
-"${compose[@]}" pull postgres ficant-server ficant-worker ficant-web
+"${compose[@]}" pull postgres ficant-server ficant-worker ficant-web ficant-ui
 "${compose[@]}" up -d --wait --wait-timeout 180 postgres
 "${compose[@]}" run --rm migration
-"${compose[@]}" up -d --remove-orphans --wait --wait-timeout 180 ficant-server ficant-worker ficant-web
+"${compose[@]}" up -d --remove-orphans --wait --wait-timeout 180 ficant-server ficant-worker ficant-web ficant-ui
 FICANT_DEPLOY_SHA=$sha "$root/bin/healthcheck.sh"
 FICANT_DEPLOY_SHA=$sha "$root/bin/smoke-test.sh"
 
@@ -70,4 +70,3 @@ printf 'FICANT_DEPLOY_SHA=%s\n' "$sha" >"$root/state/current.env"
 record success false
 trap - ERR
 echo "Deployment succeeded: $sha"
-
