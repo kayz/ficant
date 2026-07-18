@@ -15,7 +15,7 @@
 
 - 目标仓库为私有仓库 `kayz/ficant`，默认分支为 `main`；正式候选 `f300597` 以 `main@80f4870` 为唯一 parent，tree 为 `7e8d6c6`。
 - 源码集成路径已完成：候选分支、PR #1、候选十项 CI、外部只读 Audit、Human 独立 merge 授权、squash merge `6e346d0`、收口 merge `1053aae` 和 main 十项 CI。Human 随后单独授权 `v0.1.0-alpha.3` 私有、仅源码 GitHub Pre-release；实际 tag/Release 状态以 GitHub 页面为外部权威。
-- 本次候选交付 Iteration 3 已接受的 CGB 固定利率/贴现债分析纵向切片、HOQA 治理基线、Windows runner、Q-001..Q-036 自动化、真实 PostgreSQL/MinIO SIT 和候选绑定的发布门禁；不包含 UAT、部署、曲线、期货、SDK/CLI、新 migration 或公共 Protobuf 变更。
+- 本次候选交付 Iteration 3 已接受的 CGB 固定利率/贴现债分析纵向切片、当时的 HOQA 治理基线与 Windows runner、Q-001..Q-036 自动化、真实 PostgreSQL/MinIO SIT 和候选绑定的发布门禁；HOQA 与 runner 后续已归档到 `docs/history/hoqa/`，不再是活动开发或发布入口。本候选不包含 UAT、部署、曲线、期货、SDK/CLI、新 migration 或公共 Protobuf 变更。
 
 ### 候选与证据绑定
 
@@ -26,7 +26,7 @@
 
 ### 风险检查点
 
-- `RUSTSEC-2025-0052` 仍是 `INFO / unmaintained`，没有 patched version。2026-07-10 发布的最新 `minio 0.4.0` 仍直接依赖 `async-std ^1.13`，当前 production Storage 依赖链可达。
+- `RUSTSEC-2025-0052` 仍是 `INFO / unmaintained`，没有 patched version。2026-04-23 发布的最新 `minio 0.4.0` 仍直接依赖 `async-std ^1.13`，当前 production Storage 依赖链可达。
 - Human 于 2026-07-16 重新评估并限时接受该风险至 2026-10-13，范围为私有 GitHub 源码集成及 `v0.1.0-alpha.3` 仅源码 Pre-release；该决定不沿用 Iteration 2 的旧接受记录。
 - 本次 Pre-release 只包含 GitHub 自动源码归档，不附二进制或签名，不等于生产部署，也不授权 UAT、运行时或外部部署。任何运行时或外部部署前必须重新评估替代 S3 client；到期日仍为 2026-10-13。
 
@@ -38,7 +38,7 @@
 4. 源码集成本身如需回滚，创建显式 `git revert` PR 并重新运行同一 CI，禁止改写私有 `main` 历史或强推；Pre-release 如需撤回，删除 GitHub Release 与 tag 必须再次取得 Human 明确授权。本次没有运行时部署可回滚。
 5. 经 Human 单独确认后，从最终已审计 `main` 创建 `v0.1.0-alpha.3` tag 与私有 GitHub Pre-release；只使用 GitHub 自动源码归档，不附二进制、不签名。GitHub 页面承担外部发布证据，部署和 UAT 仍禁止。
 
-> **历史记录（superseded）：** 本文保留 iteration-2 的 Delivery/Review 交付证据。旧治理责任和 verdict 只作历史审计；当前交付责任按 ADR-0008 由 Orchestrator delivery work 与 Human Operator 边界承接。
+> **历史记录（superseded）：** 本文保留 iteration-2 的 Delivery/Review 交付证据。旧治理责任和 verdict 只作历史审计；ADR-0008 已被 ADR-0009 取代，当前本地开发由 OPAID 管理、发布由中央 CI/CD 管理。
 
 ## 候选与证据绑定
 

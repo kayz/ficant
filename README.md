@@ -20,22 +20,18 @@
 
 FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三方依赖和随项目分发的第三方材料仍分别适用其原有许可证与署名要求，详见 [`docs/delivery/third-party-notices.md`](docs/delivery/third-party-notices.md)。
 
-## 当前治理与迭代快照（2026-07-16）
+## 开发与发布边界（2026-07-17）
 
-- 项目采用 HOQA。Human 始终负责目标、业务含义、接受标准、风险接受和特权操作；Orchestrator 始终负责计划、专业判断、编排、集成、确定性验证和关闭准备。
-- Quality 仅在迭代包含代码更新且需要非平凡自动化测试设计、执行、缺陷循环或测试报告时激活；Audit 仅在准备发布、形成正式发布候选或关闭发布范围时激活。纯文档、规划、治理整理或用户讨论不自动激活二者。
-- Worker 只是临时执行资源，仅在至少两个真正独立、有界且并行收益明确的任务存在时使用。Iteration 3B 是一条有依赖的顺序链，执行中未使用 Worker。
-- Iteration 1 已关闭，形成治理、产品/架构说明和初始发布证据；Iteration 2 已关闭，交付 Phase 0/1、真实 PostgreSQL/MinIO 业务闭环、四类构建、Web/契约/供应链门禁，并限时接受 `RUSTSEC-2025-0052` 风险。
-- Human 已确认 Iteration 3 umbrella + 3A..3D，并接受 3A。preserved `codex/i3-runner-ctest` 因历史失败缺少可绑定的当时状态而被明确拒绝；其受审功能以 HOQA-v3 权限和 schema 基线重新合入本地基线，Windows runner suite `108/108`、Wave 1 CTest `4/4`，均 `skipped=0`。
-- Iteration 3B 已按 Human 授权在一个迭代内顺序完成 Domain/Application、唯一 unsafe sys/C ABI/safe native、Arrow Artifact/Storage 三部分，形成统一本地候选与 Quality 结果，并于 2026-07-16 被 Human 接受：新增测试 7/7；受治理的主非环境库存 159/159、Storage library 3/3，连同 3B 端到端共 165/165；严格 Clippy 退出 0、Wave 1 CTest 4/4；固定 Arrow fixture SHA-256 为 `0d74da24...59ef6`。
-- Iteration 3C 已完成并获 Human 接受：Q-001..Q-036 机器映射完整；production-native 冻结用例 12/12、Oracle 自测 31/31、Storage 真实环境 31/31、Acceptance 真实环境 14/14、契约 11/11、health 5/5、Release/ASan CTest 各 4/4；四项候选缺陷已修复并重测，PostgreSQL/MinIO 与兼容性容器资源已清理，无开放 blocking defect。
-- 权威状态依次位于 [`.hoqa/state.toml`](.hoqa/state.toml)、[`iteration-3-checklist.md`](iteration-3-checklist.md) 和已接受的 [Architecture ADR](docs/architecture/adr/)；本 README 是系统技术基线，不替代迭代状态。
-- Iteration 3 已于 2026-07-16 完成并关闭：Human 接受 3A..3D、`RUSTSEC-2025-0052` 至 2026-10-13 的私有 GitHub 源码集成风险，并分别授权候选发布与 merge；PR #1 以 squash 合入 `main@6e346d0`，收口 PR #2 合入 `main@1053aae`，精确候选与 main 的十项 CI 及外部只读 Audit 全绿。Human 随后单独授权 `v0.1.0-alpha.3` 私有、仅源码 GitHub Pre-release，并将风险范围扩展至该发布；不附二进制、不签名、不部署、不执行 UAT，实际发布状态以 GitHub tag/Release 页面为外部权威。下一迭代仍未授权。
+- [OPAID](docs/development.md) 管理从任务冻结、实现和本地测试到精确自测候选；它不执行 CI/CD、部署、UAT 或服务器管理。
+- Windows PowerShell 7 统一入口为 `.\scripts\check-fast.ps1` 与 `.\scripts\check.ps1`；两者支持 `-ListOnly`，完整检查可显式增加 `-IncludeIntegration`。
+- 中央 `kayz/cicd` 管理候选合并后的 GitHub CI、Linux 镜像、GHCR、测试环境部署、健康/冒烟检查和回滚。本地通过不能替代正式质量门槛。
+- 历史 HOQA/PROQAID 材料保留在 `docs/history/hoqa/` 作为当时证据，不再驱动当前工作；权威边界见 [ADR-0009](docs/architecture/adr/0009-opaid-local-development-and-cicd-release-boundary.md)。
 
 > 本文是 ficant 当前唯一的系统技术基线。除非通过正式 ADR 修改，后续设计和实现不得引入平行后台语言、平行数据库、平行 API 契约或平行运行体系。
 
 ## GitHub 测试环境发布（2026-07-17）
 
+- 本节属于中央 `cicd` 发布管理边界，不是 OPAID 本地自测的一部分。
 - 中央管理源位于私有仓库 `kayz/cicd` 的 `ficant/`；本仓库中的 `cicd.yml`、`.github/workflows/release-test.yml` 和 `deploy/test/` 是固定平台版本生成的业务接入文件。
 - `main` 的现有十项 `ci` 全部成功后，GitHub Linux Runner 从精确 Commit SHA 构建 `ficant-server`、`ficant-worker` 和 `ficant-web` 镜像，推送 `sha-<commit>` 与 `test-latest` 标签到 GHCR。测试机始终部署 SHA 标签，不依赖 `latest`。
 - GitHub `test` Environment 通过专用 SSH 身份连接测试机的 `ficant-deploy` 账号；测试机只拉镜像、执行版本化 PostgreSQL migration 和 Docker Compose，不现场编译源码。

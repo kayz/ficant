@@ -1,8 +1,8 @@
 # ficant 产品范围
 
-**状态：** Phase 0 / Phase 1 当前实现范围
+**状态：** Phase 0 / Phase 1 已完成；iteration-3 已交付 Phase 2A 固定收益纵向切片，其余 Phase 2 与 Phase 3+ 仍为后续范围
 
-**实现状态：** 已形成可运行候选；最终验收由 Human 基于 Orchestrator 的确定性证据、Quality test report 与最终一致性 Audit 决定
+**实现状态：** 当前能力以已合并代码、冻结合同和可重放本地证据为准，不把局部纵向切片扩写为完整 Phase 或最终产品
 
 **来源：** `README.md`、`interface/`、`web-dm/` 与当前生产实现
 
@@ -12,7 +12,7 @@ ficant 是面向专业投资研究团队的 AI 原生量化研究平台。平台
 
 正式产品终点保持为 `ResearchArtifact`、`SimulationResult`、`ReportArtifact`、`SignalSet` 和 `TargetExposure`。平台不拥有订单和外部交易执行，不建设 OMS、EMS、对外报单、清算、结算或投资组合会计。
 
-首个市场仍是中国国债现券与国债期货；但 iteration-2 只交付 Phase 0 仓库/合同基线和 Phase 1 领域内核，不把后续固定收益算法或完整研究产品页面包装成已实现能力。
+首个市场仍是中国国债现券与国债期货。当前已完成 Phase 0 仓库/合同基线和 Phase 1 领域内核，并在 iteration-3 交付小范围 Phase 2A 国债分析纵向切片；这不表示完整 Phase 2、外部数据适配、完整研究产品页面或 Phase 3+ 已实现。
 
 ## Phase 0 已落地边界
 
@@ -39,6 +39,20 @@ ficant 是面向专业投资研究团队的 AI 原生量化研究平台。平台
 
 `Artifact` 与 `SignalSet` 是不同身份的根对象；`SignalSet` 通过内容寻址引用真实 Artifact，并与 Snapshot、Run、RulePack 和输入产物形成可复核血缘。平台输出仍然是信号和研究证据，不是订单。
 
+## Iteration 3 / Phase 2A 已落地固定收益切片
+
+当前实现覆盖固定利率和贴现国债的现金流、应计利息、净价、全价、到期收益率（YTM）、麦考利久期、修正久期、凸性和 DV01。该切片已经贯通：
+
+```text
+C++20 固定收益内核
+→ 稳定 C ABI
+→ 安全 Rust adapter 与应用用例
+→ 确定性 Arrow Artifact
+→ PostgreSQL / MinIO stage、校验、发布、读取与重放
+```
+
+平台生成的现金流、估值和风险结果保持内部 `BondAnalyticsResult` / Artifact 语义，不写成外部来源的 `Cashflow` 或 `Valuation` 事实。该内部闭环没有实现曲线、Carry/Roll-down、国债期货数值、转换因子（CF）、基差、隐含回购利率（IRR）、最便宜可交割券（CTD）或套保算法，也没有实现外部市场数据源适配。
+
 ## WebApp 产品边界
 
 当前可用产品界面是 Platform Shell，不是完整 DMQuant：
@@ -63,12 +77,14 @@ interface/                           # 所有 WebApp 共用的后台 Protobuf �
 
 WebApp 可以定义独立研究体验，但不能自建身份权限、直连外部数据库、绕过 Snapshot/ResearchGraph、覆盖共享事实或携带平行后台。
 
-## 明确不在本轮范围
+## 明确尚未实现与后续范围
 
-- Phase 2 的现金流生成、应计利息、净价/全价、收益率、久期、DV01、曲线、基差、IRR、CTD 与套保算法；当前 C++ 仅证明固定工具链、可重放构建和 ABI 边界。
-- 完整 DMQuant 策略生成、回测、Artifact 浏览、多 run 比较及静态原型中的高级分析页面。
+- Phase 2 剩余的曲线、Carry/Roll-down、国债期货数值、CF、基差、IRR、CTD 与套保算法。
+- Phase 3 的外部数据源适配、采集与快照数据平台；当前 Snapshot 领域对象和内部 Artifact 闭环不能视为外部数据接入。
+- 完整 DMQuant 业务 WebApp，包括策略生成、回测、Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell。
 - openGauss 迁移、GeneratedNode/gVisor 业务运行、OMS/EMS 和任何外部交易执行。
 - 信用债、ABS、可转债、完整利率互换生命周期、真实询价通讯与清算交割。
+- README Phase 4–9 的 ResearchGraph 运行时、研究 Lab、仿真、AI 基础设施和后续发布流程仍为规划能力，不得描述为当前已完成。
 
 ## Validity
 

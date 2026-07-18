@@ -284,18 +284,22 @@ expect_fail "unpinned image" "$gate" --check-ci "$tmp/unpinned-image.yml"
 printf '%s\n' Cargo.toml web-dm/package.json web-dm/pnpm-lock.yaml >"$tmp/safe-paths"
 "$gate" --check-path-list "$tmp/safe-paths"
 printf '%s\n' \
-  .hoqa/SKILL.md \
-  .hoqa/references/contracts.md \
-  .hoqa/state.toml \
-  .hoqa/migration-map.md \
-  .hoqa/history/proqaid-superseded/README.md >"$tmp/safe-hoqa-paths"
+  AGENTS.md \
+  scripts/check-fast.ps1 \
+  scripts/check.ps1 \
+  docs/development.md \
+  docs/architecture/adr/0009-opaid-local-development-and-cicd-release-boundary.md \
+  docs/history/hoqa/governance/SKILL.md \
+  docs/history/hoqa/governance/references/contracts.md \
+  docs/history/hoqa/governance/state.toml \
+  docs/history/hoqa/governance/migration-map.md \
+  docs/history/hoqa/governance/history/proqaid-superseded/README.md >"$tmp/safe-hoqa-paths"
 "$gate" --check-path-list "$tmp/safe-hoqa-paths"
-expect_ignored .hoqa/state.toml false
 printf '%s\n' \
   .github/scripts/verify-cargo-reachability.py \
   .github/scripts/verify-license-inventory.py \
   .github/scripts/verify-risk-acceptance.py \
-  deploy/execution/execution-validator.py \
+  docs/history/hoqa/deploy-execution/execution-validator.py \
   tests/oracle/china-rates/validator.py \
   tests/oracle/china-rates/quantlib_oracle.cpp >"$tmp/safe-python-gate-tools"
 "$gate" --check-path-list "$tmp/safe-python-gate-tools"
@@ -311,7 +315,7 @@ expect_ignored docs/releases/secrets/value.json true
 expect_ignored .github/scripts/tests/fixtures/Secret/value.json true
 expect_ignored docs/secretary-notes.md false
 
-for path in '.proqaid/context.md' '.superpowers/plan.md' 'unknown-root/file.txt' '.env.production' 'keys/release.pem' 'docs/worker-notes.tmp' 'docs/releases/KeY/value.txt' 'docs/releases/SECRET/value.txt' '.github/scripts/tests/fixtures/Secret/value.json' 'docs/releases/Workers/value.txt' 'docs/releases/WorkTree/value.txt' 'docs/releases/CACHE/value.txt' 'docs/releases/.Cache/value.txt'; do
+for path in '.hoqa/state.toml' '.hoqa/SKILL.md' 'deploy/execution/run.sh' 'deploy/execution/execution-validator.py' '.proqaid/context.md' '.superpowers/plan.md' 'unknown-root/file.txt' '.env.production' 'keys/release.pem' 'docs/worker-notes.tmp' 'docs/releases/KeY/value.txt' 'docs/releases/SECRET/value.txt' '.github/scripts/tests/fixtures/Secret/value.json' 'docs/releases/Workers/value.txt' 'docs/releases/WorkTree/value.txt' 'docs/releases/CACHE/value.txt' 'docs/releases/.Cache/value.txt'; do
   printf '%s\n' "$path" >"$tmp/unsafe-path"
   expect_fail "unsafe path $path" "$gate" --check-path-list "$tmp/unsafe-path"
 done

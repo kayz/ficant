@@ -1,18 +1,20 @@
-# ADR-0008：采用 HOQA 治理基线
+# ADR-0008：采用 HOQA 治理基线（历史）
 
-- 状态：Accepted
+- 状态：Superseded by ADR-0009
 - 日期：2026-07-15
 - 范围：项目治理、Human/Model 分工、Worker 编排、测试、环境、交付与关闭
+
+> 本文只保留 HOQA 时期的决策与审计事实。自 ADR-0009 生效后，OPAID 管理本地开发与确定性自测，中央 CI/CD 管理发布；本文以及 `docs/history/hoqa/**` 均不再是活动执行入口。
 
 ## 背景
 
 项目已形成可复用的产品目标、架构边界、业务实现、测试资产、环境能力、runner 和历史证据，但原 PROQAID 基线把七个责任视角、阶段门、频繁 Review 与角色交接同时暴露给执行过程。这增加了切换和恢复成本，也使业务判断、自动化测试、执行器权限与交付操作容易相互混淆。
 
-本决策只迁移治理机制，不否定已接受的产品事实、技术 ADR、实现、测试数据、缺陷、风险或证据。完整承接关系见 `.hoqa/migration-map.md`，可恢复状态见 `.hoqa/state.toml`。
+本决策当时只迁移治理机制，不否定已接受的产品事实、技术 ADR、实现、测试数据、缺陷、风险或证据。原完整承接关系和可恢复状态现分别归档于 `docs/history/hoqa/governance/migration-map.md` 与 `docs/history/hoqa/governance/state.toml`。
 
 ## 决策
 
-HOQA 是项目唯一活动软件工程治理方法。活动治理包位于 `.hoqa/`；原 `.proqaid` 和项目本地 PROQAID skill 已整体移入 `.hoqa/history/proqaid-superseded/`，只能用于历史审计，不得驱动当前工作。
+在本 ADR 有效期间，HOQA 是项目唯一活动软件工程治理方法，治理包位于 `.hoqa/`；原 `.proqaid` 和项目本地 PROQAID skill 当时移入 `.hoqa/history/proqaid-superseded/`。上述完整治理包现已整体归档到 `docs/history/hoqa/governance/`，只能用于历史审计，不得驱动当前工作。
 
 ### 参与者与责任
 
@@ -47,7 +49,7 @@ VPS `47.100.66.40`、`greatquant.com`、应用名 `dm` 仍是 UAT/发布目标�
 
 ### 阶段与关闭
 
-当前迭代按 HOQA 的 Align/Decide、Execute、Test、Operate、Close 组织。进入实现前必须具有清晰目标、范围、非目标、Human/Model 分工、技术边界和可验证接受；进入 Test 前必须有集成候选；进入 Operate 前必须确认该迭代确需 SIT 或发布准备。
+本 ADR 有效期间的迭代按 HOQA 的 Align/Decide、Execute、Test、Operate、Close 组织。进入实现前必须具有清晰目标、范围、非目标、Human/Model 分工、技术边界和可验证接受；进入 Test 前必须有集成候选；进入 Operate 前必须确认该迭代确需 SIT 或发布准备。
 
 关闭要求：冻结接受满足；集成确定性验证通过；Quality 报告无阻断缺陷；适用的 SIT/发布准备证据与候选绑定；最终文档与 Human 意图、代码和证据一致；Audit 通过；Human 接受业务结果和剩余风险。UAT 不属于关闭条件。
 
@@ -57,11 +59,11 @@ HOQA 将复杂性封装在参与者职责、Worker 合同和 runner 内部，而
 
 ## 隔离边界与风险
 
-- 治理事实与历史证据隔离：`.hoqa/` 是活动基线，`.hoqa/history/**` 只读且无权威性。
+- 治理事实与历史证据隔离：在本 ADR 有效期间，`.hoqa/` 是活动基线、`.hoqa/history/**` 只读且无权威性；现在二者均位于 `docs/history/hoqa/governance/`，只作历史证据。
 - 判断与执行隔离：参与者制定和接受合同，Worker 只执行有界任务。
 - 测试与开发隔离：Quality/Test Worker 不监督或修改开发；Orchestrator/Development Worker 不修改冻结测试语义。
 - 环境与凭证隔离：普通 Worker 无 UAT/root key 权限；Human 承担低可观测操作。
-- 风险：角色名减少可能让责任被误认为消失。缓解方式是 `.hoqa/state.toml`、checklist 和 runner profile 明确映射。
+- 风险：角色名减少可能让责任被误认为消失。当时的缓解方式是 `.hoqa/state.toml`、checklist 和 runner profile 明确映射；这些材料现已归档且无活动权威性。
 - 风险：历史 PROQAID 文本可能被误读为活动规则。缓解方式是移动到 superseded 目录、历史文档加标记并由仓库策略禁止重新创建 `.proqaid`。
 
 ## 替代方案
@@ -73,8 +75,8 @@ HOQA 将复杂性封装在参与者职责、Worker 合同和 runner 内部，而
 
 ## 后续迁移条件
 
-只有 Human 明确改变治理方法，或现行 HOQA 无法表达新的产品目标、凭证权限或审计责任时，才重新审议本 ADR。runner、模型或操作系统变化不构成治理迁移；应优先封装在执行模块和机器配置内部。
+本条件已由 Human 采用 OPAID 并以中央 CI/CD 管理发布的决定触发。后续活动边界以 ADR-0009 为准，不再通过修改本历史 ADR 恢复 HOQA 或旧 runner。
 
 ## 影响
 
-ADR-0008 取代所有活动 PROQAID 治理机制和旧七角色阶段门，但不取代 ADR-0001 至 ADR-0007 的有效技术决策。iteration-1/2 的 PROQAID verdict 仍是当时的历史事实，不转换为当前 HOQA verdict。
+ADR-0008 当时取代所有活动 PROQAID 治理机制和旧七角色阶段门，但不取代 ADR-0001 至 ADR-0007 的有效技术决策。ADR-0009 现已取代 ADR-0008 的活动治理地位；iteration-1/2 的 PROQAID verdict 与 HOQA 时期记录仍是当时的历史事实，不转换为当前 OPAID 状态。
