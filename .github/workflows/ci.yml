@@ -246,6 +246,20 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Capture official OSV snapshot digests for lock refresh
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --retry 5 --retry-all-errors -fL -o /tmp/crates.io-all.zip 'https://storage.googleapis.com/download/storage/v1/b/osv-vulnerabilities/o/crates.io%2Fall.zip?generation=1784434995145173&alt=media' &
+          crates_pid=$!
+          curl --retry 5 --retry-all-errors -fL -o /tmp/PyPI-all.zip 'https://storage.googleapis.com/download/storage/v1/b/osv-vulnerabilities/o/PyPI%2Fall.zip?generation=1784459283605770&alt=media' &
+          pypi_pid=$!
+          curl --retry 5 --retry-all-errors -fL -o /tmp/npm-all.zip 'https://storage.googleapis.com/download/storage/v1/b/osv-vulnerabilities/o/npm%2Fall.zip?generation=1784435012452776&alt=media' &
+          npm_pid=$!
+          wait "$crates_pid" "$pypi_pid" "$npm_pid"
+          stat -c '%n %s' /tmp/crates.io-all.zip /tmp/PyPI-all.zip /tmp/npm-all.zip
+          sha256sum /tmp/crates.io-all.zip /tmp/PyPI-all.zip /tmp/npm-all.zip
+          exit 1
       - run: bash .github/scripts/verify-supply-chain.sh
         env:
           FICANT_GATE_OUTPUT_DIR: ${{ runner.temp }}/ficant-supply-evidence
