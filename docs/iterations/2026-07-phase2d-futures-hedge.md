@@ -38,6 +38,7 @@
 
 ## 最终真实测试证据
 
+- GitHub 同步候选使用中央 supply-chain 在精确候选树生成的 Syft SBOM 刷新一方源码完整性锁；`verify-license-inventory.py verify --require-first-party` exit 0，第三方许可证判断与 allowlist 未改变。
 - `./scripts/check-fast.ps1`：退出码 0；Rust workspace check、非环境测试和 storage library tests 全部通过。
 - `./scripts/check.ps1`：21/21 步退出码 0；严格 Clippy 零告警，CTest 8/8，Phase 2B/2C/2D 验收矩阵分别 16/16、18/18、18/18，Phase 2D 独立 Decimal Oracle 3/3、确定性 Arrow 1/1，Python 合同 1/1，Web 29/29。
 - `./scripts/check.ps1 -IncludeIntegration`：27/27 步退出码 0；除上述重复门禁外，PostgreSQL migration 4/4、Phase 1 业务闭环 1/1、负向不变量 13/13、Phase 2B/2C/2D 真实 PostgreSQL 16 + Ceph RGW 闭环各 1/1。
