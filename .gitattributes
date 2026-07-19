@@ -1,5 +1,6 @@
 /.gitattributes text eol=lf
 *.rs text eol=lf
+*.sh text eol=lf
 /Cargo.lock text eol=lf
 /python/uv.lock text eol=lf
 /.github/workflows/*.yml text eol=lf
