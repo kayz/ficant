@@ -39,6 +39,7 @@
 
 ## 最终真实测试证据
 
+- GitHub 同步候选使用中央 supply-chain 在精确候选树生成的 Syft SBOM 刷新一方源码完整性锁；`verify-license-inventory.py verify --require-first-party` exit 0，第三方许可证判断与 allowlist 未改变。
 - 独立 Oracle：`uv run --offline --locked --project python python -m pytest tests/oracle/china-rates/test_phase2c_manual_oracle.py -q`，exit 0，3/3；覆盖冻结 expected 精确生成、四个期限品种及年付息/半年付息和持有期有/无付息，并校验中金所官方来源事实摘要 `d1149c4594f3cc14ad977200e1bab6e48de3475d17dc03c7bb096ca369e05499`。
 - Phase 2C acceptance matrix：`uv run --offline --locked --project python python tests/phase2c/verify_acceptance_matrix.py`，exit 0，18/18；输入、expected、来源 manifest、Oracle、领域/ABI/native/Arrow/SIT 路径均由 SHA-256 fail closed。
 - `./scripts/check-fast.ps1`：exit 0；包含 Phase 2C domain/native 回归和 storage library 3/3。
