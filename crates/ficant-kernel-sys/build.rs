@@ -13,6 +13,8 @@ fn main() {
         "src/day_count.cpp",
         "src/bond_math.cpp",
         "src/kernel_api.cpp",
+        "src/curve_math.cpp",
+        "src/curve_api.cpp",
     ];
 
     let mut build = cc::Build::new();
@@ -41,9 +43,14 @@ fn main() {
         println!("cargo:rerun-if-changed={}", source.display());
         build.file(source);
     }
-    println!(
-        "cargo:rerun-if-changed={}",
-        kernel.join("include/ficant_kernel.h").display()
-    );
+    for header in [
+        "include/ficant_kernel.h",
+        "src/bond_math.hpp",
+        "src/curve_math.hpp",
+        "src/date_utils.hpp",
+        "src/day_count.hpp",
+    ] {
+        println!("cargo:rerun-if-changed={}", kernel.join(header).display());
+    }
     build.compile("ficant_kernel");
 }

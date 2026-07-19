@@ -1,0 +1,162 @@
+{
+  "schema": "ficant.quality.phase2b.acceptance-matrix.v1",
+  "base_commit": "5b2be2453937b82091b34e256bc4fb69aa9e7415",
+  "guarded_files": {
+    "tests/golden-cases/china-rates/phase2b-curve-carry-inputs.json": "5972e8b1207cf2692e34293c03f3a9abd5ece20be143eac38e58d87e95374164",
+    "tests/golden-cases/china-rates/expected/phase2b-curve-carry-v1-expected.json": "1036238412534f98d6ba95c60320a4b575f65c7792b7cb76adada973b669051c",
+    "tests/golden-cases/china-rates/expected/phase2b-quantlib-1.42.1-output.json": "d16650f927ba681209215e7c13c0ca7f8e12cbd494ce6087187f72fad7698346",
+    "tests/oracle/china-rates/phase2b_manual_oracle.py": "86aab16cb23ee2869c2abb2e7e7dcb8a15f17d362027fd358c8a5d9564edfa1c",
+    "tests/oracle/china-rates/phase2b_quantlib_oracle.py": "0d842a9890a90a1ee1ef62b156346e6f9409527e6249b4a72b0a20a51b5b21bc",
+    "crates/ficant-fixed-income-native/tests/phase2b_reference_acceptance.rs": "c22823eb345d9fab687d818f04cd99bccea8fb6cadb1eaf39f5e90f4116a5a9a",
+    "crates/ficant-storage/tests/carry_roll_arrow.rs": "269ef198116ae3acd9d3ed21f9422b1944b692392bfcd3317b97f1af29642762",
+    "crates/ficant-storage/tests/carry_roll_sit.rs": "2a0fd60b14a4674f46d3df5336d15c84349113801a5cffad4c0d7f9fddc9410f",
+    "cpp/fixed-income-kernel/tests/test_carry_roll.cpp": "2998b0508335b028293df3189d359c4a7ebd26ea6680d77eb70113c9fbd996d9",
+    "cpp/fixed-income-kernel/tests/test_i3_regression.cpp": "ec47377146b02e441f4112112240f859b3482e29737773dfa50999d7862b66cc"
+  },
+  "acceptance": [
+    {
+      "id": "P2B-001",
+      "category": "curve-domain-boundaries",
+      "automation": [{
+        "source": "crates/ficant-domain/tests/yield_curve_contracts.rs",
+        "selector": "curve_rejects_too_few_unsorted_duplicate_and_prevaluation_nodes",
+        "command": "cargo test --locked -p ficant-domain --test yield_curve_contracts"
+      }]
+    },
+    {
+      "id": "P2B-002",
+      "category": "curve-c-abi",
+      "automation": [{
+        "source": "cpp/fixed-income-kernel/tests/test_curve_interpolation.cpp",
+        "selector": "int main()",
+        "command": "ctest --test-dir build/local-cpp-vs-llvm-19 --output-on-failure"
+      }]
+    },
+    {
+      "id": "P2B-003",
+      "category": "curve-manual-oracle",
+      "automation": [{
+        "source": "crates/ficant-fixed-income-native/tests/phase2b_reference_acceptance.rs",
+        "selector": "production_curve_matches_phase2b_frozen_manual_oracle",
+        "command": "cargo test --locked -p ficant-fixed-income-native --test phase2b_reference_acceptance"
+      }]
+    },
+    {
+      "id": "P2B-004",
+      "category": "coupon-carry-roll",
+      "automation": [{
+        "source": "crates/ficant-fixed-income-native/tests/phase2b_reference_acceptance.rs",
+        "selector": "production_carry_roll_matches_coupon_and_discount_manual_oracle",
+        "command": "cargo test --locked -p ficant-fixed-income-native --test phase2b_reference_acceptance"
+      }]
+    },
+    {
+      "id": "P2B-005",
+      "category": "discount-carry-roll",
+      "automation": [{
+        "source": "crates/ficant-fixed-income-native/tests/phase2b_reference_acceptance.rs",
+        "selector": "production_carry_roll_matches_coupon_and_discount_manual_oracle",
+        "command": "cargo test --locked -p ficant-fixed-income-native --test phase2b_reference_acceptance"
+      }]
+    },
+    {
+      "id": "P2B-006",
+      "category": "paid-cashflow-ownership",
+      "automation": [{
+        "source": "crates/ficant-fixed-income-native/tests/carry_roll_acceptance.rs",
+        "selector": "coupon_bond_carry_roll_binds_curve_and_paid_cashflow_identity",
+        "command": "cargo test --locked -p ficant-fixed-income-native --test carry_roll_acceptance"
+      }]
+    },
+    {
+      "id": "P2B-007",
+      "category": "decomposition-identities",
+      "automation": [{
+        "source": "crates/ficant-domain/tests/yield_curve_contracts.rs",
+        "selector": "carry_roll_measures_enforce_the_frozen_decomposition_identity",
+        "command": "cargo test --locked -p ficant-domain --test yield_curve_contracts"
+      }]
+    },
+    {
+      "id": "P2B-008",
+      "category": "metadata-and-lineage",
+      "automation": [{
+        "source": "crates/ficant-storage/tests/carry_roll_arrow.rs",
+        "selector": "native_result_round_trips_through_deterministic_arrow_file",
+        "command": "cargo test --locked -p ficant-storage --test carry_roll_arrow"
+      }]
+    },
+    {
+      "id": "P2B-009",
+      "category": "independent-oracles",
+      "automation": [{
+        "source": "tests/phase2b/verify_acceptance_matrix.py",
+        "selector": "def verify_oracles():",
+        "command": "python tests/phase2b/verify_acceptance_matrix.py"
+      }]
+    },
+    {
+      "id": "P2B-010",
+      "category": "deterministic-arrow",
+      "automation": [{
+        "source": "crates/ficant-storage/tests/carry_roll_arrow.rs",
+        "selector": "native_result_round_trips_through_deterministic_arrow_file",
+        "command": "cargo test --locked -p ficant-storage --test carry_roll_arrow"
+      }]
+    },
+    {
+      "id": "P2B-011",
+      "category": "input-drift-fail-closed",
+      "automation": [{
+        "source": "crates/ficant-storage/tests/carry_roll_arrow.rs",
+        "selector": "negative test deliberately reuses the same declared curve reference",
+        "command": "cargo test --locked -p ficant-storage --test carry_roll_arrow"
+      }]
+    },
+    {
+      "id": "P2B-012",
+      "category": "verified-publication-replay",
+      "automation": [{
+        "source": "crates/ficant-storage/tests/carry_roll_arrow.rs",
+        "selector": "publish_and_replay_use_verified_artifact_lifecycle",
+        "command": "cargo test --locked -p ficant-storage --test carry_roll_arrow"
+      }]
+    },
+    {
+      "id": "P2B-013",
+      "category": "real-postgres-ceph-restart",
+      "automation": [{
+        "source": "crates/ficant-storage/tests/carry_roll_sit.rs",
+        "selector": "real_postgres_ceph_publish_restart_replay_and_tamper_fail_closed",
+        "command": "cargo test --locked -p ficant-storage --test carry_roll_sit -- --test-threads=1"
+      }]
+    },
+    {
+      "id": "P2B-014",
+      "category": "tamper-and-cleanup",
+      "automation": [{
+        "source": "crates/ficant-storage/tests/carry_roll_sit.rs",
+        "selector": "real_postgres_ceph_publish_restart_replay_and_tamper_fail_closed",
+        "command": "cargo test --locked -p ficant-storage --test carry_roll_sit -- --test-threads=1"
+      }]
+    },
+    {
+      "id": "P2B-015",
+      "category": "phase2a-frozen-regression",
+      "automation": [{
+        "source": "crates/ficant-fixed-income-native/tests/cgb_reference_acceptance.rs",
+        "selector": "q001_q023_production_native_matches_frozen_reference_cases",
+        "command": "cargo test --locked -p ficant-fixed-income-native --test cgb_reference_acceptance"
+      }]
+    },
+    {
+      "id": "P2B-016",
+      "category": "calendar-date-regression",
+      "automation": [{
+        "source": "cpp/fixed-income-kernel/tests/test_i3_regression.cpp",
+        "selector": "test_gregorian_january_february_round_trip",
+        "command": "ctest --test-dir build/local-cpp-vs-llvm-19 --output-on-failure"
+      }]
+    }
+  ]
+}

@@ -1127,6 +1127,8 @@ PostgreSQL 16 schema
 
 **目标：** 建立平台权威基准，供 AI 节点和研究实现比较。
 
+**当前状态（2026-07-19）：** Phase 2A 已交付固定利率/贴现国债的现金流、价格、YTM、久期、凸性与 DV01；Phase 2B 已交付区间内实际日数线性 YTM 曲线和未融资 Carry/Roll-down 分解，并贯通独立 Oracle、确定性 Arrow 与真实 PostgreSQL/Ceph RGW 发布重放。国债期货、可交割券、CF、基差、IRR、CTD 和套保仍未实现；验收口径见 [Phase 2B iteration brief](docs/iterations/2026-07-phase2b-curve-carry-roll.md)。
+
 优先实现：
 
 - 债券现金流；

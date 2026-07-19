@@ -59,7 +59,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 .\scripts\check.ps1
 ```
 
-它在不依赖目标服务器的前提下运行：严格 Rust format/Clippy/build/test、生成契约测试、C++ Release build 与四项 CTest、acceptance matrix 完整性、Python 生成契约测试，以及 Web typecheck/build/Vitest。默认不运行需要持久化服务的测试。
+它在不依赖目标服务器的前提下运行：严格 Rust format/Clippy/build/test、生成契约测试、C++ Release build 与六项 CTest、Phase 2A/2B acceptance matrix 完整性、Python 生成契约测试，以及 Web typecheck/build/Vitest。默认不运行需要持久化服务的测试。
 
 可选本地集成回归：
 
@@ -77,7 +77,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 - `FICANT_TEST_S3_SECRET_KEY`
 - `FICANT_TEST_RUNTIME_IMAGE_DIGEST`
 
-脚本不会创建、部署或清理服务器，也不会打印这些值。数据库必须可以安全地被测试 migration 重置；不得指向共享、测试发布或生产数据库。
+脚本不会创建、部署或清理服务器，也不会打印这些值。数据库必须可以安全地被测试 migration 重置；不得指向共享、测试发布或生产数据库。集成计划依次覆盖 migration、Phase 1 正向业务闭环、13 项负向不变量，以及 Phase 2B Carry/Roll-down 的真实发布重放与篡改检测。
 
 仓库内 `deploy/dev/docker-compose.yml` 提供锁定镜像摘要的 PostgreSQL 与单节点 Ceph RGW 开发夹具，可用于准备上述一次性环境；它不是生产 Ceph 部署模板。RGW 使用 `FICANT_S3_ACCESS_KEY`、`FICANT_S3_SECRET_KEY`、`FICANT_S3_BUCKET` 和可选的 `FICANT_S3_PORT`，对象存储数据位于独立 `ceph-data` 命名卷。检查脚本本身仍不自动启动、停止或下载该夹具。
 

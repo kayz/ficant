@@ -1,5 +1,11 @@
 # 交付发布说明
 
+## Phase 2B 收益率曲线与 Carry/Roll-down 候选（2026-07-19）
+
+- 新增 CFETS 风格区间内线性 YTM 曲线，以及固定利率/贴现国债的未融资 Carry/Roll-down 分解；公共 Protobuf、数据库 migration 和既有 Phase 2A expected/Oracle/容差不变。
+- 生产 Rust/C++ 结果通过独立 Decimal Oracle 与官方 QuantLib 1.42.1 对照；结果以确定性 Arrow Artifact 绑定完整输入和血缘，并通过真实 PostgreSQL 16 + Ceph RGW 发布、重启重放和篡改 fail-closed。
+- 国债期货、可交割券、CF、基差、IRR、CTD、套保、外部数据适配和 UI 均不在本候选；完整验收与残余风险以 [`docs/iterations/2026-07-phase2b-curve-carry-roll.md`](../iterations/2026-07-phase2b-curve-carry-roll.md) 为准。
+
 ## Ceph RGW 对象存储迁移候选（2026-07-19）
 
 - 新增独立迭代，把对象存储服务端从 MinIO 更换为 Ceph RGW 20.2.2，把 Rust client 从 `minio 0.4.0` 更换为 Apache `object_store 0.14.1`；公共 Protobuf、数据库 migration 和业务数值语义不变。

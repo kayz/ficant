@@ -1,0 +1,58 @@
+{
+  "schema": "ficant.test-expected.phase2b-curve-carry.v1",
+  "convention": "cfets-ytm-carry-roll-v1",
+  "tolerances": {
+    "dates_metadata_identities": "exact",
+    "yield_abs": "0.000000000002",
+    "price_and_return_abs": "0.000000010000"
+  },
+  "provenance": {
+    "expected_source": "independent_decimal_python_oracle",
+    "production_rust_or_cpp_used": false,
+    "manual_formula_layer": "executed",
+    "quantlib_required_version": "1.42.1",
+    "quantlib_agreement": "verified_official_1_42_1"
+  },
+  "curve_results": {
+    "CURVE-EXACT-NODE": {
+      "query_date": "2028-01-01",
+      "yield_to_maturity": "0.019000000000"
+    },
+    "CURVE-EXACT-MIDPOINT": {
+      "query_date": "2027-04-11",
+      "yield_to_maturity": "0.015000000000"
+    },
+    "CURVE-UNEVEN-INTERVAL": {
+      "query_date": "2027-10-01",
+      "yield_to_maturity": "0.018163636364"
+    }
+  },
+  "carry_results": {
+    "CARRY-COUPON-UPWARD": {
+      "initial_curve_query_date": "2028-12-31",
+      "rolled_curve_query_date": "2028-07-18",
+      "initial_yield": "0.022490437158",
+      "rolled_yield": "0.020903005464",
+      "initial_dirty_price": "100.502648470911",
+      "horizon_dirty_at_initial_yield": "99.524290105504",
+      "horizon_dirty_at_rolled_yield": "99.830565820442",
+      "paid_cashflows": "2.000000000000",
+      "carry": "1.021641634593",
+      "roll_down": "0.306275714938",
+      "total_return": "1.327917349532"
+    },
+    "CARRY-DISCOUNT-UPWARD": {
+      "initial_curve_query_date": "2029-12-30",
+      "rolled_curve_query_date": "2028-12-30",
+      "initial_yield": "0.027327127660",
+      "rolled_yield": "0.022480874317",
+      "initial_dirty_price": "91.385970049520",
+      "horizon_dirty_at_initial_yield": "93.726619992303",
+      "horizon_dirty_at_rolled_yield": "94.781092923699",
+      "paid_cashflows": "0.000000000000",
+      "carry": "2.340649942783",
+      "roll_down": "1.054472931395",
+      "total_return": "3.395122874178"
+    }
+  }
+}

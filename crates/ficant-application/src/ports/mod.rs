@@ -3,6 +3,7 @@ mod analytics;
 mod artifacts;
 mod blob_store;
 mod cursor;
+mod curves;
 mod definitions;
 mod execution;
 mod facts;
@@ -22,6 +23,9 @@ pub use analytics::{
 pub use artifacts::{ArtifactRepository, PublishArtifact};
 pub use blob_store::{BeginBlobStage, BlobStore, StagedBlobRef, VerifiedBlobRef, VerifyBlobStage};
 pub use cursor::{AeadCursorCodec, Cursor, CursorKey};
+pub use curves::{
+    CarryRollArtifactCodec, CarryRollEngine, EncodedCarryRollArtifact, YieldCurveEngine,
+};
 pub use definitions::{
     AppendDefinitionVersion, DefinitionIdentity, DefinitionKind, DefinitionRepository,
     DefinitionValue, InstrumentDefinition, InstrumentSubtype,

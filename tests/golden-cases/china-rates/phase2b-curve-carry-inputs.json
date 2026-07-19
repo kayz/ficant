@@ -1,0 +1,54 @@
+{
+  "schema": "ficant.test-input.phase2b-curve-carry.v1",
+  "valuation_date": "2026-07-19",
+  "market_timezone": "Asia/Shanghai",
+  "calendar": {
+    "id": "phase2b-weekend-calendar-v1",
+    "coverage_start": "2026-01-01",
+    "coverage_end": "2031-01-10",
+    "non_business_days": [],
+    "work_weekends": []
+  },
+  "curve": {
+    "snapshot_id": "phase2b-cfets-curve-snapshot-v1",
+    "interpolation": "LINEAR_YIELD_ACTUAL_DAYS",
+    "nodes": [
+      {"maturity_date": "2027-01-01", "yield_to_maturity": "0.012500000000"},
+      {"maturity_date": "2027-07-20", "yield_to_maturity": "0.017500000000"},
+      {"maturity_date": "2028-01-01", "yield_to_maturity": "0.019000000000"},
+      {"maturity_date": "2029-01-01", "yield_to_maturity": "0.022500000000"},
+      {"maturity_date": "2030-07-19", "yield_to_maturity": "0.030000000000"}
+    ]
+  },
+  "curve_cases": [
+    {"id": "CURVE-EXACT-NODE", "query_date": "2028-01-01"},
+    {"id": "CURVE-EXACT-MIDPOINT", "query_date": "2027-04-11"},
+    {"id": "CURVE-UNEVEN-INTERVAL", "query_date": "2027-10-01"}
+  ],
+  "carry_cases": [
+    {
+      "id": "CARRY-COUPON-UPWARD",
+      "bond": {
+        "issue_date": "2026-01-01",
+        "maturity_date": "2029-01-01",
+        "coupon_rate": "0.020000000000",
+        "frequency": 1,
+        "face_value": "100.000000000000"
+      },
+      "initial_settlement": "2026-07-20",
+      "horizon_settlement": "2027-01-02"
+    },
+    {
+      "id": "CARRY-DISCOUNT-UPWARD",
+      "bond": {
+        "issue_date": "2026-01-01",
+        "maturity_date": "2029-12-31",
+        "coupon_rate": "0.000000000000",
+        "frequency": 1,
+        "face_value": "100.000000000000"
+      },
+      "initial_settlement": "2026-07-20",
+      "horizon_settlement": "2027-07-20"
+    }
+  ]
+}

@@ -1,13 +1,181 @@
 use chrono::{NaiveDate, TimeDelta};
-use ficant_application::ports::BondAnalyticsEngine;
+use ficant_application::ports::{BondAnalyticsEngine, CarryRollEngine, YieldCurveEngine};
 use ficant_domain::analytics::{
     ABI_VERSION, AnalyticsError, AnalyticsMeasures, AnalyticsMode, BondAnalyticsInput,
     BondAnalyticsResult, BusinessDayConvention, CalendarRequirement, CalendarResolution,
     CouponFrequency, DayCountConvention, DerivedCashflow, FixedDecimal,
 };
+use ficant_domain::curves::{
+    CarryRollInput, CarryRollMeasures, CarryRollResult, YieldCurveInterpolation, YieldCurvePoint,
+    YieldCurveQuery,
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NativeBondAnalyticsEngine;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NativeYieldCurveEngine;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NativeCarryRollEngine;
+
+impl YieldCurveEngine for NativeYieldCurveEngine {
+    fn interpolate(&self, query: &YieldCurveQuery) -> Result<YieldCurvePoint, AnalyticsError> {
+        if ficant_kernel_sys::abi_version() != ABI_VERSION {
+            return Err(AnalyticsError::AbiMismatch);
+        }
+        let curve = query.curve();
+        let nodes = curve
+            .nodes()
+            .iter()
+            .map(|node| {
+                Ok(ficant_kernel_sys::YieldCurveNodeV1 {
+                    maturity_date: epoch_days(node.maturity_date())?,
+                    yield_to_maturity: decimal_to_f64(node.yield_to_maturity())?,
+                })
+            })
+            .collect::<Result<Vec<_>, AnalyticsError>>()?;
+        let input = ficant_kernel_sys::YieldCurveInputV1 {
+            valuation_date: epoch_days(curve.valuation_date())?,
+            interpolation: match curve.interpolation() {
+                YieldCurveInterpolation::LinearYield => {
+                    ficant_kernel_sys::CURVE_INTERPOLATION_LINEAR_YIELD
+                }
+            },
+            nodes: &nodes,
+        };
+        let (status, result) =
+            ficant_kernel_sys::interpolate_yield_curve(&input, epoch_days(query.query_date())?);
+        map_status(status)?;
+        if result.status_code != ficant_kernel_sys::STATUS_OK {
+            return Err(AnalyticsError::Internal);
+        }
+        YieldCurvePoint::new(query.clone(), decimal_from_f64(result.yield_to_maturity)?)
+            .map_err(|_| AnalyticsError::Internal)
+    }
+}
+
+impl CarryRollEngine for NativeCarryRollEngine {
+    fn calculate(&self, input: &CarryRollInput) -> Result<CarryRollResult, AnalyticsError> {
+        let initial_curve_query = YieldCurveQuery::new(
+            input.curve().clone(),
+            input
+                .initial_curve_query_date()
+                .map_err(|_| AnalyticsError::InvalidInput)?,
+        )
+        .map_err(|_| AnalyticsError::InvalidInput)?;
+        let rolled_curve_query = YieldCurveQuery::new(
+            input.curve().clone(),
+            input
+                .rolled_curve_query_date()
+                .map_err(|_| AnalyticsError::InvalidInput)?,
+        )
+        .map_err(|_| AnalyticsError::InvalidInput)?;
+        let initial_yield = NativeYieldCurveEngine
+            .interpolate(&initial_curve_query)?
+            .yield_to_maturity();
+        let rolled_yield = NativeYieldCurveEngine
+            .interpolate(&rolled_curve_query)?
+            .yield_to_maturity();
+        if !initial_yield.is_positive() || !rolled_yield.is_positive() {
+            return Err(AnalyticsError::InvalidInput);
+        }
+
+        let initial = NativeBondAnalyticsEngine.calculate(&bond_input(
+            input,
+            input.initial_settlement(),
+            initial_yield,
+        )?)?;
+        let horizon_at_initial = NativeBondAnalyticsEngine.calculate(&bond_input(
+            input,
+            input.horizon_settlement(),
+            initial_yield,
+        )?)?;
+        let horizon_at_rolled = NativeBondAnalyticsEngine.calculate(&bond_input(
+            input,
+            input.horizon_settlement(),
+            rolled_yield,
+        )?)?;
+        let paid_cashflows = initial
+            .cashflows()
+            .iter()
+            .filter(|cashflow| cashflow.payment_date() <= input.horizon_settlement())
+            .try_fold(FixedDecimal::ZERO, |total, cashflow| {
+                total.checked_add(cashflow.total())
+            })
+            .map_err(|_| AnalyticsError::Internal)?;
+        let initial_dirty = initial.measures().dirty_price();
+        let horizon_initial_dirty = horizon_at_initial.measures().dirty_price();
+        let horizon_rolled_dirty = horizon_at_rolled.measures().dirty_price();
+        let (status, native) =
+            ficant_kernel_sys::decompose_carry_roll(&ficant_kernel_sys::CarryRollInputV1 {
+                initial_dirty_price: decimal_to_f64(initial_dirty)?,
+                horizon_dirty_at_initial_yield: decimal_to_f64(horizon_initial_dirty)?,
+                horizon_dirty_at_rolled_yield: decimal_to_f64(horizon_rolled_dirty)?,
+                paid_cashflows: decimal_to_f64(paid_cashflows)?,
+            });
+        map_status(status)?;
+        if native.status_code != ficant_kernel_sys::STATUS_OK {
+            return Err(AnalyticsError::Internal);
+        }
+
+        let carry = horizon_initial_dirty
+            .checked_add(paid_cashflows)
+            .and_then(|value| value.checked_sub(initial_dirty))
+            .map_err(|_| AnalyticsError::Internal)?;
+        let roll_down = horizon_rolled_dirty
+            .checked_sub(horizon_initial_dirty)
+            .map_err(|_| AnalyticsError::Internal)?;
+        let total_return = carry
+            .checked_add(roll_down)
+            .map_err(|_| AnalyticsError::Internal)?;
+        verify_native_measure(native.carry, carry)?;
+        verify_native_measure(native.roll_down, roll_down)?;
+        verify_native_measure(native.total_return, total_return)?;
+        let measures = CarryRollMeasures::new(
+            initial_yield,
+            rolled_yield,
+            initial_dirty,
+            horizon_initial_dirty,
+            horizon_rolled_dirty,
+            paid_cashflows,
+            carry,
+            roll_down,
+            total_return,
+        )
+        .map_err(|_| AnalyticsError::Internal)?;
+        Ok(CarryRollResult::new(input.clone(), measures))
+    }
+}
+
+fn bond_input(
+    input: &CarryRollInput,
+    settlement_date: NaiveDate,
+    yield_to_maturity: FixedDecimal,
+) -> Result<BondAnalyticsInput, AnalyticsError> {
+    BondAnalyticsInput::new(
+        input.owner().clone(),
+        input.bond().clone(),
+        input.rule_pack().clone(),
+        input.snapshot().clone(),
+        input.valuation_at().clone(),
+        settlement_date,
+        input.calendar_requirement(),
+        input.calendar().clone(),
+        input.terms().clone(),
+        AnalyticsMode::YieldIn,
+        yield_to_maturity,
+    )
+    .map_err(|_| AnalyticsError::InvalidInput)
+}
+
+fn verify_native_measure(native: f64, exact: FixedDecimal) -> Result<(), AnalyticsError> {
+    let observed = decimal_from_f64(native)?;
+    if observed.scaled().abs_diff(exact.scaled()) > 2 {
+        return Err(AnalyticsError::Internal);
+    }
+    Ok(())
+}
 
 impl BondAnalyticsEngine for NativeBondAnalyticsEngine {
     fn calculate(&self, input: &BondAnalyticsInput) -> Result<BondAnalyticsResult, AnalyticsError> {

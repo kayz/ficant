@@ -10,6 +10,8 @@ add_library(ficant_kernel SHARED
     src/day_count.cpp
     src/bond_math.cpp
     src/kernel_api.cpp
+    src/curve_math.cpp
+    src/curve_api.cpp
 )
 target_compile_features(ficant_kernel PUBLIC cxx_std_20)
 target_compile_definitions(ficant_kernel PRIVATE FICANT_KERNEL_BUILD)
@@ -44,4 +46,6 @@ if(BUILD_TESTING)
   ficant_kernel_test(test_constants_and_layout)
   ficant_kernel_test(test_calculate_bond_smoke)
   ficant_kernel_test(test_i3_regression)
+  ficant_kernel_test(test_curve_interpolation)
+  ficant_kernel_test(test_carry_roll)
 endif()
