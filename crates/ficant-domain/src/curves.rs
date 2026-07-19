@@ -4,7 +4,7 @@ use crate::analytics::{
     AnalyticsObjectRef, BondTerms, CalendarBinding, CalendarRequirement, FixedDecimal,
     MARKET_TIMEZONE,
 };
-use crate::primitives::{MarketTime, OwnerRef};
+use crate::primitives::{ContentHash, MarketTime, OwnerRef};
 use crate::{DomainErrorCode, DomainResult};
 
 pub const CURVE_RESULT_SCHEMA_ID: &str = "ficant.yield-curve-point.result.v1";
@@ -12,6 +12,8 @@ pub const CURVE_ALGORITHM_ID: &str = "ficant.cgb.ytm-curve.linear";
 pub const CURVE_ALGORITHM_VERSION: u32 = 1;
 pub const CURVE_CONVENTION_PROFILE: &str = "cfets-ytm-linear-v1";
 pub const CARRY_ROLL_RESULT_SCHEMA_ID: &str = "ficant.carry-roll.result.v1";
+pub const CARRY_ROLL_ARTIFACT_SCHEMA_ID: &str = "ficant.carry-roll.arrow.v1";
+pub const CARRY_ROLL_ARTIFACT_CODEC_ID: &str = "ficant-carry-roll-arrow/1";
 pub const CARRY_ROLL_ALGORITHM_ID: &str = "ficant.cgb.carry-roll.unfunded";
 pub const CARRY_ROLL_ALGORITHM_VERSION: u32 = 1;
 pub const CARRY_ROLL_CONVENTION_PROFILE: &str = "cfets-ytm-carry-roll-v1";
@@ -280,6 +282,79 @@ impl CarryRollInput {
         self.curve_query_date(self.horizon_settlement)
     }
 
+    /// Returns a deterministic identity over every semantic input field.
+    #[must_use]
+    pub fn fingerprint(&self) -> ContentHash {
+        let mut bytes = Vec::with_capacity(1024);
+        field(&mut bytes, b"ficant.carry-roll.input.v1");
+        object_ref(
+            &mut bytes,
+            self.owner.tenant_id().as_str().as_bytes(),
+            0,
+            &[],
+        );
+        object_ref(
+            &mut bytes,
+            self.owner.owner_id().as_str().as_bytes(),
+            0,
+            &[],
+        );
+        analytics_ref(&mut bytes, &self.bond);
+        analytics_ref(&mut bytes, &self.rule_pack);
+        analytics_ref(&mut bytes, &self.snapshot);
+        field(
+            &mut bytes,
+            &self.valuation_at.instant().timestamp().to_be_bytes(),
+        );
+        field(
+            &mut bytes,
+            &self
+                .valuation_at
+                .instant()
+                .timestamp_subsec_nanos()
+                .to_be_bytes(),
+        );
+        field(&mut bytes, self.valuation_at.market_timezone().as_bytes());
+        date_field(&mut bytes, self.valuation_at.local_trading_date());
+        date_field(&mut bytes, self.initial_settlement);
+        date_field(&mut bytes, self.horizon_settlement);
+        field(&mut bytes, &[self.calendar_requirement as u8]);
+        field(&mut bytes, self.calendar.id().as_bytes());
+        field(&mut bytes, &self.calendar.version().get().to_be_bytes());
+        field(&mut bytes, self.calendar.content_hash().as_bytes());
+        date_field(&mut bytes, self.calendar.coverage_start());
+        date_field(&mut bytes, self.calendar.coverage_end());
+        dates_field(&mut bytes, self.calendar.non_business_days());
+        dates_field(&mut bytes, self.calendar.work_weekends());
+        date_field(&mut bytes, self.terms.issue_date());
+        date_field(&mut bytes, self.terms.maturity_date());
+        field(&mut bytes, &(self.terms.frequency() as u32).to_be_bytes());
+        field(&mut bytes, &(self.terms.day_count() as u32).to_be_bytes());
+        field(
+            &mut bytes,
+            &(self.terms.business_day() as u32).to_be_bytes(),
+        );
+        field(&mut bytes, &self.terms.coupon_rate().scaled().to_be_bytes());
+        field(&mut bytes, &self.terms.face_amount().scaled().to_be_bytes());
+        analytics_ref(&mut bytes, self.curve.curve_snapshot());
+        date_field(&mut bytes, self.curve.valuation_date());
+        field(
+            &mut bytes,
+            &(self.curve.interpolation() as u32).to_be_bytes(),
+        );
+        field(
+            &mut bytes,
+            &u64::try_from(self.curve.nodes().len())
+                .unwrap_or(u64::MAX)
+                .to_be_bytes(),
+        );
+        for node in self.curve.nodes() {
+            date_field(&mut bytes, node.maturity_date());
+            field(&mut bytes, &node.yield_to_maturity().scaled().to_be_bytes());
+        }
+        ContentHash::digest(&bytes)
+    }
+
     #[must_use]
     pub fn owner(&self) -> &OwnerRef {
         &self.owner
@@ -333,6 +408,42 @@ impl CarryRollInput {
     #[must_use]
     pub fn curve(&self) -> &YieldCurveBinding {
         &self.curve
+    }
+}
+
+fn field(target: &mut Vec<u8>, value: &[u8]) {
+    target.extend_from_slice(&u64::try_from(value.len()).unwrap_or(u64::MAX).to_be_bytes());
+    target.extend_from_slice(value);
+}
+
+fn object_ref(target: &mut Vec<u8>, id: &[u8], version: u64, hash: &[u8]) {
+    field(target, id);
+    field(target, &version.to_be_bytes());
+    field(target, hash);
+}
+
+fn analytics_ref(target: &mut Vec<u8>, reference: &AnalyticsObjectRef) {
+    object_ref(
+        target,
+        reference.version_ref().id().as_str().as_bytes(),
+        reference.version_ref().version().get(),
+        reference.content_hash().as_bytes(),
+    );
+}
+
+fn date_field(target: &mut Vec<u8>, value: NaiveDate) {
+    field(target, value.to_string().as_bytes());
+}
+
+fn dates_field(target: &mut Vec<u8>, values: &[NaiveDate]) {
+    field(
+        target,
+        &u64::try_from(values.len())
+            .unwrap_or(u64::MAX)
+            .to_be_bytes(),
+    );
+    for value in values {
+        date_field(target, *value);
     }
 }
 

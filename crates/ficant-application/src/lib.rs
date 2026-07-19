@@ -13,6 +13,9 @@ pub use use_cases::bond_analytics::{
     BOND_ANALYTICS_MEDIA_TYPE, BondAnalyticsReplay, CalculateBondAnalytics, PublishBondAnalytics,
     ReplayBondAnalytics, map_analytics_error,
 };
+pub use use_cases::carry_roll::{
+    CARRY_ROLL_MEDIA_TYPE, CalculateCarryRoll, CarryRollReplay, PublishCarryRoll, ReplayCarryRoll,
+};
 pub use use_cases::phase1_business_loop::{
     Phase1BusinessInput, Phase1BusinessLoop, Phase1BusinessResult, StagedArtifact, StagedSnapshot,
     replay_collected_journal,
