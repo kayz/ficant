@@ -1,6 +1,7 @@
 use chrono::{NaiveDate, TimeDelta};
 use ficant_application::ports::{
-    BondAnalyticsEngine, CarryRollEngine, FuturesDeliveryEngine, YieldCurveEngine,
+    BondAnalyticsEngine, CarryRollEngine, FuturesDeliveryEngine, FuturesHedgeEngine,
+    YieldCurveEngine,
 };
 use ficant_domain::analytics::{
     ABI_VERSION, AnalyticsError, AnalyticsMeasures, AnalyticsMode, BondAnalyticsInput,
@@ -14,6 +15,7 @@ use ficant_domain::curves::{
 use ficant_domain::futures_delivery::{
     CgbFuturesProduct, FuturesDeliverableInput, FuturesDeliveryMeasures, FuturesDeliveryResult,
 };
+use ficant_domain::futures_hedge::{FuturesHedgeInput, FuturesHedgeMeasures, FuturesHedgeResult};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NativeBondAnalyticsEngine;
@@ -26,6 +28,43 @@ pub struct NativeCarryRollEngine;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NativeFuturesDeliveryEngine;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NativeFuturesHedgeEngine;
+
+impl FuturesHedgeEngine for NativeFuturesHedgeEngine {
+    fn calculate(&self, input: &FuturesHedgeInput) -> Result<FuturesHedgeResult, AnalyticsError> {
+        if ficant_kernel_sys::abi_version() != ABI_VERSION {
+            return Err(AnalyticsError::AbiMismatch);
+        }
+        let (status, native) = ficant_kernel_sys::calculate_cgb_futures_hedge(
+            &ficant_kernel_sys::CgbFuturesHedgeInputV1 {
+                product: match input.product() {
+                    CgbFuturesProduct::TwoYear => ficant_kernel_sys::CGB_FUTURES_TS,
+                    CgbFuturesProduct::FiveYear => ficant_kernel_sys::CGB_FUTURES_TF,
+                    CgbFuturesProduct::TenYear => ficant_kernel_sys::CGB_FUTURES_T,
+                    CgbFuturesProduct::ThirtyYear => ficant_kernel_sys::CGB_FUTURES_TL,
+                },
+                target_dv01: decimal_to_f64(input.target_dv01())?,
+                ctd_dv01_per_100: decimal_to_f64(input.ctd_dv01_per_100())?,
+                conversion_factor: decimal_to_f64(input.conversion_factor())?,
+            },
+        );
+        map_status(status)?;
+        if native.status_code != ficant_kernel_sys::STATUS_OK {
+            return Err(AnalyticsError::Internal);
+        }
+        let measures = FuturesHedgeMeasures::new(
+            decimal_from_f64(native.futures_contract_dv01)?,
+            decimal_from_f64(native.raw_contracts)?,
+            native.recommended_contracts,
+            decimal_from_f64(native.residual_dv01)?,
+            decimal_from_f64(native.hedge_effectiveness)?,
+        )
+        .map_err(|_| AnalyticsError::Internal)?;
+        Ok(FuturesHedgeResult::new(input.clone(), measures))
+    }
+}
 
 impl FuturesDeliveryEngine for NativeFuturesDeliveryEngine {
     fn calculate(

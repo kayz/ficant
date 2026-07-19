@@ -9,6 +9,7 @@ mod execution;
 mod facts;
 mod fingerprint;
 mod futures_delivery;
+mod futures_hedge;
 mod journal;
 mod required_reads;
 mod rule_pack_resolution;
@@ -41,6 +42,9 @@ pub use facts::{
 pub use fingerprint::OperationFingerprint;
 pub use futures_delivery::{
     EncodedFuturesDeliveryArtifact, FuturesDeliveryArtifactCodec, FuturesDeliveryEngine,
+};
+pub use futures_hedge::{
+    EncodedFuturesHedgeArtifact, FuturesHedgeArtifactCodec, FuturesHedgeEngine,
 };
 pub use journal::{AppendJournalEvent, RunJournalRepository};
 pub(crate) use required_reads::SnapshotVerifiedReadMetadataParts;

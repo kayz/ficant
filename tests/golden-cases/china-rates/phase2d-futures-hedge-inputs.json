@@ -1,0 +1,35 @@
+{
+  "schema": "ficant.phase2d-futures-hedge.inputs.v1",
+  "contract_notional": "1000000.000000000000",
+  "quote_face": "100.000000000000",
+  "cases": [
+    {
+      "id": "TS-long-risk-rounds-short-nine",
+      "product": "TS",
+      "target_dv01": "1234.500000000000",
+      "ctd_dv01_per_100": "0.014500000000",
+      "conversion_factor": "0.998700000000"
+    },
+    {
+      "id": "TF-short-risk-rounds-long-six",
+      "product": "TF",
+      "target_dv01": "-2100.000000000000",
+      "ctd_dv01_per_100": "0.035000000000",
+      "conversion_factor": "0.975000000000"
+    },
+    {
+      "id": "T-exact-short-one",
+      "product": "T",
+      "target_dv01": "500.000000000000",
+      "ctd_dv01_per_100": "0.045000000000",
+      "conversion_factor": "0.900000000000"
+    },
+    {
+      "id": "TL-half-contract-tie-prefers-zero",
+      "product": "TL",
+      "target_dv01": "-250.000000000000",
+      "ctd_dv01_per_100": "0.045000000000",
+      "conversion_factor": "0.900000000000"
+    }
+  ]
+}

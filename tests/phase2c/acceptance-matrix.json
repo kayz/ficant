@@ -12,7 +12,7 @@
     "crates/ficant-storage/tests/futures_delivery_arrow.rs": "1b1d39ff59fe662a0f56e9191cd6f41b850e000a9eb4ac352e63700bc816b073",
     "crates/ficant-storage/tests/futures_delivery_sit.rs": "14f37e4c2849b605a5023c80e5efa2c670e9a84031a6ef09b005402665878a8d",
     "cpp/fixed-income-kernel/tests/test_futures_delivery.cpp": "b6babf4ade9d24393c69e453239c19e1c88bdab5515d93ef155cc4fd0bb23e1d",
-    "cpp/fixed-income-kernel/tests/test_constants_and_layout.cpp": "fb4d67719cf4f0279a9a9db89d71ba94aa85ff8ca58fd5d6c16abf7eccb99c9c"
+    "cpp/fixed-income-kernel/tests/test_constants_and_layout.cpp": "33630c6747a3815c97cfb27a41fec075f023f8e0b5af6661c1f2cab5b25d999b"
   },
   "acceptance": [
     {

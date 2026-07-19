@@ -1,0 +1,33 @@
+{
+  "schema": "ficant.phase2d-futures-hedge.expected.v1",
+  "case_results": {
+    "TS-long-risk-rounds-short-nine": {
+      "futures_contract_dv01": "145.188745368980",
+      "raw_contracts": "-8.502725172414",
+      "recommended_contracts": -9,
+      "residual_dv01": "-72.198708320817",
+      "hedge_effectiveness": "0.941515829631"
+    },
+    "TF-short-risk-rounds-long-six": {
+      "futures_contract_dv01": "358.974358974359",
+      "raw_contracts": "5.850000000000",
+      "recommended_contracts": 6,
+      "residual_dv01": "53.846153846154",
+      "hedge_effectiveness": "0.974358974359"
+    },
+    "T-exact-short-one": {
+      "futures_contract_dv01": "500.000000000000",
+      "raw_contracts": "-1.000000000000",
+      "recommended_contracts": -1,
+      "residual_dv01": "0.000000000000",
+      "hedge_effectiveness": "1.000000000000"
+    },
+    "TL-half-contract-tie-prefers-zero": {
+      "futures_contract_dv01": "500.000000000000",
+      "raw_contracts": "0.500000000000",
+      "recommended_contracts": 0,
+      "residual_dv01": "-250.000000000000",
+      "hedge_effectiveness": "0.000000000000"
+    }
+  }
+}

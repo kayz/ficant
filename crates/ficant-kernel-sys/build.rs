@@ -17,6 +17,8 @@ fn main() {
         "src/curve_api.cpp",
         "src/futures_math.cpp",
         "src/futures_api.cpp",
+        "src/hedge_math.cpp",
+        "src/hedge_api.cpp",
     ];
 
     let mut build = cc::Build::new();
@@ -52,6 +54,7 @@ fn main() {
         "src/date_utils.hpp",
         "src/day_count.hpp",
         "src/futures_math.hpp",
+        "src/hedge_math.hpp",
     ] {
         println!("cargo:rerun-if-changed={}", kernel.join(header).display());
     }

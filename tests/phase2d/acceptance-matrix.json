@@ -1,0 +1,109 @@
+{
+  "schema": "ficant.quality.phase2d.acceptance-matrix.v1",
+  "base_commit": "b7872f7e89bde71c9bbfa1fd39735125e2dba9a1",
+  "guarded_files": {
+    "tests/golden-cases/china-rates/phase2d-futures-hedge-inputs.json": "dd9863ed7a5da2b119b6dbbc516fb47c946d23bb2d8b7a2e1f728bdaab15166a",
+    "tests/golden-cases/china-rates/expected/phase2d-futures-hedge-v1-expected.json": "699dee6137d500034222d17b60f152429c9c1c3eac47145f4bcba3e6676d8713",
+    "tests/golden-cases/china-rates/phase2d-cffex-source-manifest.json": "1974f49ec750dc8451c9893565ff87d5380e4d67f7747e1c4b97b8eef9f4a6e8",
+    "tests/oracle/china-rates/phase2d_manual_oracle.py": "7ae5c687ed909e02b2c80649236e7a389792b8ccaffdeef8223f0c297edd08dd",
+    "tests/oracle/china-rates/test_phase2d_manual_oracle.py": "bc7f48537877f53b675afd2f252cb1aedc9a5d7488a27b0a9acc0af53e40e50e",
+    "crates/ficant-domain/tests/futures_hedge_contracts.rs": "0812229d586ae2159b732155b90c4b613412fbde0ae9bfbbedac0722cd758dd2",
+    "crates/ficant-fixed-income-native/tests/futures_hedge_acceptance.rs": "a286e8b9a0df0f2624c53d80fa344f5429ade2d68fdb63ed4fcf9e05437ab287",
+    "crates/ficant-storage/tests/futures_hedge_arrow.rs": "f2a56a21587515bf7346ef480a57b0d3bd80d91380a27cec55a818ab1ba05bc0",
+    "crates/ficant-storage/tests/futures_hedge_sit.rs": "645329fd7ca74c2ddacb04d00e69fe8597982edd78a18481f3d1c70f786b74c3",
+    "cpp/fixed-income-kernel/tests/test_futures_hedge.cpp": "7b9bf891a4508d0fa5b0195e64fd414e50a65c55746e76f6f63a0efb67195413",
+    "cpp/fixed-income-kernel/tests/test_constants_and_layout.cpp": "33630c6747a3815c97cfb27a41fec075f023f8e0b5af6661c1f2cab5b25d999b"
+  },
+  "acceptance": [
+    {
+      "id": "P2D-001",
+      "category": "input-lineage-and-validation",
+      "automation": [{"source": "crates/ficant-domain/tests/futures_hedge_contracts.rs", "selector": "input_binds_all_risk_and_delivery_lineage_and_rejects_zero_or_nonpositive_risk_terms", "command": "cargo test --locked -p ficant-domain --test futures_hedge_contracts"}]
+    },
+    {
+      "id": "P2D-002",
+      "category": "result-bounds",
+      "automation": [{"source": "crates/ficant-domain/tests/futures_hedge_contracts.rs", "selector": "measures_allow_signed_contracts_and_residual_but_bound_effectiveness", "command": "cargo test --locked -p ficant-domain --test futures_hedge_contracts"}]
+    },
+    {
+      "id": "P2D-003",
+      "category": "c-abi-layout",
+      "automation": [{"source": "cpp/fixed-income-kernel/tests/test_constants_and_layout.cpp", "selector": "sizeof(ficant_kernel_cgb_futures_hedge_input_v1) == 40", "command": "ctest --test-dir build/local-cpp-vs-llvm-19 --output-on-failure"}]
+    },
+    {
+      "id": "P2D-004",
+      "category": "contract-dv01-formula",
+      "automation": [{"source": "cpp/fixed-income-kernel/tests/test_futures_hedge.cpp", "selector": "contract DV01 follows CTD/CF identity", "command": "ctest --test-dir build/local-cpp-vs-llvm-19 --output-on-failure"}]
+    },
+    {
+      "id": "P2D-005",
+      "category": "signed-direction-and-exact-hedge",
+      "automation": [{"source": "crates/ficant-fixed-income-native/tests/futures_hedge_acceptance.rs", "selector": "safe_adapter_preserves_direction_exact_hedge_and_zero_hand_tie", "command": "cargo test --locked -p ficant-fixed-income-native --test futures_hedge_acceptance"}]
+    },
+    {
+      "id": "P2D-006",
+      "category": "integer-tie-break",
+      "automation": [{"source": "cpp/fixed-income-kernel/tests/test_futures_hedge.cpp", "selector": "half-contract tie chooses lower absolute position", "command": "ctest --test-dir build/local-cpp-vs-llvm-19 --output-on-failure"}]
+    },
+    {
+      "id": "P2D-007",
+      "category": "non-finite-and-abi-fail-closed",
+      "automation": [{"source": "cpp/fixed-income-kernel/tests/test_futures_hedge.cpp", "selector": "input layout drift fails closed", "command": "ctest --test-dir build/local-cpp-vs-llvm-19 --output-on-failure"}]
+    },
+    {
+      "id": "P2D-008",
+      "category": "all-products-and-rounding-paths",
+      "automation": [{"source": "tests/oracle/china-rates/test_phase2d_manual_oracle.py", "selector": "test_golden_suite_covers_direction_rounding_exactness_and_tie", "command": "uv run --offline --locked --project python python -m pytest tests/oracle/china-rates/test_phase2d_manual_oracle.py -q"}]
+    },
+    {
+      "id": "P2D-009",
+      "category": "independent-decimal-oracle",
+      "automation": [{"source": "tests/oracle/china-rates/test_phase2d_manual_oracle.py", "selector": "test_independent_decimal_oracle_matches_frozen_expected", "command": "uv run --offline --locked --project python python -m pytest tests/oracle/china-rates/test_phase2d_manual_oracle.py -q"}]
+    },
+    {
+      "id": "P2D-010",
+      "category": "official-source-facts",
+      "automation": [{"source": "tests/oracle/china-rates/test_phase2d_manual_oracle.py", "selector": "test_source_manifest_normalized_facts_digest_is_bound", "command": "uv run --offline --locked --project python python -m pytest tests/oracle/china-rates/test_phase2d_manual_oracle.py -q"}]
+    },
+    {
+      "id": "P2D-011",
+      "category": "production-oracle-agreement",
+      "automation": [{"source": "crates/ficant-fixed-income-native/tests/futures_hedge_acceptance.rs", "selector": "production_matches_all_four_frozen_decimal_oracle_cases", "command": "cargo test --locked -p ficant-fixed-income-native --test futures_hedge_acceptance"}]
+    },
+    {
+      "id": "P2D-012",
+      "category": "deterministic-arrow",
+      "automation": [{"source": "crates/ficant-storage/tests/futures_hedge_arrow.rs", "selector": "native_hedge_round_trips_through_deterministic_arrow_file", "command": "cargo test --locked -p ficant-storage --test futures_hedge_arrow"}]
+    },
+    {
+      "id": "P2D-013",
+      "category": "artifact-input-drift-fail-closed",
+      "automation": [{"source": "crates/ficant-storage/tests/futures_hedge_arrow.rs", "selector": "assert_ne!(drifted.fingerprint(), original.fingerprint())", "command": "cargo test --locked -p ficant-storage --test futures_hedge_arrow"}]
+    },
+    {
+      "id": "P2D-014",
+      "category": "seven-part-lineage",
+      "automation": [{"source": "crates/ficant-storage/tests/futures_hedge_sit.rs", "selector": "assert_eq!(artifact.lineage().len(), 7)", "command": "cargo test --locked -p ficant-storage --test futures_hedge_sit -- --test-threads=1"}]
+    },
+    {
+      "id": "P2D-015",
+      "category": "real-postgres-ceph-restart-replay",
+      "automation": [{"source": "crates/ficant-storage/tests/futures_hedge_sit.rs", "selector": "restart-safe replay must reproduce exact canonical bytes", "command": "cargo test --locked -p ficant-storage --test futures_hedge_sit -- --test-threads=1"}]
+    },
+    {
+      "id": "P2D-016",
+      "category": "tamper-fail-closed",
+      "automation": [{"source": "crates/ficant-storage/tests/futures_hedge_sit.rs", "selector": "tampered formal size must fail closed", "command": "cargo test --locked -p ficant-storage --test futures_hedge_sit -- --test-threads=1"}]
+    },
+    {
+      "id": "P2D-017",
+      "category": "staging-orphan-cleanup",
+      "automation": [{"source": "crates/ficant-storage/tests/futures_hedge_sit.rs", "selector": "assert_eq!(candidate_count, 0)", "command": "cargo test --locked -p ficant-storage --test futures_hedge_sit -- --test-threads=1"}]
+    },
+    {
+      "id": "P2D-018",
+      "category": "phase2a-phase2b-phase2c-regression",
+      "automation": [{"source": "cpp/fixed-income-kernel/tests/test_futures_hedge.cpp", "selector": "exact hedge has zero residual", "command": "ctest --test-dir build/local-cpp-vs-llvm-19 --output-on-failure"}, {"source": "tests/phase2c/verify_acceptance_matrix.py", "selector": "Phase 2C acceptance matrix: PASS", "command": "uv run --offline --locked --project python python tests/phase2c/verify_acceptance_matrix.py"}]
+    }
+  ]
+}

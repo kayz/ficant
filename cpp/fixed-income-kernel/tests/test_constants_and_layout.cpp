@@ -99,6 +99,10 @@ int main() {
           "sizeof(cgb_futures_delivery_input_v1) == 72");
     CHECK(sizeof(ficant_kernel_cgb_futures_delivery_result_v1) == 120,
           "sizeof(cgb_futures_delivery_result_v1) == 120");
+    CHECK(sizeof(ficant_kernel_cgb_futures_hedge_input_v1) == 40,
+          "sizeof(cgb_futures_hedge_input_v1) == 40");
+    CHECK(sizeof(ficant_kernel_cgb_futures_hedge_result_v1) == 56,
+          "sizeof(cgb_futures_hedge_result_v1) == 56");
 
     /* ── Key offsets (ABI stability) ───────────────────────────── */
     CHECK(offsetof(ficant_kernel_bond_input_v1, struct_size) == 0,
@@ -139,6 +143,10 @@ int main() {
           "futures_delivery_input.coupon_rate offset 40");
     CHECK(offsetof(ficant_kernel_cgb_futures_delivery_result_v1, conversion_factor) == 24,
           "futures_delivery_result.conversion_factor offset 24");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_input_v1, target_dv01) == 16,
+          "futures_hedge_input.target_dv01 offset 16");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_result_v1, recommended_contracts) == 32,
+          "futures_hedge_result.recommended_contracts offset 32");
 
     if (failures > 0) {
         std::fprintf(stderr, "%d failures\n", failures);

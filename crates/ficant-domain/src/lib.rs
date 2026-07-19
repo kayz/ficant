@@ -13,6 +13,7 @@
 pub mod analytics;
 pub mod curves;
 pub mod futures_delivery;
+pub mod futures_hedge;
 pub mod market;
 pub mod primitives;
 pub mod research;

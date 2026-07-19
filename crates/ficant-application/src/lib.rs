@@ -20,6 +20,10 @@ pub use use_cases::futures_delivery::{
     CalculateFuturesDeliveryBasket, FUTURES_DELIVERY_MEDIA_TYPE, FuturesDeliveryReplay,
     PublishFuturesDelivery, ReplayFuturesDelivery,
 };
+pub use use_cases::futures_hedge::{
+    CalculateFuturesHedge, FUTURES_HEDGE_MEDIA_TYPE, FuturesHedgeReplay, PublishFuturesHedge,
+    ReplayFuturesHedge,
+};
 pub use use_cases::phase1_business_loop::{
     Phase1BusinessInput, Phase1BusinessLoop, Phase1BusinessResult, StagedArtifact, StagedSnapshot,
     replay_collected_journal,
