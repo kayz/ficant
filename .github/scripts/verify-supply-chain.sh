@@ -4,7 +4,7 @@ set -euo pipefail
 
 scripts_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 lock_file="$scripts_dir/supply-chain.lock.json"
-SUPPLY_LOCK_SHA256=4a7706d4639af9e30e041965e9fc30dbfb4f313306ca097d334ffb1554ab700f
+SUPPLY_LOCK_SHA256=3743b82b32cc63dbc81bb02c9ab0698bda0ff02490106c1d9bf9dd976134f8fe
 
 die() {
   printf 'supply-chain: %s\n' "$1" >&2
@@ -57,7 +57,7 @@ if data.get("cargo_reachability") != {
     "command": ["tree", "--locked", "--all-features", "--target", "all", "--prefix", "none", "--format", "{p}"],
 }:
     print("supply-chain: frozen Cargo reachability contract mismatch", file=sys.stderr); raise SystemExit(2)
-if len(data.get("first_party_packages", [])) != 15 or len({item.get("purl") for item in data["first_party_packages"]}) != 15:
+if len(data.get("first_party_packages", [])) != 16 or len({item.get("purl") for item in data["first_party_packages"]}) != 16:
     print("supply-chain: exact first-party policy mismatch", file=sys.stderr); raise SystemExit(2)
 if {item.get("purl") for item in data.get("license_scoped_exceptions", [])} != {
     "pkg:cargo/webpki-roots@0.26.11", "pkg:cargo/webpki-root-certs@1.0.9",

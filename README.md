@@ -1163,7 +1163,7 @@ PostgreSQL 16 schema
 
 **目标：** 从异构输入形成可复现研究数据。
 
-**当前状态（2026-07-19）：** Phase 3A 已交付版本化 DataSource 注册、文件 NDJSON 与 PostgreSQL 两种异构输入、精确 Instrument/Calendar/Unit 版本映射、observed/visible 双时间点时过滤、失败关闭的数据质量规则，以及固定 16 列的 Canonical Quote Arrow Schema。两种来源已在真实 PostgreSQL 验收中形成 schema hash 与业务内容一致的 RecordBatch。Parquet Snapshot、Manifest、Ceph RGW 发布/重读和实验脱离外部数据源仍属于 Phase 3B，完成前不得宣称 Phase 3 已退出。
+**当前状态（2026-07-20）：** Phase 3A 已交付版本化 DataSource、文件 NDJSON 与 PostgreSQL 双源接入、精确版本映射、双时间点时过滤、失败关闭的数据质量规则和固定 16 列 Canonical Quote Arrow Schema。Phase 3B 已把该 RecordBatch 编码为参数冻结的确定性 Parquet 与 canonical Manifest，并复用 Phase 1 双 blob proof 发布为真实 `DataSnapshot`。正式重读先完成 PostgreSQL metadata、Ceph RGW 两个 required payload 和内容摘要校验，再校验 Snapshot/Manifest/Parquet 三方绑定后解码；真实验收在销毁外部 source adapter、重建存储 adapter 后仍只按 Snapshot ID 得到相同 RecordBatch，外源调用次数保持一次。因此 Phase 3 已正式退出；最终证据与残余风险见 [Phase 3B iteration brief](docs/iterations/2026-07-phase3b-immutable-parquet-snapshot.md)。
 
 优先实现：
 

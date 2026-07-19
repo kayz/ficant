@@ -36,8 +36,14 @@
 
 ## 最终真实测试证据
 
-- 待最终候选形成后填写；中间子循环命令由编排运行状态承载，不在仓库新增状态文档。
+- `cargo clippy --offline --locked -p ficant-application -p ficant-data -p ficant-storage --all-targets -- -D warnings`：exit 0；Phase 3B 触达的三个 crate 全 target 严格 Clippy 通过，无新增 lint 豁免。
+- `./scripts/check-phase3b.ps1`：exit 0；确定性编码/精确重读与 Parquet、Manifest、lineage 篡改失败关闭 2/2，真实 PostgreSQL 16 + Ceph RGW 双 payload 发布、adapter 重建、脱离外源重读 1/1。
+- `bash .github/scripts/tests/run-repo-policy-tests.sh`：exit 0；中文、路径、CI 合同和恢复 fixture 全部通过，CI 已显式运行 Phase 3B codec 与真实存储验收。
+- 冻结 Syft 1.46.0 扫描发布树得到 641 个 Cargo/PyPI/npm 包，其中一方包 16 个；`verify-license-inventory.py verify --require-first-party --require-native-lf` exit 0，inventory digest 为 `d5c37afb325a25e2b720f122da23a59ddd1b8e13282672a781a2953a9ca38262`。
+- 完整本地非环境门禁与包含 Phase 1–3B 的真实集成门禁将在最终候选形成后补记；不得把本条计划写成已通过。
 
 ## 残余风险
 
-- 待最终候选形成后填写。首版只交付单个 Canonical Quote batch 的单文件快照，不承诺大规模分区、压缩比、谓词下推或 schema evolution。
+- 首版只交付单个 Canonical Quote batch 的单文件快照，不承诺大规模分区、压缩比、谓词下推或 schema evolution；真实验收只覆盖小型固定数据集，不代表生产吞吐与容量结论。
+- Parquet writer 参数和库版本属于字节确定性合同；未来升级 Arrow/Parquet、开启压缩或分区必须作为显式兼容迭代，不能静默改写历史快照。
+- Phase 4 ResearchGraph 尚未实现；本迭代冻结并验证的是它唯一允许使用的 verified Canonical Snapshot 解码边界，不宣称已有完整实验运行时或业务 UI。

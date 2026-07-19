@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "captured_utc": "2026-07-19T11:32:00Z",
+  "captured_utc": "2026-07-19T16:18:32Z",
   "release_topology": {
     "trusted_base_source": "ci-event-or-default-branch",
     "candidate_commit_count": "derived-from-positive-linear-range",
@@ -54,6 +54,13 @@
           "source": "crates/ficant-contracts"
       },
       {
+          "name": "ficant-data",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-data@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "crates/ficant-data"
+      },
+      {
           "name": "ficant-domain",
           "version": "0.1.0",
           "purl": "pkg:cargo/ficant-domain@0.1.0",
@@ -75,9 +82,9 @@
           "source": "crates/ficant-kernel-sys"
       },
       {
-          "name": "ficant-node-runtime",
+          "name": "ficant-sdk",
           "version": "0.1.0",
-          "purl": "pkg:pypi/ficant-node-runtime@0.1.0",
+          "purl": "pkg:pypi/ficant-sdk@0.1.0",
           "ecosystem": "PyPI",
           "source": "python"
       },
