@@ -14,6 +14,8 @@ pub enum DataError {
     SourceUnavailable,
     #[error("canonical schema mismatch")]
     SchemaMismatch,
+    #[error("snapshot integrity validation failed")]
+    SnapshotIntegrityFailed,
 }
 
 pub type DataResult<T> = Result<T, DataError>;

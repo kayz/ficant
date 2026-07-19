@@ -193,8 +193,51 @@ pub(crate) async fn insert_lineage(
         let content_hash = reference
             .content_hash()
             .map(crate::s3::content_addressed::hash_hex);
-        let target_exists: bool = sqlx::query_scalar(
-            "WITH candidates(target_version, target_content_hash) AS (
+        let target_exists = lineage_target_exists(
+            transaction,
+            tenant_id,
+            reference.object_id().as_str(),
+            version,
+            content_hash.as_deref(),
+        )
+        .await?;
+        if !target_exists {
+            return Err(application_error(
+                ApplicationErrorCategory::LineageIncomplete,
+                false,
+            ));
+        }
+        sqlx::query(
+            "INSERT INTO research.lineage_edges
+             (tenant_id, source_object_id, lineage_ordinal, target_object_id,
+              target_version, target_content_hash)
+             VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(tenant_id)
+        .bind(source_object_id)
+        .bind(ordinal)
+        .bind(reference.object_id().as_str())
+        .bind(version)
+        .bind(content_hash)
+        .execute(&mut **transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+    }
+    Ok(())
+}
+
+async fn lineage_target_exists(
+    transaction: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    target_object_id: &str,
+    version: Option<i64>,
+    content_hash: Option<&str>,
+) -> StorageResult<bool> {
+    sqlx::query_scalar(
+        "WITH candidates(target_version, target_content_hash) AS (
+                 SELECT version, NULL::text FROM data.sources
+                  WHERE tenant_id = $1 AND data_source_id = $2
+                 UNION ALL
                  SELECT version, NULL::text FROM market.units
                   WHERE tenant_id = $1 AND unit_id = $2
                  UNION ALL
@@ -247,35 +290,12 @@ pub(crate) async fn insert_lineage(
                    AND ($3::bigint IS NULL OR target_version IS NOT NULL)
                    AND ($4::text IS NULL OR target_content_hash IS NOT NULL)
              )",
-        )
-        .bind(tenant_id)
-        .bind(reference.object_id().as_str())
-        .bind(version)
-        .bind(content_hash.as_deref())
-        .fetch_one(&mut **transaction)
-        .await
-        .map_err(map_sqlx_error)?;
-        if !target_exists {
-            return Err(application_error(
-                ApplicationErrorCategory::LineageIncomplete,
-                false,
-            ));
-        }
-        sqlx::query(
-            "INSERT INTO research.lineage_edges
-             (tenant_id, source_object_id, lineage_ordinal, target_object_id,
-              target_version, target_content_hash)
-             VALUES ($1, $2, $3, $4, $5, $6)",
-        )
-        .bind(tenant_id)
-        .bind(source_object_id)
-        .bind(ordinal)
-        .bind(reference.object_id().as_str())
-        .bind(version)
-        .bind(content_hash)
-        .execute(&mut **transaction)
-        .await
-        .map_err(map_sqlx_error)?;
-    }
-    Ok(())
+    )
+    .bind(tenant_id)
+    .bind(target_object_id)
+    .bind(version)
+    .bind(content_hash)
+    .fetch_one(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)
 }

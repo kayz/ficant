@@ -1,4 +1,4 @@
-use ficant_domain::primitives::{EffectivePeriod, MarketTime, OwnerRef, VersionRef};
+use ficant_domain::primitives::{ContentHash, EffectivePeriod, MarketTime, OwnerRef, VersionRef};
 
 use crate::{DataError, DataResult};
 
@@ -92,6 +92,40 @@ impl InstrumentMapping {
         &self.source
     }
 
+    pub fn entries(&self) -> &[InstrumentMappingEntry] {
+        &self.entries
+    }
+
+    pub fn contract_hash(&self) -> ContentHash {
+        let mut bytes = b"ficant-instrument-mapping/v1\0".to_vec();
+        append(&mut bytes, self.owner.tenant_id().as_str());
+        append(&mut bytes, self.owner.owner_id().as_str());
+        append(&mut bytes, self.source.id().as_str());
+        bytes.extend_from_slice(&self.source.version().get().to_be_bytes());
+        for entry in &self.entries {
+            append(&mut bytes, entry.source_instrument_key());
+            bytes.extend_from_slice(
+                &entry
+                    .effective()
+                    .from()
+                    .instant()
+                    .timestamp_micros()
+                    .to_be_bytes(),
+            );
+            bytes.extend_from_slice(
+                &entry
+                    .effective()
+                    .to()
+                    .instant()
+                    .timestamp_micros()
+                    .to_be_bytes(),
+            );
+            append(&mut bytes, entry.instrument().id().as_str());
+            bytes.extend_from_slice(&entry.instrument().version().get().to_be_bytes());
+        }
+        ContentHash::digest(&bytes)
+    }
+
     pub fn resolve(
         &self,
         source_instrument_key: &str,
@@ -108,4 +142,13 @@ impl InstrumentMapping {
         }
         Ok(&value.instrument)
     }
+}
+
+fn append(bytes: &mut Vec<u8>, value: &str) {
+    bytes.extend_from_slice(
+        &u64::try_from(value.len())
+            .expect("mapping token length fits u64")
+            .to_be_bytes(),
+    );
+    bytes.extend_from_slice(value.as_bytes());
 }

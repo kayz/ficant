@@ -19,6 +19,7 @@ pedantic = { level = "warn", priority = -1 }
 [workspace.dependencies]
 async-trait = "=0.1.89"
 arrow = { version = "=59.1.0", default-features = false, features = ["ipc"] }
+bytes = "=1.12.1"
 cc = "=1.2.67"
 chrono = { version = "=0.4.45", default-features = false, features = ["std"] }
 chrono-tz = { version = "=0.10.4", default-features = false, features = ["std"] }
@@ -38,3 +39,5 @@ tonic-web = "=0.14.6"
 tower-layer = "=0.3.3"
 ulid = { version = "=1.2.1", default-features = false }
 object_store = { version = "=0.14.1", default-features = false, features = ["aws"] }
+parquet = { version = "=59.1.0", default-features = false, features = ["arrow"] }
+serde = { version = "=1.0.228", features = ["derive"] }

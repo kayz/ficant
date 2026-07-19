@@ -75,6 +75,18 @@ impl CanonicalIngestRequest {
     pub fn window(&self) -> &PointInTimeWindow {
         &self.window
     }
+
+    pub fn mapping(&self) -> &InstrumentMapping {
+        &self.mapping
+    }
+
+    pub fn calendar(&self) -> &Calendar {
+        &self.calendar
+    }
+
+    pub fn unit(&self) -> &Unit {
+        &self.unit
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
