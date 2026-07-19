@@ -5,6 +5,9 @@
 !/.gitattributes
 !/README.md
 !/LICENSE
+!/AGENTS.md
+!/scripts/
+!/scripts/**
 !/Cargo.toml
 !/Cargo.lock
 !/rust-toolchain.toml
@@ -12,8 +15,6 @@
 !/clippy.toml
 !/cicd.yml
 !/iteration-*-checklist.md
-!/.hoqa/
-!/.hoqa/**
 !/.config/
 !/.config/**
 !/.github/

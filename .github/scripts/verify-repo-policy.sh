@@ -20,7 +20,11 @@ emit_result() {
 
 require_path() {
   local stage=$1 path=$2
-  [[ -e $path ]] || record_failure "missing required ${stage} path: $path"
+  if [[ ! -e $path ]]; then
+    record_failure "missing required ${stage} path: $path"
+    return
+  fi
+  git ls-files --error-unmatch -- "$path" >/dev/null 2>&1 || record_failure "required ${stage} path is not tracked: $path"
 }
 
 python_command() {
@@ -78,7 +82,7 @@ validate_path_list() {
     IFS='/' read -r -a components <<<"$lower"
     for component in "${components[@]}"; do
       case "$component" in
-        .proqaid|.superpowers|.planning|.codex|.claude|hidden|ui-dm|.worktrees|key|keys|secret|secrets|worker|workers|.worker|worktree|worktrees|temp|tmp|cache|.cache|target|build|node_modules|__pycache__|.venv)
+        .hoqa|.proqaid|.superpowers|.planning|.codex|.claude|hidden|ui-dm|.worktrees|key|keys|secret|secrets|worker|workers|.worker|worktree|worktrees|temp|tmp|cache|.cache|target|build|node_modules|__pycache__|.venv)
           if [[ $component == secret && $fixture_secret == true ]]; then
             continue
           fi
@@ -89,12 +93,12 @@ validate_path_list() {
 
     if [[ $path == */* ]]; then
       case "$top" in
-        .config|.github|.hoqa|binaries|crates|cpp|deploy|docs|domain-packs|interface|migrations|python|result|src|tests|web-dm) ;;
+        .config|.github|binaries|crates|cpp|deploy|docs|domain-packs|interface|migrations|python|result|scripts|src|tests|web-dm) ;;
         *) record_failure "unknown release top-level directory: $top ($path)" ;;
       esac
     else
       case "$path" in
-        .gitignore|.gitattributes|README.md|LICENSE|Cargo.toml|Cargo.lock|rust-toolchain.toml|rustfmt.toml|clippy.toml|cicd.yml|iteration-[0-9]*-checklist.md) ;;
+        .gitignore|.gitattributes|AGENTS.md|README.md|LICENSE|Cargo.toml|Cargo.lock|rust-toolchain.toml|rustfmt.toml|clippy.toml|cicd.yml|iteration-[0-9]*-checklist.md) ;;
         *) record_failure "unknown release root file: $path" ;;
       esac
     fi
@@ -109,13 +113,14 @@ validate_path_list() {
     esac
 
     case "$path" in
+      deploy/execution|deploy/execution/*) record_failure "active deploy/execution is forbidden; preserve legacy runner artifacts under docs/history/hoqa/: $path" ;;
       proto|proto/*) record_failure "root proto/ is forbidden; use interface/proto/: $path" ;;
       *.go|*.java|*.kt|*.kts|*.cs|*.fs|*.fsx|*.php|*.rb)
         record_failure "forbidden backend language source: $path"
         ;;
       *.py)
         case "$path" in
-          python/*|tests/oracle/china-rates/*|tests/iteration-3/verify_acceptance_matrix.py|deploy/execution/execution-validator.py|deploy/test/validate_release.py|.github/scripts/compose_security_gate.py|.github/scripts/tests/test_compose_security_gate.py|.github/scripts/verify-cargo-reachability.py|.github/scripts/verify-license-inventory.py|.github/scripts/verify-risk-acceptance.py) ;;
+          python/*|tests/oracle/china-rates/*|tests/iteration-3/verify_acceptance_matrix.py|docs/history/hoqa/deploy-execution/execution-validator.py|deploy/test/validate_release.py|.github/scripts/compose_security_gate.py|.github/scripts/tests/test_compose_security_gate.py|.github/scripts/verify-cargo-reachability.py|.github/scripts/verify-license-inventory.py|.github/scripts/verify-risk-acceptance.py) ;;
           *) record_failure "Python is restricted to python/ or the exact CI gate tool allowlist: $path" ;;
         esac
         ;;
@@ -249,8 +254,13 @@ cd "$repo_root" || exit 2
 
 baseline_paths=(
   .gitattributes Cargo.toml Cargo.lock rust-toolchain.toml rustfmt.toml clippy.toml
-  .hoqa/SKILL.md .hoqa/references/contracts.md .hoqa/state.toml .hoqa/migration-map.md
-  .hoqa/history/proqaid-superseded/README.md
+  AGENTS.md scripts/check-fast.ps1 scripts/check.ps1 docs/development.md
+  docs/architecture/adr/0009-opaid-local-development-and-cicd-release-boundary.md
+  docs/history/hoqa/governance/SKILL.md docs/history/hoqa/governance/references/contracts.md
+  docs/history/hoqa/governance/state.toml docs/history/hoqa/governance/migration-map.md
+  docs/history/hoqa/governance/history/proqaid-superseded/README.md
+  docs/history/hoqa/deploy-execution/execution-validator.py
+  docs/history/hoqa/iteration-3-checklist.md
   binaries/ficant-bootstrap/Cargo.toml binaries/ficant-bootstrap/src/lib.rs
   binaries/ficant-server/Cargo.toml binaries/ficant-server/src/main.rs
   binaries/ficant-worker/Cargo.toml binaries/ficant-worker/src/main.rs

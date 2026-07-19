@@ -3,9 +3,9 @@
 - 状态：Superseded by ADR-0007
 - 日期：2026-07-13
 - 决策者：Architecture authority，经用户明确确认
-- 历史关联：ADR-0003、ADR-0005；当前配置不再实现本 ADR，见 ADR-0007 与 ADR-0008
+- 历史关联：ADR-0003、ADR-0005；当前配置不再实现本 ADR，见 ADR-0007 与 ADR-0009
 
-> 本文仅保留为 superseded 历史决策。文中的七角色、WSL 默认执行面、Delivery 和 Review 机制不得用于当前 HOQA 工作。
+> 本文仅保留为 superseded 历史决策。其 runner 与合同资产已归档到 `docs/history/hoqa/deploy-execution/`；文中的七角色、WSL 默认执行面、Delivery、Review、Profile Pool 和 runner 规则不得驱动当前 OPAID 工作或中央 CICD 发布。
 
 ## 背景
 
@@ -19,7 +19,7 @@ iteration-3 同时使用 Windows 主模型、Windows Git 工作区、WSL 编译/
 2. **WSL 执行面。** Development Worker 和 Test Worker 默认由 `ficant-ubuntu-24.04` 中的 CLI 执行。编译、测试、依赖、构建缓存和开发工具链归 WSL 管理。Windows Git 工作区现阶段可从 `/mnt/c` 使用，但 worktree、构建目录、数据集和服务实例必须按 Development、Test、SIT 隔离；构建输出、依赖缓存和临时证据优先位于 Linux 文件系统。
 3. **UAT/发布目标。** VPS `47.100.66.40`、`greatquant.com`、应用名 `dm` 仍由 Delivery 管理。机械发布可以使用 Delivery 临时 Release Executor；普通 Development/Test Worker 无远程发布权限，不能获得 VPS/root key，密钥不得进入项目目录或执行合同。
 
-Windows 稳定入口是 `deploy/execution/invoke-wsl.ps1`；它使用参数数组完成 Windows/WSL 路径映射并调用 `deploy/execution/run.sh`，不拼接 `bash -lc` 或临时命令。WSL runner 封装 CLI 选择、sandbox、超时、模型身份、fingerprint、路径白名单、证据和清理。角色和业务模块只依赖合同与结果 schema。
+当时的 Windows 稳定入口现归档为 `docs/history/hoqa/deploy-execution/invoke-wsl.ps1`；它使用参数数组完成 Windows/WSL 路径映射并调用同目录的 `run.sh`，不拼接 `bash -lc` 或临时命令。该 WSL runner 只解释历史执行证据，不是当前本地开发入口。
 
 ### Worker Profile Pool
 
@@ -76,7 +76,7 @@ runner 验证 worktree/base、调用非交互 CLI、记录 provider 可验证的
 
 ### 迭代环境能力准入
 
-每次迭代在 `ACTIVE` 前由 Product、Architecture、Quality、Delivery 声明所需能力。Delivery 将其与 `deploy/execution/environment-capabilities.toml` 及持久化工具链 lock 比较，只安装增量依赖，并用真实 runner 身份预检 WSL Codex read-only、WSL Codex workspace-write、WSL Claude workspace-write、编译/测试、数据和必要服务。
+当时每次迭代在 `ACTIVE` 前由 Product、Architecture、Quality、Delivery 声明所需能力，并与现已归档的 `docs/history/hoqa/deploy-execution/environment-capabilities.toml` 及持久化工具链 lock 比较。该准入流程仅说明历史证据，不是当前 OPAID round contract 或本地能力预检。
 
 `fingerprint` 记录 distribution、runner identity、工具路径/版本/哈希、runner/config/toolchain lock 哈希、组件 fingerprint 与验证时间。身份哈希明确排除 `captured_at`，所以同一能力状态可稳定复用；时间仍作为审计事实保留。模型准入另以选定 CLI binary、实际模型、Profile、permission/sandbox 和显式 `model_invocation_revision` 计算 key。文档、测试数据、toolchain、Docker 或 SIT 服务状态变化不使模型 key 失效；CLI/model/permission 或模型调用逻辑变化才重跑对应 Profile。
 
@@ -144,4 +144,4 @@ Worker 只引用已准入 fingerprint，不重复平台预检。未改变合同�
 - 当前允许 `/mnt/c` worktree。出现可重复的 I/O 性能问题、大小写冲突、权限/锁冲突或构建不可重现时，Delivery 将执行 worktree 迁到 WSL ext4；合同和 schema 不变，仅路径映射与 fingerprint 变化。
 - 若采用 CI/cloud executor，必须实现同一合同、权限、实际模型、fingerprint、证据和清理语义；不能绕过 Mentor 或七角色边界。
 - QuantLib 只需在受控测试环境中可执行，用于独立验证冻结业务合同；不要求形成部署模式，不进入生产依赖、运行镜像、Artifact schema 或 UAT 发布包。未来更换 Oracle provider 时仍须保持同一输入/expected/容差合同与独立性证据。
-- 复杂性必须留在 `deploy/execution` 模块内，不得把 WSL、CLI、sandbox、provider 或路径类型引入 Domain、Application、公共接口和角色职责。
+- 当时的执行复杂性已归档到 `docs/history/hoqa/deploy-execution/`；当前业务模块仍不得引入 WSL、CLI、sandbox、provider 或历史 runner 路径类型。

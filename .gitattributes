@@ -1,16 +1,17 @@
 /.gitattributes text eol=lf
+*.rs text eol=lf
 /Cargo.lock text eol=lf
 /python/uv.lock text eol=lf
 /.github/workflows/*.yml text eol=lf
 /.github/workflows/*.yaml text eol=lf
-/deploy/execution/*.sh text eol=lf
-/deploy/execution/*.ps1 text eol=lf
-/deploy/execution/*.toml text eol=lf
-/deploy/execution/schemas/*.json text eol=lf
-/deploy/execution/tests/*.ps1 text eol=lf
+/docs/history/hoqa/deploy-execution/*.sh text eol=lf
+/docs/history/hoqa/deploy-execution/*.ps1 text eol=lf
+/docs/history/hoqa/deploy-execution/*.toml text eol=lf
+/docs/history/hoqa/deploy-execution/schemas/*.json text eol=lf
+/docs/history/hoqa/deploy-execution/tests/*.ps1 text eol=lf
 /tests/golden-cases/china-rates/iteration-3-cgb-basic-info-source-manifest.json text eol=lf
 /tests/golden-cases/china-rates/expected/cgb-reference-v1-expected.json text eol=lf
 /tests/oracle/china-rates/build_oracle.py text eol=lf
 /tests/oracle/china-rates/quantlib_oracle.cpp text eol=lf
 /tests/oracle/china-rates/test_candidate_contract.py text eol=lf
-/.hoqa/history/proqaid-superseded/archive/iteration-1/orchestrator/iteration-1-checklist.md -whitespace
+/docs/history/hoqa/governance/history/proqaid-superseded/archive/iteration-1/orchestrator/iteration-1-checklist.md -whitespace

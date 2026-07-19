@@ -129,9 +129,9 @@ metadata/resource 不存在返回 `NotFound`。metadata 和 durable ref 已存�
 
 ## Phase 2 与后续边界
 
-本轮没有实现现金流生成、定价、收益率、久期/DV01、曲线插值、基差/IRR/CTD 或套保算法。现有 C++ 工程只证明固定 Clang/CMake/Ninja 构建和稳定 C ABI 基线。
+iteration-3 的小范围 Phase 2A 已实现固定利率和贴现国债的现金流、应计利息、净价、全价、到期收益率（YTM）、麦考利久期、修正久期、凸性和 DV01，并贯通 C++20 内核、稳定 C ABI、安全 Rust adapter、确定性 Arrow 编码及 PostgreSQL/MinIO 发布与重放的内部 Artifact 链。
 
-iteration-3 的小范围 Phase 2A 不改变外部事实语义：平台生成的现金流与估值风险结果不得写成现有 `Cashflow` 或 `Valuation`。它们使用内部 `BondAnalyticsResult` 并作为内容寻址 Artifact 发布，绑定 Bond、MarketRulePack、估值时点、输入快照、算法版本和 ABI 版本；详见 [ADR-0002](adr/0002-fixed-income-kernel-and-ffi-safety-boundary.md)。
+该切片不改变外部事实语义：平台生成的现金流与估值风险结果不得写成现有 `Cashflow` 或 `Valuation`。它们使用内部 `BondAnalyticsResult` 并作为内容寻址 Artifact 发布，绑定 Bond、MarketRulePack、估值时点、输入快照、算法版本和 ABI 版本；详见 [ADR-0002](adr/0002-fixed-income-kernel-and-ffi-safety-boundary.md)。曲线、Carry/Roll-down、国债期货数值、转换因子（CF）、基差、隐含回购利率（IRR）、最便宜可交割券（CTD）和套保算法仍未实现。
 
 Storage 的发布 Workspace/生产 adapter 当前经 `minio 0.4.0` 可达 `async-std 1.13.2`，并在 put 请求签名/内容处理路径实际使用其 blocking runtime；当前 `ficant-server`/`ficant-worker` 组合根尚未直接装配该 adapter。2026-07-13 复核确认 RustSec 项为 `INFO / unmaintained`、无 patched version；`minio 0.4.0` 是 crates.io 最新版且上游 `master` 仍依赖 `async-std 1.13`，因此没有安全的小版本升级路径。该项按 D-026 作为“当前安全风险低、维护风险中等”的 `accepted-unfixed` 收束，不是架构长期背书。Human/Orchestrator 必须在每次 iteration Align、首次外部发布或 2026-10-13 前（最早者）验证上游移除、受控 fork 或受维护 S3 SDK 迁移；禁止自动继承到其他版本、依赖链、调用边界或发布范围。
 
