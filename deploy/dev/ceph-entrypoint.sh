@@ -175,12 +175,12 @@ radosgw --cluster "$cluster" --name "client.rgw.${rgw_name}" --keyring "$rgw_key
 pids+=("$!")
 
 for _ in $(seq 1 90); do
-  if [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${rgw_port}/" || true)" == "403" ]]; then
+  if [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${rgw_port}/" || true)" == "200" ]]; then
     break
   fi
   sleep 1
 done
-[[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${rgw_port}/" || true)" == "403" ]]
+[[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${rgw_port}/" || true)" == "200" ]]
 
 bucket_json="/tmp/${cluster}.bucket.json"
 if ! radosgw-admin --cluster "$cluster" --name client.admin --keyring "$admin_keyring" \

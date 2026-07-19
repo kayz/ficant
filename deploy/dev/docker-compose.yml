@@ -81,7 +81,7 @@ services:
     ports:
       - "127.0.0.1:${FICANT_S3_PORT:-19000}:9000"
     healthcheck:
-      test: ["CMD-SHELL", "test -f /run/ceph/ficant-ready && code=$$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:9000/) && test \"$${code}\" = 403"]
+      test: ["CMD-SHELL", "test -f /run/ceph/ficant-ready && code=$$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:9000/) && test \"$${code}\" = 200"]
       interval: 5s
       timeout: 4s
       start_period: 10s

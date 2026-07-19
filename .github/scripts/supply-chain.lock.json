@@ -3,7 +3,7 @@
   "captured_utc": "2026-07-12T04:34:09Z",
   "release_topology": {
     "trusted_base": "2e986673df1b0dfbab29094313ac913e91377994",
-    "candidate_commit_count": 2,
+    "candidate_commit_count": 3,
     "main_update": "squash-merge-only-after-final-consistency-audit"
   },
   "cargo_reachability": {

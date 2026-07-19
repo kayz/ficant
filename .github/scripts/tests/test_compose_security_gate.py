@@ -402,6 +402,13 @@ class ComposeSecurityGateTests(unittest.TestCase):
             self.assertRegex(compose, rf"\$\{{{key}:\?[^}}]+\}}")
         self.assertNotIn("test-only", compose)
 
+    def test_ceph_readiness_matches_tentacle_anonymous_root_status(self) -> None:
+        compose = Path("deploy/dev/docker-compose.yml").read_text(encoding="utf-8")
+        entrypoint = Path("deploy/dev/ceph-entrypoint.sh").read_text(encoding="utf-8")
+
+        self.assertIn('test \\"$${code}\\" = 200', compose)
+        self.assertEqual(entrypoint.count('== "200"'), 2)
+
     def test_expected_services_cover_the_complete_runtime_graph(self) -> None:
         self.assertEqual(
             EXPECTED_SERVICES,
