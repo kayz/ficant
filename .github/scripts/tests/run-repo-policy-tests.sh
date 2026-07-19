@@ -78,7 +78,11 @@ check_ci_recovery_contracts() {
   grep -Fq 'cargo test --workspace --locked --exclude ficant-acceptance --exclude ficant-data --exclude ficant-storage' <<<"$rust" || return 1
   grep -Fq -- '--exclude ficant-contract-tests' <<<"$rust" || return 1
   grep -Fq 'cargo test --locked -p ficant-data --test canonical_ingestion' <<<"$rust" || return 1
+  grep -Fq 'cargo test --locked -p ficant-data --test snapshot_codec' <<<"$rust" || return 1
   grep -Fq 'cargo test --locked -p ficant-storage --lib' <<<"$rust" || return 1
+  local business
+  business=$(workflow_job "$candidate" business-loop)
+  grep -Fq 'cargo test --locked -p ficant-data --test snapshot_publication_sit -- --test-threads=1' <<<"$business" || return 1
   grep -Fq 'ref: ${{ github.event.pull_request.head.sha || github.sha }}' <<<"$supply" || return 1
   grep -Fq 'FICANT_TRUSTED_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}' <<<"$supply" || return 1
   grep -Fq 'FICANT_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}' <<<"$supply" || return 1

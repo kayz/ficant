@@ -65,7 +65,7 @@ jobs:
           --volume "${{ github.workspace }}:/workspace"
           --workdir /workspace
           rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663
-          sh -ec 'cargo build --workspace --all-targets --locked && cargo test --workspace --locked --exclude ficant-acceptance --exclude ficant-data --exclude ficant-storage --exclude ficant-contract-tests && cargo test --locked -p ficant-storage --lib && cargo test --locked -p ficant-data --test canonical_ingestion'
+          sh -ec 'cargo build --workspace --all-targets --locked && cargo test --workspace --locked --exclude ficant-acceptance --exclude ficant-data --exclude ficant-storage --exclude ficant-contract-tests && cargo test --locked -p ficant-storage --lib && cargo test --locked -p ficant-data --test canonical_ingestion && cargo test --locked -p ficant-data --test snapshot_codec'
 
   python:
     runs-on: ubuntu-24.04
@@ -192,7 +192,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
-      - name: Real serial Phase 1 business stage
+      - name: Real serial business and immutable snapshot stage
         shell: bash
         run: |
           set -euo pipefail
@@ -237,7 +237,7 @@ jobs:
             --env FICANT_TEST_RUNTIME_IMAGE_DIGEST \
             --volume "${{ github.workspace }}:/workspace" --workdir /workspace \
             rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 \
-            sh -ec 'cargo test --locked -p ficant-acceptance --test phase1_business_loop -- --test-threads=1 && cargo test --locked -p ficant-acceptance --test negative_invariants -- --test-threads=1'
+            sh -ec 'cargo test --locked -p ficant-acceptance --test phase1_business_loop -- --test-threads=1 && cargo test --locked -p ficant-acceptance --test negative_invariants -- --test-threads=1 && cargo test --locked -p ficant-data --test snapshot_publication_sit -- --test-threads=1'
 
   supply-chain:
     runs-on: ubuntu-24.04
