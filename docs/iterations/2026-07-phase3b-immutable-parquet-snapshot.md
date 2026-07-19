@@ -42,7 +42,7 @@
 - `./scripts/check.ps1`：exit 0；Rust fmt/strict Clippy/workspace build、generated contract 12/12、C++ CTest 8/8、Phase 2C/2D 独立 Oracle 各 3/3、Phase 2E live SDK 1/1、Phase 3A 5/5、Phase 3B 2/2、Web 29/29，其余非环境回归全部通过。
 - `./scripts/check.ps1 -IncludeIntegration`：exit 0；在同一 disposable PostgreSQL 16 + Ceph RGW 上，migration 4/4、Phase 1 业务闭环 1/1、负向不变量 13/13、Phase 2B/2C/2D 发布重放各 1/1、Phase 3A registry 与双源各 1/1、Phase 3B codec 2/2 与脱离外源发布重读 1/1。统一入口曾发现旧 Phase 1 acceptance 清理未删除 Phase 3A 新增 `data` schema；最终候选已显式清理并通过上述完整串行回归。
 - `bash .github/scripts/tests/run-repo-policy-tests.sh`：exit 0；中文、路径、CI 合同和恢复 fixture 全部通过，CI 已显式运行 Phase 3B codec 与真实存储验收。
-- 冻结 Syft 1.46.0 扫描发布树得到 641 个 Cargo/PyPI/npm 包，其中一方包 16 个；`verify-license-inventory.py verify --require-first-party --require-native-lf` exit 0，inventory digest 为 `d5c37afb325a25e2b720f122da23a59ddd1b8e13282672a781a2953a9ca38262`。
+- 冻结 Syft 1.46.0 扫描发布树得到 641 个 Cargo/PyPI/npm 包，其中一方包 16 个；`verify-license-inventory.py verify --require-first-party --require-native-lf` exit 0，inventory digest 为 `7361f7134f4779ac81cf81b12f132f7a7903554a6abfac4c7bb73d3e504151ac`。
 
 ## 残余风险
 
