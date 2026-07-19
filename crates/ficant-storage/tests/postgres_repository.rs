@@ -25,7 +25,7 @@ use ficant_domain::research::{
     Artifact, ArtifactKind, DataSnapshot, DataSnapshotInput, ExperimentRun, ExperimentRunInput,
     JournalEventType, RunJournal, RunJournalInput, RunState, SignalSet, SignalSetInput,
 };
-use ficant_storage::minio::MinioBlobStore;
+use ficant_storage::s3::S3BlobStore;
 use sqlx::PgPool;
 use sqlx::types::chrono::{NaiveDate, TimeZone, Utc};
 
@@ -1823,7 +1823,7 @@ async fn stage_verified_blob(
     let scope = support::access_scope(&owner);
     let (endpoint, bucket, access_key, secret_key) = support::s3_environment();
     let store =
-        MinioBlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone()).unwrap();
+        S3BlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone()).unwrap();
     let staged = store
         .begin_stage(
             BeginBlobStage::new(
@@ -1864,7 +1864,7 @@ async fn stage_verified_snapshot_blob(
     let scope = support::access_scope(&owner);
     let (endpoint, bucket, access_key, secret_key) = support::s3_environment();
     let store =
-        MinioBlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone()).unwrap();
+        S3BlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone()).unwrap();
     let staged = store
         .begin_stage(
             BeginBlobStage::new(

@@ -159,7 +159,7 @@ pub(crate) async fn validate_run_rule(
     )
     .bind(proof.tenant_id().as_str())
     .bind(proof.snapshot_id().as_str())
-    .bind(crate::minio::content_addressed::hash_hex(
+    .bind(crate::s3::content_addressed::hash_hex(
         proof.snapshot_content_hash(),
     ))
     .fetch_optional(&mut **transaction)

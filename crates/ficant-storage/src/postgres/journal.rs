@@ -133,7 +133,7 @@ pub(crate) async fn persist_journal(
     };
     let actual_previous = event
         .prev_hash()
-        .map(crate::minio::content_addressed::hash_hex);
+        .map(crate::s3::content_addressed::hash_hex);
     if expected_previous != actual_previous {
         return Err(application_error(
             ApplicationErrorCategory::LineageIncomplete,
@@ -179,11 +179,9 @@ pub(crate) async fn persist_journal(
     .bind(
         event
             .prev_hash()
-            .map(crate::minio::content_addressed::hash_hex),
+            .map(crate::s3::content_addressed::hash_hex),
     )
-    .bind(crate::minio::content_addressed::hash_hex(
-        event.content_hash(),
-    ))
+    .bind(crate::s3::content_addressed::hash_hex(event.content_hash()))
     .bind(command.idempotency_key().as_str())
     .bind(command.fingerprint().content_hash().as_bytes().as_slice())
     .bind(encode_journal(event))

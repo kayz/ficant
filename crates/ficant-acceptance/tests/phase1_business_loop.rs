@@ -32,8 +32,8 @@ use ficant_domain::research::{
     Artifact, ArtifactKind, DataSnapshot, DataSnapshotInput, ExperimentRun, ExperimentRunInput,
     RunState, SignalSet, SignalSetInput, UniverseSnapshot,
 };
-use ficant_storage::minio::MinioBlobStore;
 use ficant_storage::postgres::PostgresRepository;
+use ficant_storage::s3::S3BlobStore;
 use serde_json::Value;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
@@ -855,12 +855,12 @@ fn postgres_repository(pool: PgPool) -> PostgresRepository {
     PostgresRepository::new(pool, Arc::new(cursor))
 }
 
-fn blob_store(pool: PgPool) -> MinioBlobStore {
-    MinioBlobStore::new(
-        &env::var("FICANT_TEST_S3_ENDPOINT").expect("real MinIO endpoint must be configured"),
-        env::var("FICANT_TEST_S3_BUCKET").expect("isolated MinIO bucket must be configured"),
-        &env::var("FICANT_TEST_S3_ACCESS_KEY").expect("MinIO access key must be configured"),
-        &env::var("FICANT_TEST_S3_SECRET_KEY").expect("MinIO secret key must be configured"),
+fn blob_store(pool: PgPool) -> S3BlobStore {
+    S3BlobStore::new(
+        &env::var("FICANT_TEST_S3_ENDPOINT").expect("real S3 endpoint must be configured"),
+        env::var("FICANT_TEST_S3_BUCKET").expect("isolated S3 bucket must be configured"),
+        &env::var("FICANT_TEST_S3_ACCESS_KEY").expect("S3 access key must be configured"),
+        &env::var("FICANT_TEST_S3_SECRET_KEY").expect("S3 secret key must be configured"),
         pool,
     )
     .unwrap()
@@ -897,7 +897,7 @@ async fn publish_definition(
 }
 
 async fn stage(
-    store: &MinioBlobStore,
+    store: &S3BlobStore,
     scope: &AccessScope,
     owner: &OwnerRef,
     prefix: &str,

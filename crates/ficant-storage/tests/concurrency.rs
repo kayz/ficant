@@ -18,7 +18,7 @@ use ficant_domain::research::{
     DataSnapshot, DataSnapshotInput, ExperimentRun, ExperimentRunInput, JournalEventType,
     RunJournal, RunJournalInput, RunState,
 };
-use ficant_storage::minio::MinioBlobStore;
+use ficant_storage::s3::S3BlobStore;
 use sqlx::PgPool;
 use sqlx::types::chrono::{NaiveDate, TimeZone, Utc};
 
@@ -472,7 +472,7 @@ async fn snapshot_command(pool: &PgPool, snapshot_id: &str, bytes: &[u8]) -> Pub
     );
     let (endpoint, bucket, access_key, secret_key) = support::s3_environment();
     let store =
-        MinioBlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone()).unwrap();
+        S3BlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone()).unwrap();
     let stage_key = format!("snapshot:concurrent:blob:{snapshot_id}");
     let staged = store
         .begin_stage(

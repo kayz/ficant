@@ -97,7 +97,7 @@ pub(crate) async fn publish_blob_reference(
 ) -> StorageResult<()> {
     let size = i64::try_from(blob_size)
         .map_err(|_| application_error(ApplicationErrorCategory::ValidationFailed, false))?;
-    let hash = crate::minio::content_addressed::hash_hex(content_hash);
+    let hash = crate::s3::content_addressed::hash_hex(content_hash);
     let object_key = format!("immutable/{hash}");
     let candidate: Option<(String, i64)> = sqlx::query_as(
         "SELECT object_key, blob_size
@@ -192,7 +192,7 @@ pub(crate) async fn insert_lineage(
             .map_err(|_| application_error(ApplicationErrorCategory::ValidationFailed, false))?;
         let content_hash = reference
             .content_hash()
-            .map(crate::minio::content_addressed::hash_hex);
+            .map(crate::s3::content_addressed::hash_hex);
         let target_exists: bool = sqlx::query_scalar(
             "WITH candidates(target_version, target_content_hash) AS (
                  SELECT version, NULL::text FROM market.units

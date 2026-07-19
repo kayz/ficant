@@ -1,6 +1,6 @@
 # ficant 产品范围
 
-**状态：** Phase 0 / Phase 1 已完成；iteration-3 已交付 Phase 2A 固定收益纵向切片，其余 Phase 2 与 Phase 3+ 仍为后续范围
+**状态：** Phase 0 / Phase 1 已完成；iteration-3 已交付 Phase 2A 固定收益纵向切片；2026-07 对象存储迁移候选统一为 Ceph RGW + Apache `object_store`；其余 Phase 2 与 Phase 3+ 仍为后续范围
 
 **实现状态：** 当前能力以已合并代码、冻结合同和可重放本地证据为准，不把局部纵向切片扩写为完整 Phase 或最终产品
 
@@ -18,7 +18,7 @@ ficant 是面向专业投资研究团队的 AI 原生量化研究平台。平台
 
 - Rust Workspace 是唯一后台实现；Python 只承担生成节点运行时/合同消费，C++20 只保留稳定 C ABI 数值库边界。
 - `interface/` 是后台 Protobuf 唯一来源，并生成 Rust、Python、TypeScript consumer；不建立平行 REST/OpenAPI DTO。
-- PostgreSQL Migration、MinIO 内容寻址对象、开发 Compose、固定工具链和多语言构建已进入发布候选。
+- PostgreSQL Migration、Ceph RGW 内容寻址对象、开发 Compose、固定工具链和多语言构建已进入发布候选。
 - React Platform Shell 已实现真实 Rust gRPC-Web 路径、会话、应用目录和短期应用启动授权。
 - 多 WebApp 的页面设计、代码和测试统一位于 `web-dm/`；后台接口设计保留在根 `interface/`，避免未来 WebApp 各自复制后台合同。
 
@@ -35,7 +35,7 @@ ficant 是面向专业投资研究团队的 AI 原生量化研究平台。平台
 → 重启后 required read 与确定性重放
 ```
 
-这条链路使用真实 PostgreSQL 与 MinIO，约束租户/所有者、精确版本、单位、规则生效时间、内容哈希、大小、血缘、幂等、并发和不可变性。已发布内容的正式读取是 required read：metadata 存在而对象缺失、哈希漂移或大小漂移属于完整性损失，不会被解释为“未找到”。
+这条链路使用真实 PostgreSQL 与 Ceph RGW，约束租户/所有者、精确版本、单位、规则生效时间、内容哈希、大小、血缘、幂等、并发和不可变性。已发布内容的正式读取是 required read：metadata 存在而对象缺失、哈希漂移或大小漂移属于完整性损失，不会被解释为“未找到”。
 
 `Artifact` 与 `SignalSet` 是不同身份的根对象；`SignalSet` 通过内容寻址引用真实 Artifact，并与 Snapshot、Run、RulePack 和输入产物形成可复核血缘。平台输出仍然是信号和研究证据，不是订单。
 
@@ -48,7 +48,7 @@ C++20 固定收益内核
 → 稳定 C ABI
 → 安全 Rust adapter 与应用用例
 → 确定性 Arrow Artifact
-→ PostgreSQL / MinIO stage、校验、发布、读取与重放
+→ PostgreSQL / Ceph RGW stage、校验、发布、读取与重放
 ```
 
 平台生成的现金流、估值和风险结果保持内部 `BondAnalyticsResult` / Artifact 语义，不写成外部来源的 `Cashflow` 或 `Valuation` 事实。该内部闭环没有实现曲线、Carry/Roll-down、国债期货数值、转换因子（CF）、基差、隐含回购利率（IRR）、最便宜可交割券（CTD）或套保算法，也没有实现外部市场数据源适配。

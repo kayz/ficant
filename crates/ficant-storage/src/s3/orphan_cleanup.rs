@@ -2,7 +2,7 @@ use ficant_application::ports::ApplicationResult;
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use sqlx::PgPool;
 
-use super::MinioBlobStore;
+use super::S3BlobStore;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CleanupReport {
@@ -24,13 +24,13 @@ impl CleanupReport {
 
 #[derive(Clone)]
 pub struct OrphanCleaner {
-    store: MinioBlobStore,
+    store: S3BlobStore,
     pool: PgPool,
 }
 
 impl OrphanCleaner {
     #[must_use]
-    pub fn new(store: MinioBlobStore, pool: PgPool) -> Self {
+    pub fn new(store: S3BlobStore, pool: PgPool) -> Self {
         Self { store, pool }
     }
 

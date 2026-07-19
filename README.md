@@ -36,7 +36,7 @@ FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三�
 - `main` 的现有十项 `ci` 全部成功后，GitHub Linux Runner 从精确 Commit SHA 构建 `ficant-server`、`ficant-worker` 和 `ficant-web` 镜像，推送 `sha-<commit>` 与 `test-latest` 标签到 GHCR。测试机始终部署 SHA 标签，不依赖 `latest`。
 - GitHub `test` Environment 通过专用 SSH 身份连接测试机的 `ficant-deploy` 账号；测试机只拉镜像、执行版本化 PostgreSQL migration 和 Docker Compose，不现场编译源码。
 - 发布脚本记录 current、previous、镜像 SHA、部署时间、migration、健康检查和冒烟结果；失败时如存在 previous SHA，直接切回上一组镜像。
-- 首版运行拓扑明确不包含 MinIO 或对象存储 adapter。三个发布二进制的依赖闭包不包含 `minio`/`async-std`，因此既有 `RUSTSEC-2025-0052` 不进入该运行时；受维护的 S3 兼容实现完成选择和验证前，对象存储保持 fail-closed。
+- 当前测试发布拓扑仍未把对象存储 adapter 装配进三个发布二进制；源码 Workspace 已统一迁移到 Apache `object_store` + Ceph RGW，锁文件与可达依赖图均不再包含 `minio`/`async-std`，既有 `RUSTSEC-2025-0052` 风险接受已退出。开发与 CI 使用锁定摘要的单节点 RGW 夹具，生产 Ceph 集群拓扑仍需独立运维授权。
 - 该环境只证明发布链路和当前最小服务探针，不等于完整业务 UAT、生产发布或对象存储验收。
 
 ---
@@ -733,7 +733,7 @@ CapabilityArtifact
                                 │ Arrow IPC / Parquet / Protobuf
 ┌───────────────────────────────▼───────────────────────────────────────┐
 │                              Data Plane                               │
-│ PostgreSQL │ MinIO │ Data Adapters │ Snapshot Store │ Evidence Ledger │
+│ PostgreSQL │ Ceph RGW │ Data Adapters │ Snapshot Store │ Evidence Ledger │
 └───────────────────────────────┬───────────────────────────────────────┘
                                 │
                External Database / File / Data Service / Market System
@@ -797,7 +797,7 @@ SignalPublished
 RunClosed
 ```
 
-事实先写入 PostgreSQL 的 append-only journal，再由投影表形成可查询状态。Artifact 使用内容哈希保存在 MinIO。
+事实先写入 PostgreSQL 的 append-only journal，再由投影表形成可查询状态。Artifact 使用内容哈希保存在 Ceph RGW。
 
 ### 8.5 WebApp 运行方式
 
@@ -834,7 +834,7 @@ WebApp 由平台 Shell 通过 iframe 加载，使用短期 App Token 调用 gRPC
 | 数据库访问 | SQLx | PostgreSQL 查询、事务和 Migration |
 | 元数据数据库 | PostgreSQL 16 | 开发版唯一数据库 |
 | 信创数据库 | openGauss | 信创改造阶段唯一目标数据库 |
-| 对象存储 | MinIO | 数据快照、代码包、模型和报告 Artifact |
+| 对象存储 | Ceph RGW | 数据快照、代码包、模型和报告 Artifact |
 | 内存数据格式 | Apache Arrow | Rust 与 Python 之间的列式数据交换 |
 | 持久数据格式 | Apache Parquet | 不可变研究快照和大规模结果 |
 | 后台序列化 | Protobuf | 领域对象、节点契约和服务接口 |
@@ -922,7 +922,7 @@ Python 只用于：
 - 模型训练和推断节点；
 - 报告中的研究型计算。
 
-Python 不实现平台控制平面，不直接访问 PostgreSQL，不直接访问 MinIO，不持有平台密钥。
+Python 不实现平台控制平面，不直接访问 PostgreSQL，不直接访问 Ceph RGW，不持有平台密钥。
 
 ### 9.4 API 契约
 
@@ -950,7 +950,7 @@ PostgreSQL 保存：
 - 任务队列；
 - 审批和发布记录。
 
-MinIO 保存：
+Ceph RGW 保存：
 
 - Parquet 数据快照；
 - Arrow IPC 中间包；
@@ -975,7 +975,7 @@ PostgreSQL 不保存大规模行情矩阵和因子矩阵。
 - 金额、价格和利率使用定点 Decimal；
 - 时间统一存储 UTC，并单独保存市场时区；
 - 对象 ID 使用 ULID 字符串；
-- 大字段和大矩阵进入 MinIO；
+- 大字段和大矩阵进入 Ceph RGW；
 - Migration 必须具备前向升级和数据校验脚本。
 
 ---
@@ -994,13 +994,13 @@ Rust stable，版本由 rust-toolchain.toml 固定
 Python 3.12
 VS LLVM 19.1.5（C++/ABI 主工具链）+ standalone Clang 18（回退）+ CMake + Ninja
 PostgreSQL 16
-MinIO
+Ceph RGW
 Docker Desktop + Docker Compose（仅在进入本地 SIT 时）
 gVisor
 Node.js 22 + pnpm
 ```
 
-Docker Desktop 的 PostgreSQL/MinIO 隔离环境由 Orchestrator 的 delivery work 在 SIT 阶段管理；
+Docker Desktop 的 PostgreSQL/Ceph RGW 隔离环境由 Orchestrator 的 delivery work 在 SIT 阶段管理；
 Human 负责 Docker Desktop GUI、启动和管理员操作。命令从 Windows 执行，不要求 WSL Integration。Linux 只在明确命名的兼容、CI/container、
 发布或 UAT 门禁中验证；仓库现存 WSL runner/config/evidence 是历史来源，在另行退役前保留。
 
@@ -1080,7 +1080,7 @@ PostgreSQL 16 schema
 - Protobuf 契约仓库；
 - PostgreSQL 16 Migration；
 - Windows Docker Desktop 阶段特定 SIT 环境；
-- MinIO Bucket 规范；
+- S3 Bucket 规范；
 - Python GeneratedNode 基础镜像；
 - React Platform Shell；
 - CI、格式化、静态检查和依赖审计；
@@ -1276,7 +1276,7 @@ PostgreSQL 16 schema
 
 - 每次模型调用和工具调用可审计；
 - AI 只能通过平台 Tool 访问对象；
-- AI 无法直接访问数据库、MinIO 和密钥。
+- AI 无法直接访问数据库、Ceph RGW 和密钥。
 
 ### Phase 8：GeneratedNode 与实时研究补丁
 
@@ -1520,7 +1520,7 @@ Rust 使用 `tracing` 产生结构化事件，通过 OTLP 输出。
 | 普通开发 OS | Windows 11 + PowerShell 7 |
 | 开发数据库 | PostgreSQL 16 |
 | 信创数据库 | openGauss |
-| 对象存储 | MinIO |
+| 对象存储 | Ceph RGW |
 | 数据格式 | Arrow + Parquet |
 | 控制平面 | Rust 模块化单体 |
 | 任务执行 | Rust Worker + PostgreSQL Lease Queue |

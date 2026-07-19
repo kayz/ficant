@@ -1,5 +1,12 @@
 # 交付发布说明
 
+## Ceph RGW 对象存储迁移候选（2026-07-19）
+
+- 新增独立迭代，把对象存储服务端从 MinIO 更换为 Ceph RGW 20.2.2，把 Rust client 从 `minio 0.4.0` 更换为 Apache `object_store 0.14.1`；公共 Protobuf、数据库 migration 和业务数值语义不变。
+- 活动 Cargo 锁文件与可达依赖图不再包含 `minio` 或 `async-std`，供应链 `risk_acceptances` 收敛为空；`RUSTSEC-2025-0052` 的历史接受记录仍保留在旧迭代证据中，但不再适用于当前候选。
+- 开发 Compose 和 Linux business-loop CI 统一使用锁定摘要、非 root、只读根文件系统的单节点 Ceph RGW 夹具。它用于真实 S3/业务回归，不授权生产 Ceph 集群、数据迁移或发布。
+- 本节的最终命令、测试数量、候选 commit 和残余风险以 [`docs/iterations/2026-07-ceph-object-store-migration.md`](../iterations/2026-07-ceph-object-store-migration.md) 与对应 Pull Request 为准；以下旧发布说明保持其发生时的历史事实。
+
 ## v0.1.0-test.1 GitHub 测试环境（2026-07-17）
 
 - Human 已授权第一个 GitHub `test` Environment 和 Linux 测试机发布链路；这是一项 Iteration 3 关闭后的 Delivery 活动，不恢复业务迭代。

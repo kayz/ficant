@@ -98,7 +98,7 @@ pub(crate) async fn persist_artifact(
     .bind(artifact.owner().owner_id().as_str())
     .bind(artifact_kind(artifact.kind()))
     .bind(artifact.media_type())
-    .bind(crate::minio::content_addressed::hash_hex(
+    .bind(crate::s3::content_addressed::hash_hex(
         artifact.content_hash(),
     ))
     .bind(i64::try_from(artifact.blob_size()).map_err(|_| {

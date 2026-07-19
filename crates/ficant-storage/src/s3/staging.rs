@@ -7,21 +7,18 @@ use ficant_application::ports::{
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory, map_domain_error};
 use ficant_domain::primitives::{ContentHash, Ulid};
-use minio::s3::MinioClient;
-use minio::s3::creds::StaticProvider;
-use minio::s3::error::{Error as MinioError, S3ServerError};
-use minio::s3::http::BaseUrl;
-use minio::s3::minio_error_response::MinioErrorCode;
-use minio::s3::types::S3Api;
+use object_store::aws::AmazonS3Builder;
+use object_store::path::Path;
+use object_store::{ObjectStore, ObjectStoreExt};
 use sqlx::PgPool;
+use std::sync::Arc;
 
 use super::content_addressed::content_key;
 use crate::postgres::common::{application_error, lock_idempotency, map_sqlx_error};
 
 #[derive(Clone)]
-pub struct MinioBlobStore {
-    pub(super) client: MinioClient,
-    pub(super) bucket: String,
+pub struct S3BlobStore {
+    pub(super) client: Arc<dyn ObjectStore>,
     tracking_pool: PgPool,
 }
 
@@ -41,8 +38,8 @@ type SignalReferenceRow = (
     Option<i64>,
 );
 
-impl MinioBlobStore {
-    /// Creates an S3-compatible `MinIO` adapter without exposing credentials.
+impl S3BlobStore {
+    /// Creates a vendor-neutral S3 adapter without exposing credentials.
     ///
     /// # Errors
     ///
@@ -54,15 +51,18 @@ impl MinioBlobStore {
         secret_key: &str,
         tracking_pool: PgPool,
     ) -> ApplicationResult<Self> {
-        let base_url = endpoint
-            .parse::<BaseUrl>()
-            .map_err(|_| validation_error())?;
-        let credentials = StaticProvider::new(access_key, secret_key, None);
-        let client = MinioClient::new(base_url, Some(credentials), None, None)
+        let client = AmazonS3Builder::new()
+            .with_endpoint(endpoint)
+            .with_bucket_name(bucket)
+            .with_access_key_id(access_key)
+            .with_secret_access_key(secret_key)
+            .with_region("us-east-1")
+            .with_allow_http(endpoint.starts_with("http://"))
+            .with_virtual_hosted_style_request(false)
+            .build()
             .map_err(|_| validation_error())?;
         Ok(Self {
-            client,
-            bucket,
+            client: Arc::new(client),
             tracking_pool,
         })
     }
@@ -91,34 +91,23 @@ impl MinioBlobStore {
     }
 
     async fn read_object(&self, key: &str) -> ApplicationResult<Option<Vec<u8>>> {
-        let response = match self
-            .client
-            .get_object(&self.bucket, key)
-            .map_err(|_| validation_error())?
-            .build()
-            .send()
-            .await
-        {
+        let path = Path::from(key);
+        let response = match self.client.get(&path).await {
             Ok(response) => response,
-            Err(error) if is_missing(&error) => return Ok(None),
+            Err(object_store::Error::NotFound { .. }) => return Ok(None),
             Err(_) => return Err(storage_error()),
         };
-        let content = response.content().map_err(|_| storage_error())?;
-        let bytes = content
-            .to_segmented_bytes()
+        let bytes = response
+            .bytes()
             .await
             .map_err(|_| storage_error())?
-            .to_bytes()
             .to_vec();
         Ok(Some(bytes))
     }
 
     async fn put_object(&self, key: &str, bytes: Vec<u8>) -> ApplicationResult<()> {
         self.client
-            .put_object_content(&self.bucket, key, bytes)
-            .map_err(|_| validation_error())?
-            .build()
-            .send()
+            .put(&Path::from(key), bytes.into())
             .await
             .map_err(|_| storage_error())?;
         Ok(())
@@ -126,10 +115,7 @@ impl MinioBlobStore {
 
     pub(super) async fn delete_object(&self, key: &str) -> ApplicationResult<()> {
         self.client
-            .delete_object(&self.bucket, key)
-            .map_err(|_| validation_error())?
-            .build()
-            .send()
+            .delete(&Path::from(key))
             .await
             .map_err(|_| storage_error())?;
         Ok(())
@@ -263,7 +249,7 @@ impl MinioBlobStore {
 }
 
 #[async_trait]
-impl VerifiedBlobReader for MinioBlobStore {
+impl VerifiedBlobReader for S3BlobStore {
     async fn read_required(
         &self,
         request: &RequiredVerifiedBlobRead,
@@ -322,7 +308,7 @@ impl VerifiedBlobReader for MinioBlobStore {
 }
 
 #[async_trait]
-impl BlobStore for MinioBlobStore {
+impl BlobStore for S3BlobStore {
     async fn begin_stage(&self, command: BeginBlobStage) -> ApplicationResult<StagedBlobRef> {
         let mut identity_input = Vec::with_capacity(32 + command.idempotency_key().as_str().len());
         identity_input.extend_from_slice(command.fingerprint().content_hash().as_bytes());
@@ -483,7 +469,7 @@ impl BlobStore for MinioBlobStore {
     }
 }
 
-impl MinioBlobStore {
+impl S3BlobStore {
     async fn register_orphan_candidate(
         &self,
         hash: &ContentHash,
@@ -559,14 +545,6 @@ fn ulid_from_hash(hash: &ContentHash) -> ApplicationResult<Ulid> {
     }
     let value = String::from_utf8(encoded.to_vec()).map_err(|_| validation_error())?;
     Ulid::new(value).map_err(map_domain_error)
-}
-
-fn is_missing(error: &MinioError) -> bool {
-    matches!(
-        error,
-        MinioError::S3Server(S3ServerError::S3Error(response))
-            if response.code() == MinioErrorCode::NoSuchKey
-    )
 }
 
 fn validation_error() -> ApplicationError {

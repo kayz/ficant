@@ -85,7 +85,7 @@ try {
                 [string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable($_))
             })
             if ($missingVariables.Count -gt 0) {
-                throw "Integration checks require a disposable local PostgreSQL/MinIO environment. Missing environment variables: $($missingVariables -join ', ')"
+                throw "Integration checks require a disposable local PostgreSQL/Ceph RGW environment. Missing environment variables: $($missingVariables -join ', ')"
             }
         }
 

@@ -17,7 +17,7 @@ OPAID 是从任务冻结到精确本地自测候选的唯一活动开发方法�
 
 中央 `cicd` 是候选合并后的唯一发布管理边界，负责 GitHub CI、Linux 制品构建、GHCR、测试环境部署、健康与冒烟检查、部署记录及回滚。OPAID 不等待或报告 CI/CD 作为本地退出门，也不执行服务器管理、SIT、UAT 或发布操作。
 
-仓库提供 PowerShell 7 的 `scripts/check-fast.ps1` 和 `scripts/check.ps1`。入口使用参数数组、失败即退出和离线锁定依赖；不包含 SSH、GitHub、部署、发布或网络安装行为。需要 PostgreSQL/MinIO 的回归只能由显式 `-IncludeIntegration` 选择，并只面向调用者准备的一次性本地环境。
+仓库提供 PowerShell 7 的 `scripts/check-fast.ps1` 和 `scripts/check.ps1`。入口使用参数数组、失败即退出和离线锁定依赖；不包含 SSH、GitHub、部署、发布或网络安装行为。需要 PostgreSQL/Ceph RGW 的回归只能由显式 `-IncludeIntegration` 选择，并只面向调用者准备的一次性本地环境。
 
 不创建新的状态 ledger、agent registry、mailbox、治理 checklist 或活动治理目录。编排工具是运行中 OPAID 状态的来源；Git Commit、测试输出、PR、Actions、GHCR 标签和部署记录分别是候选与发布事实来源。
 

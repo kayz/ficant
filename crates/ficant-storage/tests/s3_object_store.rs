@@ -10,17 +10,17 @@ use ficant_application::ports::{
 use ficant_domain::market::{Unit, UnitInput};
 use ficant_domain::primitives::{ContentHash, LineageRef, MarketTime, OwnerRef, Ulid, Version};
 use ficant_domain::research::{DataSnapshot, DataSnapshotInput};
-use ficant_storage::minio::{MinioBlobStore, OrphanCleaner};
+use ficant_storage::s3::{OrphanCleaner, S3BlobStore};
 use sqlx::types::chrono::{NaiveDate, TimeZone, Utc};
 
 #[tokio::test]
-async fn minio_stages_verifies_and_promotes_server_checked_content() {
+async fn s3_stages_verifies_and_promotes_server_checked_content() {
     let (endpoint, bucket, access_key, secret_key) = support::s3_environment();
     let pool = support::postgres_pool().await;
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
-    let store = MinioBlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool)
-        .expect("MinIO adapter configuration must be valid");
+    let store = S3BlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool)
+        .expect("S3 adapter configuration must be valid");
     let owner = OwnerRef::new(
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F01").unwrap(),
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F02").unwrap(),
@@ -34,7 +34,7 @@ async fn minio_stages_verifies_and_promotes_server_checked_content() {
                 scope.clone(),
                 owner,
                 u64::try_from(bytes.len()).unwrap(),
-                IdempotencyKey::new("minio-object-store:stage:v1").unwrap(),
+                IdempotencyKey::new("s3-object-store:stage:v1").unwrap(),
             )
             .unwrap(),
         )
@@ -73,7 +73,7 @@ async fn orphan_cleanup_deletes_only_unreferenced_content() {
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
     let store =
-        MinioBlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone()).unwrap();
+        S3BlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone()).unwrap();
     let owner = OwnerRef::new(
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F01").unwrap(),
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F02").unwrap(),
@@ -88,7 +88,7 @@ async fn orphan_cleanup_deletes_only_unreferenced_content() {
                 scope.clone(),
                 owner.clone(),
                 u64::try_from(orphan_bytes.len()).unwrap(),
-                IdempotencyKey::new("minio-orphan:stage:v1").unwrap(),
+                IdempotencyKey::new("s3-orphan:stage:v1").unwrap(),
             )
             .unwrap(),
         )
@@ -121,7 +121,7 @@ async fn orphan_cleanup_deletes_only_unreferenced_content() {
                 scope.clone(),
                 owner.clone(),
                 u64::try_from(protected_bytes.len()).unwrap(),
-                IdempotencyKey::new("minio-protected:stage:v1").unwrap(),
+                IdempotencyKey::new("s3-protected:stage:v1").unwrap(),
             )
             .unwrap(),
         )
@@ -152,7 +152,7 @@ async fn orphan_cleanup_deletes_only_unreferenced_content() {
                 scope.clone(),
                 owner.clone(),
                 u64::try_from(protected_manifest_bytes.len()).unwrap(),
-                IdempotencyKey::new("minio-protected:manifest-stage:v1").unwrap(),
+                IdempotencyKey::new("s3-protected:manifest-stage:v1").unwrap(),
             )
             .unwrap(),
         )
@@ -184,7 +184,7 @@ async fn orphan_cleanup_deletes_only_unreferenced_content() {
             lineage_id.clone(),
             owner.clone(),
             DefinitionKind::Unit,
-            IdempotencyKey::new("minio-protected:lineage:identity").unwrap(),
+            IdempotencyKey::new("s3-protected:lineage:identity").unwrap(),
         ))
         .await
         .unwrap();
@@ -204,7 +204,7 @@ async fn orphan_cleanup_deletes_only_unreferenced_content() {
                     })
                     .unwrap(),
                 ),
-                IdempotencyKey::new("minio-protected:lineage:v1").unwrap(),
+                IdempotencyKey::new("s3-protected:lineage:v1").unwrap(),
             )
             .unwrap(),
         )
@@ -248,7 +248,7 @@ async fn orphan_cleanup_deletes_only_unreferenced_content() {
                     .unwrap(),
                 )
                 .unwrap(),
-                IdempotencyKey::new("minio-protected:snapshot:publish").unwrap(),
+                IdempotencyKey::new("s3-protected:snapshot:publish").unwrap(),
             )
             .unwrap(),
         )
@@ -273,13 +273,13 @@ async fn staging_rejects_idempotency_drift_and_oversized_chunks() {
     let pool = support::postgres_pool().await;
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
-    let store = MinioBlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool).unwrap();
+    let store = S3BlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool).unwrap();
     let owner = OwnerRef::new(
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F01").unwrap(),
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F02").unwrap(),
     );
     let scope = support::access_scope(&owner);
-    let idempotency = IdempotencyKey::new("minio-stage:drift:v1").unwrap();
+    let idempotency = IdempotencyKey::new("s3-stage:drift:v1").unwrap();
     let staged = store
         .begin_stage(
             BeginBlobStage::new(scope.clone(), owner.clone(), 3, idempotency.clone()).unwrap(),
@@ -323,7 +323,7 @@ async fn candidate_registration_failure_never_creates_untracked_immutable_object
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
     let store =
-        MinioBlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone()).unwrap();
+        S3BlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone()).unwrap();
     let owner = OwnerRef::new(
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F01").unwrap(),
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F02").unwrap(),
@@ -341,7 +341,7 @@ async fn candidate_registration_failure_never_creates_untracked_immutable_object
                 scope.clone(),
                 owner,
                 u64::try_from(bytes.len()).unwrap(),
-                IdempotencyKey::new(format!("minio-candidate-failure:stage:v1:{nonce}")).unwrap(),
+                IdempotencyKey::new(format!("s3-candidate-failure:stage:v1:{nonce}")).unwrap(),
             )
             .unwrap(),
         )
@@ -391,7 +391,7 @@ async fn finalize_failure_remains_recoverable_after_adapter_restart() {
     let pool = support::postgres_pool().await;
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
-    let store = MinioBlobStore::new(
+    let store = S3BlobStore::new(
         &endpoint,
         bucket.clone(),
         &access_key,
@@ -416,7 +416,7 @@ async fn finalize_failure_remains_recoverable_after_adapter_restart() {
                 scope.clone(),
                 owner,
                 u64::try_from(bytes.len()).unwrap(),
-                IdempotencyKey::new(format!("minio-finalize-failure:stage:v1:{nonce}")).unwrap(),
+                IdempotencyKey::new(format!("s3-finalize-failure:stage:v1:{nonce}")).unwrap(),
             )
             .unwrap(),
         )
@@ -457,7 +457,7 @@ async fn finalize_failure_remains_recoverable_after_adapter_restart() {
     let candidate_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM storage.orphan_candidates WHERE content_hash = $1",
     )
-    .bind(MinioBlobStore::hash_hex(&hash))
+    .bind(S3BlobStore::hash_hex(&hash))
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -471,7 +471,7 @@ async fn finalize_failure_remains_recoverable_after_adapter_restart() {
     .await
     .unwrap();
     let restarted =
-        MinioBlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone()).unwrap();
+        S3BlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone()).unwrap();
     let cleaner = OrphanCleaner::new(restarted.clone(), pool);
     let report = cleaner.cleanup_before(4_102_444_800).await.unwrap();
     assert_eq!(report.deleted_immutable(), 1);

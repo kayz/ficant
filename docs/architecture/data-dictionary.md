@@ -94,7 +94,7 @@ Application 在任何可变 I/O 前解析 exact version 并形成 opaque proof�
 
 ## Phase 1 事务与跨存储职责
 
-Application 先完成 scope、owner、Unit、RulePack、Snapshot、Artifact/Signal 与 lineage 校验，再验证并 promote MinIO staging 内容；随后提交一个 storage-owned PostgreSQL 事务：
+Application 先完成 scope、owner、Unit、RulePack、Snapshot、Artifact/Signal 与 lineage 校验，再验证并 promote Ceph RGW staging 内容；随后提交一个 storage-owned PostgreSQL 事务：
 
 ```text
 Market Fact
@@ -104,7 +104,7 @@ Market Fact
 → 五条 RunJournal 事件
 ```
 
-PostgreSQL 负责 tenant-scoped metadata、版本/revision、血缘、durable blob ref、幂等键、并发约束和这一业务单元的原子提交。MinIO 负责按 SHA-256 内容寻址的不可变 bytes、staging/verify/promote 与 orphan 清理。不能把两种存储描述成一个分布式事务：PG 失败后的已 promote 但未引用对象由 orphan 机制回收，正式 metadata/Run/Journal 不产生半状态。
+PostgreSQL 负责 tenant-scoped metadata、版本/revision、血缘、durable blob ref、幂等键、并发约束和这一业务单元的原子提交。Ceph RGW 负责按 SHA-256 内容寻址的不可变 bytes、staging/verify/promote 与 orphan 清理。不能把两种存储描述成一个分布式事务：PG 失败后的已 promote 但未引用对象由 orphan 机制回收，正式 metadata/Run/Journal 不产生半状态。
 
 ## 已发布内容读取
 
@@ -117,7 +117,7 @@ metadata/resource 不存在返回 `NotFound`。metadata 和 durable ref 已存�
 | DataSnapshot | data Parquet 与 Manifest 两个角色都成功 |
 | UniverseSnapshot | members Manifest 成功 |
 
-对象缺失、hash mismatch 或 size mismatch 都返回 `HashMismatch/retryable=false`，并恰好发出一次 `storage.published_content_integrity_failure` 结构化事件。事件只包含安全的 tenant、resource kind/id、blob role、expected hash/size、reason 和 trace context；不输出 bucket/key、credential、raw bytes、SQL 或 stack。无法判断完整性的 MinIO/网络故障才是 `StorageUnavailable`。
+对象缺失、hash mismatch 或 size mismatch 都返回 `HashMismatch/retryable=false`，并恰好发出一次 `storage.published_content_integrity_failure` 结构化事件。事件只包含安全的 tenant、resource kind/id、blob role、expected hash/size、reason 和 trace context；不输出 bucket/key、credential、raw bytes、SQL 或 stack。无法判断完整性的 Ceph RGW/网络故障才是 `StorageUnavailable`。
 
 `probe_verified` 仍可用于 orphan/reconciliation 和未发布探测，但不得进入已发布内容的正式业务读。
 
@@ -129,11 +129,11 @@ metadata/resource 不存在返回 `NotFound`。metadata 和 durable ref 已存�
 
 ## Phase 2 与后续边界
 
-iteration-3 的小范围 Phase 2A 已实现固定利率和贴现国债的现金流、应计利息、净价、全价、到期收益率（YTM）、麦考利久期、修正久期、凸性和 DV01，并贯通 C++20 内核、稳定 C ABI、安全 Rust adapter、确定性 Arrow 编码及 PostgreSQL/MinIO 发布与重放的内部 Artifact 链。
+iteration-3 的小范围 Phase 2A 已实现固定利率和贴现国债的现金流、应计利息、净价、全价、到期收益率（YTM）、麦考利久期、修正久期、凸性和 DV01，并贯通 C++20 内核、稳定 C ABI、安全 Rust adapter、确定性 Arrow 编码及 PostgreSQL/Ceph RGW 发布与重放的内部 Artifact 链。
 
 该切片不改变外部事实语义：平台生成的现金流与估值风险结果不得写成现有 `Cashflow` 或 `Valuation`。它们使用内部 `BondAnalyticsResult` 并作为内容寻址 Artifact 发布，绑定 Bond、MarketRulePack、估值时点、输入快照、算法版本和 ABI 版本；详见 [ADR-0002](adr/0002-fixed-income-kernel-and-ffi-safety-boundary.md)。曲线、Carry/Roll-down、国债期货数值、转换因子（CF）、基差、隐含回购利率（IRR）、最便宜可交割券（CTD）和套保算法仍未实现。
 
-Storage 的发布 Workspace/生产 adapter 当前经 `minio 0.4.0` 可达 `async-std 1.13.2`，并在 put 请求签名/内容处理路径实际使用其 blocking runtime；当前 `ficant-server`/`ficant-worker` 组合根尚未直接装配该 adapter。2026-07-13 复核确认 RustSec 项为 `INFO / unmaintained`、无 patched version；`minio 0.4.0` 是 crates.io 最新版且上游 `master` 仍依赖 `async-std 1.13`，因此没有安全的小版本升级路径。该项按 D-026 作为“当前安全风险低、维护风险中等”的 `accepted-unfixed` 收束，不是架构长期背书。Human/Orchestrator 必须在每次 iteration Align、首次外部发布或 2026-10-13 前（最早者）验证上游移除、受控 fork 或受维护 S3 SDK 迁移；禁止自动继承到其他版本、依赖链、调用边界或发布范围。
+Storage adapter 通过 Apache `object_store 0.14.1` 访问 S3，并以 Ceph RGW 20.2.2 作为受支持的服务端实现；bucket、endpoint、access key 和 secret key 仍由运行环境注入。`minio` 与 `async-std` 已从锁文件和可达依赖图移除，旧 D-026 限时接受不再是活动风险处置。开发与 CI 的单节点 Ceph 只验证 S3 兼容性、内容完整性、重启和业务闭环，不代表生产高可用拓扑；选择依据和升级条件见 [ADR-0010](adr/0010-ceph-rgw-and-apache-object-store.md)。
 
 ## Validity
 

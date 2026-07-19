@@ -29,12 +29,11 @@ use ficant_domain::research::{
     Artifact, ArtifactKind, DataSnapshot, DataSnapshotInput, ExperimentRun, ExperimentRunInput,
     JournalEventType, RunJournalInput, SignalSet, SignalSetInput,
 };
-use ficant_storage::minio::MinioBlobStore;
 use ficant_storage::postgres::PostgresRepository;
-use minio::s3::MinioClient;
-use minio::s3::creds::StaticProvider;
-use minio::s3::http::BaseUrl;
-use minio::s3::types::S3Api;
+use ficant_storage::s3::S3BlobStore;
+use object_store::ObjectStoreExt;
+use object_store::aws::{AmazonS3, AmazonS3Builder};
+use object_store::path::Path as ObjectPath;
 use serde_json::Value;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
@@ -59,7 +58,7 @@ async fn q2_inv_01_rejects_semantically_wrong_units_without_side_effects() {
             .unwrap(),
         ),
     );
-    let _store = MinioBlobStore::new(
+    let _store = S3BlobStore::new(
         &env::var("FICANT_TEST_S3_ENDPOINT").unwrap(),
         env::var("FICANT_TEST_S3_BUCKET").unwrap(),
         &env::var("FICANT_TEST_S3_ACCESS_KEY").unwrap(),
@@ -486,7 +485,7 @@ async fn q2_inv_11_required_reads_fail_closed_for_missing_corrupt_and_wrong_size
             .unwrap(),
         ),
     );
-    let store = MinioBlobStore::new(
+    let store = S3BlobStore::new(
         &env::var("FICANT_TEST_S3_ENDPOINT").unwrap(),
         env::var("FICANT_TEST_S3_BUCKET").unwrap(),
         &env::var("FICANT_TEST_S3_ACCESS_KEY").unwrap(),
@@ -496,29 +495,10 @@ async fn q2_inv_11_required_reads_fail_closed_for_missing_corrupt_and_wrong_size
     .unwrap();
     let bytes = b"q2-inv-11-promoted-object".to_vec();
     let hash = ContentHash::digest(&bytes);
-    let client = MinioClient::new(
-        env::var("FICANT_TEST_S3_ENDPOINT")
-            .unwrap()
-            .parse::<BaseUrl>()
-            .unwrap(),
-        Some(StaticProvider::new(
-            &env::var("FICANT_TEST_S3_ACCESS_KEY").unwrap(),
-            &env::var("FICANT_TEST_S3_SECRET_KEY").unwrap(),
-            None,
-        )),
-        None,
-        None,
-    )
-    .unwrap();
-    let object_key = MinioBlobStore::immutable_key(&hash);
+    let client = raw_s3_client();
+    let object_key = S3BlobStore::immutable_key(&hash);
     client
-        .delete_object(
-            &env::var("FICANT_TEST_S3_BUCKET").unwrap(),
-            object_key.as_str(),
-        )
-        .unwrap()
-        .build()
-        .send()
+        .delete(&ObjectPath::from(object_key.as_str()))
         .await
         .unwrap();
     let staged = store
@@ -579,13 +559,7 @@ async fn q2_inv_11_required_reads_fail_closed_for_missing_corrupt_and_wrong_size
         .unwrap();
     let baseline = side_effect_counts(&pool).await;
     client
-        .delete_object(
-            &env::var("FICANT_TEST_S3_BUCKET").unwrap(),
-            object_key.as_str(),
-        )
-        .unwrap()
-        .build()
-        .send()
+        .delete(&ObjectPath::from(object_key.as_str()))
         .await
         .unwrap();
     assert_required_artifact_integrity_failure(
@@ -600,14 +574,10 @@ async fn q2_inv_11_required_reads_fail_closed_for_missing_corrupt_and_wrong_size
     assert_eq!(side_effect_counts(&pool).await, baseline);
 
     client
-        .put_object_content(
-            &env::var("FICANT_TEST_S3_BUCKET").unwrap(),
-            object_key.as_str(),
-            vec![b'x'; b"q2-inv-11-promoted-object".len()],
+        .put(
+            &ObjectPath::from(object_key.as_str()),
+            vec![b'x'; b"q2-inv-11-promoted-object".len()].into(),
         )
-        .unwrap()
-        .build()
-        .send()
         .await
         .unwrap();
     assert_required_artifact_integrity_failure(
@@ -622,14 +592,10 @@ async fn q2_inv_11_required_reads_fail_closed_for_missing_corrupt_and_wrong_size
     assert_eq!(side_effect_counts(&pool).await, baseline);
 
     client
-        .put_object_content(
-            &env::var("FICANT_TEST_S3_BUCKET").unwrap(),
-            object_key.as_str(),
-            vec![b'y'; b"q2-inv-11-promoted-object".len() + 1],
+        .put(
+            &ObjectPath::from(object_key.as_str()),
+            vec![b'y'; b"q2-inv-11-promoted-object".len() + 1].into(),
         )
-        .unwrap()
-        .build()
-        .send()
         .await
         .unwrap();
     assert_required_artifact_integrity_failure(
@@ -644,14 +610,10 @@ async fn q2_inv_11_required_reads_fail_closed_for_missing_corrupt_and_wrong_size
     assert_eq!(side_effect_counts(&pool).await, baseline);
 
     client
-        .put_object_content(
-            &env::var("FICANT_TEST_S3_BUCKET").unwrap(),
-            object_key.as_str(),
-            b"q2-inv-11-promoted-object".to_vec(),
+        .put(
+            &ObjectPath::from(object_key.as_str()),
+            b"q2-inv-11-promoted-object".to_vec().into(),
         )
-        .unwrap()
-        .build()
-        .send()
         .await
         .unwrap();
     let required = RequiredVerifiedBlobRead::new(
@@ -738,15 +700,23 @@ async fn q2_inv_11_required_reads_fail_closed_for_missing_corrupt_and_wrong_size
     }
     assert_eq!(durable_read_counts(&pool).await, missing_ref_baseline);
     client
-        .delete_object(
-            &env::var("FICANT_TEST_S3_BUCKET").unwrap(),
-            object_key.as_str(),
-        )
-        .unwrap()
-        .build()
-        .send()
+        .delete(&ObjectPath::from(object_key.as_str()))
         .await
         .unwrap();
+}
+
+fn raw_s3_client() -> AmazonS3 {
+    let endpoint = env::var("FICANT_TEST_S3_ENDPOINT").unwrap();
+    AmazonS3Builder::new()
+        .with_endpoint(&endpoint)
+        .with_bucket_name(env::var("FICANT_TEST_S3_BUCKET").unwrap())
+        .with_access_key_id(env::var("FICANT_TEST_S3_ACCESS_KEY").unwrap())
+        .with_secret_access_key(env::var("FICANT_TEST_S3_SECRET_KEY").unwrap())
+        .with_region("us-east-1")
+        .with_allow_http(endpoint.starts_with("http://"))
+        .with_virtual_hosted_style_request(false)
+        .build()
+        .unwrap()
 }
 
 #[tokio::test]
@@ -819,7 +789,7 @@ async fn q2_inv_07_hash_mismatch_never_promotes_or_publishes() {
         vec![owner.owner_id().clone()],
     )
     .unwrap();
-    let store = MinioBlobStore::new(
+    let store = S3BlobStore::new(
         &env::var("FICANT_TEST_S3_ENDPOINT").unwrap(),
         env::var("FICANT_TEST_S3_BUCKET").unwrap(),
         &env::var("FICANT_TEST_S3_ACCESS_KEY").unwrap(),
@@ -967,7 +937,7 @@ async fn q2_inv_09_promote_transport_failure_leaves_no_formal_reference() {
         vec![owner.owner_id().clone()],
     )
     .unwrap();
-    let good = MinioBlobStore::new(
+    let good = S3BlobStore::new(
         &env::var("FICANT_TEST_S3_ENDPOINT").unwrap(),
         env::var("FICANT_TEST_S3_BUCKET").unwrap(),
         &env::var("FICANT_TEST_S3_ACCESS_KEY").unwrap(),
@@ -993,7 +963,7 @@ async fn q2_inv_09_promote_transport_failure_leaves_no_formal_reference() {
         .await
         .unwrap();
     let baseline = side_effect_counts(&pool).await;
-    let broken = MinioBlobStore::new(
+    let broken = S3BlobStore::new(
         "http://127.0.0.1:1",
         env::var("FICANT_TEST_S3_BUCKET").unwrap(),
         &env::var("FICANT_TEST_S3_ACCESS_KEY").unwrap(),
@@ -1161,7 +1131,7 @@ async fn q2_inv_04_published_snapshot_does_not_drift_after_source_revision_two()
         2,
     )
     .await;
-    let store = MinioBlobStore::new(
+    let store = S3BlobStore::new(
         &env::var("FICANT_TEST_S3_ENDPOINT").unwrap(),
         env::var("FICANT_TEST_S3_BUCKET").unwrap(),
         &env::var("FICANT_TEST_S3_ACCESS_KEY").unwrap(),
@@ -1349,7 +1319,7 @@ impl IntegrityEventSink for RecordingSink {
 
 async fn assert_required_artifact_integrity_failure(
     repository: &PostgresRepository,
-    store: &MinioBlobStore,
+    store: &S3BlobStore,
     scope: &AccessScope,
     artifact: &Artifact,
     reason: IntegrityFailureReason,
@@ -1487,7 +1457,7 @@ async fn publish_definition(
 }
 
 async fn verified_snapshot_blob(
-    store: &MinioBlobStore,
+    store: &S3BlobStore,
     scope: &AccessScope,
     owner: &OwnerRef,
     role: SnapshotBlobRole,

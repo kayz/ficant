@@ -6,7 +6,7 @@
 - 取代：ADR-0006
 - 关联：ADR-0002、ADR-0003、ADR-0004、ADR-0005、ADR-0009
 
-> ADR-0009 已取代本文的活动治理、Worker 编排和发布责任；本文继续作为 Windows primary、按需本地能力和跨 OS 技术边界的有效决策。
+> ADR-0009 已取代本文的活动治理、Worker 编排和发布责任；本文继续作为 Windows primary、按需本地能力和跨 OS 技术边界的有效决策。文中的 MinIO 环境引用已由 ADR-0010 的 Ceph RGW 取代。
 
 ## 背景
 

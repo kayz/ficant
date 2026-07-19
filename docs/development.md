@@ -50,7 +50,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 .\scripts\check-fast.ps1
 ```
 
-它运行 `cargo fmt`、离线 workspace check、非环境 Rust 测试和 Storage library 测试；不会连接 PostgreSQL、MinIO、GitHub 或目标服务器。
+它运行 `cargo fmt`、离线 workspace check、非环境 Rust 测试和 Storage library 测试；不会连接 PostgreSQL、Ceph RGW、GitHub 或目标服务器。
 
 完整本地回归：
 
@@ -68,7 +68,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 .\scripts\check.ps1 -IncludeIntegration
 ```
 
-调用者必须先提供一次性的本地 PostgreSQL 与 MinIO，设置以下环境变量：
+调用者必须先提供一次性的本地 PostgreSQL 与 Ceph RGW，设置以下环境变量：
 
 - `FICANT_TEST_DATABASE_URL`
 - `FICANT_TEST_S3_ENDPOINT`
@@ -78,6 +78,8 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 - `FICANT_TEST_RUNTIME_IMAGE_DIGEST`
 
 脚本不会创建、部署或清理服务器，也不会打印这些值。数据库必须可以安全地被测试 migration 重置；不得指向共享、测试发布或生产数据库。
+
+仓库内 `deploy/dev/docker-compose.yml` 提供锁定镜像摘要的 PostgreSQL 与单节点 Ceph RGW 开发夹具，可用于准备上述一次性环境；它不是生产 Ceph 部署模板。RGW 使用 `FICANT_S3_ACCESS_KEY`、`FICANT_S3_SECRET_KEY`、`FICANT_S3_BUCKET` 和可选的 `FICANT_S3_PORT`，对象存储数据位于独立 `ceph-data` 命名卷。检查脚本本身仍不自动启动、停止或下载该夹具。
 
 ## 本地依赖能力
 
@@ -91,7 +93,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 | Python | uv 0.7.13、Python 3.12 与 `python/uv.lock` 所需 wheel 必须已缓存；命令使用 `--offline --locked` |
 | Web | Node 22.17.0、Corepack 缓存中的 pnpm 10.12.4，以及已完成 frozen-lockfile 安装的 `web-dm/node_modules` |
 | Protobuf | Buf 1.56.0；Windows 可用 `FICANT_BUF` 显式提供已核验的可执行文件路径 |
-| 集成测试 | 仅在 `-IncludeIntegration` 下使用调用者提供的本地一次性 PostgreSQL/MinIO 和固定 runtime image digest |
+| 集成测试 | 仅在 `-IncludeIntegration` 下使用调用者提供的本地一次性 PostgreSQL/Ceph RGW 和固定 runtime image digest |
 
 `COREPACK_ENABLE_NETWORK=0` 只在完整检查的执行范围内设置并恢复。Cargo 和 uv 同样使用离线模式，因此脚本不会因为缺少缓存而静默联网安装。
 

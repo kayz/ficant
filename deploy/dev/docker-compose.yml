@@ -54,51 +54,38 @@ services:
       start_period: 5s
       retries: 20
 
-  minio:
+  ceph-rgw:
     <<: *secure-service
     profiles: [dev]
-    image: ficant/minio-runtime:dev
+    image: ficant/ceph-rgw-runtime:dev
     build:
       context: ../..
-      dockerfile: deploy/dev/Minio.Dockerfile
+      dockerfile: deploy/dev/Ceph.Dockerfile
       args:
-        MINIO_IMAGE: minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e
-    user: "1000:1000"
+        CEPH_IMAGE: quay.io/ceph/ceph@sha256:6b4b5ae33acd3d736eb26d2a19238bce71a22f9cfb99cca887ba6312d0957644
+    user: "167:167"
     restart: unless-stopped
-    command: ["server", "/data"]
     environment:
-      MINIO_ROOT_USER: "${FICANT_MINIO_ROOT_USER:?FICANT_MINIO_ROOT_USER is required}"
-      MINIO_ROOT_PASSWORD: "${FICANT_MINIO_ROOT_PASSWORD:?FICANT_MINIO_ROOT_PASSWORD is required}"
+      FICANT_S3_ACCESS_KEY: "${FICANT_S3_ACCESS_KEY:?FICANT_S3_ACCESS_KEY is required}"
+      FICANT_S3_SECRET_KEY: "${FICANT_S3_SECRET_KEY:?FICANT_S3_SECRET_KEY is required}"
+      FICANT_S3_BUCKET: "${FICANT_S3_BUCKET:-ficant}"
     volumes:
-      - minio-data:/data
+      - ceph-data:/var/lib/ceph
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,uid=167,gid=167
+      - /run/ceph:rw,noexec,nosuid,nodev,size=16m,uid=167,gid=167
+      - /var/log/ceph:rw,noexec,nosuid,nodev,size=32m,uid=167,gid=167
+    cpus: 1.00
+    mem_limit: 1536m
+    pids_limit: 512
     ports:
-      - "127.0.0.1:${FICANT_MINIO_PORT:-19000}:9000"
+      - "127.0.0.1:${FICANT_S3_PORT:-19000}:9000"
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null"]
+      test: ["CMD-SHELL", "test -f /run/ceph/ficant-ready && code=$$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:9000/) && test \"$${code}\" = 403"]
       interval: 5s
-      timeout: 3s
-      start_period: 5s
-      retries: 20
-
-  minio-init:
-    <<: *secure-service
-    profiles: [dev]
-    image: minio/mc@sha256:09f93f534cde415d192bb6084dd0e0ddd1715fb602f8a922ad121fd2bf0f8b44
-    user: "1000:1000"
-    restart: "no"
-    environment:
-      MINIO_ROOT_USER: "${FICANT_MINIO_ROOT_USER:?FICANT_MINIO_ROOT_USER is required}"
-      MINIO_ROOT_PASSWORD: "${FICANT_MINIO_ROOT_PASSWORD:?FICANT_MINIO_ROOT_PASSWORD is required}"
-      FICANT_MINIO_BUCKET: "${FICANT_MINIO_BUCKET:-ficant}"
-      MC_CONFIG_DIR: /tmp/.mc
-    entrypoint: ["/bin/sh", "-ec"]
-    command:
-      - |
-        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
-        mc mb --ignore-existing "local/$${FICANT_MINIO_BUCKET}"
-    depends_on:
-      minio:
-        condition: service_healthy
+      timeout: 4s
+      start_period: 10s
+      retries: 36
 
   migration:
     <<: *secure-service
@@ -150,8 +137,8 @@ services:
     depends_on:
       migration:
         condition: service_completed_successfully
-      minio-init:
-        condition: service_completed_successfully
+      ceph-rgw:
+        condition: service_healthy
 
   ficant-worker:
     <<: *rust-service
@@ -165,8 +152,8 @@ services:
     depends_on:
       migration:
         condition: service_completed_successfully
-      minio-init:
-        condition: service_completed_successfully
+      ceph-rgw:
+        condition: service_healthy
       ficant-server:
         condition: service_healthy
 
@@ -182,11 +169,11 @@ services:
     depends_on:
       migration:
         condition: service_completed_successfully
-      minio-init:
-        condition: service_completed_successfully
+      ceph-rgw:
+        condition: service_healthy
       ficant-server:
         condition: service_healthy
 
 volumes:
   postgres-data:
-  minio-data:
+  ceph-data:
