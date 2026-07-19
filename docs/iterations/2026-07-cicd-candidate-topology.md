@@ -22,6 +22,7 @@
 ## 公共契约变化
 
 - `supply-chain.lock.json` 不再冻结某次历史迭代的 base SHA 和提交数，改为冻结“CI 事件/默认分支提供 base、门禁派生正数线性区间提交数”的长期合同。
+- 官方 OSV generation 的 size、SHA-256、GCS MD5/CRC32C 与更新时间继续冻结；相同字节同时保存到专用 GitHub prerelease，正式门禁从不可变镜像下载并复核 SHA-256，避免 GCS 清理历史 generation 后失效。
 - 仓库 Python 所有权策略新增严格的 Phase 验收矩阵验证器路径族，不开放通用 `tests/**.py`。
 
 ## 需 Human 决策
@@ -40,4 +41,5 @@
 ## 残余风险
 
 - 本地按锁下载 Gitleaks 的拓扑专项夹具因 GitHub Release 传输长时间无响应而主动终止；固定供应链夹具已通过，真实 Gitleaks、SBOM、OSV 和三层秘密扫描仍须以中央 `supply-chain` job 的结果收口。
+- OSV 镜像是可复现输入，不会自动获得新增漏洞；后续需另行冻结快照刷新节奏与失效提醒，本轮不把动态在线扫描混入现有离线证据合同。
 - 三个 Phase 2 PR 在本候选合并并更新 base 前仍会显示旧合同失败；不得绕过 required checks 合并。

@@ -4,7 +4,7 @@ set -euo pipefail
 
 scripts_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 lock_file="$scripts_dir/supply-chain.lock.json"
-SUPPLY_LOCK_SHA256=1926b582039e4fe7790c68c807718b464a4c150072098c001c6006c1b171a387
+SUPPLY_LOCK_SHA256=4a7706d4639af9e30e041965e9fc30dbfb4f313306ca097d334ffb1554ab700f
 
 die() {
   printf 'supply-chain: %s\n' "$1" >&2
@@ -94,6 +94,10 @@ for db in dbs:
     generation = urllib.parse.parse_qs(parsed.query).get("generation", [])
     if parsed.scheme != "https" or parsed.netloc != "storage.googleapis.com" or generation != [db["generation"]] or urllib.parse.parse_qs(parsed.query).get("alt") != ["media"]:
         print("supply-chain: OSV URL is not generation-pinned", file=sys.stderr); raise SystemExit(2)
+    mirror = urllib.parse.urlparse(db.get("mirror_url", ""))
+    expected_path = f"/kayz/ficant/releases/download/supply-chain-osv-2026-07-19/{db['asset']}"
+    if mirror.scheme != "https" or mirror.netloc != "github.com" or mirror.path != expected_path or mirror.query or mirror.fragment:
+        print("supply-chain: OSV mirror URL is not release-pinned", file=sys.stderr); raise SystemExit(2)
     if not isinstance(db.get("size"), int) or db["size"] <= 0:
         print("supply-chain: invalid OSV object size", file=sys.stderr); raise SystemExit(2)
 PY
@@ -597,7 +601,7 @@ done < <(python3 - "$lock_file" <<'PY'
 import json, pathlib, sys
 lock = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 for item in lock["osv_snapshot"]["databases"]:
-    print(item["ecosystem"], item["asset"], item["official_url"], item["size"], item["sha256"], sep="\t")
+    print(item["ecosystem"], item["asset"], item["mirror_url"], item["size"], item["sha256"], sep="\t")
 PY
 )
 verify_db_cache "$cache/db"
