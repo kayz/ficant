@@ -8,8 +8,10 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+chrono = { workspace = true }
 ficant-application = { path = "../ficant-application" }
 ficant-contracts = { path = "../ficant-contracts" }
+ficant-domain = { path = "../ficant-domain" }
 prost = { workspace = true }
 prost-types = { workspace = true }
 ring = { workspace = true }
@@ -17,9 +19,6 @@ tokio = { workspace = true }
 tonic = { workspace = true }
 tonic-web = { workspace = true }
 tower-layer = { workspace = true }
-
-[dev-dependencies]
-ficant-domain = { path = "../ficant-domain" }
 
 [lints]
 workspace = true

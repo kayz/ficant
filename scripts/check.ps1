@@ -31,6 +31,7 @@ $steps = @(
     New-FicantCheckStep -Name 'Phase 2D independent Oracle' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_phase2d_manual_oracle.py', '-q')
     New-FicantCheckStep -Name 'Phase 2D deterministic artifact tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'futures_hedge_arrow')
     New-FicantCheckStep -Name 'Python generated-contract tests' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'python/tests')
+    New-FicantCheckStep -Name 'Phase 2E live Python SDK parity' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-File', 'scripts/check-phase2e-sdk.ps1')
     New-FicantCheckStep -Name 'Web type check' -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', 'typecheck') -WorkingDirectory $webDirectory
     New-FicantCheckStep -Name 'Web production build' -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', 'build') -WorkingDirectory $webDirectory
     New-FicantCheckStep -Name 'Web unit and component tests' -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', 'test', '--', '--run') -WorkingDirectory $webDirectory

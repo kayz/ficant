@@ -760,6 +760,7 @@ dependencies = [
 name = "ficant-api"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "ficant-application",
  "ficant-contracts",
  "ficant-domain",
@@ -859,6 +860,7 @@ dependencies = [
  "ficant-application",
  "ficant-contracts",
  "ficant-domain",
+ "ficant-fixed-income-native",
  "serde_json",
  "tokio",
  "tonic",

@@ -175,6 +175,15 @@ pub struct SessionView {
     pub(crate) expires_at: i64,
 }
 
+impl SessionView {
+    #[must_use]
+    pub fn has_scope(&self, required: &str) -> bool {
+        self.scopes
+            .binary_search_by(|scope| scope.as_str().cmp(required))
+            .is_ok()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct AppGrantView {
     pub(crate) app: AppRegistration,
