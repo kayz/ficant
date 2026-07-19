@@ -30,6 +30,7 @@
 - 测试环境变量保留既有 `FICANT_TEST_S3_*` 名称，只把错误文字和运行时身份从 MinIO 改为 S3/Ceph。
 - 本地开发 Compose 的对象存储服务、初始化步骤、健康检查、固定镜像和数据卷改为 Ceph RGW；fast gate 仍不启动环境服务。
 - 新增 ADR 记录 Ceph RGW 与 Apache `object_store` 的选择、替代方案和重新评估条件。
+- 供应链候选拓扑继续冻结精确 base、候选 commit 数和无 merge 线性历史，但允许一个迭代的多个 forward-only checkpoint；main 的最终 squash-merge 合同不变。
 
 ## 需 Human 决策
 
@@ -45,7 +46,7 @@
 - Compose security unit tests：23 tests，0 failed，2 skipped；解析后的 `ficant-dev` Compose security gate：PASS；CI 静态合同：PASS；空风险接受 fixture：PASS。
 - `cargo tree --locked --workspace --all-features --target all`：exit 0；可达图不含 `minio` 或 `async-std`。许可证 inventory 机械重建为 632 个包并通过 source integrity、第一方分区、SPDX 限域例外和 notices 校验。
 - `./scripts/check.ps1`：exit 1，预检发现本机没有固定的 `uv 0.7.13`，未进入完整命令；单独 contract test 的 2 项通过、9 项因本机没有固定 Buf 1.56.0 可执行文件而失败。两者均为本地工具环境 blocker，不记为通过。
-- 两次 `docker pull quay.io/ceph/ceph@sha256:6b4b...` 均在 Quay/CDN 大层传输时以 `unexpected EOF` 失败；因此本地真实 Ceph RGW、`./scripts/check.ps1 -IncludeIntegration`、重启读取和完整正/负业务闭环尚无通过证据。本候选只能作为 draft checkpoint 推送，等待 Linux CI 的真实 RGW 结果；CI 结果不回写成本地通过。
+- 四次 `docker pull quay.io/ceph/ceph@sha256:6b4b...` 均在 Quay/CDN 大层传输时以 `unexpected EOF` 失败；因此本地真实 Ceph RGW、`./scripts/check.ps1 -IncludeIntegration`、重启读取和完整正/负业务闭环尚无通过证据。本候选只能作为 draft checkpoint 推送，等待 Linux CI 的真实 RGW 结果；CI 结果不回写成本地通过。
 
 ## 残余风险
 

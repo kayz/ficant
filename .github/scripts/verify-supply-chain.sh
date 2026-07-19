@@ -4,7 +4,7 @@ set -euo pipefail
 
 scripts_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 lock_file="$scripts_dir/supply-chain.lock.json"
-SUPPLY_LOCK_SHA256=db7b0088a449a7716fb42791ecf9a789d6b41ffc45d5a80f690b44ac9c905310
+SUPPLY_LOCK_SHA256=cea2457771370afe9e0b707742bf713e96fa781414b5e67b33ac9a8f6e73745f
 
 die() {
   printf 'supply-chain: %s\n' "$1" >&2
@@ -47,7 +47,7 @@ except Exception as exc:
 if data.get("schema_version") != 1 or len(data.get("tools", [])) != 3:
     print("supply-chain: invalid tool lock", file=sys.stderr); raise SystemExit(2)
 if data.get("release_topology") != {
-    "trusted_base": "bc6f096e688bb35e380c9c8141fe2e1e3c1e9a11",
+    "trusted_base": "2e986673df1b0dfbab29094313ac913e91377994",
     "candidate_commit_count": 2,
     "main_update": "squash-merge-only-after-final-consistency-audit",
 }:
@@ -60,7 +60,8 @@ if data.get("cargo_reachability") != {
 if len(data.get("first_party_packages", [])) != 15 or len({item.get("purl") for item in data["first_party_packages"]}) != 15:
     print("supply-chain: exact first-party policy mismatch", file=sys.stderr); raise SystemExit(2)
 if {item.get("purl") for item in data.get("license_scoped_exceptions", [])} != {
-    "pkg:cargo/webpki-roots@0.26.11", "pkg:cargo/webpki-roots@1.0.8", "pkg:npm/caniuse-lite@1.0.30001805",
+    "pkg:cargo/webpki-roots@0.26.11", "pkg:cargo/webpki-root-certs@1.0.9",
+    "pkg:cargo/webpki-roots@1.0.9", "pkg:npm/caniuse-lite@1.0.30001805",
 }:
     print("supply-chain: scoped license exception set mismatch", file=sys.stderr); raise SystemExit(2)
 acceptances = data.get("risk_acceptances", [])

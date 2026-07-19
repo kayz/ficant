@@ -66,6 +66,9 @@ osd memory target = 268435456
 osd objectstore = bluestore
 osd bluestore block create = true
 osd bluestore block size = 2147483648
+ms async op threads = 1
+osd op num shards = 1
+osd op num threads per shard = 1
 log to file = false
 log to stderr = true
 err to stderr = true
@@ -78,6 +81,7 @@ osd data = ${osd_dir}
 
 [client.rgw.${rgw_name}]
 rgw frontends = beast endpoint=0.0.0.0:${rgw_port}
+rgw thread pool size = 64
 rgw enable usage log = false
 EOF
 
