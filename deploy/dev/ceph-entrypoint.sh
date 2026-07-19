@@ -18,6 +18,8 @@ readonly fsid_file="${state_dir}/fsid"
 readonly monmap="/tmp/${cluster}.monmap"
 readonly osd_new="/tmp/${cluster}.osd-new.json"
 readonly rgw_port="${FICANT_CEPH_RGW_PORT:-9000}"
+readonly s3_region="us-east-1"
+readonly empty_sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 require_env() {
   local name="$1"
@@ -170,6 +172,14 @@ if ! radosgw-admin --cluster "$cluster" --name "client.rgw.${rgw_name}" --keyrin
     --access-key "$FICANT_S3_ACCESS_KEY" --secret-key "$FICANT_S3_SECRET_KEY" >/dev/null
 fi
 
+zonegroup_json="/tmp/${cluster}.zonegroup.json"
+radosgw-admin --cluster "$cluster" --name client.admin --keyring "$admin_keyring" \
+  zonegroup modify --rgw-zonegroup default --api-name "$s3_region" >"$zonegroup_json"
+if [[ "$(jq -r '.api_name // empty' "$zonegroup_json")" != "$s3_region" ]]; then
+  printf 'default zonegroup S3 region does not match %s\n' "$s3_region" >&2
+  exit 4
+fi
+
 radosgw --cluster "$cluster" --name "client.rgw.${rgw_name}" --keyring "$rgw_keyring" \
   --foreground --setuser ceph --setgroup ceph &
 pids+=("$!")
@@ -183,14 +193,17 @@ done
 [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${rgw_port}/" || true)" == "200" ]]
 
 bucket_json="/tmp/${cluster}.bucket.json"
+bucket_response="/tmp/${cluster}.bucket-response.xml"
 if ! radosgw-admin --cluster "$cluster" --name client.admin --keyring "$admin_keyring" \
   bucket stats --bucket "$FICANT_S3_BUCKET" >"$bucket_json" 2>/dev/null; then
-  bucket_code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-    --aws-sigv4 'aws:amz:us-east-1:s3' \
+  bucket_code="$(curl --silent --show-error --output "$bucket_response" --write-out '%{http_code}' \
+    --aws-sigv4 "aws:amz:${s3_region}:s3" \
     --user "${FICANT_S3_ACCESS_KEY}:${FICANT_S3_SECRET_KEY}" \
+    --header "x-amz-content-sha256:${empty_sha256}" \
     --request PUT "http://127.0.0.1:${rgw_port}/${FICANT_S3_BUCKET}")"
   if [[ "$bucket_code" != "200" && "$bucket_code" != "204" ]]; then
     printf 'fixture bucket creation returned HTTP %s\n' "$bucket_code" >&2
+    sed -n '1,20p' "$bucket_response" >&2
     exit 4
   fi
   radosgw-admin --cluster "$cluster" --name client.admin --keyring "$admin_keyring" \

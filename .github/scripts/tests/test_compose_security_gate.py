@@ -409,6 +409,14 @@ class ComposeSecurityGateTests(unittest.TestCase):
         self.assertIn('test \\"$${code}\\" = 200', compose)
         self.assertEqual(entrypoint.count('== "200"'), 2)
 
+    def test_ceph_fixture_aligns_zonegroup_and_sigv4_region(self) -> None:
+        entrypoint = Path("deploy/dev/ceph-entrypoint.sh").read_text(encoding="utf-8")
+
+        self.assertIn('readonly s3_region="us-east-1"', entrypoint)
+        self.assertIn('zonegroup modify --rgw-zonegroup default --api-name "$s3_region"', entrypoint)
+        self.assertIn('--aws-sigv4 "aws:amz:${s3_region}:s3"', entrypoint)
+        self.assertIn('--header "x-amz-content-sha256:${empty_sha256}"', entrypoint)
+
     def test_expected_services_cover_the_complete_runtime_graph(self) -> None:
         self.assertEqual(
             EXPECTED_SERVICES,

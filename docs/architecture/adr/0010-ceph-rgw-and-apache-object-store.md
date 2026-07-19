@@ -15,7 +15,7 @@
 
 Ceph 上游说明其主体代码按 `LGPL-2.1-only OR LGPL-3.0-only` 双重许可，少量文件另有许可证；工具链锁与运行时标签记录该主体表达式。官方容器还包含 CentOS 与系统包，因此标签不替代镜像级 SBOM/许可证清单，正式发布仍须由中央供应链门禁对精确 digest 扫描。
 
-Rust client 选用 Apache Arrow 社区维护的 `object_store 0.14.1`，只启用 `aws` feature。Storage 对外仍暴露现有 narrow application ports，使用 path-style S3、显式 endpoint、`us-east-1` 签名区域和环境注入凭证；不把 Ceph 类型泄漏到 Domain、Application、Protobuf 或数据库 schema。
+Rust client 选用 Apache Arrow 社区维护的 `object_store 0.14.1`，只启用 `aws` feature。Storage 对外仍暴露现有 narrow application ports，使用 path-style S3、显式 endpoint、`us-east-1` 签名区域和环境注入凭证；Ceph 默认 zonegroup 的 `api_name` 也显式设为同一区域，避免服务端 LocationConstraint 与客户端 SigV4 scope 漂移。夹具的原始 SigV4 空载荷请求必须发送并签署标准空内容 SHA-256，不以匿名写或关闭认证绕过兼容性验证。不把 Ceph 类型泄漏到 Domain、Application、Protobuf 或数据库 schema。
 
 开发 Compose 与 GitHub business-loop 使用同一个基于官方 Ceph 镜像构建的单节点 RGW 夹具。夹具以非 root UID/GID `167:167` 运行，根文件系统只读，持久状态只写入命名卷；它只用于兼容性与业务验收，不是生产容量、故障域、复制或升级方案。生产 Ceph 必须由独立运维工作确定至少三节点的 MON/OSD、复制/纠删码、备份、监控、密钥轮换和滚动升级。
 
