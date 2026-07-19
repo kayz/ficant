@@ -13,6 +13,8 @@ fn main() {
         "src/day_count.cpp",
         "src/bond_math.cpp",
         "src/kernel_api.cpp",
+        "src/curve_math.cpp",
+        "src/curve_api.cpp",
     ];
 
     let mut build = cc::Build::new();

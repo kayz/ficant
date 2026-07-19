@@ -39,6 +39,9 @@
 #define FICANT_KERNEL_CALENDAR_RESOLUTION_EXACT                  UINT32_C(1)
 #define FICANT_KERNEL_CALENDAR_RESOLUTION_PROVISIONAL_WEEKEND_ONLY UINT32_C(2)
 
+/* ── Yield-curve interpolation ─────────────────────────────────── */
+#define FICANT_KERNEL_CURVE_INTERPOLATION_LINEAR_YIELD UINT32_C(1)
+
 /* ── Visibility ──────────────────────────────────────────────────── */
 #if defined(_WIN32)
 #if defined(FICANT_KERNEL_BUILD)
@@ -115,6 +118,40 @@ typedef struct {
     double   total;             /* coupon + principal */
 } ficant_kernel_cashflow_v1;
 
+/* ── Yield-curve structs ───────────────────────────────────────── */
+typedef struct {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    int32_t  maturity_date;       /* epoch days, strictly after valuation_date */
+    uint32_t reserved;
+    double   yield_to_maturity;   /* decimal rate, finite and greater than -1 */
+} ficant_kernel_yield_curve_node_v1;
+
+typedef struct {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    int32_t  valuation_date;      /* epoch days */
+    uint32_t interpolation;
+    const ficant_kernel_yield_curve_node_v1* nodes;
+    uint32_t node_count;
+    uint32_t reserved;
+} ficant_kernel_yield_curve_input_v1;
+
+typedef struct {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    int32_t  query_date;          /* epoch days */
+    uint32_t reserved;
+} ficant_kernel_yield_curve_query_v1;
+
+typedef struct {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t status_code;
+    uint32_t reserved;
+    double   yield_to_maturity;
+} ficant_kernel_yield_curve_result_v1;
+
 /* ── ABI functions ───────────────────────────────────────────────── */
 
 /** Return the ABI version this shared library was compiled with. */
@@ -145,6 +182,22 @@ FICANT_KERNEL_API uint32_t ficant_kernel_calculate_bond_v1(
     ficant_kernel_result_v1*             result,
     ficant_kernel_cashflow_v1*           cashflows,
     uint32_t                             cashflow_capacity)
+#if defined(__cplusplus) && __cplusplus >= 201103L
+    noexcept
+#endif
+;
+
+/**
+ * Interpolate one CFETS-style maturity/yield curve point.
+ *
+ * Nodes must be strictly increasing by maturity date. Queries are accepted
+ * only inside the closed node range; this reference function never
+ * extrapolates. Exact-node queries return the exact node yield.
+ */
+FICANT_KERNEL_API uint32_t ficant_kernel_interpolate_yield_curve_v1(
+    const ficant_kernel_yield_curve_input_v1* curve_input,
+    const ficant_kernel_yield_curve_query_v1* query,
+    ficant_kernel_yield_curve_result_v1*      result)
 #if defined(__cplusplus) && __cplusplus >= 201103L
     noexcept
 #endif

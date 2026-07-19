@@ -1,13 +1,53 @@
 use chrono::{NaiveDate, TimeDelta};
-use ficant_application::ports::BondAnalyticsEngine;
+use ficant_application::ports::{BondAnalyticsEngine, YieldCurveEngine};
 use ficant_domain::analytics::{
     ABI_VERSION, AnalyticsError, AnalyticsMeasures, AnalyticsMode, BondAnalyticsInput,
     BondAnalyticsResult, BusinessDayConvention, CalendarRequirement, CalendarResolution,
     CouponFrequency, DayCountConvention, DerivedCashflow, FixedDecimal,
 };
+use ficant_domain::curves::{YieldCurveInterpolation, YieldCurvePoint, YieldCurveQuery};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NativeBondAnalyticsEngine;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NativeYieldCurveEngine;
+
+impl YieldCurveEngine for NativeYieldCurveEngine {
+    fn interpolate(&self, query: &YieldCurveQuery) -> Result<YieldCurvePoint, AnalyticsError> {
+        if ficant_kernel_sys::abi_version() != ABI_VERSION {
+            return Err(AnalyticsError::AbiMismatch);
+        }
+        let curve = query.curve();
+        let nodes = curve
+            .nodes()
+            .iter()
+            .map(|node| {
+                Ok(ficant_kernel_sys::YieldCurveNodeV1 {
+                    maturity_date: epoch_days(node.maturity_date())?,
+                    yield_to_maturity: decimal_to_f64(node.yield_to_maturity())?,
+                })
+            })
+            .collect::<Result<Vec<_>, AnalyticsError>>()?;
+        let input = ficant_kernel_sys::YieldCurveInputV1 {
+            valuation_date: epoch_days(curve.valuation_date())?,
+            interpolation: match curve.interpolation() {
+                YieldCurveInterpolation::LinearYield => {
+                    ficant_kernel_sys::CURVE_INTERPOLATION_LINEAR_YIELD
+                }
+            },
+            nodes: &nodes,
+        };
+        let (status, result) =
+            ficant_kernel_sys::interpolate_yield_curve(&input, epoch_days(query.query_date())?);
+        map_status(status)?;
+        if result.status_code != ficant_kernel_sys::STATUS_OK {
+            return Err(AnalyticsError::Internal);
+        }
+        YieldCurvePoint::new(query.clone(), decimal_from_f64(result.yield_to_maturity)?)
+            .map_err(|_| AnalyticsError::Internal)
+    }
+}
 
 impl BondAnalyticsEngine for NativeBondAnalyticsEngine {
     fn calculate(&self, input: &BondAnalyticsInput) -> Result<BondAnalyticsResult, AnalyticsError> {

@@ -22,6 +22,7 @@ pub const CALENDAR_REQUIREMENT_REFERENCE_REPLAY: u32 = 1;
 pub const CALENDAR_REQUIREMENT_EXACT_MARKET: u32 = 2;
 pub const CALENDAR_RESOLUTION_EXACT: u32 = 1;
 pub const CALENDAR_RESOLUTION_PROVISIONAL_WEEKEND_ONLY: u32 = 2;
+pub const CURVE_INTERPOLATION_LINEAR_YIELD: u32 = 1;
 
 const MAX_CASHFLOWS: usize = 4_096;
 
@@ -71,6 +72,25 @@ pub struct CashflowV1 {
     pub coupon: f64,
     pub principal: f64,
     pub total: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct YieldCurveNodeV1 {
+    pub maturity_date: i32,
+    pub yield_to_maturity: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct YieldCurveInputV1<'a> {
+    pub valuation_date: i32,
+    pub interpolation: u32,
+    pub nodes: &'a [YieldCurveNodeV1],
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct YieldCurveResultV1 {
+    pub status_code: u32,
+    pub yield_to_maturity: f64,
 }
 
 #[repr(C)]
@@ -133,6 +153,45 @@ struct RawCashflowV1 {
     total: f64,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct RawYieldCurveNodeV1 {
+    struct_size: u32,
+    abi_version: u32,
+    maturity_date: i32,
+    reserved: u32,
+    yield_to_maturity: f64,
+}
+
+#[repr(C)]
+struct RawYieldCurveInputV1 {
+    struct_size: u32,
+    abi_version: u32,
+    valuation_date: i32,
+    interpolation: u32,
+    nodes: *const RawYieldCurveNodeV1,
+    node_count: u32,
+    reserved: u32,
+}
+
+#[repr(C)]
+struct RawYieldCurveQueryV1 {
+    struct_size: u32,
+    abi_version: u32,
+    query_date: i32,
+    reserved: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct RawYieldCurveResultV1 {
+    struct_size: u32,
+    abi_version: u32,
+    status_code: u32,
+    reserved: u32,
+    yield_to_maturity: f64,
+}
+
 unsafe extern "C" {
     fn ficant_kernel_abi_version() -> c_uint;
     fn ficant_kernel_calculate_bond_v1(
@@ -141,6 +200,11 @@ unsafe extern "C" {
         result: *mut RawResultV1,
         cashflows: *mut RawCashflowV1,
         cashflow_capacity: u32,
+    ) -> c_uint;
+    fn ficant_kernel_interpolate_yield_curve_v1(
+        curve_input: *const RawYieldCurveInputV1,
+        query: *const RawYieldCurveQueryV1,
+        result: *mut RawYieldCurveResultV1,
     ) -> c_uint;
 }
 
@@ -242,6 +306,63 @@ pub fn calculate(bond: &BondInput, input: &CalculateInput<'_>) -> (u32, ResultV1
     (status, convert_result(raw_result), cashflows)
 }
 
+#[must_use]
+pub fn interpolate_yield_curve(
+    curve: &YieldCurveInputV1<'_>,
+    query_date: i32,
+) -> (u32, YieldCurveResultV1) {
+    let Ok(node_count) = u32::try_from(curve.nodes.len()) else {
+        return (STATUS_INVALID_ARGUMENT, YieldCurveResultV1::default());
+    };
+    let raw_nodes = curve
+        .nodes
+        .iter()
+        .map(|node| RawYieldCurveNodeV1 {
+            struct_size: size_of_u32::<RawYieldCurveNodeV1>(),
+            abi_version: ABI_VERSION,
+            maturity_date: node.maturity_date,
+            reserved: 0,
+            yield_to_maturity: node.yield_to_maturity,
+        })
+        .collect::<Vec<_>>();
+    let raw_curve = RawYieldCurveInputV1 {
+        struct_size: size_of_u32::<RawYieldCurveInputV1>(),
+        abi_version: ABI_VERSION,
+        valuation_date: curve.valuation_date,
+        interpolation: curve.interpolation,
+        nodes: raw_nodes.as_ptr(),
+        node_count,
+        reserved: 0,
+    };
+    let raw_query = RawYieldCurveQueryV1 {
+        struct_size: size_of_u32::<RawYieldCurveQueryV1>(),
+        abi_version: ABI_VERSION,
+        query_date,
+        reserved: 0,
+    };
+    let mut raw_result = RawYieldCurveResultV1 {
+        struct_size: size_of_u32::<RawYieldCurveResultV1>(),
+        abi_version: ABI_VERSION,
+        ..RawYieldCurveResultV1::default()
+    };
+    // SAFETY: all pointers reference live, correctly laid-out values for the duration of the call.
+    // `raw_nodes` is not mutated, and the C++ implementation reads exactly `node_count` entries.
+    let status = unsafe {
+        ficant_kernel_interpolate_yield_curve_v1(
+            &raw const raw_curve,
+            &raw const raw_query,
+            &raw mut raw_result,
+        )
+    };
+    (
+        status,
+        YieldCurveResultV1 {
+            status_code: raw_result.status_code,
+            yield_to_maturity: raw_result.yield_to_maturity,
+        },
+    )
+}
+
 fn size_of_u32<T>() -> u32 {
     u32::try_from(core::mem::size_of::<T>()).unwrap_or(u32::MAX)
 }
@@ -291,7 +412,10 @@ fn convert_cashflow(value: RawCashflowV1) -> CashflowV1 {
 
 #[cfg(test)]
 mod tests {
-    use super::{RawBondInputV1, RawCalculateInputV1, RawCashflowV1, RawResultV1};
+    use super::{
+        RawBondInputV1, RawCalculateInputV1, RawCashflowV1, RawResultV1, RawYieldCurveInputV1,
+        RawYieldCurveNodeV1, RawYieldCurveQueryV1, RawYieldCurveResultV1,
+    };
 
     #[test]
     fn rust_layout_matches_frozen_c_header() {
@@ -299,6 +423,10 @@ mod tests {
         assert_eq!(core::mem::size_of::<RawCalculateInputV1>(), 72);
         assert_eq!(core::mem::size_of::<RawResultV1>(), 88);
         assert_eq!(core::mem::size_of::<RawCashflowV1>(), 48);
+        assert_eq!(core::mem::size_of::<RawYieldCurveNodeV1>(), 24);
+        assert_eq!(core::mem::size_of::<RawYieldCurveInputV1>(), 32);
+        assert_eq!(core::mem::size_of::<RawYieldCurveQueryV1>(), 16);
+        assert_eq!(core::mem::size_of::<RawYieldCurveResultV1>(), 24);
 
         assert_eq!(core::mem::offset_of!(RawBondInputV1, struct_size), 0);
         assert_eq!(core::mem::offset_of!(RawBondInputV1, coupon_rate), 32);
@@ -307,5 +435,14 @@ mod tests {
         assert_eq!(core::mem::offset_of!(RawResultV1, accrued_interest), 24);
         assert_eq!(core::mem::offset_of!(RawCashflowV1, sequence), 8);
         assert_eq!(core::mem::offset_of!(RawCashflowV1, coupon), 24);
+        assert_eq!(
+            core::mem::offset_of!(RawYieldCurveNodeV1, yield_to_maturity),
+            16
+        );
+        assert_eq!(core::mem::offset_of!(RawYieldCurveInputV1, nodes), 16);
+        assert_eq!(
+            core::mem::offset_of!(RawYieldCurveResultV1, yield_to_maturity),
+            16
+        );
     }
 }

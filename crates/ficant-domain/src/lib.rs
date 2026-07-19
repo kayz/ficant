@@ -11,6 +11,7 @@
 )]
 
 pub mod analytics;
+pub mod curves;
 pub mod market;
 pub mod primitives;
 pub mod research;

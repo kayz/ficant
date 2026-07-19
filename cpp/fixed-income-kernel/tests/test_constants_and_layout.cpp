@@ -69,6 +69,8 @@ int main() {
           "CALENDAR_RESOLUTION_EXACT == 1");
     CHECK(FICANT_KERNEL_CALENDAR_RESOLUTION_PROVISIONAL_WEEKEND_ONLY == UINT32_C(2),
           "CALENDAR_RESOLUTION_PROVISIONAL_WEEKEND_ONLY == 2");
+    CHECK(FICANT_KERNEL_CURVE_INTERPOLATION_LINEAR_YIELD == UINT32_C(1),
+          "CURVE_INTERPOLATION_LINEAR_YIELD == 1");
 
     /* ── Struct sizes ──────────────────────────────────────────── */
     CHECK(sizeof(ficant_kernel_bond_input_v1) == 48,
@@ -79,6 +81,14 @@ int main() {
           "sizeof(result_v1) == 88");
     CHECK(sizeof(ficant_kernel_cashflow_v1) == 48,
           "sizeof(cashflow_v1) == 48");
+    CHECK(sizeof(ficant_kernel_yield_curve_node_v1) == 24,
+          "sizeof(yield_curve_node_v1) == 24");
+    CHECK(sizeof(ficant_kernel_yield_curve_input_v1) == 32,
+          "sizeof(yield_curve_input_v1) == 32");
+    CHECK(sizeof(ficant_kernel_yield_curve_query_v1) == 16,
+          "sizeof(yield_curve_query_v1) == 16");
+    CHECK(sizeof(ficant_kernel_yield_curve_result_v1) == 24,
+          "sizeof(yield_curve_result_v1) == 24");
 
     /* ── Key offsets (ABI stability) ───────────────────────────── */
     CHECK(offsetof(ficant_kernel_bond_input_v1, struct_size) == 0,
@@ -105,6 +115,12 @@ int main() {
           "cashflow.sequence offset 8");
     CHECK(offsetof(ficant_kernel_cashflow_v1, coupon) == 24,
           "cashflow.coupon offset 24");
+    CHECK(offsetof(ficant_kernel_yield_curve_node_v1, yield_to_maturity) == 16,
+          "yield_curve_node.yield_to_maturity offset 16");
+    CHECK(offsetof(ficant_kernel_yield_curve_input_v1, nodes) == 16,
+          "yield_curve_input.nodes offset 16");
+    CHECK(offsetof(ficant_kernel_yield_curve_result_v1, yield_to_maturity) == 16,
+          "yield_curve_result.yield_to_maturity offset 16");
 
     if (failures > 0) {
         std::fprintf(stderr, "%d failures\n", failures);
