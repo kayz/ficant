@@ -241,6 +241,8 @@ jobs:
 
   supply-chain:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -248,6 +250,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Capture official OSV snapshot digests for lock refresh
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           curl --retry 5 --retry-all-errors -fL -o /tmp/crates.io-all.zip 'https://storage.googleapis.com/download/storage/v1/b/osv-vulnerabilities/o/crates.io%2Fall.zip?generation=1784434995145173&alt=media' &
@@ -261,6 +265,10 @@ jobs:
           sha256sum /tmp/crates.io-all.zip /tmp/PyPI-all.zip /tmp/npm-all.zip
           mkdir -p "${{ runner.temp }}/ficant-supply-evidence"
           cp /tmp/crates.io-all.zip /tmp/PyPI-all.zip /tmp/npm-all.zip "${{ runner.temp }}/ficant-supply-evidence/"
+          if [[ $GITHUB_EVENT_NAME == push && $GITHUB_REF_NAME == codex/cicd-candidate-topology ]]; then
+            gh release upload supply-chain-osv-2026-07-19 \
+              /tmp/crates.io-all.zip /tmp/PyPI-all.zip /tmp/npm-all.zip --clobber
+          fi
           exit 1
       - run: bash .github/scripts/verify-supply-chain.sh
         env:
