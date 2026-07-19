@@ -36,8 +36,12 @@
 
 ## 最终真实测试证据
 
-- 待最终候选形成后填写；中间子循环命令由编排运行状态承载，不在仓库新增状态文档。
+- `./scripts/check-fast.ps1`：exit 0；Rust 格式、离线 workspace all-targets check、非环境 workspace 单元/集成/doc tests 和 storage library tests 全部通过。
+- `./scripts/check.ps1`：exit 0；Rust workspace 单元/集成/doc tests、12 项生成合同测试、8 项 C++ 测试、Q-001..Q-036、Phase 2B 16/16、Phase 2C 18/18、Phase 2D 18/18、Phase 2C/2D 独立 Oracle 各 3 项、确定性 Arrow、Python 合同 import、Web 29 项测试全部通过。
+- `./scripts/check-phase2e-sdk.ps1`（由完整门禁调用）：exit 0，1/1；启动真实 `ficant-server`，Python 3.12 SDK 经 gRPC 完成现券、曲线、Carry/Roll-down、交割篮子/CTD 和套保五类调用，并同时验证既有 PlatformService 路由。
+- 历史矩阵原先混用 Windows CRLF 工作树哈希和未对应任何提交内容的守卫值；候选为 C/C++ 与冻结测试资产固定 LF，并把守卫值校正为既有提交的实际字节 SHA-256。数值 expected、Oracle 逻辑、断言和容差均未修改，四套矩阵验证器均 exit 0。
 
 ## 残余风险
 
-- 待最终候选形成后填写。SDK 首版是同步一元调用，不承诺批量吞吐、流式结果或长任务调度；这些能力属于后续 ResearchGraph/Worker 迭代。
+- SDK 首版是同步一元调用，不承诺批量吞吐、流式结果或长任务调度；这些能力属于后续 ResearchGraph/Worker 迭代。
+- Phase 2E 证明的是合同与数值一致性，不把内部分析 Artifact 冒充 Phase 3 的外部数据接入或不可变 Parquet Snapshot；数据源隔离、点时可见性和脱源重放由 Phase 3A/3B 分别交付。

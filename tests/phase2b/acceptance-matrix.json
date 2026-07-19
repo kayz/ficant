@@ -11,7 +11,7 @@
     "crates/ficant-storage/tests/carry_roll_arrow.rs": "269ef198116ae3acd9d3ed21f9422b1944b692392bfcd3317b97f1af29642762",
     "crates/ficant-storage/tests/carry_roll_sit.rs": "2a0fd60b14a4674f46d3df5336d15c84349113801a5cffad4c0d7f9fddc9410f",
     "cpp/fixed-income-kernel/tests/test_carry_roll.cpp": "2998b0508335b028293df3189d359c4a7ebd26ea6680d77eb70113c9fbd996d9",
-    "cpp/fixed-income-kernel/tests/test_i3_regression.cpp": "ec47377146b02e441f4112112240f859b3482e29737773dfa50999d7862b66cc"
+    "cpp/fixed-income-kernel/tests/test_i3_regression.cpp": "726d498f6043adfe83bc621b72f4b609c59c9174d293c97d5373908e6d40a85b"
   },
   "acceptance": [
     {

@@ -1,6 +1,6 @@
 # ficant 产品范围
 
-**状态：** Phase 0 / Phase 1 已完成；Phase 2A/2B/2C/2D 已分别交付现券分析、曲线与 Carry/Roll-down、国债期货交割价值链、单合约 CTD DV01 套保比例；对象存储统一为 Ceph RGW + Apache `object_store`；Phase 2 参考算法优先清单已完成，但 Python SDK 一致性退出条件尚未交付，Phase 3+ 仍为后续范围
+**状态：** Phase 0 / Phase 1 / Phase 2 已完成；Phase 2A–2E 已交付现券分析、曲线与 Carry/Roll-down、国债期货交割价值链、单合约 CTD DV01 套保比例以及 Python SDK 一致性闭环；对象存储统一为 Ceph RGW + Apache `object_store`；Phase 3+ 仍为后续范围
 
 **实现状态：** 当前能力以已合并代码、冻结合同和可重放本地证据为准，不把局部纵向切片扩写为完整 Phase 或最终产品
 
@@ -12,7 +12,7 @@ ficant 是面向专业投资研究团队的 AI 原生量化研究平台。平台
 
 正式产品终点保持为 `ResearchArtifact`、`SimulationResult`、`ReportArtifact`、`SignalSet` 和 `TargetExposure`。平台不拥有订单和外部交易执行，不建设 OMS、EMS、对外报单、清算、结算或投资组合会计。
 
-首个市场仍是中国国债现券与国债期货。当前已完成 Phase 0 仓库/合同基线和 Phase 1 领域内核，并交付 Phase 2A 国债分析、Phase 2B 收益率曲线/Carry-Roll-down、Phase 2C 国债期货交割价值链、Phase 2D 单合约 CTD DV01 套保比例四个纵向切片；这不表示 Phase 2 的 Python SDK 退出条件、外部数据适配、完整研究产品页面或 Phase 3+ 已实现。
+首个市场仍是中国国债现券与国债期货。当前已完成 Phase 0 仓库/合同基线、Phase 1 领域内核，并交付 Phase 2A 国债分析、Phase 2B 收益率曲线/Carry-Roll-down、Phase 2C 国债期货交割价值链、Phase 2D 单合约 CTD DV01 套保比例和 Phase 2E Python SDK 五个纵向切片。Python SDK 通过同一 Protobuf/gRPC 合同调用真实 Rust/C++ 生产路径，结果与冻结参考一致；这不表示外部数据适配、完整研究产品页面或 Phase 3+ 已实现。
 
 ## Phase 0 已落地边界
 
@@ -77,6 +77,12 @@ total_return = carry + roll_down
 
 结果绑定目标 Risk Artifact、Delivery Artifact、CTD Analytics Artifact、FuturesContract、CTD Bond、RulePack 和 DataSnapshot 七段血缘，并贯通独立 Decimal Oracle、C++20/C ABI/Rust、确定性 Arrow 以及真实 PostgreSQL 16 + Ceph RGW 发布、重启重放和篡改失败关闭。该方法只处理单一 CTD 的平行 1bp 一阶风险，不是关键期限或多合约曲线风险优化，也不包含基差、CTD 切换、凸性、流动性和动态再平衡风险。
 
+## 2026-07 / Phase 2E 已落地 Python SDK 一致性闭环
+
+当前实现新增 `ficant.rates.v1.RatesAnalyticsService` 五个一元 RPC 和可安装的 `ficant-sdk`。Python 只消费由 `interface/` 确定性生成的 Protobuf/gRPC 类型，通过认证后的 `ficant-server` 调用 Phase 2A–2D 的真实 Rust application 与 C++ 数值 provider；它不重写算法，不直连 PostgreSQL、Ceph RGW 或 C ABI。
+
+每个请求显式绑定 owner、DataSnapshot、MarketRulePack、算法/约定/ABI 版本和对应市场对象，服务端要求 `rates:analyze` scope 并在进入 provider 前失败关闭非法身份与输入。真实服务进程上的跨语言 Golden Case 已覆盖现券、曲线、Carry/Roll-down、交割篮子/CTD 和套保五类调用，并证明 Python 结果与冻结参考一致。
+
 ## WebApp 产品边界
 
 当前可用产品界面是 Platform Shell，不是完整 DMQuant：
@@ -103,7 +109,7 @@ WebApp 可以定义独立研究体验，但不能自建身份权限、直连外�
 
 ## 明确尚未实现与后续范围
 
-- Phase 2 的 Python SDK 调用一致性退出条件，以及关键期限/多合约曲线风险对冲和组合层优化。
+- 关键期限/多合约曲线风险对冲和组合层优化；Phase 2E 的 Python SDK 首版只提供同步一元调用，不承诺批量、流式或长任务调度。
 - Phase 3 的外部数据源适配、采集与快照数据平台；当前 Snapshot 领域对象和内部 Artifact 闭环不能视为外部数据接入。
 - 完整 DMQuant 业务 WebApp，包括策略生成、回测、Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell。
 - openGauss 迁移、GeneratedNode/gVisor 业务运行、OMS/EMS 和任何外部交易执行。

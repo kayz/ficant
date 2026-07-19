@@ -3,9 +3,9 @@
   "candidate_binding": "record git HEAD and tree at execution; evidence is invalid after candidate drift",
   "frozen_assets": {
     "tests/golden-cases/china-rates/expected/cgb-reference-v1-expected.json": "e81a6cb0c941c85f0548f59952c9d7539af46818a6df2dc77bf897d814bc0f5c",
-    "tests/oracle/china-rates/oracle_manual.py": "624fad7fbade6eea3f9679c9c4ce778c69dd8d297afb130e693a789c9b95e99a",
+    "tests/oracle/china-rates/oracle_manual.py": "a612138cabedfdd50dbab16f7e872b4c597c84e8cc14b29607c40a9df7d8c6cb",
     "tests/oracle/china-rates/quantlib_oracle.cpp": "3dfe5e359d9c95ad63e0620e14e63d14f733193cf095736abbeef1c06b846632",
-    "tests/oracle/china-rates/calendar_cgb.py": "55a49129ed358113d0be855a00511f8e9b1fd74df6619b87c67600d9074e94db"
+    "tests/oracle/china-rates/calendar_cgb.py": "7f6226dc06086fd03c06f6399d547f0d5e0e9c6349ad16be201a8eec8b7f5dcb"
   },
   "evidence_schema": {
     "required": ["candidate_head", "candidate_tree", "acceptance_id", "command", "exit_code", "passed", "failed", "skipped", "environment"]
