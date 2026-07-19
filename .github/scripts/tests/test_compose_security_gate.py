@@ -414,8 +414,11 @@ class ComposeSecurityGateTests(unittest.TestCase):
 
         self.assertIn('readonly s3_region="us-east-1"', entrypoint)
         self.assertIn('zonegroup modify --rgw-zonegroup default --api-name "$s3_region"', entrypoint)
-        self.assertIn('--aws-sigv4 "aws:amz:${s3_region}:s3"', entrypoint)
-        self.assertIn('--header "x-amz-content-sha256:${empty_sha256}"', entrypoint)
+        self.assertIn("create_bucket_sigv4()", entrypoint)
+        self.assertIn("AWS4-HMAC-SHA256", entrypoint)
+        self.assertIn('SignedHeaders=host;x-amz-content-sha256;x-amz-date', entrypoint)
+        self.assertIn('--header "x-amz-content-sha256: ${empty_sha256}"', entrypoint)
+        self.assertNotIn("--aws-sigv4", entrypoint)
 
     def test_expected_services_cover_the_complete_runtime_graph(self) -> None:
         self.assertEqual(

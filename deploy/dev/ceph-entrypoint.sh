@@ -29,6 +29,44 @@ require_env() {
   fi
 }
 
+hmac_sha256_hex() {
+  local key_hex="$1"
+  local value="$2"
+  printf '%s' "$value" | openssl dgst -sha256 -mac HMAC -macopt "hexkey:${key_hex}" -binary \
+    | od -An -v -tx1 | tr -d ' \n'
+}
+
+create_bucket_sigv4() {
+  local response_file="$1"
+  local host="127.0.0.1:${rgw_port}"
+  local amz_date date_stamp canonical_request canonical_hash credential_scope string_to_sign
+  local secret_key_hex date_key region_key service_key signing_key signature authorization
+
+  amz_date="$(date -u +%Y%m%dT%H%M%SZ)"
+  date_stamp="${amz_date:0:8}"
+  printf -v canonical_request 'PUT\n/%s\n\nhost:%s\nx-amz-content-sha256:%s\nx-amz-date:%s\n\nhost;x-amz-content-sha256;x-amz-date\n%s' \
+    "$FICANT_S3_BUCKET" "$host" "$empty_sha256" "$amz_date" "$empty_sha256"
+  canonical_hash="$(printf '%s' "$canonical_request" | sha256sum | cut -d ' ' -f 1)"
+  credential_scope="${date_stamp}/${s3_region}/s3/aws4_request"
+  printf -v string_to_sign 'AWS4-HMAC-SHA256\n%s\n%s\n%s' \
+    "$amz_date" "$credential_scope" "$canonical_hash"
+
+  secret_key_hex="$(printf 'AWS4%s' "$FICANT_S3_SECRET_KEY" | od -An -v -tx1 | tr -d ' \n')"
+  date_key="$(hmac_sha256_hex "$secret_key_hex" "$date_stamp")"
+  region_key="$(hmac_sha256_hex "$date_key" "$s3_region")"
+  service_key="$(hmac_sha256_hex "$region_key" s3)"
+  signing_key="$(hmac_sha256_hex "$service_key" aws4_request)"
+  signature="$(hmac_sha256_hex "$signing_key" "$string_to_sign")"
+  authorization="AWS4-HMAC-SHA256 Credential=${FICANT_S3_ACCESS_KEY}/${credential_scope}, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=${signature}"
+
+  curl --silent --show-error --output "$response_file" --write-out '%{http_code}' \
+    --header "Host: ${host}" \
+    --header "x-amz-content-sha256: ${empty_sha256}" \
+    --header "x-amz-date: ${amz_date}" \
+    --header "Authorization: ${authorization}" \
+    --request PUT "http://${host}/${FICANT_S3_BUCKET}"
+}
+
 require_env FICANT_S3_ACCESS_KEY
 require_env FICANT_S3_SECRET_KEY
 require_env FICANT_S3_BUCKET
@@ -196,11 +234,7 @@ bucket_json="/tmp/${cluster}.bucket.json"
 bucket_response="/tmp/${cluster}.bucket-response.xml"
 if ! radosgw-admin --cluster "$cluster" --name client.admin --keyring "$admin_keyring" \
   bucket stats --bucket "$FICANT_S3_BUCKET" >"$bucket_json" 2>/dev/null; then
-  bucket_code="$(curl --silent --show-error --output "$bucket_response" --write-out '%{http_code}' \
-    --aws-sigv4 "aws:amz:${s3_region}:s3" \
-    --user "${FICANT_S3_ACCESS_KEY}:${FICANT_S3_SECRET_KEY}" \
-    --header "x-amz-content-sha256:${empty_sha256}" \
-    --request PUT "http://127.0.0.1:${rgw_port}/${FICANT_S3_BUCKET}")"
+  bucket_code="$(create_bucket_sigv4 "$bucket_response")"
   if [[ "$bucket_code" != "200" && "$bucket_code" != "204" ]]; then
     printf 'fixture bucket creation returned HTTP %s\n' "$bucket_code" >&2
     sed -n '1,20p' "$bucket_response" >&2
