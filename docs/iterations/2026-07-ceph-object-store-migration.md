@@ -43,13 +43,14 @@
 - `cargo clippy --offline --workspace --all-targets --locked --exclude ficant-contracts --exclude ficant-contract-tests --no-deps -- -D warnings`：exit 0；`cargo build --offline --workspace --all-targets --locked`：exit 0。
 - C++ configure/build/ctest：exit 0，4/4 通过；Q-001..Q-036 acceptance matrix：36 mapped、0 missing。
 - Python 锁定版本环境的 contract import：1 passed；Web 定向 typecheck/build/Vitest：exit 0，4 files、29 tests 通过。Web 定向命令由现有 Node 24 临时忽略 engine 检查执行，不替代完整门要求的 Node 22.17.0 证据。
-- Compose security unit tests：23 tests，0 failed，2 skipped；解析后的 `ficant-dev` Compose security gate：PASS；CI 静态合同：PASS；空风险接受 fixture：PASS。
+- Compose security unit tests：25 discovered、23 passed、0 failed、2 skipped；解析后的 `ficant-dev` Compose security gate：PASS；CI 静态合同：PASS；空风险接受 fixture：PASS。
 - `cargo tree --locked --workspace --all-features --target all`：exit 0；可达图不含 `minio` 或 `async-std`。许可证 inventory 机械重建为 632 个包并通过 source integrity、第一方分区、SPDX 限域例外和 notices 校验。
 - `./scripts/check.ps1`：exit 1，预检发现本机没有固定的 `uv 0.7.13`，未进入完整命令；单独 contract test 的 2 项通过、9 项因本机没有固定 Buf 1.56.0 可执行文件而失败。两者均为本地工具环境 blocker，不记为通过。
-- 四次 `docker pull quay.io/ceph/ceph@sha256:6b4b...` 均在 Quay/CDN 大层传输时以 `unexpected EOF` 失败；因此本地真实 Ceph RGW、`./scripts/check.ps1 -IncludeIntegration`、重启读取和完整正/负业务闭环尚无通过证据。本候选只能作为 draft checkpoint 推送，等待 Linux CI 的真实 RGW 结果；CI 结果不回写成本地通过。
+- 本机多次 `docker pull quay.io/ceph/ceph@sha256:6b4b...` 均在 Quay/CDN 大层传输时出现 `unexpected EOF` 或持续重试；因此本机仍没有真实 Ceph RGW 或 `./scripts/check.ps1 -IncludeIntegration` 的通过证据，不能把远端结果回写成本地通过。
+- GitHub PR run [`29672981319`](https://github.com/kayz/ficant/actions/runs/29672981319) 的真实 `business-loop`：exit 0，用固定 Ceph Tentacle 20.2.2 digest 启动 RGW，并连接 PostgreSQL 16；`phase1_business_loop_persists_restart_safe_complete_lineage` 1 passed、0 failed，13 项 `negative_invariants` 全部通过。该结果覆盖 Apache `object_store` 的签名读写、完整 lineage、重启读取、内容篡改、幂等、失败恢复和 orphan cleanup，不是 mock 或 MinIO 兼容替代。
 
 ## 残余风险
 
 - Ceph 单节点 fixture 只验证协议兼容性和持久性，不证明生产高可用、容量、性能或灾备设计。
 - `object_store` 的升级仍需精确版本锁、SBOM、许可证和 advisory 门；本次消除 MinIO 风险不构成对未来版本的自动接受。
-- 当前 draft 的主要未关闭风险是官方 Ceph 镜像尚未在本机完成下载与启动；在真实 RGW business-loop 通过前不得把本迭代标记为完成或合并。
+- 官方 Ceph 镜像仍未在本机完整下载，因此本地集成复现能力受 Quay/CDN 传输限制；远端真实 RGW 已关闭协议兼容与业务语义风险，但不消除该开发环境限制。
