@@ -1,0 +1,38 @@
+{
+  "schema": "ficant.phase2d.cffex-source-manifest.v1",
+  "retrieved_at": "2026-07-19",
+  "sources": [
+    {
+      "url": "https://www.cffex.com.cn/u/cms/www/oldsys/P020130830612915071896.pdf",
+      "purpose": "中金所国债期货交易策略材料中的 DV01 套保手数公式"
+    },
+    {
+      "url": "https://www.cffex.com.cn/cn/cjwtdy/20240614/38947.html",
+      "purpose": "中金所对国债期货及相关债券组合风险值（BPV）的说明"
+    },
+    {
+      "url": "https://www.cffex.com.cn/ywtz/20220718/28903.html",
+      "purpose": "中金所套保风险值不得超过标的资产风险值的业务约束"
+    },
+    {
+      "url": "https://www.cffex.com.cn/10tf/",
+      "purpose": "国债期货合约面值与转换因子产品合同"
+    },
+    {
+      "url": "https://www.cffex.com.cn/30tl/",
+      "purpose": "三十年期国债期货合约面值与转换因子产品合同"
+    }
+  ],
+  "normalized_facts": {
+    "contract_notional_cny": 1000000,
+    "quote_face_cny": 100,
+    "futures_contract_dv01": "ctd_dv01_per_100 * (contract_notional / quote_face) / conversion_factor",
+    "raw_contracts": "-target_dv01 / futures_contract_dv01",
+    "direction": "positive target DV01 requires negative futures contracts; negative target DV01 requires positive futures contracts",
+    "integer_selection": "minimize absolute residual over floor(raw), ceil(raw), and zero; then minimize absolute contracts; then choose smaller signed integer",
+    "residual_dv01": "target_dv01 + recommended_contracts * futures_contract_dv01",
+    "hedge_effectiveness": "clamp(1 - abs(residual_dv01) / abs(target_dv01), 0, 1)",
+    "scope": "single-contract CTD parallel-DV01 hedge; not key-rate or multi-contract optimization"
+  },
+  "normalized_facts_sha256": "b611332b8b9137ac9c1a24b01effccbfc4a796e9f4273fdfe23e168544f31052"
+}
