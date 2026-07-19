@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "captured_utc": "2026-07-12T04:34:09Z",
+  "captured_utc": "2026-07-19T11:32:00Z",
   "release_topology": {
-    "trusted_base": "83d2f030f9df9535c22d36f5872dd25a2cc242d7",
-    "candidate_commit_count": 7,
+    "trusted_base_source": "ci-event-or-default-branch",
+    "candidate_commit_count": "derived-from-positive-linear-range",
     "main_update": "squash-merge-only-after-final-consistency-audit"
   },
   "cargo_reachability": {
@@ -195,40 +195,43 @@
   "osv_snapshot": {
     "schema_version": 1,
     "aggregate_algorithm": "sha256 of UTF-8 lines ecosystem<TAB>generation<TAB>sha256<LF> in listed order",
-    "aggregate_sha256": "624fc7a35df8328ea4b79123ced39cd11a9e943d0e87aa682ea9e317e52dd851",
+    "aggregate_sha256": "74bbab7bb3e987766881ca7c2158b827504220b46a6a7abc099205c66df79f39",
     "databases": [
       {
         "ecosystem": "crates.io",
-        "generation": "1783752835905425",
-        "updated_utc": "2026-07-11T06:53:56.007Z",
-        "official_url": "https://storage.googleapis.com/download/storage/v1/b/osv-vulnerabilities/o/crates.io%2Fall.zip?generation=1783752835905425&alt=media",
+        "generation": "1784434995145173",
+        "updated_utc": "2026-07-19T04:23:15.264Z",
+        "official_url": "https://storage.googleapis.com/download/storage/v1/b/osv-vulnerabilities/o/crates.io%2Fall.zip?generation=1784434995145173&alt=media",
+        "mirror_url": "https://github.com/kayz/ficant/releases/download/supply-chain-osv-2026-07-19/crates.io-all.zip",
         "asset": "crates.io-all.zip",
-        "size": 3255613,
-        "sha256": "f882709ffbc3309f9801e2326457464f00da33898ccc96bb4bed2a42b96bafa5",
-        "gcs_md5_base64": "lsVqFhYt9EsGFDnjAUbFBQ==",
-        "gcs_crc32c_base64": "9UFXNA=="
+        "size": 3278133,
+        "sha256": "ccb1a388b5679d17553d7c4cc6eae6f4302bea560c7e3231e98f611ebbd19dc2",
+        "gcs_md5_base64": "GWxWNEN/Wazed5v5Y4BrTQ==",
+        "gcs_crc32c_base64": "9YJ9SA=="
       },
       {
         "ecosystem": "PyPI",
-        "generation": "1783813078497842",
-        "updated_utc": "2026-07-11T23:37:58.611Z",
-        "official_url": "https://storage.googleapis.com/download/storage/v1/b/osv-vulnerabilities/o/PyPI%2Fall.zip?generation=1783813078497842&alt=media",
+        "generation": "1784459283605770",
+        "updated_utc": "2026-07-19T11:08:03.737Z",
+        "official_url": "https://storage.googleapis.com/download/storage/v1/b/osv-vulnerabilities/o/PyPI%2Fall.zip?generation=1784459283605770&alt=media",
+        "mirror_url": "https://github.com/kayz/ficant/releases/download/supply-chain-osv-2026-07-19/PyPI-all.zip",
         "asset": "PyPI-all.zip",
-        "size": 28994223,
-        "sha256": "72ea414ebe4a303e46a6c8f13ff6567068b3c4e2d45bcec82a8595c9724d6092",
-        "gcs_md5_base64": "E3FE2jxG4icBRTV8l40k/g==",
-        "gcs_crc32c_base64": "6pROKg=="
+        "size": 31902028,
+        "sha256": "2eb50404f974c4cd8a583dc8be015f8e23e2f625bbd3d35c0e914eeaf9b48f39",
+        "gcs_md5_base64": "VZXRHdJjqkuxKawz9gZV6w==",
+        "gcs_crc32c_base64": "sqF/cw=="
       },
       {
         "ecosystem": "npm",
-        "generation": "1783814918772606",
-        "updated_utc": "2026-07-12T00:08:38.892Z",
-        "official_url": "https://storage.googleapis.com/download/storage/v1/b/osv-vulnerabilities/o/npm%2Fall.zip?generation=1783814918772606&alt=media",
+        "generation": "1784435012452776",
+        "updated_utc": "2026-07-19T04:23:32.56Z",
+        "official_url": "https://storage.googleapis.com/download/storage/v1/b/osv-vulnerabilities/o/npm%2Fall.zip?generation=1784435012452776&alt=media",
+        "mirror_url": "https://github.com/kayz/ficant/releases/download/supply-chain-osv-2026-07-19/npm-all.zip",
         "asset": "npm-all.zip",
-        "size": 210804679,
-        "sha256": "21dd4c9f930f41f7a8655eee844fc7b8dcd72200a2adc01ab706e02814a23ecf",
-        "gcs_md5_base64": "xbQFZixIrn0b/p+shKJ5Mg==",
-        "gcs_crc32c_base64": "jQUgzw=="
+        "size": 211986708,
+        "sha256": "dba86e674a047f4113f4aa76ec098fdd47198917084e528e10b9bf8dd493794b",
+        "gcs_md5_base64": "ZF+KyAfn0VuKQ7tMrkn6Zg==",
+        "gcs_crc32c_base64": "fOvEnQ=="
       }
     ]
   },

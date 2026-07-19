@@ -120,7 +120,7 @@ validate_path_list() {
         ;;
       *.py)
         case "$path" in
-          python/*|tests/oracle/china-rates/*|tests/iteration-3/verify_acceptance_matrix.py|docs/history/hoqa/deploy-execution/execution-validator.py|deploy/test/validate_release.py|.github/scripts/compose_security_gate.py|.github/scripts/tests/test_compose_security_gate.py|.github/scripts/verify-cargo-reachability.py|.github/scripts/verify-license-inventory.py|.github/scripts/verify-risk-acceptance.py) ;;
+          python/*|tests/oracle/china-rates/*|tests/iteration-3/verify_acceptance_matrix.py|tests/phase[0-9]/verify_acceptance_matrix.py|tests/phase[0-9][a-z]/verify_acceptance_matrix.py|docs/history/hoqa/deploy-execution/execution-validator.py|deploy/test/validate_release.py|.github/scripts/compose_security_gate.py|.github/scripts/tests/test_compose_security_gate.py|.github/scripts/verify-cargo-reachability.py|.github/scripts/verify-license-inventory.py|.github/scripts/verify-risk-acceptance.py) ;;
           *) record_failure "Python is restricted to python/ or the exact CI gate tool allowlist: $path" ;;
         esac
         ;;
@@ -214,6 +214,10 @@ validate_ci() {
   require_job_marker "$workflow" business-loop 'phase1_business_loop'
   require_job_marker "$workflow" business-loop 'negative_invariants'
   require_job_marker "$workflow" supply-chain 'ref: ${{ github.event.pull_request.head.sha || github.sha }}'
+  require_job_marker "$workflow" supply-chain 'FICANT_TRUSTED_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}'
+  require_job_marker "$workflow" supply-chain 'FICANT_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}'
+  require_job_marker "$workflow" supply-chain 'FICANT_EVENT_NAME: ${{ github.event_name }}'
+  require_job_marker "$workflow" supply-chain 'FICANT_REF_NAME: ${{ github.ref_name }}'
   require_job_marker "$workflow" supply-chain 'verify-supply-chain.sh'
   require_job_marker "$workflow" reproducibility 'verify-reproducibility.sh'
 }

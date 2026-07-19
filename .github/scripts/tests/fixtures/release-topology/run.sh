@@ -24,6 +24,15 @@ expect_fail() {
   fi
 }
 
+expect_fail_count() {
+  local label=$1
+  shift
+  if "$gate" --verify-release-fixture "$1" "$2" "$3" "$gitleaks" "$4" >"$tmp/stdout" 2>"$tmp/stderr"; then
+    printf 'release topology fixture unexpectedly passed: %s\n' "$label" >&2
+    exit 1
+  fi
+}
+
 write_test_secret() {
   local name_a='to' name_b='ken'
   local value_a='01234567' value_b='89abcdef' value_c='0123456789ab'
@@ -92,13 +101,17 @@ make_candidate "$repo" clean-candidate
 candidate=$(git -C "$repo" rev-parse HEAD)
 expect_pass "$repo" "$base" "$candidate"
 
-repo="$tmp/base-drift"
+repo="$tmp/non-ancestor"
 init_clean_repo "$repo"
 base=$(git -C "$repo" rev-parse HEAD)
-wrong_base=$(git -C "$repo" rev-parse HEAD^)
+git -C "$repo" checkout -q -b unrelated
+make_candidate "$repo" unrelated-base
+wrong_base=$(git -C "$repo" rev-parse HEAD)
+git -C "$repo" checkout -q -B candidate "$base"
 make_candidate "$repo" drifted-candidate
 candidate=$(git -C "$repo" rev-parse HEAD)
-expect_fail base-drift "$repo" "$wrong_base" "$candidate"
+expect_fail non-ancestor "$repo" "$wrong_base" "$candidate"
+expect_fail empty-range "$repo" "$base" "$base"
 
 repo="$tmp/multi-commit"
 init_clean_repo "$repo"
@@ -106,7 +119,8 @@ base=$(git -C "$repo" rev-parse HEAD)
 make_candidate "$repo" first-candidate
 make_candidate "$repo" second-candidate
 candidate=$(git -C "$repo" rev-parse HEAD)
-expect_fail multi-commit "$repo" "$base" "$candidate"
+expect_pass "$repo" "$base" "$candidate"
+expect_fail_count wrong-exact-count "$repo" "$base" "$candidate" 1
 expect_pass_count "$repo" "$base" "$candidate" 2
 
 repo="$tmp/merge-parent"
