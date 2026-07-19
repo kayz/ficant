@@ -1,4 +1,4 @@
-FROM python@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7
+FROM python@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 AS uv-toolchain
 
 ARG UV_URL=https://github.com/astral-sh/uv/releases/download/0.7.13/uv-x86_64-unknown-linux-gnu.tar.gz
 ARG UV_SHA256=909278eb197c5ed0e9b5f16317d1255270d1f9ea4196e7179ce934d48c4c2545
@@ -14,6 +14,8 @@ RUN set -eu; \
     install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv; \
     install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uvx /usr/local/bin/uvx; \
     rm -rf /tmp/uv*
+
+FROM uv-toolchain AS node-runtime
 
 WORKDIR /opt/ficant/python
 COPY python/pyproject.toml python/uv.lock ./

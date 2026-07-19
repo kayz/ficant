@@ -8,6 +8,7 @@
 - `ficant.market.v1`：Instrument、Bond、FuturesContract、Cashflow、Calendar、Unit、Quote、Trade、Valuation、CurveSnapshot、MarketRulePack。
 - `ficant.research.v1`：DataSnapshot、UniverseSnapshot、ExperimentRun、Artifact、SignalSet、RunJournal。
 - `ficant.app.v1`：Platform Shell 使用的 App Registry、Session 与短期应用启动授权；它们不计入 17 个 Phase 1 领域对象。
+- `ficant.rates.v1`：Phase 2E 的固定收益参考分析调用合同；只承载强类型请求/结果并复用 `ficant.core.v1` 身份、Decimal、时间和错误，不把 Python 变成数值实现或控制平面。
 
 `DecimalValue` 的唯一表示是 `coefficient(string) + scale(uint32) + UnitRef`。时间 instant 使用 Protobuf `Timestamp`，并显式携带 IANA 市场时区和本地交易日期。Valuation、CurveSnapshot 与 Cashflow 只登记外部输入事实和来源，不提供定价、曲线、现金流生成、久期、DV01 或其他 Phase 2 算法。
 
@@ -28,6 +29,7 @@ iteration-3 Phase 2A 生成的现金流、估值和风险结果保持内部 `Bon
 | Rust message | `buf.build/community/neoeinstein-prost:v0.5.0` | 2 | `neoeinstein/protoc-gen-prost`；Apache-2.0；对应 prost 0.14.x。 |
 | Rust gRPC | `buf.build/community/neoeinstein-tonic:v0.5.0` | 4 | `neoeinstein/protoc-gen-prost`；Apache-2.0；对应 tonic/tonic-prost 0.14.x。 |
 | Python | `buf.build/protocolbuffers/python:v31.1` | 2 | `protocolbuffers/protobuf`；BSD-3-Clause。 |
+| Python gRPC | `buf.build/grpc/python:v1.73.1` | 1 | `grpc/grpc`；Apache-2.0。 |
 | TypeScript | `buf.build/bufbuild/es:v2.5.2` | 1 | `bufbuild/protobuf-es`；Apache-2.0；`target=ts`。 |
 
 version 与 revision 同时固定，禁止省略版本、改用 `latest` 或浮动 branch。插件元数据以 Buf 1.56.0 的 `buf registry sdk info` 和 `bufbuild/plugins` 对应版本清单为来源。

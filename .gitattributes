@@ -15,4 +15,7 @@
 /tests/oracle/china-rates/build_oracle.py text eol=lf
 /tests/oracle/china-rates/quantlib_oracle.cpp text eol=lf
 /tests/oracle/china-rates/test_candidate_contract.py text eol=lf
+/crates/ficant-contracts/src/generated/** text eol=lf -whitespace
+/python/node-contracts/src/ficant_contracts/generated/** text eol=lf -whitespace
+/web-dm/packages/contracts-generated/src/** text eol=lf -whitespace
 /docs/history/hoqa/governance/history/proqaid-superseded/archive/iteration-1/orchestrator/iteration-1-checklist.md -whitespace

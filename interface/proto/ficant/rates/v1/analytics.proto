@@ -1,0 +1,301 @@
+syntax = "proto3";
+
+package ficant.rates.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+
+message ObjectBinding {
+  ficant.core.v1.VersionRef object = 1;
+  ficant.core.v1.Sha256 content_hash = 2;
+}
+
+message AlgorithmBinding {
+  string algorithm_id = 1;
+  uint32 algorithm_version = 2;
+  string convention_profile = 3;
+  uint32 abi_version = 4;
+}
+
+// AnalysisUnits binds every numerical dimension used by the reference
+// analytics API to an immutable Unit definition. Inputs must use the matching
+// binding and responses echo these identities rather than guessing units.
+message AnalysisUnits {
+  ficant.core.v1.UnitRef currency_amount = 1;
+  ficant.core.v1.UnitRef price_per_100 = 2;
+  ficant.core.v1.UnitRef rate = 3;
+  ficant.core.v1.UnitRef years = 4;
+  ficant.core.v1.UnitRef years_squared = 5;
+  ficant.core.v1.UnitRef dv01_per_100 = 6;
+  ficant.core.v1.UnitRef dv01 = 7;
+  ficant.core.v1.UnitRef dimensionless = 8;
+  ficant.core.v1.UnitRef contract_count = 9;
+}
+
+message AnalysisContext {
+  ficant.core.v1.OwnerRef owner = 1;
+  ObjectBinding rule_pack = 2;
+  ObjectBinding data_snapshot = 3;
+  AlgorithmBinding algorithm = 4;
+  AnalysisUnits units = 5;
+}
+
+message ResultMetadata {
+  string schema_id = 1;
+  string engine_id = 2;
+  string engine_version = 3;
+  AlgorithmBinding algorithm = 4;
+}
+
+enum CouponFrequency {
+  COUPON_FREQUENCY_UNSPECIFIED = 0;
+  COUPON_FREQUENCY_ANNUAL = 1;
+  COUPON_FREQUENCY_SEMIANNUAL = 2;
+}
+
+enum CalendarRequirement {
+  CALENDAR_REQUIREMENT_UNSPECIFIED = 0;
+  CALENDAR_REQUIREMENT_REFERENCE_REPLAY = 1;
+  CALENDAR_REQUIREMENT_EXACT_MARKET = 2;
+}
+
+enum YieldCurveInterpolation {
+  YIELD_CURVE_INTERPOLATION_UNSPECIFIED = 0;
+  YIELD_CURVE_INTERPOLATION_LINEAR_YIELD = 1;
+}
+
+enum CgbFuturesProduct {
+  CGB_FUTURES_PRODUCT_UNSPECIFIED = 0;
+  CGB_FUTURES_PRODUCT_TS = 1;
+  CGB_FUTURES_PRODUCT_TF = 2;
+  CGB_FUTURES_PRODUCT_T = 3;
+  CGB_FUTURES_PRODUCT_TL = 4;
+}
+
+message BondTerms {
+  string issue_date = 1;
+  string maturity_date = 2;
+  CouponFrequency frequency = 3;
+  ficant.core.v1.DecimalValue coupon_rate = 4;
+  ficant.core.v1.DecimalValue face_amount = 5;
+}
+
+message CalendarBinding {
+  string calendar_id = 1;
+  uint64 version = 2;
+  ficant.core.v1.Sha256 content_hash = 3;
+  string coverage_start = 4;
+  string coverage_end = 5;
+  repeated string non_business_days = 6;
+  repeated string work_weekends = 7;
+}
+
+message YieldCurveNode {
+  string maturity_date = 1;
+  ficant.core.v1.DecimalValue yield_to_maturity = 2;
+}
+
+message YieldCurveBinding {
+  ObjectBinding curve_snapshot = 1;
+  string valuation_date = 2;
+  YieldCurveInterpolation interpolation = 3;
+  repeated YieldCurveNode nodes = 4;
+}
+
+message DerivedCashflow {
+  uint32 sequence = 1;
+  string nominal_date = 2;
+  string payment_date = 3;
+  ficant.core.v1.DecimalValue coupon = 4;
+  ficant.core.v1.DecimalValue principal = 5;
+  ficant.core.v1.DecimalValue total = 6;
+}
+
+message BondAnalyticsMeasures {
+  ficant.core.v1.DecimalValue accrued_interest = 1;
+  ficant.core.v1.DecimalValue clean_price = 2;
+  ficant.core.v1.DecimalValue dirty_price = 3;
+  ficant.core.v1.DecimalValue yield_to_maturity = 4;
+  ficant.core.v1.DecimalValue macaulay_duration = 5;
+  ficant.core.v1.DecimalValue modified_duration = 6;
+  ficant.core.v1.DecimalValue convexity = 7;
+  ficant.core.v1.DecimalValue dv01 = 8;
+}
+
+message AnalyzeBondRequest {
+  AnalysisContext context = 1;
+  ObjectBinding bond = 2;
+  ficant.core.v1.MarketTime valuation_at = 3;
+  string settlement_date = 4;
+  CalendarRequirement calendar_requirement = 5;
+  CalendarBinding calendar = 6;
+  BondTerms terms = 7;
+  oneof input {
+    ficant.core.v1.DecimalValue yield_to_maturity = 8;
+    ficant.core.v1.DecimalValue clean_price = 9;
+  }
+}
+
+message AnalyzeBondResult {
+  repeated DerivedCashflow cashflows = 1;
+  BondAnalyticsMeasures measures = 2;
+  ResultMetadata metadata = 3;
+}
+
+message AnalyzeBondResponse {
+  oneof result {
+    AnalyzeBondResult analysis = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message InterpolateYieldCurveRequest {
+  AnalysisContext context = 1;
+  YieldCurveBinding curve = 2;
+  string query_date = 3;
+}
+
+message InterpolateYieldCurveResult {
+  string query_date = 1;
+  ficant.core.v1.DecimalValue yield_to_maturity = 2;
+  ResultMetadata metadata = 3;
+}
+
+message InterpolateYieldCurveResponse {
+  oneof result {
+    InterpolateYieldCurveResult point = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message AnalyzeCarryRollRequest {
+  AnalysisContext context = 1;
+  ObjectBinding bond = 2;
+  ficant.core.v1.MarketTime valuation_at = 3;
+  string initial_settlement = 4;
+  string horizon_settlement = 5;
+  CalendarRequirement calendar_requirement = 6;
+  CalendarBinding calendar = 7;
+  BondTerms terms = 8;
+  YieldCurveBinding curve = 9;
+}
+
+message CarryRollMeasures {
+  ficant.core.v1.DecimalValue initial_yield = 1;
+  ficant.core.v1.DecimalValue rolled_yield = 2;
+  ficant.core.v1.DecimalValue initial_dirty_price = 3;
+  ficant.core.v1.DecimalValue horizon_dirty_at_initial_yield = 4;
+  ficant.core.v1.DecimalValue horizon_dirty_at_rolled_yield = 5;
+  ficant.core.v1.DecimalValue paid_cashflows = 6;
+  ficant.core.v1.DecimalValue carry = 7;
+  ficant.core.v1.DecimalValue roll_down = 8;
+  ficant.core.v1.DecimalValue total_return = 9;
+}
+
+message AnalyzeCarryRollResult {
+  CarryRollMeasures measures = 1;
+  ResultMetadata metadata = 2;
+}
+
+message AnalyzeCarryRollResponse {
+  oneof result {
+    AnalyzeCarryRollResult analysis = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message FuturesDeliverableCandidate {
+  ObjectBinding bond = 1;
+  BondTerms terms = 2;
+  ficant.core.v1.DecimalValue spot_clean_price = 3;
+}
+
+message AnalyzeFuturesDeliveryRequest {
+  AnalysisContext context = 1;
+  ObjectBinding futures_contract = 2;
+  ficant.core.v1.MarketTime valuation_at = 3;
+  string purchase_date = 4;
+  string delivery_month_first = 5;
+  string delivery_date = 6;
+  CgbFuturesProduct product = 7;
+  ficant.core.v1.DecimalValue futures_clean_price = 8;
+  ficant.core.v1.DecimalValue financing_rate = 9;
+  repeated FuturesDeliverableCandidate candidates = 10;
+}
+
+message FuturesDeliveryMeasures {
+  uint32 months_to_next_coupon = 1;
+  uint32 remaining_coupon_count = 2;
+  ficant.core.v1.DecimalValue conversion_factor = 3;
+  ficant.core.v1.DecimalValue purchase_accrued_interest = 4;
+  ficant.core.v1.DecimalValue delivery_accrued_interest = 5;
+  ficant.core.v1.DecimalValue interim_coupons = 6;
+  ficant.core.v1.DecimalValue invoice_price = 7;
+  ficant.core.v1.DecimalValue purchase_dirty_price = 8;
+  ficant.core.v1.DecimalValue gross_basis = 9;
+  ficant.core.v1.DecimalValue financing_cost = 10;
+  ficant.core.v1.DecimalValue holding_carry = 11;
+  ficant.core.v1.DecimalValue net_basis = 12;
+  ficant.core.v1.DecimalValue implied_repo_rate = 13;
+  ficant.core.v1.DecimalValue delivery_profit = 14;
+}
+
+message FuturesDeliveryCandidateResult {
+  ObjectBinding bond = 1;
+  FuturesDeliveryMeasures measures = 2;
+}
+
+message AnalyzeFuturesDeliveryResult {
+  repeated FuturesDeliveryCandidateResult candidates = 1;
+  uint32 ctd_index = 2;
+  ResultMetadata metadata = 3;
+}
+
+message AnalyzeFuturesDeliveryResponse {
+  oneof result {
+    AnalyzeFuturesDeliveryResult analysis = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message AnalyzeFuturesHedgeRequest {
+  AnalysisContext context = 1;
+  ObjectBinding target_risk_artifact = 2;
+  ObjectBinding delivery_artifact = 3;
+  ObjectBinding ctd_analytics_artifact = 4;
+  ObjectBinding futures_contract = 5;
+  ObjectBinding ctd_bond = 6;
+  ficant.core.v1.MarketTime valuation_at = 7;
+  CgbFuturesProduct product = 8;
+  ficant.core.v1.DecimalValue target_dv01 = 9;
+  ficant.core.v1.DecimalValue ctd_dv01_per_100 = 10;
+  ficant.core.v1.DecimalValue conversion_factor = 11;
+}
+
+message FuturesHedgeMeasures {
+  ficant.core.v1.DecimalValue futures_contract_dv01 = 1;
+  ficant.core.v1.DecimalValue raw_contracts = 2;
+  int64 recommended_contracts = 3;
+  ficant.core.v1.DecimalValue residual_dv01 = 4;
+  ficant.core.v1.DecimalValue hedge_effectiveness = 5;
+}
+
+message AnalyzeFuturesHedgeResult {
+  FuturesHedgeMeasures measures = 1;
+  ResultMetadata metadata = 2;
+}
+
+message AnalyzeFuturesHedgeResponse {
+  oneof result {
+    AnalyzeFuturesHedgeResult analysis = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+service RatesAnalyticsService {
+  rpc AnalyzeBond(AnalyzeBondRequest) returns (AnalyzeBondResponse);
+  rpc InterpolateYieldCurve(InterpolateYieldCurveRequest) returns (InterpolateYieldCurveResponse);
+  rpc AnalyzeCarryRoll(AnalyzeCarryRollRequest) returns (AnalyzeCarryRollResponse);
+  rpc AnalyzeFuturesDelivery(AnalyzeFuturesDeliveryRequest) returns (AnalyzeFuturesDeliveryResponse);
+  rpc AnalyzeFuturesHedge(AnalyzeFuturesHedgeRequest) returns (AnalyzeFuturesHedgeResponse);
+}
