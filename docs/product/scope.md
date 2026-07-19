@@ -1,6 +1,6 @@
 # ficant 产品范围
 
-**状态：** Phase 0 / Phase 1 已完成；iteration-3 已交付 Phase 2A，2026-07 Phase 2B 已交付收益率曲线与 Carry/Roll-down；对象存储统一为 Ceph RGW + Apache `object_store`；其余 Phase 2 与 Phase 3+ 仍为后续范围
+**状态：** Phase 0 / Phase 1 已完成；Phase 2A/2B/2C 已分别交付现券分析、曲线与 Carry/Roll-down、国债期货交割价值链；对象存储统一为 Ceph RGW + Apache `object_store`；Phase 2 尚余套保比例，Phase 3+ 仍为后续范围
 
 **实现状态：** 当前能力以已合并代码、冻结合同和可重放本地证据为准，不把局部纵向切片扩写为完整 Phase 或最终产品
 
@@ -12,7 +12,7 @@ ficant 是面向专业投资研究团队的 AI 原生量化研究平台。平台
 
 正式产品终点保持为 `ResearchArtifact`、`SimulationResult`、`ReportArtifact`、`SignalSet` 和 `TargetExposure`。平台不拥有订单和外部交易执行，不建设 OMS、EMS、对外报单、清算、结算或投资组合会计。
 
-首个市场仍是中国国债现券与国债期货。当前已完成 Phase 0 仓库/合同基线和 Phase 1 领域内核，并交付 Phase 2A 国债分析及 Phase 2B 收益率曲线/Carry-Roll-down 两个纵向切片；这不表示完整 Phase 2、外部数据适配、完整研究产品页面或 Phase 3+ 已实现。
+首个市场仍是中国国债现券与国债期货。当前已完成 Phase 0 仓库/合同基线和 Phase 1 领域内核，并交付 Phase 2A 国债分析、Phase 2B 收益率曲线/Carry-Roll-down、Phase 2C 国债期货交割价值链三个纵向切片；这不表示完整 Phase 2、外部数据适配、完整研究产品页面或 Phase 3+ 已实现。
 
 ## Phase 0 已落地边界
 
@@ -65,6 +65,12 @@ total_return = carry + roll_down
 
 固定利率债与贴现债已贯通 Rust 领域校验、C++20、加法式 C ABI、安全 Rust adapter、独立 Decimal/QuantLib 1.42.1 Oracle、确定性 Arrow，以及真实 PostgreSQL 16 + Ceph RGW 发布、重启重放和篡改检测。该结果不包含融资成本、税费、交易成本或现金流再投资，也不是 bootstrap 后的无套利即期/远期曲线。
 
+## 2026-07 / Phase 2C 已落地国债期货交割价值链
+
+当前实现覆盖中金所 `TS`、`TF`、`T`、`TL` 合约参数与可交割券期限资格，并由冻结债券日程推导转换因子、购入/交割应计利息和持有期票息，进而计算交割发票价、基差、融资成本、净基差、未再投资 IRR 与篮子 CTD。CTD 按 IRR 最大、净基差最小、稳定 bond ID 排序。
+
+该切片贯通 Rust 领域校验、C++20、加法式 C ABI、安全 Rust adapter、独立 Decimal Oracle、确定性 Arrow，以及真实 PostgreSQL 16 + Ceph RGW 发布、adapter 重建后重放和篡改检测。中金所规则以带来源和摘要的冻结 fixture 进入测试，不冒充实时交易所数据；保证金、手续费、真实交割流程、外部行情/篮子适配和期现套保比例仍未实现。
+
 ## WebApp 产品边界
 
 当前可用产品界面是 Platform Shell，不是完整 DMQuant：
@@ -91,7 +97,7 @@ WebApp 可以定义独立研究体验，但不能自建身份权限、直连外�
 
 ## 明确尚未实现与后续范围
 
-- Phase 2 剩余的国债期货数值、可交割券、CF、基差、净基差、IRR、CTD 与套保算法。
+- Phase 2 剩余的期现 DV01 套保比例、曲线风险对冲与组合层优化。
 - Phase 3 的外部数据源适配、采集与快照数据平台；当前 Snapshot 领域对象和内部 Artifact 闭环不能视为外部数据接入。
 - 完整 DMQuant 业务 WebApp，包括策略生成、回测、Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell。
 - openGauss 迁移、GeneratedNode/gVisor 业务运行、OMS/EMS 和任何外部交易执行。

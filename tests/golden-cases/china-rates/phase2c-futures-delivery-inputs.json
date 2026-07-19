@@ -1,0 +1,73 @@
+{
+  "schema": "ficant.phase2c-futures-delivery.inputs.v1",
+  "valuation_date": "2026-07-20",
+  "purchase_date": "2026-07-21",
+  "delivery_month_first": "2026-09-01",
+  "delivery_date": "2026-09-18",
+  "futures_clean_price": "99.500000000000",
+  "financing_rate": "0.018000000000",
+  "cases": [
+    {
+      "id": "TS-semiannual-coupon-crossing",
+      "product": "TS",
+      "issue_date": "2024-03-15",
+      "maturity_date": "2028-09-15",
+      "frequency": 2,
+      "coupon_rate": "0.020000000000",
+      "spot_clean_price": "100.150000000000"
+    },
+    {
+      "id": "TF-annual-no-coupon",
+      "product": "TF",
+      "issue_date": "2024-06-15",
+      "maturity_date": "2031-06-15",
+      "frequency": 1,
+      "coupon_rate": "0.022000000000",
+      "spot_clean_price": "101.050000000000"
+    },
+    {
+      "id": "T-semiannual-coupon-crossing",
+      "product": "T",
+      "issue_date": "2024-08-15",
+      "maturity_date": "2034-08-15",
+      "frequency": 2,
+      "coupon_rate": "0.025000000000",
+      "spot_clean_price": "101.250000000000"
+    },
+    {
+      "id": "TL-annual-no-coupon",
+      "product": "TL",
+      "issue_date": "2023-05-15",
+      "maturity_date": "2053-05-15",
+      "frequency": 1,
+      "coupon_rate": "0.032500000000",
+      "spot_clean_price": "102.300000000000"
+    }
+  ],
+  "t_basket": [
+    {
+      "bond_id": "T-bond-expensive",
+      "issue_date": "2024-08-15",
+      "maturity_date": "2034-08-15",
+      "frequency": 2,
+      "coupon_rate": "0.025000000000",
+      "spot_clean_price": "102.000000000000"
+    },
+    {
+      "bond_id": "T-bond-ctd",
+      "issue_date": "2024-08-15",
+      "maturity_date": "2034-08-15",
+      "frequency": 2,
+      "coupon_rate": "0.025000000000",
+      "spot_clean_price": "100.000000000000"
+    },
+    {
+      "bond_id": "T-bond-tied-later",
+      "issue_date": "2024-08-15",
+      "maturity_date": "2034-08-15",
+      "frequency": 2,
+      "coupon_rate": "0.025000000000",
+      "spot_clean_price": "100.000000000000"
+    }
+  ]
+}

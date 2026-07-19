@@ -133,7 +133,9 @@ iteration-3 的小范围 Phase 2A 已实现固定利率和贴现国债的现金�
 
 该切片不改变外部事实语义：平台生成的现金流与估值风险结果不得写成现有 `Cashflow` 或 `Valuation`。它们使用内部 `BondAnalyticsResult` 并作为内容寻址 Artifact 发布，绑定 Bond、MarketRulePack、估值时点、输入快照、算法版本和 ABI 版本；详见 [ADR-0002](adr/0002-fixed-income-kernel-and-ffi-safety-boundary.md)。
 
-2026-07 Phase 2B 新增内部 `YieldCurveBinding` / `CarryRollInput` / `CarryRollResult` 语义：曲线绑定独立 `CurveSnapshot`，按实际日数在冻结 YTM 节点间线性插值且不外推；持有期结果绑定 owner、Bond、CurveSnapshot、MarketRulePack、DataSnapshot、估值日、起止日、算法/约定/ABI 版本，并作为确定性 Arrow Artifact 发布。输入、血缘、hash 或 size 漂移均 fail closed。国债期货数值、可交割券、转换因子（CF）、基差、净基差、隐含回购利率（IRR）、最便宜可交割券（CTD）和套保算法仍未实现。
+2026-07 Phase 2B 新增内部 `YieldCurveBinding` / `CarryRollInput` / `CarryRollResult` 语义：曲线绑定独立 `CurveSnapshot`，按实际日数在冻结 YTM 节点间线性插值且不外推；持有期结果绑定 owner、Bond、CurveSnapshot、MarketRulePack、DataSnapshot、估值日、起止日、算法/约定/ABI 版本，并作为确定性 Arrow Artifact 发布。输入、血缘、hash 或 size 漂移均 fail closed。
+
+2026-07 Phase 2C 新增内部 `CgbFuturesProduct` / `FuturesDeliverableInput` / `FuturesDeliveryMeasures` / `FuturesDeliveryBasket` 语义：输入绑定 owner、FuturesContract、Bond、MarketRulePack、DataSnapshot、估值/购入/交割日期、算法/约定/ABI 版本；生产内核从债券日程推导转换因子、应计利息和持有期票息，并输出交割发票价、基差、融资成本、净基差、IRR 与 CTD。结果使用独立确定性 Arrow schema 作为内部 Artifact 发布，输入、血缘、hash 或 size 漂移均 fail closed。该类型不是外部行情事实，也不包含期现套保比例、保证金或交易所交割流程。
 
 Storage adapter 通过 Apache `object_store 0.14.1` 访问 S3，并以 Ceph RGW 20.2.2 作为受支持的服务端实现；bucket、endpoint、access key 和 secret key 仍由运行环境注入。`minio` 与 `async-std` 已从锁文件和可达依赖图移除，旧 D-026 限时接受不再是活动风险处置。开发与 CI 的单节点 Ceph 只验证 S3 兼容性、内容完整性、重启和业务闭环，不代表生产高可用拓扑；选择依据和升级条件见 [ADR-0010](adr/0010-ceph-rgw-and-apache-object-store.md)。
 
