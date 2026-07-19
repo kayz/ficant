@@ -14,6 +14,8 @@ add_library(ficant_kernel SHARED
     src/curve_api.cpp
     src/futures_math.cpp
     src/futures_api.cpp
+    src/hedge_math.cpp
+    src/hedge_api.cpp
 )
 target_compile_features(ficant_kernel PUBLIC cxx_std_20)
 target_compile_definitions(ficant_kernel PRIVATE FICANT_KERNEL_BUILD)
@@ -51,4 +53,5 @@ if(BUILD_TESTING)
   ficant_kernel_test(test_curve_interpolation)
   ficant_kernel_test(test_carry_roll)
   ficant_kernel_test(test_futures_delivery)
+  ficant_kernel_test(test_futures_hedge)
 endif()

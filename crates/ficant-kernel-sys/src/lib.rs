@@ -148,6 +148,24 @@ pub struct CgbFuturesDeliveryResultV1 {
     pub delivery_profit: f64,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct CgbFuturesHedgeInputV1 {
+    pub product: u32,
+    pub target_dv01: f64,
+    pub ctd_dv01_per_100: f64,
+    pub conversion_factor: f64,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CgbFuturesHedgeResultV1 {
+    pub status_code: u32,
+    pub futures_contract_dv01: f64,
+    pub raw_contracts: f64,
+    pub recommended_contracts: i64,
+    pub residual_dv01: f64,
+    pub hedge_effectiveness: f64,
+}
+
 #[repr(C)]
 struct RawBondInputV1 {
     struct_size: u32,
@@ -310,6 +328,31 @@ struct RawCgbFuturesDeliveryResultV1 {
     delivery_profit: f64,
 }
 
+#[repr(C)]
+struct RawCgbFuturesHedgeInputV1 {
+    struct_size: u32,
+    abi_version: u32,
+    product: u32,
+    reserved: u32,
+    target_dv01: f64,
+    ctd_dv01_per_100: f64,
+    conversion_factor: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct RawCgbFuturesHedgeResultV1 {
+    struct_size: u32,
+    abi_version: u32,
+    status_code: u32,
+    reserved: u32,
+    futures_contract_dv01: f64,
+    raw_contracts: f64,
+    recommended_contracts: i64,
+    residual_dv01: f64,
+    hedge_effectiveness: f64,
+}
+
 unsafe extern "C" {
     fn ficant_kernel_abi_version() -> c_uint;
     fn ficant_kernel_calculate_bond_v1(
@@ -331,6 +374,10 @@ unsafe extern "C" {
     fn ficant_kernel_analyze_cgb_futures_delivery_v1(
         input: *const RawCgbFuturesDeliveryInputV1,
         result: *mut RawCgbFuturesDeliveryResultV1,
+    ) -> c_uint;
+    fn ficant_kernel_calculate_cgb_futures_hedge_v1(
+        input: *const RawCgbFuturesHedgeInputV1,
+        result: *mut RawCgbFuturesHedgeResultV1,
     ) -> c_uint;
 }
 
@@ -572,6 +619,42 @@ pub fn analyze_cgb_futures_delivery(
     )
 }
 
+#[must_use]
+pub fn calculate_cgb_futures_hedge(
+    input: &CgbFuturesHedgeInputV1,
+) -> (u32, CgbFuturesHedgeResultV1) {
+    let raw_input = RawCgbFuturesHedgeInputV1 {
+        struct_size: size_of_u32::<RawCgbFuturesHedgeInputV1>(),
+        abi_version: ABI_VERSION,
+        product: input.product,
+        reserved: 0,
+        target_dv01: input.target_dv01,
+        ctd_dv01_per_100: input.ctd_dv01_per_100,
+        conversion_factor: input.conversion_factor,
+    };
+    let mut raw_result = RawCgbFuturesHedgeResultV1 {
+        struct_size: size_of_u32::<RawCgbFuturesHedgeResultV1>(),
+        abi_version: ABI_VERSION,
+        ..RawCgbFuturesHedgeResultV1::default()
+    };
+    // SAFETY: both pointers reference live, correctly-laid-out values for the full call and the
+    // C++ implementation does not retain them.
+    let status = unsafe {
+        ficant_kernel_calculate_cgb_futures_hedge_v1(&raw const raw_input, &raw mut raw_result)
+    };
+    (
+        status,
+        CgbFuturesHedgeResultV1 {
+            status_code: raw_result.status_code,
+            futures_contract_dv01: raw_result.futures_contract_dv01,
+            raw_contracts: raw_result.raw_contracts,
+            recommended_contracts: raw_result.recommended_contracts,
+            residual_dv01: raw_result.residual_dv01,
+            hedge_effectiveness: raw_result.hedge_effectiveness,
+        },
+    )
+}
+
 fn size_of_u32<T>() -> u32 {
     u32::try_from(core::mem::size_of::<T>()).unwrap_or(u32::MAX)
 }
@@ -623,8 +706,9 @@ fn convert_cashflow(value: RawCashflowV1) -> CashflowV1 {
 mod tests {
     use super::{
         RawBondInputV1, RawCalculateInputV1, RawCarryRollInputV1, RawCarryRollResultV1,
-        RawCashflowV1, RawCgbFuturesDeliveryInputV1, RawCgbFuturesDeliveryResultV1, RawResultV1,
-        RawYieldCurveInputV1, RawYieldCurveNodeV1, RawYieldCurveQueryV1, RawYieldCurveResultV1,
+        RawCashflowV1, RawCgbFuturesDeliveryInputV1, RawCgbFuturesDeliveryResultV1,
+        RawCgbFuturesHedgeInputV1, RawCgbFuturesHedgeResultV1, RawResultV1, RawYieldCurveInputV1,
+        RawYieldCurveNodeV1, RawYieldCurveQueryV1, RawYieldCurveResultV1,
     };
 
     #[test]
@@ -641,6 +725,8 @@ mod tests {
         assert_eq!(core::mem::size_of::<RawCarryRollResultV1>(), 40);
         assert_eq!(core::mem::size_of::<RawCgbFuturesDeliveryInputV1>(), 72);
         assert_eq!(core::mem::size_of::<RawCgbFuturesDeliveryResultV1>(), 120);
+        assert_eq!(core::mem::size_of::<RawCgbFuturesHedgeInputV1>(), 40);
+        assert_eq!(core::mem::size_of::<RawCgbFuturesHedgeResultV1>(), 56);
 
         assert_eq!(core::mem::offset_of!(RawBondInputV1, struct_size), 0);
         assert_eq!(core::mem::offset_of!(RawBondInputV1, coupon_rate), 32);
@@ -665,6 +751,14 @@ mod tests {
         assert_eq!(
             core::mem::offset_of!(RawCgbFuturesDeliveryResultV1, conversion_factor),
             24
+        );
+        assert_eq!(
+            core::mem::offset_of!(RawCgbFuturesHedgeInputV1, target_dv01),
+            16
+        );
+        assert_eq!(
+            core::mem::offset_of!(RawCgbFuturesHedgeResultV1, recommended_contracts),
+            32
         );
         assert_eq!(
             core::mem::offset_of!(RawCarryRollInputV1, initial_dirty_price),

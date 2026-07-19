@@ -216,6 +216,29 @@ typedef struct {
     double   delivery_profit;
 } ficant_kernel_cgb_futures_delivery_result_v1;
 
+/* ── CFFEX CGB futures DV01-hedge structs ───────────────────── */
+typedef struct {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t product;
+    uint32_t reserved;
+    double   target_dv01;          /* signed CNY per bp */
+    double   ctd_dv01_per_100;     /* positive CNY per CNY 100 face per bp */
+    double   conversion_factor;    /* positive CFFEX conversion factor */
+} ficant_kernel_cgb_futures_hedge_input_v1;
+
+typedef struct {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t status_code;
+    uint32_t reserved;
+    double   futures_contract_dv01;
+    double   raw_contracts;        /* negative=sell, positive=buy */
+    int64_t  recommended_contracts;
+    double   residual_dv01;
+    double   hedge_effectiveness;
+} ficant_kernel_cgb_futures_hedge_result_v1;
+
 /* ── ABI functions ───────────────────────────────────────────────── */
 
 /** Return the ABI version this shared library was compiled with. */
@@ -280,6 +303,15 @@ FICANT_KERNEL_API uint32_t ficant_kernel_decompose_carry_roll_v1(
 FICANT_KERNEL_API uint32_t ficant_kernel_analyze_cgb_futures_delivery_v1(
     const ficant_kernel_cgb_futures_delivery_input_v1* input,
     ficant_kernel_cgb_futures_delivery_result_v1*      result)
+#if defined(__cplusplus) && __cplusplus >= 201103L
+    noexcept
+#endif
+;
+
+/** Calculate one CTD-based CFFEX CGB futures DV01 hedge. */
+FICANT_KERNEL_API uint32_t ficant_kernel_calculate_cgb_futures_hedge_v1(
+    const ficant_kernel_cgb_futures_hedge_input_v1* input,
+    ficant_kernel_cgb_futures_hedge_result_v1*      result)
 #if defined(__cplusplus) && __cplusplus >= 201103L
     noexcept
 #endif
