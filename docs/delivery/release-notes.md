@@ -1,5 +1,11 @@
 # 交付发布说明
 
+## Phase 2D 国债期货 DV01 套保比例候选（2026-07-19）
+
+- 新增基于带符号目标 DV01、CTD 每百元 DV01 与转换因子的单合约套保参考实现，输出连续合约数、推荐整数手数、剩余 DV01 与套保有效性；固定中金所 `TS`、`TF`、`T`、`TL` 100 万元合约面值和稳定整数平局规则。
+- C++20 内核通过加法式 C ABI 与安全 Rust adapter 提供结果，并与独立 50 位 Decimal Oracle 的四品种冻结案例一致；非有限值、ABI 漂移、reserved 漂移和整数边界失败关闭。
+- 确定性 Arrow Artifact 绑定目标风险、Phase 2C 交割结果、CTD 分析、合约、债券、RulePack 与 DataSnapshot 七段血缘，并通过真实 PostgreSQL 16 + Ceph RGW 发布、adapter 重建后重放、篡改检测和临时状态清零。Phase 2 的参考算法优先清单已完成，但 Python SDK 一致性退出条件仍未交付；完整验收与残余风险以 [`docs/iterations/2026-07-phase2d-futures-hedge.md`](../iterations/2026-07-phase2d-futures-hedge.md) 为准。
+
 ## Phase 2C 国债期货交割价值链候选（2026-07-19）
 
 - 新增中金所 `TS`、`TF`、`T`、`TL` 合约参数和可交割券资格，并交付 CF、交割发票价、基差、含融资成本净基差、未再投资 IRR 与 CTD；公共 Protobuf、数据库 migration 和既有 Phase 2A/2B expected、Oracle、容差不变。

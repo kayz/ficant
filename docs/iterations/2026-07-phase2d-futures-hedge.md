@@ -38,8 +38,16 @@
 
 ## 最终真实测试证据
 
-- 待最终候选形成后填写；中间命令和 Agent 交流不写入本 brief。
+- `./scripts/check-fast.ps1`：退出码 0；Rust workspace check、非环境测试和 storage library tests 全部通过。
+- `./scripts/check.ps1`：21/21 步退出码 0；严格 Clippy 零告警，CTest 8/8，Phase 2B/2C/2D 验收矩阵分别 16/16、18/18、18/18，Phase 2D 独立 Decimal Oracle 3/3、确定性 Arrow 1/1，Python 合同 1/1，Web 29/29。
+- `./scripts/check.ps1 -IncludeIntegration`：27/27 步退出码 0；除上述重复门禁外，PostgreSQL migration 4/4、Phase 1 业务闭环 1/1、负向不变量 13/13、Phase 2B/2C/2D 真实 PostgreSQL 16 + Ceph RGW 闭环各 1/1。
+- 新增目标测试：领域合同 2/2、Rust 安全 adapter 与四品种冻结 Oracle 2/2；真实套保 Artifact 覆盖七段血缘、发布、adapter 重建后重放、正式大小篡改失败关闭，最终 `storage.staging_uploads=0`、`storage.orphan_candidates=0`。
+- Clang 19.1.5 AddressSanitizer（`RelWithDebInfo`、静态 release CRT）独立构建和 CTest 8/8 通过，新增 `test_futures_hedge` 包含在内；普通 Release CTest 同为 8/8。
+- 两次 disposable 集成项目均在验证后执行 `docker compose ... down --volumes --remove-orphans`；复核对应容器、网络和卷为零，未触碰主机其他 Compose 项目。
 
 ## 残余风险
 
-- 待最终候选形成后填写。当前明确：单一 CTD DV01 套保只消除冻结平行 1bp 冲击下的一阶风险，不消除基差、CTD 切换、曲线形变、凸性、流动性或再平衡风险。
+- 单一 CTD DV01 套保只消除冻结平行 1bp 冲击下的一阶风险，不消除基差、CTD 切换、曲线形变、凸性、流动性或再平衡风险；不得把本结果解释为完整曲线风险免疫。
+- 生产 C++ 边界使用 IEEE-754 `double`，Artifact 使用 12 位定点数；冻结案例已限定舍入容差，但极端规模组合仍需在后续组合层显式限制输入范围。
+- 中金所规则事实为带来源摘要的离线冻结基线，运行时不会自动发现交易所规则变化；规则更新必须新增 RulePack/算法版本并重新生成独立 Oracle，而不是覆盖当前 expected。
+- Phase 2 的参考算法优先清单已完成，但 README 的“Python SDK 调用结果与参考结果一致”退出条件仍未实现，因此本迭代不宣称整个 Phase 2 已正式退出；Python SDK 应作为独立后续迭代冻结公共调用合同。
