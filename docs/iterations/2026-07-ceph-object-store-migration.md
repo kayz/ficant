@@ -40,17 +40,13 @@
 ## 最终真实测试证据
 
 - `./scripts/check-fast.ps1`：exit 0；Rust workspace check、非环境测试和 storage library 3 项单元测试通过。
-- `cargo clippy --offline --workspace --all-targets --locked --exclude ficant-contracts --exclude ficant-contract-tests --no-deps -- -D warnings`：exit 0；`cargo build --offline --workspace --all-targets --locked`：exit 0。
-- C++ configure/build/ctest：exit 0，4/4 通过；Q-001..Q-036 acceptance matrix：36 mapped、0 missing。
-- Python 锁定版本环境的 contract import：1 passed；Web 定向 typecheck/build/Vitest：exit 0，4 files、29 tests 通过。Web 定向命令由现有 Node 24 临时忽略 engine 检查执行，不替代完整门要求的 Node 22.17.0 证据。
-- Compose security unit tests：25 discovered、23 passed、0 failed、2 skipped；解析后的 `ficant-dev` Compose security gate：PASS；CI 静态合同：PASS；空风险接受 fixture：PASS。
-- `cargo tree --locked --workspace --all-features --target all`：exit 0；可达图不含 `minio` 或 `async-std`。许可证 inventory 机械重建为 632 个包并通过 source integrity、第一方分区、SPDX 限域例外和 notices 校验。
-- `./scripts/check.ps1`：exit 1，预检发现本机没有固定的 `uv 0.7.13`，未进入完整命令；单独 contract test 的 2 项通过、9 项因本机没有固定 Buf 1.56.0 可执行文件而失败。两者均为本地工具环境 blocker，不记为通过。
-- 本机多次 `docker pull quay.io/ceph/ceph@sha256:6b4b...` 均在 Quay/CDN 大层传输时出现 `unexpected EOF` 或持续重试；因此本机仍没有真实 Ceph RGW 或 `./scripts/check.ps1 -IncludeIntegration` 的通过证据，不能把远端结果回写成本地通过。
-- GitHub PR run [`29672981319`](https://github.com/kayz/ficant/actions/runs/29672981319) 的真实 `business-loop`：exit 0，用固定 Ceph Tentacle 20.2.2 digest 启动 RGW，并连接 PostgreSQL 16；`phase1_business_loop_persists_restart_safe_complete_lineage` 1 passed、0 failed，13 项 `negative_invariants` 全部通过。该结果覆盖 Apache `object_store` 的签名读写、完整 lineage、重启读取、内容篡改、幂等、失败恢复和 orphan cleanup，不是 mock 或 MinIO 兼容替代。
+- `./scripts/check.ps1`：exit 0；严格 Clippy/build/test、生成契约 11/11、C++ CTest 6/6、Phase 2A matrix 36/36、Phase 2B matrix 16/16、Python 1/1、Web 4 files / 29 tests 全部通过；使用锁定 Node 22.17.0、pnpm 10.12.4、uv 0.7.13 与 Buf 1.56.0。
+- `./scripts/check.ps1 -IncludeIntegration`：exit 0；真实 PostgreSQL 16 + 固定 Ceph Tentacle 20.2.2 digest 上 migration 4/4、Phase 1 正向业务闭环 1/1、负向不变量 13/13、Phase 2B 发布重放 1/1 全部通过。覆盖签名读写、完整 lineage、重启读取、内容篡改、幂等、失败恢复与 orphan cleanup，不是 mock 或 MinIO 替代。
+- Windows Docker Desktop 首次真实启动发现 checkout 的 CRLF 使解释器变为 `bash\r`；候选增加全仓库 `*.sh eol=lf` 契约并在 Ceph 镜像构建时防御性归一化，重建后 RGW 健康。一次性 `ficant-phase2b` 容器、网络和 PostgreSQL/Ceph volumes 在验收后全部删除，剩余数量为 0。
+- GitHub PR run [`29672981319`](https://github.com/kayz/ficant/actions/runs/29672981319) 继续提供 Linux 上同一固定 digest 的独立历史证据；本轮本地结果补齐 Windows Docker Desktop 复现，不把远端结果回写为本地通过。
 
 ## 残余风险
 
 - Ceph 单节点 fixture 只验证协议兼容性和持久性，不证明生产高可用、容量、性能或灾备设计。
 - `object_store` 的升级仍需精确版本锁、SBOM、许可证和 advisory 门；本次消除 MinIO 风险不构成对未来版本的自动接受。
-- 官方 Ceph 镜像仍未在本机完整下载，因此本地集成复现能力受 Quay/CDN 传输限制；远端真实 RGW 已关闭协议兼容与业务语义风险，但不消除该开发环境限制。
+- Quay 直连在本机仍可能出现大层 EOF；本次通过镜像代理取得完全相同的 OCI index digest，并由 Docker checksum 与官方仓库 digest 再登记验证。摘要锁定关闭内容替换风险，但注册表可达性仍是环境可用性风险。
