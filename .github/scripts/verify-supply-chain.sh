@@ -4,7 +4,7 @@ set -euo pipefail
 
 scripts_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 lock_file="$scripts_dir/supply-chain.lock.json"
-SUPPLY_LOCK_SHA256=34047f9c71c296be7fca1e0da2b90dba3359fb35564a21818a13118eae9d9f3d
+SUPPLY_LOCK_SHA256=62118d4c12daf505fbac9f7d4be918b7e9a273c897f5e9f8e6aaab3ab4a7bbaf
 
 die() {
   printf 'supply-chain: %s\n' "$1" >&2
@@ -47,8 +47,8 @@ except Exception as exc:
 if data.get("schema_version") != 1 or len(data.get("tools", [])) != 3:
     print("supply-chain: invalid tool lock", file=sys.stderr); raise SystemExit(2)
 if data.get("release_topology") != {
-    "trusted_base": "2e986673df1b0dfbab29094313ac913e91377994",
-    "candidate_commit_count": 6,
+    "trusted_base": "83d2f030f9df9535c22d36f5872dd25a2cc242d7",
+    "candidate_commit_count": 7,
     "main_update": "squash-merge-only-after-final-consistency-audit",
 }:
     print("supply-chain: frozen release topology mismatch", file=sys.stderr); raise SystemExit(2)

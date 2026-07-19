@@ -2,7 +2,7 @@
 
 ## 目标
 
-- 在精确 base `2e986673df1b0dfbab29094313ac913e91377994` 上，将对象存储服务端从长期社区版方向不足以信任的 MinIO Server 迁移到由 Ceph Foundation 治理的 Ceph Object Gateway（RGW）。
+- 在治理收敛完成后的精确 `main` base `83d2f030f9df9535c22d36f5872dd25a2cc242d7` 上，将对象存储服务端从长期社区版方向不足以信任的 MinIO Server 迁移到由 Ceph Foundation 治理的 Ceph Object Gateway（RGW）。
 - 将 Rust S3 客户端从 `minio` 迁移到 Apache `object_store`，删除 `async-std` 的既有可达链。
 - 将产品代码、测试、部署和活跃文档中的品牌耦合收敛为通用 S3 契约；历史证据保留当时事实。
 - 使用多个 forward-only 快速子循环分别完成 Ceph 可运行性、客户端迁移、部署迁移和最终收敛，每个子循环只运行针对性测试，不创建额外治理文档。

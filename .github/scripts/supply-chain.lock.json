@@ -2,8 +2,8 @@
   "schema_version": 1,
   "captured_utc": "2026-07-12T04:34:09Z",
   "release_topology": {
-    "trusted_base": "2e986673df1b0dfbab29094313ac913e91377994",
-    "candidate_commit_count": 6,
+    "trusted_base": "83d2f030f9df9535c22d36f5872dd25a2cc242d7",
+    "candidate_commit_count": 7,
     "main_update": "squash-merge-only-after-final-consistency-audit"
   },
   "cargo_reachability": {
