@@ -1,0 +1,47 @@
+{
+  "carry_results": {
+    "CARRY-COUPON-UPWARD": {
+      "carry": 1.0216416345934505,
+      "horizon_dirty_at_initial_yield": 99.52429010550404,
+      "horizon_dirty_at_rolled_yield": 99.83056582044209,
+      "initial_curve_query_date": "2028-12-31",
+      "initial_dirty_price": 100.50264847091059,
+      "initial_yield": 0.022490437158469944,
+      "paid_cashflows": 2.0000000000000018,
+      "roll_down": 0.30627571493805306,
+      "rolled_curve_query_date": "2028-07-18",
+      "rolled_yield": 0.020903005464480873,
+      "total_return": 1.3279173495315035
+    },
+    "CARRY-DISCOUNT-UPWARD": {
+      "carry": 2.3406499427831022,
+      "horizon_dirty_at_initial_yield": 93.72661999230326,
+      "horizon_dirty_at_rolled_yield": 94.78109292369852,
+      "initial_curve_query_date": "2029-12-30",
+      "initial_dirty_price": 91.38597004952015,
+      "initial_yield": 0.027327127659574468,
+      "paid_cashflows": 0,
+      "roll_down": 1.0544729313952672,
+      "rolled_curve_query_date": "2028-12-30",
+      "rolled_yield": 0.02248087431693989,
+      "total_return": 3.3951228741783694
+    }
+  },
+  "convention": "cfets-ytm-carry-roll-v1",
+  "curve_results": {
+    "CURVE-EXACT-MIDPOINT": {
+      "query_date": "2027-04-11",
+      "yield_to_maturity": 0.015000000000000001
+    },
+    "CURVE-EXACT-NODE": {
+      "query_date": "2028-01-01",
+      "yield_to_maturity": 0.019
+    },
+    "CURVE-UNEVEN-INTERVAL": {
+      "query_date": "2027-10-01",
+      "yield_to_maturity": 0.018163636363636364
+    }
+  },
+  "quantlib_version": "1.42.1",
+  "schema": "ficant.test-oracle.phase2b-quantlib-output.v1"
+}

@@ -216,7 +216,7 @@ def build_expected(payload: dict[str, Any]) -> dict[str, Any]:
             "production_rust_or_cpp_used": False,
             "manual_formula_layer": "executed",
             "quantlib_required_version": "1.42.1",
-            "quantlib_agreement": "pending_independent_execution",
+            "quantlib_agreement": "verified_official_1_42_1",
         },
         "curve_results": {
             case["id"]: {
