@@ -13,7 +13,7 @@ async-trait = { workspace = true }
 chrono = { workspace = true }
 ficant-application = { path = "../ficant-application" }
 ficant-domain = { path = "../ficant-domain" }
-minio = { workspace = true }
+object_store = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 

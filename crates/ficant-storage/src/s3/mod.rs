@@ -3,4 +3,4 @@ pub mod orphan_cleanup;
 pub mod staging;
 
 pub use orphan_cleanup::{CleanupReport, OrphanCleaner};
-pub use staging::MinioBlobStore;
+pub use staging::S3BlobStore;

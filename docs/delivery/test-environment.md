@@ -4,7 +4,7 @@
 
 本合同覆盖 `ficant` 的第一个自动化测试发布：GitHub main CI 成功、GHCR 不可变镜像、Linux 测试机 Docker Compose、PostgreSQL migration、健康检查、冒烟测试、部署记录和镜像回滚。
 
-它不授权生产发布，不宣称完整业务 UAT，也不启用 MinIO 或对象存储 adapter。
+它不授权生产发布，不宣称完整业务 UAT，也不启用任何对象存储 adapter。
 
 ## 触发与制品
 

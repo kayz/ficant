@@ -208,7 +208,7 @@ async fn insert_definition(
             .bind(rule_pack.effective().from().instant())
             .bind(rule_pack.effective().to().instant())
             .bind(verification_status(rule_pack.verification_status()))
-            .bind(crate::minio::content_addressed::hash_hex(
+            .bind(crate::s3::content_addressed::hash_hex(
                 rule_pack.content_hash(),
             ))
             .bind(payload)

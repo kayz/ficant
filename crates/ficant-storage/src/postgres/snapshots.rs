@@ -74,10 +74,8 @@ impl SnapshotVerifiedReadMetadataRepository for PostgresRepository {
                        AND manifest.tenant_id=$1 AND manifest.content_hash=$3",
                 )
                 .bind(scope.tenant_id().as_str())
-                .bind(crate::minio::content_addressed::hash_hex(
-                    value.content_hash(),
-                ))
-                .bind(crate::minio::content_addressed::hash_hex(
+                .bind(crate::s3::content_addressed::hash_hex(value.content_hash()))
+                .bind(crate::s3::content_addressed::hash_hex(
                     value.manifest_hash(),
                 ))
                 .fetch_optional(self.pool())
@@ -100,9 +98,7 @@ impl SnapshotVerifiedReadMetadataRepository for PostgresRepository {
                     "SELECT blob_size FROM storage.blobs WHERE tenant_id=$1 AND content_hash=$2",
                 )
                 .bind(scope.tenant_id().as_str())
-                .bind(crate::minio::content_addressed::hash_hex(
-                    value.content_hash(),
-                ))
+                .bind(crate::s3::content_addressed::hash_hex(value.content_hash()))
                 .fetch_optional(self.pool())
                 .await
                 .map_err(map_sqlx_error)?;
@@ -202,9 +198,9 @@ async fn insert_snapshot_metadata(
                 .bind(value.owner().owner_id().as_str())
                 .bind(value.visible_at().instant())
                 .bind(value.as_of().instant())
-                .bind(crate::minio::content_addressed::hash_hex(value.schema_hash()))
-                .bind(crate::minio::content_addressed::hash_hex(value.manifest_hash()))
-                .bind(crate::minio::content_addressed::hash_hex(value.content_hash()))
+                .bind(crate::s3::content_addressed::hash_hex(value.schema_hash()))
+                .bind(crate::s3::content_addressed::hash_hex(value.manifest_hash()))
+                .bind(crate::s3::content_addressed::hash_hex(value.content_hash()))
                 .bind(command.idempotency_key().as_str())
                 .bind(fingerprint.as_slice())
                 .bind(payload)
@@ -222,12 +218,10 @@ async fn insert_snapshot_metadata(
             .bind(tenant_id)
             .bind(value.id().as_str())
             .bind(value.owner().owner_id().as_str())
-            .bind(crate::minio::content_addressed::hash_hex(
+            .bind(crate::s3::content_addressed::hash_hex(
                 value.filter_digest(),
             ))
-            .bind(crate::minio::content_addressed::hash_hex(
-                value.content_hash(),
-            ))
+            .bind(crate::s3::content_addressed::hash_hex(value.content_hash()))
             .bind(command.idempotency_key().as_str())
             .bind(fingerprint.as_slice())
             .bind(payload)

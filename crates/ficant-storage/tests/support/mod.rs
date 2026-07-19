@@ -47,7 +47,7 @@ pub async fn migrate(pool: &PgPool) {
 
 pub fn s3_environment() -> (String, String, String, String) {
     let endpoint = env::var("FICANT_TEST_S3_ENDPOINT")
-        .expect("FICANT_TEST_S3_ENDPOINT must point to the ready MinIO service");
+        .expect("FICANT_TEST_S3_ENDPOINT must point to the ready S3 service");
     let bucket = env::var("FICANT_TEST_S3_BUCKET")
         .expect("FICANT_TEST_S3_BUCKET must name the isolated test bucket");
     let access_key = env::var("FICANT_TEST_S3_ACCESS_KEY")

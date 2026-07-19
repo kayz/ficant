@@ -167,13 +167,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker run --detach --rm --name ficant-ci-minio --network host \
-            --env MINIO_ROOT_USER=ficant-ci --env MINIO_ROOT_PASSWORD=ficant-ci-password \
-            minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e server /data
-          trap 'docker rm -f ficant-ci-minio >/dev/null 2>&1 || true' EXIT
-          until docker run --rm --network host --entrypoint /bin/sh \
-            minio/mc@sha256:09f93f534cde415d192bb6084dd0e0ddd1715fb602f8a922ad121fd2bf0f8b44 \
-            -ec 'mc alias set local http://127.0.0.1:9000 ficant-ci ficant-ci-password && mc mb --ignore-existing local/ficant-ci'; do sleep 1; done
           docker run --rm --network host \
             --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu \
             --env FICANT_TEST_DATABASE_URL=postgres://ficant:ficant-ci-password@127.0.0.1:5432/ficant \
@@ -203,13 +196,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker run --detach --rm --name ficant-ci-minio --network host \
-            --env MINIO_ROOT_USER=ficant-ci --env MINIO_ROOT_PASSWORD=ficant-ci-password \
-            minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e server /data
-          trap 'docker rm -f ficant-ci-minio >/dev/null 2>&1 || true' EXIT
-          until docker run --rm --network host --entrypoint /bin/sh \
-            minio/mc@sha256:09f93f534cde415d192bb6084dd0e0ddd1715fb602f8a922ad121fd2bf0f8b44 \
-            -ec 'mc alias set local http://127.0.0.1:9000 ficant-ci ficant-ci-password && mc mb --ignore-existing local/ficant-ci'; do sleep 1; done
+          ceph_image=ficant/ceph-rgw-runtime:ci
+          ceph_container=ficant-ci-ceph-rgw
+          ceph_volume=ficant-ci-ceph-data
+          docker build --pull=false --file deploy/dev/Ceph.Dockerfile \
+            --build-arg CEPH_IMAGE=quay.io/ceph/ceph@sha256:6b4b5ae33acd3d736eb26d2a19238bce71a22f9cfb99cca887ba6312d0957644 \
+            --tag "$ceph_image" .
+          docker volume create "$ceph_volume" >/dev/null
+          trap 'docker rm -f "$ceph_container" >/dev/null 2>&1 || true; docker volume rm -f "$ceph_volume" >/dev/null 2>&1 || true; docker image rm -f "$ceph_image" >/dev/null 2>&1 || true' EXIT
+          docker run --detach --name "$ceph_container" --network host \
+            --user 167:167 --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+            --cpus 1 --memory 1536m --pids-limit 512 \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,uid=167,gid=167 \
+            --tmpfs /run/ceph:rw,noexec,nosuid,nodev,size=16m,uid=167,gid=167 \
+            --tmpfs /var/log/ceph:rw,noexec,nosuid,nodev,size=32m,uid=167,gid=167 \
+            --volume "$ceph_volume:/var/lib/ceph" \
+            --env FICANT_S3_ACCESS_KEY=ficant-ci \
+            --env FICANT_S3_SECRET_KEY=ficant-ci-password \
+            --env FICANT_S3_BUCKET=ficant-ci \
+            "$ceph_image"
+          for _ in $(seq 1 180); do
+            if docker exec "$ceph_container" test -f /run/ceph/ficant-ready; then
+              break
+            fi
+            sleep 1
+          done
+          if ! docker exec "$ceph_container" test -f /run/ceph/ficant-ready; then
+            docker logs "$ceph_container"
+            exit 1
+          fi
           # Derived OCI manifest verified at dbcff347; runtime inputs are unchanged through this SHA; this job does not rebuild it.
           export FICANT_TEST_RUNTIME_IMAGE_DIGEST=sha256:8e97031468b2ad51ab8484d06d8af9d63f1b73f8c04654f17be40ac629076cd9
           docker run --rm --network host \

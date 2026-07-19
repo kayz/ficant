@@ -1,6 +1,8 @@
 # ficant 验收与证据索引
 
 > **历史记录（superseded）：** 本文记录 iteration-2 当时的 PROQAID Quality、Delivery 和 Review 事实。旧角色名、路径和 verdict 仅用于审计，不是当前 OPAID 权威；后续治理边界见 ADR-0009，HOQA 状态与 Iteration 3 checklist 分别归档于 `docs/history/hoqa/governance/state.toml` 和 `docs/history/hoqa/iteration-3-checklist.md`。
+>
+> **后续处置：** 2026-07-19 的 Ceph RGW 迁移候选已从活动 Cargo/Compose/CI 合同移除 `minio` 与 `async-std`，并把风险接受集合收敛为空。下文继续保留 iteration-2 当时的原始证据；当前选择与升级条件见 ADR-0010。
 
 **当前结论：** iteration-2 已 `CLOSED`。原 Phase 0/1 的真实业务、运行时与可重放证据保持有效；2026-07-13 closure audit 对 `RUSTSEC-2025-0052` 完成了精确机器门、真实对象存储验证和候选绑定 CI。独立 Quality verdict 为 `PASS-WITH-ACCEPTED-RISK`，内部 Review 为 `pass-with-accepted-findings`（C0/I0/M1）；唯一 accepted finding 是下述限时维护风险，不是未关闭 blocker。
 

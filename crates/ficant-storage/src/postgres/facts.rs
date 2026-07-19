@@ -178,9 +178,7 @@ impl MarketFactRepository for PostgresRepository {
         .bind(curve.rule_pack().id().as_str())
         .bind(version_i64(curve.rule_pack().version().get())?)
         .bind(curve.point_schema())
-        .bind(crate::minio::content_addressed::hash_hex(
-            curve.content_hash(),
-        ))
+        .bind(crate::s3::content_addressed::hash_hex(curve.content_hash()))
         .bind(version_i64(command.declared_blob_size())?)
         .bind(command.idempotency_key().as_str())
         .bind(command.fingerprint().content_hash().as_bytes().as_slice())

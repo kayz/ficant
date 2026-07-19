@@ -37,4 +37,4 @@ tonic-prost = "=0.14.6"
 tonic-web = "=0.14.6"
 tower-layer = "=0.3.3"
 ulid = { version = "=1.2.1", default-features = false }
-minio = { version = "=0.4.0", default-features = false, features = ["rustls-tls", "default-crypto"] }
+object_store = { version = "=0.14.1", default-features = false, features = ["aws"] }

@@ -4,6 +4,8 @@
 - 日期：2026-07-13
 - 决策者：Human，经 Orchestrator Architecture/Interface lens 形成方案并由 checklist 确认
 
+> 本 ADR 的数值、C ABI、Arrow 与 Artifact 语义继续有效；其中 MinIO 专名和 adapter 路径已由 ADR-0010 的通用 S3 port、Apache `object_store` 与 Ceph RGW 取代。
+
 ## 背景
 
 Phase 2A 必须在不修改公共 Protobuf、不开新数据库 migration 的前提下，穿过 Rust/C++ 边界并把 `BondAnalyticsResult` 作为可验证的不可变 Artifact 保存。若 Domain 持有 FFI/Arrow 类型，Application 直接操作指针，或 Storage 决定业务语义，复杂性会跨层扩散。README 同时要求 Artifact 只使用 Arrow、Parquet 或 Protobuf，因此不能使用临时 JSON 或平台私有裸二进制。

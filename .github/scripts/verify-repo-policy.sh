@@ -181,7 +181,7 @@ validate_ci() {
 
   while IFS= read -r image; do
     [[ $image == *@sha256:* ]] || record_failure "external CI image is not digest-pinned: $image"
-  done < <(grep -Eo '(rust|python|node|postgres|minio/minio|minio/mc|bufbuild/buf|mcr\.microsoft\.com/[A-Za-z0-9._/-]+)(:[A-Za-z0-9._-]+|@sha256:[0-9a-f]{64})' "$workflow" || true)
+  done < <(grep -Eo '(rust|python|node|postgres|quay\.io/ceph/ceph|bufbuild/buf|mcr\.microsoft\.com/[A-Za-z0-9._/-]+)(:[A-Za-z0-9._-]+|@sha256:[0-9a-f]{64})' "$workflow" || true)
 
   local checkout_count depth_count
   checkout_count=$(grep -Ec 'uses:[[:space:]]*actions/checkout@' "$workflow" || true)
@@ -206,9 +206,10 @@ validate_ci() {
   done
   for job in migration business-loop; do
     require_job_marker "$workflow" "$job" 'postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74'
-    require_job_marker "$workflow" "$job" 'minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e'
     require_job_marker "$workflow" "$job" '--test-threads=1'
   done
+  require_job_marker "$workflow" business-loop 'quay.io/ceph/ceph@sha256:6b4b5ae33acd3d736eb26d2a19238bce71a22f9cfb99cca887ba6312d0957644'
+  require_job_marker "$workflow" business-loop 'deploy/dev/Ceph.Dockerfile'
   require_job_marker "$workflow" migration 'migration_acceptance'
   require_job_marker "$workflow" business-loop 'phase1_business_loop'
   require_job_marker "$workflow" business-loop 'negative_invariants'
@@ -265,7 +266,8 @@ baseline_paths=(
   binaries/ficant-server/Cargo.toml binaries/ficant-server/src/main.rs
   binaries/ficant-worker/Cargo.toml binaries/ficant-worker/src/main.rs
   binaries/ficant-web/Cargo.toml binaries/ficant-web/src/main.rs
-  deploy/dev/docker-compose.yml deploy/dev/Minio.Dockerfile deploy/dev/config/ficant.toml deploy/dev/toolchain.lock.toml
+  deploy/dev/docker-compose.yml deploy/dev/Ceph.Dockerfile deploy/dev/ceph-entrypoint.sh
+  deploy/dev/config/ficant.toml deploy/dev/toolchain.lock.toml
   .github/workflows/ci.yml .github/scripts/verify-repo-policy.sh
   cpp/fixed-income-kernel/CMakeLists.txt cpp/fixed-income-kernel/include/ficant_kernel.h
   cpp/fixed-income-kernel/src/abi_version.cpp cpp/fixed-income-kernel/tests/abi_smoke.cpp

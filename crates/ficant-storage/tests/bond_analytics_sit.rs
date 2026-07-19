@@ -17,11 +17,11 @@ use ficant_domain::analytics::{
 use ficant_domain::primitives::{ContentHash, MarketTime, OwnerRef, Ulid, Version, VersionRef};
 use ficant_fixed_income_native::NativeBondAnalyticsEngine;
 use ficant_storage::analytics_arrow::ArrowBondAnalyticsCodec;
-use ficant_storage::minio::MinioBlobStore;
+use ficant_storage::s3::S3BlobStore;
 
 #[tokio::test]
 #[allow(clippy::too_many_lines)]
-async fn q035_q036_real_postgres_minio_publish_restart_replay_and_tamper_fail_closed() {
+async fn q035_q036_real_postgres_s3_publish_restart_replay_and_tamper_fail_closed() {
     let (endpoint, bucket, access_key, secret_key) = support::s3_environment();
     let pool = support::postgres_pool().await;
     support::reset_postgres(&pool).await;
@@ -31,14 +31,14 @@ async fn q035_q036_real_postgres_minio_publish_restart_replay_and_tamper_fail_cl
     let scope = support::access_scope(input.owner());
     let artifact_id = id('H');
     let repository = support::repository(pool.clone());
-    let store = MinioBlobStore::new(
+    let store = S3BlobStore::new(
         &endpoint,
         bucket.clone(),
         &access_key,
         &secret_key,
         pool.clone(),
     )
-    .expect("SIT MinIO adapter must initialize");
+    .expect("SIT S3 adapter must initialize");
     seed_analytics_lineage(&pool, &store, &scope, &input).await;
     let artifact = PublishBondAnalytics::new(
         &NativeBondAnalyticsEngine,
@@ -69,8 +69,8 @@ async fn q035_q036_real_postgres_minio_publish_restart_replay_and_tamper_fail_cl
     drop(repository);
     let restarted_repository = support::repository(pool.clone());
     let restarted_store =
-        MinioBlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone())
-            .expect("restarted MinIO adapter must initialize");
+        S3BlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone())
+            .expect("restarted S3 adapter must initialize");
     let sink = RecordingSink::default();
     let replay = ReplayBondAnalytics::new(
         &NativeBondAnalyticsEngine,
@@ -202,7 +202,7 @@ fn analytics_input() -> BondAnalyticsInput {
 #[allow(clippy::too_many_lines)]
 async fn seed_analytics_lineage(
     pool: &sqlx::PgPool,
-    store: &MinioBlobStore,
+    store: &S3BlobStore,
     scope: &AccessScope,
     input: &BondAnalyticsInput,
 ) {
@@ -260,7 +260,7 @@ async fn seed_analytics_lineage(
     .bind(tenant)
     .bind(input.rule_pack().version_ref().id().as_str())
     .bind(owner)
-    .bind(MinioBlobStore::hash_hex(input.rule_pack().content_hash()))
+    .bind(S3BlobStore::hash_hex(input.rule_pack().content_hash()))
     .execute(pool)
     .await
     .expect("SIT RulePack prerequisite must persist");
@@ -298,14 +298,14 @@ async fn seed_analytics_lineage(
         )
         .await
         .expect("SIT snapshot bytes must verify");
-    let snapshot_hash = MinioBlobStore::hash_hex(verified.content_hash());
+    let snapshot_hash = S3BlobStore::hash_hex(verified.content_hash());
     sqlx::query(
         "INSERT INTO storage.blobs (tenant_id, content_hash, object_key, blob_size)
          VALUES ($1, $2, $3, $4)",
     )
     .bind(tenant)
     .bind(&snapshot_hash)
-    .bind(MinioBlobStore::immutable_key(verified.content_hash()))
+    .bind(S3BlobStore::immutable_key(verified.content_hash()))
     .bind(i64::try_from(verified.size()).unwrap())
     .execute(pool)
     .await
@@ -325,9 +325,7 @@ async fn seed_analytics_lineage(
     .bind(tenant)
     .bind(input.snapshot().version_ref().id().as_str())
     .bind(owner)
-    .bind(MinioBlobStore::hash_hex(&ContentHash::digest(
-        b"i3c-schema",
-    )))
+    .bind(S3BlobStore::hash_hex(&ContentHash::digest(b"i3c-schema")))
     .bind(&snapshot_hash)
     .bind(vec![7_u8; 32])
     .execute(pool)

@@ -74,12 +74,84 @@ of Data, including for example machine learning models and models'
 insights.
 ```
 
-## pkg:cargo/webpki-roots@1.0.8
+## pkg:cargo/webpki-root-certs@1.0.9
 
 - SPDX：`CDLA-Permissive-2.0`
-- 来源：`https://crates.io/api/v1/crates/webpki-roots/1.0.8/download`
-- 完整性：`sha256:bf85cb06032201fa7c6f829d7db5a7e5aa45bcc0655327713065f6f0576731bf`
-- 署名：webpki-roots 1.0.8；Mozilla Contributors；信任根数据采用 CDLA-Permissive-2.0。
+- 来源：`https://crates.io/api/v1/crates/webpki-root-certs/1.0.9/download`
+- 完整性：`sha256:b96554aa2acc8ccdb7e1c9a58a7a68dd5d13bccc69cd124cb09406db612a1c9b`
+- 署名：webpki-root-certs 1.0.9；Mozilla Contributors；信任根数据采用 CDLA-Permissive-2.0。
+- 许可证文本 SHA-256：`d30183ec6610abca89d6095d5f1dc56ea50248a1001cbb4549fadc3a582f6f9a`
+
+```text
+# Community Data License Agreement - Permissive - Version 2.0
+
+This is the Community Data License Agreement - Permissive, Version
+2.0 (the "agreement"). Data Provider(s) and Data Recipient(s) agree
+as follows:
+
+## 1. Provision of the Data
+
+1.1. A Data Recipient may use, modify, and share the Data made
+available by Data Provider(s) under this agreement if that Data
+Recipient follows the terms of this agreement.
+
+1.2. This agreement does not impose any restriction on a Data
+Recipient's use, modification, or sharing of any portions of the
+Data that are in the public domain or that may be used, modified,
+or shared under any other legal exception or limitation.
+
+## 2. Conditions for Sharing Data
+
+2.1. A Data Recipient may share Data, with or without modifications, so
+long as the Data Recipient makes available the text of this agreement
+with the shared Data.
+
+## 3. No Restrictions on Results
+
+3.1. This agreement does not impose any restriction or obligations
+with respect to the use, modification, or sharing of Results.
+
+## 4. No Warranty; Limitation of Liability
+
+4.1. All Data Recipients receive the Data subject to the following
+terms:
+
+THE DATA IS PROVIDED ON AN "AS IS" BASIS, WITHOUT REPRESENTATIONS,
+WARRANTIES OR CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED
+INCLUDING, WITHOUT LIMITATION, ANY WARRANTIES OR CONDITIONS OF TITLE,
+NON-INFRINGEMENT, MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+
+NO DATA PROVIDER SHALL HAVE ANY LIABILITY FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING
+WITHOUT LIMITATION LOST PROFITS), HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE DATA OR RESULTS,
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+## 5. Definitions
+
+5.1. "Data" means the material received by a Data Recipient under
+this agreement.
+
+5.2. "Data Provider" means any person who is the source of Data
+provided under this agreement and in reliance on a Data Recipient's
+agreement to its terms.
+
+5.3. "Data Recipient" means any person who receives Data directly
+or indirectly from a Data Provider and agrees to the terms of this
+agreement.
+
+5.4. "Results" means any outcome obtained by computational analysis
+of Data, including for example machine learning models and models'
+insights.
+```
+
+## pkg:cargo/webpki-roots@1.0.9
+
+- SPDX：`CDLA-Permissive-2.0`
+- 来源：`https://crates.io/api/v1/crates/webpki-roots/1.0.9/download`
+- 完整性：`sha256:7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a`
+- 署名：webpki-roots 1.0.9；Mozilla Contributors；信任根数据采用 CDLA-Permissive-2.0。
 - 许可证文本 SHA-256：`d30183ec6610abca89d6095d5f1dc56ea50248a1001cbb4549fadc3a582f6f9a`
 
 ```text

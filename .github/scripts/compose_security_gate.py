@@ -13,37 +13,35 @@ from urllib.parse import urlsplit
 
 
 RUST_SERVICES = {"ficant-server", "ficant-worker", "ficant-web"}
-PERSISTENCE_SERVICES = {"postgres", "minio"}
-INIT_SERVICES = {"minio-init", "migration"}
+PERSISTENCE_SERVICES = {"postgres", "ceph-rgw"}
+INIT_SERVICES = {"migration"}
 EXPECTED_SERVICES = RUST_SERVICES | PERSISTENCE_SERVICES | INIT_SERVICES
 PUBLISHED_SERVICES = RUST_SERVICES | PERSISTENCE_SERVICES
 EXPECTED_IMAGES = {
     "postgres": "postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74",
     "migration": "postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74",
-    "minio-init": "minio/mc@sha256:09f93f534cde415d192bb6084dd0e0ddd1715fb602f8a922ad121fd2bf0f8b44",
 }
-MINIO_BASE_IMAGE = "minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e"
-MINIO_RUNTIME_IMAGE = "ficant/minio-runtime:dev"
-MINIO_RUNTIME_DOCKERFILE = "deploy/dev/Minio.Dockerfile"
-MINIO_RUNTIME_USER = "1000:1000"
-MINIO_LICENSE = "AGPL-3.0-only"
+CEPH_BASE_IMAGE = "quay.io/ceph/ceph@sha256:6b4b5ae33acd3d736eb26d2a19238bce71a22f9cfb99cca887ba6312d0957644"
+CEPH_RUNTIME_IMAGE = "ficant/ceph-rgw-runtime:dev"
+CEPH_RUNTIME_DOCKERFILE = "deploy/dev/Ceph.Dockerfile"
+CEPH_RUNTIME_USER = "167:167"
+CEPH_LICENSE = "LGPL-2.1-only OR LGPL-3.0-only"
 EXPECTED_DEPENDENCIES = {
     "postgres": {},
-    "minio": {},
-    "minio-init": {"minio": "service_healthy"},
+    "ceph-rgw": {},
     "migration": {"postgres": "service_healthy"},
     "ficant-server": {
         "migration": "service_completed_successfully",
-        "minio-init": "service_completed_successfully",
+        "ceph-rgw": "service_healthy",
     },
     "ficant-worker": {
         "migration": "service_completed_successfully",
-        "minio-init": "service_completed_successfully",
+        "ceph-rgw": "service_healthy",
         "ficant-server": "service_healthy",
     },
     "ficant-web": {
         "migration": "service_completed_successfully",
-        "minio-init": "service_completed_successfully",
+        "ceph-rgw": "service_healthy",
         "ficant-server": "service_healthy",
     },
 }
@@ -219,7 +217,7 @@ def validate_resolved(document: dict[str, Any], project: str) -> list[str]:
     record(isinstance(named_volumes, dict), "resolved named volumes must be an object", failures)
     if isinstance(named_volumes, dict):
         record("postgres-data" in named_volumes, "postgres-data named volume is required", failures)
-        record("minio-data" in named_volumes, "minio-data named volume is required", failures)
+        record("ceph-data" in named_volumes, "ceph-data named volume is required", failures)
 
     for service_name in sorted(EXPECTED_SERVICES):
         service = services.get(service_name)
@@ -284,35 +282,35 @@ def validate_resolved(document: dict[str, Any], project: str) -> list[str]:
                 f"{service_name}: image must match the locked RepoDigest",
                 failures,
             )
-        elif service_name == "minio":
+        elif service_name == "ceph-rgw":
             build = service.get("build")
             record(
-                service.get("image") == MINIO_RUNTIME_IMAGE,
-                "minio: runtime image must match the frozen local image name",
+                service.get("image") == CEPH_RUNTIME_IMAGE,
+                "ceph-rgw: runtime image must match the frozen local image name",
                 failures,
             )
-            record(isinstance(build, dict), "minio: hardened image build is required", failures)
+            record(isinstance(build, dict), "ceph-rgw: hardened image build is required", failures)
             if isinstance(build, dict):
                 context = build.get("context")
                 record(
                     isinstance(context, str) and bool(context) and "://" not in context,
-                    "minio: build context must be local",
+                    "ceph-rgw: build context must be local",
                     failures,
                 )
                 record(
-                    build.get("dockerfile") == MINIO_RUNTIME_DOCKERFILE,
-                    "minio: Dockerfile must match the hardened runtime contract",
+                    build.get("dockerfile") == CEPH_RUNTIME_DOCKERFILE,
+                    "ceph-rgw: Dockerfile must match the hardened runtime contract",
                     failures,
                 )
                 args = build.get("args")
                 record(
-                    isinstance(args, dict) and args.get("MINIO_IMAGE") == MINIO_BASE_IMAGE,
-                    "minio: build must use the locked base RepoDigest",
+                    isinstance(args, dict) and args.get("CEPH_IMAGE") == CEPH_BASE_IMAGE,
+                    "ceph-rgw: build must use the locked base RepoDigest",
                     failures,
                 )
             record(
-                service.get("user") == MINIO_RUNTIME_USER,
-                "minio: runtime user must be exactly 1000:1000",
+                service.get("user") == CEPH_RUNTIME_USER,
+                "ceph-rgw: runtime user must be exactly 167:167",
                 failures,
             )
 
@@ -349,10 +347,10 @@ def validate_resolved(document: dict[str, Any], project: str) -> list[str]:
                 "postgres: persistent data volume is required",
                 failures,
             )
-        elif service_name == "minio":
+        elif service_name == "ceph-rgw":
             record(
-                any(isinstance(volume, dict) and volume.get("target") == "/data" for volume in volumes or []),
-                "minio: persistent data volume is required",
+                any(isinstance(volume, dict) and volume.get("target") == "/var/lib/ceph" for volume in volumes or []),
+                "ceph-rgw: persistent data volume is required",
                 failures,
             )
         elif service_name == "migration":
@@ -365,21 +363,17 @@ def validate_resolved(document: dict[str, Any], project: str) -> list[str]:
         environment = service.get("environment")
         if service_name in {"postgres", "migration"}:
             record(isinstance(environment, dict) and configured(environment, "PGPASSWORD" if service_name == "migration" else "POSTGRES_PASSWORD"), f"{service_name}: injected PostgreSQL credential is required", failures)
-        elif service_name == "minio":
-            record(isinstance(environment, dict) and configured(environment, "MINIO_ROOT_USER") and configured(environment, "MINIO_ROOT_PASSWORD"), "minio: injected root credentials are required", failures)
-        elif service_name == "minio-init":
-            record(isinstance(environment, dict) and configured(environment, "MINIO_ROOT_USER") and configured(environment, "MINIO_ROOT_PASSWORD"), "minio-init: injected root credentials are required", failures)
+        elif service_name == "ceph-rgw":
             record(
                 isinstance(environment, dict)
-                and is_tmp_config_directory(environment.get("MC_CONFIG_DIR"), tmpfs),
-                "minio-init: MC_CONFIG_DIR must use the /tmp tmpfs",
+                and configured(environment, "FICANT_S3_ACCESS_KEY")
+                and configured(environment, "FICANT_S3_SECRET_KEY")
+                and configured(environment, "FICANT_S3_BUCKET"),
+                "ceph-rgw: injected S3 credentials and bucket are required",
                 failures,
             )
 
-        if service_name == "minio-init":
-            init_command = command_text(service.get("command"))
-            record("mc alias set" in init_command and "--ignore-existing" in init_command, "minio-init: credential-safe idempotent bucket creation is required", failures)
-        elif service_name == "migration":
+        if service_name == "migration":
             migration_command = command_text(service.get("command"))
             for marker in ("ficant_schema_migrations", "ON_ERROR_STOP=1", "BEGIN;", "COMMIT;"):
                 record(marker in migration_command, f"migration: idempotent migration command must contain {marker}", failures)
@@ -392,7 +386,7 @@ def validate_resolved(document: dict[str, Any], project: str) -> list[str]:
 
 def validate_runtime(document: list[dict[str, Any]], project: str) -> list[str]:
     failures: list[str] = []
-    record(len(document) == len(EXPECTED_SERVICES), "runtime inspection must contain exactly seven containers", failures)
+    record(len(document) == len(EXPECTED_SERVICES), "runtime inspection must contain exactly six containers", failures)
     inspected_services: set[str] = set()
 
     for container in document:
@@ -455,25 +449,25 @@ def validate_runtime(document: list[dict[str, Any]], project: str) -> list[str]:
 
         if service_name in EXPECTED_IMAGES:
             record(config.get("Image") == EXPECTED_IMAGES[service_name], f"{service_name}: runtime image must match the locked RepoDigest", failures)
-        elif service_name == "minio":
+        elif service_name == "ceph-rgw":
             record(
-                config.get("Image") == MINIO_RUNTIME_IMAGE,
-                "minio: runtime image must match the frozen local image name",
+                config.get("Image") == CEPH_RUNTIME_IMAGE,
+                "ceph-rgw: runtime image must match the frozen local image name",
                 failures,
             )
             record(
-                config.get("User") == MINIO_RUNTIME_USER,
-                "minio: runtime user must be exactly 1000:1000",
+                config.get("User") == CEPH_RUNTIME_USER,
+                "ceph-rgw: runtime user must be exactly 167:167",
                 failures,
             )
             record(
-                labels.get("org.opencontainers.image.base.name") == MINIO_BASE_IMAGE,
-                "minio: runtime base image provenance must match the locked RepoDigest",
+                labels.get("org.opencontainers.image.base.name") == CEPH_BASE_IMAGE,
+                "ceph-rgw: runtime base image provenance must match the locked RepoDigest",
                 failures,
             )
             record(
-                labels.get("org.opencontainers.image.licenses") == MINIO_LICENSE,
-                "minio: runtime license label must be AGPL-3.0-only",
+                labels.get("org.opencontainers.image.licenses") == CEPH_LICENSE,
+                "ceph-rgw: runtime license label must match the frozen Ceph dual-license expression",
                 failures,
             )
 
@@ -485,8 +479,8 @@ def validate_runtime(document: list[dict[str, Any]], project: str) -> list[str]:
                 record(config_mounts[0].get("RW") is False, f"{service_name}: runtime config mount must be read-only", failures)
         elif service_name == "postgres":
             record(any(mount.get("Destination") == "/var/lib/postgresql/data" and mount.get("Type") == "volume" for mount in mounts), "postgres: runtime persistent data volume is required", failures)
-        elif service_name == "minio":
-            record(any(mount.get("Destination") == "/data" and mount.get("Type") == "volume" for mount in mounts), "minio: runtime persistent data volume is required", failures)
+        elif service_name == "ceph-rgw":
+            record(any(mount.get("Destination") == "/var/lib/ceph" and mount.get("Type") == "volume" for mount in mounts), "ceph-rgw: runtime persistent data volume is required", failures)
         elif service_name == "migration":
             record(any(mount.get("Destination") == "/migrations" and mount.get("RW") is False for mount in mounts), "migration: runtime read-only migration source is required", failures)
 

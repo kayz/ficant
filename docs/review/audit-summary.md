@@ -1,6 +1,8 @@
 # iteration-2 PROQAID 退出摘要
 
 > **历史记录（superseded）：** 本文保留 iteration-2 在旧治理下的关闭事实。PROQAID、HOQA、Review、角色路径和 verdict 不得用于驱动当前 OPAID 工作；后续治理边界见 ADR-0009，旧状态与 checklist 分别归档于 `docs/history/hoqa/governance/state.toml` 和 `docs/history/hoqa/iteration-3-checklist.md`。
+>
+> **后续处置：** 2026-07-19 的 Ceph RGW 迁移候选已从活动 Cargo/Compose/CI 合同移除 `minio` 与 `async-std`，并把风险接受集合收敛为空。下文仍只描述 iteration-2 当时的接受事实，当前决策见 ADR-0010。
 
 **迭代状态：** `CLOSED`
 

@@ -104,15 +104,11 @@ verification = "Host runtime evidence only; the desktop suffix is distinct from 
 source_tag = "postgres:16.10-bookworm"
 repo_digest = "postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74"
 
-[docker.images.minio]
-source_tag = "minio/minio:RELEASE.2025-04-22T22-12-26Z"
-repo_digest = "minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e"
-linux_amd64_manifest = "sha256:3f97c5651cb6662b880c787a232b6b34fec8d8922e08d6617b25d241a21164bb"
-runtime_image = "ficant/minio-runtime:dev"
-dockerfile = "deploy/dev/Minio.Dockerfile"
-runtime_user = "1000:1000"
-license = "AGPL-3.0-only"
-
-[docker.images.minio_client]
-source_tag = "minio/mc:RELEASE.2025-05-21T01-59-54Z"
-repo_digest = "minio/mc@sha256:09f93f534cde415d192bb6084dd0e0ddd1715fb602f8a922ad121fd2bf0f8b44"
+[docker.images.ceph]
+source_tag = "quay.io/ceph/ceph:v20.2.2"
+repo_digest = "quay.io/ceph/ceph@sha256:6b4b5ae33acd3d736eb26d2a19238bce71a22f9cfb99cca887ba6312d0957644"
+linux_amd64_manifest = "sha256:55a5c2014b4db34589ad8886606409727f633319131bb663d37e0d489e350703"
+runtime_image = "ficant/ceph-rgw-runtime:dev"
+dockerfile = "deploy/dev/Ceph.Dockerfile"
+runtime_user = "167:167"
+license = "LGPL-2.1-only OR LGPL-3.0-only"

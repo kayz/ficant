@@ -120,7 +120,7 @@ pub(crate) async fn persist_signal(
     .bind(artifact_id)
     .bind(signal.owner().owner_id().as_str())
     .bind(signal.experiment_run_id().as_str())
-    .bind(crate::minio::content_addressed::hash_hex(
+    .bind(crate::s3::content_addressed::hash_hex(
         signal.content_hash(),
     ))
     .bind(signal.valid().from().instant())
@@ -157,7 +157,7 @@ async fn validate_artifact_binding(
     let expected_metadata = (
         signal.owner().owner_id().as_str().to_owned(),
         "SIGNAL_SET".to_owned(),
-        crate::minio::content_addressed::hash_hex(signal.content_hash()),
+        crate::s3::content_addressed::hash_hex(signal.content_hash()),
         expected_size,
     );
     let Some((owner_id, kind, content_hash, blob_size, payload)) = artifact else {

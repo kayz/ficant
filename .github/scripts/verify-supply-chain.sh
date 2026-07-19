@@ -4,7 +4,7 @@ set -euo pipefail
 
 scripts_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 lock_file="$scripts_dir/supply-chain.lock.json"
-SUPPLY_LOCK_SHA256=085739ba35a6aa9a2714f6a3f11ff640ad1199886b7898a8b25edc46cc330968
+SUPPLY_LOCK_SHA256=62118d4c12daf505fbac9f7d4be918b7e9a273c897f5e9f8e6aaab3ab4a7bbaf
 
 die() {
   printf 'supply-chain: %s\n' "$1" >&2
@@ -47,8 +47,8 @@ except Exception as exc:
 if data.get("schema_version") != 1 or len(data.get("tools", [])) != 3:
     print("supply-chain: invalid tool lock", file=sys.stderr); raise SystemExit(2)
 if data.get("release_topology") != {
-    "trusted_base": "bc6f096e688bb35e380c9c8141fe2e1e3c1e9a11",
-    "candidate_commit_count": 2,
+    "trusted_base": "83d2f030f9df9535c22d36f5872dd25a2cc242d7",
+    "candidate_commit_count": 7,
     "main_update": "squash-merge-only-after-final-consistency-audit",
 }:
     print("supply-chain: frozen release topology mismatch", file=sys.stderr); raise SystemExit(2)
@@ -60,12 +60,13 @@ if data.get("cargo_reachability") != {
 if len(data.get("first_party_packages", [])) != 15 or len({item.get("purl") for item in data["first_party_packages"]}) != 15:
     print("supply-chain: exact first-party policy mismatch", file=sys.stderr); raise SystemExit(2)
 if {item.get("purl") for item in data.get("license_scoped_exceptions", [])} != {
-    "pkg:cargo/webpki-roots@0.26.11", "pkg:cargo/webpki-roots@1.0.8", "pkg:npm/caniuse-lite@1.0.30001805",
+    "pkg:cargo/webpki-roots@0.26.11", "pkg:cargo/webpki-root-certs@1.0.9",
+    "pkg:cargo/webpki-roots@1.0.9", "pkg:npm/caniuse-lite@1.0.30001805",
 }:
     print("supply-chain: scoped license exception set mismatch", file=sys.stderr); raise SystemExit(2)
 acceptances = data.get("risk_acceptances", [])
-if len(acceptances) != 1 or acceptances[0].get("id") != "iteration-3-async-std-1.13.2" or acceptances[0].get("status") != "accepted-unfixed":
-    print("supply-chain: accepted-unfixed policy mismatch", file=sys.stderr); raise SystemExit(2)
+if acceptances != []:
+    print("supply-chain: active risk acceptance set must be empty", file=sys.stderr); raise SystemExit(2)
 expected_tools = {
     "osv-scanner": ("2.4.0", "Apache-2.0", "15314940c10d26af9c6649f150b8a47c1262e8fc7e17b1d1029b0e479e8ed8a0"),
     "syft": ("1.46.0", "Apache-2.0", "d654f678b709eb53c393d38519d5ed7d2e57205529404018614cfefa0fb2b5ca"),
@@ -593,7 +594,12 @@ cp "$cache/db/npm-all.zip" "$db_root/osv-scanner/npm/all.zip"
   -o "syft-json=$output/packages.syft.json" -o "cyclonedx-json=$output/sbom.cdx.json" || die 'Syft scan failed'
 
 (cd "$release_root" && cargo tree --locked --all-features --target all --prefix none --format '{p}' | sort -u) >"$output/cargo-resolved-tree.txt" || die 'Cargo resolved graph failed'
-(cd "$release_root" && cargo tree --locked --all-features --target all -i async-std --prefix none --format '{p}' | sort -u) >"$output/cargo-async-std-chain.txt" || die 'async-std dependency chain failed'
+if grep -q '^name = "async-std"$' "$release_root/Cargo.lock"; then
+  (cd "$release_root" && cargo tree --locked --all-features --target all -i async-std --prefix none --format '{p}' | sort -u) >"$output/cargo-async-std-chain.txt" \
+    || die 'async-std dependency chain failed'
+else
+  : >"$output/cargo-async-std-chain.txt"
+fi
 python3 "$scripts_dir/verify-cargo-reachability.py" generate --resolved-graph "$output/cargo-resolved-tree.txt" \
   --cargo-lock "$release_root/Cargo.lock" --manifest-root "$release_root" --cargo-version "$(cargo --version)" \
   --output "$output/cargo-reachability.json" || die 'Cargo reachability evidence failed'

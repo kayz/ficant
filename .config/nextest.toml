@@ -1,6 +1,6 @@
-[test-groups.shared-postgres-minio]
+[test-groups.shared-postgres-s3]
 max-threads = 1
 
 [[profile.default.overrides]]
 filter = 'package(ficant-storage) | package(ficant-acceptance)'
-test-group = 'shared-postgres-minio'
+test-group = 'shared-postgres-s3'
