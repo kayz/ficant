@@ -39,7 +39,9 @@ pub use facts::{
     PublishCurveSnapshot,
 };
 pub use fingerprint::OperationFingerprint;
-pub use futures_delivery::FuturesDeliveryEngine;
+pub use futures_delivery::{
+    EncodedFuturesDeliveryArtifact, FuturesDeliveryArtifactCodec, FuturesDeliveryEngine,
+};
 pub use journal::{AppendJournalEvent, RunJournalRepository};
 pub(crate) use required_reads::SnapshotVerifiedReadMetadataParts;
 pub use required_reads::{

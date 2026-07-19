@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use chrono::{Datelike, Months, NaiveDate};
 
 use crate::analytics::{AnalyticsObjectRef, BondTerms, FixedDecimal, MARKET_TIMEZONE};
-use crate::primitives::{MarketTime, OwnerRef};
+use crate::primitives::{ContentHash, MarketTime, OwnerRef};
 use crate::{DomainErrorCode, DomainResult};
 
 pub const FUTURES_DELIVERY_RESULT_SCHEMA_ID: &str = "ficant.cgb-futures-delivery.result.v1";
@@ -184,6 +184,63 @@ impl FuturesDeliverableInput {
     pub const fn financing_rate(&self) -> FixedDecimal {
         self.financing_rate
     }
+
+    #[must_use]
+    pub fn fingerprint(&self) -> ContentHash {
+        let mut bytes = Vec::new();
+        field(&mut bytes, FUTURES_DELIVERY_ALGORITHM_ID.as_bytes());
+        field(
+            &mut bytes,
+            &FUTURES_DELIVERY_ALGORITHM_VERSION.to_be_bytes(),
+        );
+        field(&mut bytes, self.owner.tenant_id().as_str().as_bytes());
+        field(&mut bytes, self.owner.owner_id().as_str().as_bytes());
+        for reference in [
+            &self.futures_contract,
+            &self.bond,
+            &self.rule_pack,
+            &self.snapshot,
+        ] {
+            field(&mut bytes, reference.version_ref().id().as_str().as_bytes());
+            field(
+                &mut bytes,
+                &reference.version_ref().version().get().to_be_bytes(),
+            );
+            field(&mut bytes, reference.content_hash().as_bytes());
+        }
+        field(
+            &mut bytes,
+            &self.valuation_at.instant().timestamp_micros().to_be_bytes(),
+        );
+        field(&mut bytes, self.valuation_at.market_timezone().as_bytes());
+        for value in [
+            self.valuation_at.local_trading_date(),
+            self.purchase_date,
+            self.delivery_month_first,
+            self.delivery_date,
+            self.terms.issue_date(),
+            self.terms.maturity_date(),
+        ] {
+            field(&mut bytes, value.to_string().as_bytes());
+        }
+        field(&mut bytes, &(self.product as u32).to_be_bytes());
+        field(&mut bytes, &(self.terms.frequency() as u32).to_be_bytes());
+        for value in [
+            self.terms.coupon_rate(),
+            self.terms.face_amount(),
+            self.spot_clean_price,
+            self.futures_clean_price,
+            self.financing_rate,
+        ] {
+            field(&mut bytes, &value.scaled().to_be_bytes());
+        }
+        ContentHash::digest(&bytes)
+    }
+}
+
+fn field(target: &mut Vec<u8>, value: &[u8]) {
+    target.extend_from_slice(&u64::try_from(value.len()).unwrap_or(u64::MAX).to_be_bytes());
+    target.extend_from_slice(value);
 }
 
 pub fn is_deliverable(
