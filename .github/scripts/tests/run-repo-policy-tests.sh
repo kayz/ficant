@@ -79,6 +79,10 @@ check_ci_recovery_contracts() {
   grep -Fq -- '--exclude ficant-contract-tests' <<<"$rust" || return 1
   grep -Fq 'cargo test --locked -p ficant-storage --lib' <<<"$rust" || return 1
   grep -Fq 'ref: ${{ github.event.pull_request.head.sha || github.sha }}' <<<"$supply" || return 1
+  grep -Fq 'FICANT_TRUSTED_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}' <<<"$supply" || return 1
+  grep -Fq 'FICANT_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}' <<<"$supply" || return 1
+  grep -Fq 'FICANT_EVENT_NAME: ${{ github.event_name }}' <<<"$supply" || return 1
+  grep -Fq 'FICANT_REF_NAME: ${{ github.ref_name }}' <<<"$supply" || return 1
   grep -Fq 'FICANT_GATE_OUTPUT_DIR: ${{ runner.temp }}/ficant-supply-evidence' <<<"$supply" || return 1
   grep -Fq 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' <<<"$supply" || return 1
   grep -Fq 'if-no-files-found: error' <<<"$supply" || return 1
@@ -301,6 +305,8 @@ printf '%s\n' \
   .github/scripts/verify-risk-acceptance.py \
   docs/history/hoqa/deploy-execution/execution-validator.py \
   tests/oracle/china-rates/validator.py \
+  tests/phase2b/verify_acceptance_matrix.py \
+  tests/phase3/verify_acceptance_matrix.py \
   tests/oracle/china-rates/quantlib_oracle.cpp >"$tmp/safe-python-gate-tools"
 "$gate" --check-path-list "$tmp/safe-python-gate-tools"
 printf '%s\n' crates/ficant-runtime/src/worker_pool.rs docs/secretary-notes.md docs/cache-policy.md >"$tmp/safe-component-names"
@@ -319,7 +325,7 @@ for path in '.hoqa/state.toml' '.hoqa/SKILL.md' 'deploy/execution/run.sh' 'deplo
   printf '%s\n' "$path" >"$tmp/unsafe-path"
   expect_fail "unsafe path $path" "$gate" --check-path-list "$tmp/unsafe-path"
 done
-for path in '.github/scripts/foo.py' 'root-tool.py'; do
+for path in '.github/scripts/foo.py' 'root-tool.py' 'tests/phase2b/helper.py' 'tests/phase20/verify_acceptance_matrix.py'; do
   printf '%s\n' "$path" >"$tmp/unsafe-python-path"
   expect_fail "unsafe Python path $path" "$gate" --check-path-list "$tmp/unsafe-python-path"
 done

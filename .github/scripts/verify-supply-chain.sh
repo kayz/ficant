@@ -4,7 +4,7 @@ set -euo pipefail
 
 scripts_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 lock_file="$scripts_dir/supply-chain.lock.json"
-SUPPLY_LOCK_SHA256=62118d4c12daf505fbac9f7d4be918b7e9a273c897f5e9f8e6aaab3ab4a7bbaf
+SUPPLY_LOCK_SHA256=1926b582039e4fe7790c68c807718b464a4c150072098c001c6006c1b171a387
 
 die() {
   printf 'supply-chain: %s\n' "$1" >&2
@@ -47,8 +47,8 @@ except Exception as exc:
 if data.get("schema_version") != 1 or len(data.get("tools", [])) != 3:
     print("supply-chain: invalid tool lock", file=sys.stderr); raise SystemExit(2)
 if data.get("release_topology") != {
-    "trusted_base": "83d2f030f9df9535c22d36f5872dd25a2cc242d7",
-    "candidate_commit_count": 7,
+    "trusted_base_source": "ci-event-or-default-branch",
+    "candidate_commit_count": "derived-from-positive-linear-range",
     "main_update": "squash-merge-only-after-final-consistency-audit",
 }:
     print("supply-chain: frozen release topology mismatch", file=sys.stderr); raise SystemExit(2)
@@ -129,9 +129,9 @@ PY
 
 verify_release_topology() {
   [[ $# -ge 3 && $# -le 4 ]] || die 'verify_release_topology requires repo, trusted base, candidate, and optional exact commit count'
-  local repo=$1 trusted_base=$2 candidate=$3 expected_count=${4:-1} count
+  local repo=$1 trusted_base=$2 candidate=$3 expected_count=${4:-} count
   [[ $trusted_base =~ ^[0-9a-f]{40}$ && $candidate =~ ^[0-9a-f]{40}$ ]] || die 'release topology SHA invalid'
-  [[ $expected_count =~ ^[1-9][0-9]*$ ]] || die 'release candidate commit count invalid'
+  [[ -z $expected_count || $expected_count =~ ^[1-9][0-9]*$ ]] || die 'release candidate commit count invalid'
   git -C "$repo" cat-file -e "$trusted_base^{commit}" 2>/dev/null || die 'trusted release base object missing'
   git -C "$repo" cat-file -e "$candidate^{commit}" 2>/dev/null || die 'release candidate object missing'
   git -C "$repo" merge-base --is-ancestor "$trusted_base" "$candidate" \
@@ -139,8 +139,32 @@ verify_release_topology() {
   [[ -z $(git -C "$repo" rev-list --min-parents=2 "$trusted_base..$candidate") ]] \
     || die 'release candidate range must remain linear without merge commits'
   count=$(git -C "$repo" rev-list --count "$trusted_base..$candidate") || die 'cannot count release candidate commits'
-  [[ $count -eq $expected_count ]] || die "release candidate must contain exactly $expected_count forward-only commit(s)"
+  [[ $count -gt 0 ]] || die 'release candidate range must contain at least one forward-only commit'
+  [[ -z $expected_count || $count -eq $expected_count ]] \
+    || die "release candidate must contain exactly $expected_count forward-only commit(s)"
   git -C "$repo" rev-parse "$candidate^{tree}"
+}
+
+resolve_trusted_base() {
+  [[ $# -eq 2 ]] || die 'resolve_trusted_base requires repo and candidate'
+  local repo=$1 candidate=$2 trusted_base=${FICANT_TRUSTED_BASE:-} default_branch=${FICANT_DEFAULT_BRANCH:-main}
+  local event_name=${FICANT_EVENT_NAME:-local} ref_name=${FICANT_REF_NAME:-} default_tip
+  git -C "$repo" check-ref-format "refs/heads/$default_branch" >/dev/null 2>&1 \
+    || die 'default branch name invalid'
+  if [[ $event_name == push && -n $ref_name && $ref_name != "$default_branch" ]]; then
+    default_tip=$(git -C "$repo" rev-parse "origin/$default_branch^{commit}" 2>/dev/null) \
+      || die 'cannot resolve default branch for feature push'
+    trusted_base=$(git -C "$repo" merge-base "$candidate" "$default_tip" 2>/dev/null) \
+      || die 'cannot resolve feature push base'
+  elif [[ ! $trusted_base =~ ^[0-9a-f]{40}$ || $trusted_base == 0000000000000000000000000000000000000000 ]]; then
+    trusted_base=$(git -C "$repo" rev-parse "origin/$default_branch^{commit}" 2>/dev/null) \
+      || die 'cannot resolve trusted base from CI event or default branch'
+  fi
+  if [[ $trusted_base == "$candidate" ]]; then
+    trusted_base=$(git -C "$repo" rev-parse "$candidate^" 2>/dev/null) \
+      || die 'candidate has no trusted predecessor'
+  fi
+  printf '%s\n' "$trusted_base"
 }
 
 scan_release_secrets() {
@@ -169,7 +193,7 @@ scan_release_secrets() {
 
 verify_release_fixture() {
   [[ $# -ge 4 && $# -le 5 ]] || die '--verify-release-fixture requires repo, trusted base, candidate, Gitleaks, and optional exact commit count'
-  local repo=$1 trusted_base=$2 candidate=$3 gitleaks=$4 expected_count=${5:-1} output
+  local repo=$1 trusted_base=$2 candidate=$3 gitleaks=$4 expected_count=${5:-} output
   verify_release_topology "$repo" "$trusted_base" "$candidate" "$expected_count" >/dev/null
   output=$(mktemp -d)
   scan_release_secrets "$repo" "$trusted_base" "$candidate" "$repo" "$gitleaks" "$output"
@@ -291,12 +315,19 @@ for scan in scans:
 if set(scan_counts) != set(required_locks):
     print("supply-chain: vulnerability scan ledger incomplete", file=sys.stderr); raise SystemExit(2)
 
-trusted_base = lock["release_topology"]["trusted_base"]
-expected_commit_count = lock["release_topology"]["candidate_commit_count"]
 expected_tools = [{"name": item["name"], "version": item["version"], "sha256": item["sha256"]} for item in lock["tools"]]
 topology = provenance.get("topology")
 if not isinstance(topology, dict) or topology.get("candidate_tree") != candidate["tree"]:
     print("supply-chain: release tree binding invalid", file=sys.stderr); raise SystemExit(2)
+trusted_base = topology.get("trusted_base")
+expected_commit_count = topology.get("commit_count")
+if (not isinstance(trusted_base, str)
+        or not re.fullmatch(r"[0-9a-f]{40}", trusted_base)
+        or trusted_base == candidate["commit"]
+        or isinstance(expected_commit_count, bool)
+        or not isinstance(expected_commit_count, int)
+        or expected_commit_count < 1):
+    print("supply-chain: release topology binding invalid", file=sys.stderr); raise SystemExit(2)
 if provenance.get("schema_version") != 1 or topology != {
     "trusted_base": trusted_base,
     "candidate": candidate["commit"],
@@ -518,17 +549,10 @@ repo=$(git rev-parse --show-toplevel 2>/dev/null) || die 'not in a Git worktree'
 cd "$repo"
 [[ -z $(git status --porcelain) ]] || die 'worktree must be clean'
 candidate=$(git rev-parse HEAD) || die 'cannot identify candidate commit'
-trusted_base=$(python3 - "$lock_file" <<'PY'
-import json, pathlib, sys
-print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["release_topology"]["trusted_base"])
-PY
-)
-candidate_commit_count=$(python3 - "$lock_file" <<'PY'
-import json, pathlib, sys
-print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["release_topology"]["candidate_commit_count"])
-PY
-)
-candidate_tree=$(verify_release_topology "$repo" "$trusted_base" "$candidate" "$candidate_commit_count")
+trusted_base=$(resolve_trusted_base "$repo" "$candidate")
+candidate_tree=$(verify_release_topology "$repo" "$trusted_base" "$candidate")
+candidate_commit_count=$(git -C "$repo" rev-list --count "$trusted_base..$candidate") \
+  || die 'cannot count release candidate commits'
 [[ $(git rev-parse --is-shallow-repository) == false ]] || die 'full Git history is required for secret scanning'
 for command in cargo git python3 tar; do command -v "$command" >/dev/null || die "missing tool: $command"; done
 [[ $(cargo --version) == cargo\ 1.96.1\ * ]] || die 'Cargo reachability tool version mismatch'
@@ -665,10 +689,10 @@ python3 "$scripts_dir/verify-risk-acceptance.py" generate --supply-lock "$lock_f
 
 scan_release_secrets "$repo" "$trusted_base" "$candidate" "$release_root" "$cache/bin/gitleaks" "$output" || exit $?
 
-if ! python3 - "$lock_file" "$output" "$trusted_base" "$candidate" "$candidate_tree" "$license_inventory" "$release_root/docs/delivery/third-party-notices.md" <<'PY'
+if ! python3 - "$lock_file" "$output" "$trusted_base" "$candidate" "$candidate_tree" "$candidate_commit_count" "$license_inventory" "$release_root/docs/delivery/third-party-notices.md" <<'PY'
 import hashlib, json, pathlib, sys
 
-lock_path, output_path, trusted_base, candidate, candidate_tree, inventory_path, notice_path = sys.argv[1:]
+lock_path, output_path, trusted_base, candidate, candidate_tree, candidate_commit_count, inventory_path, notice_path = sys.argv[1:]
 lock = json.loads(pathlib.Path(lock_path).read_text(encoding="utf-8"))
 root = pathlib.Path(output_path)
 inventory = json.loads(pathlib.Path(inventory_path).read_text(encoding="utf-8"))
@@ -686,7 +710,7 @@ document = {
         "candidate": candidate,
         "parent": trusted_base,
         "candidate_tree": candidate_tree,
-        "commit_count": lock["release_topology"]["candidate_commit_count"],
+        "commit_count": int(candidate_commit_count),
     },
     "tools": [{"name": item["name"], "version": item["version"], "sha256": item["sha256"]} for item in lock["tools"]],
     "license_inventory": {
