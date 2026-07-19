@@ -75,8 +75,9 @@ check_ci_recovery_contracts() {
   supply=$(workflow_job "$candidate" supply-chain)
   grep -Fq 'corepack enable' <<<"$web" || return 1
   grep -Fq 'corepack prepare pnpm@10.12.4 --activate' <<<"$web" || return 1
-  grep -Fq 'cargo test --workspace --locked --exclude ficant-acceptance --exclude ficant-storage' <<<"$rust" || return 1
+  grep -Fq 'cargo test --workspace --locked --exclude ficant-acceptance --exclude ficant-data --exclude ficant-storage' <<<"$rust" || return 1
   grep -Fq -- '--exclude ficant-contract-tests' <<<"$rust" || return 1
+  grep -Fq 'cargo test --locked -p ficant-data --test canonical_ingestion' <<<"$rust" || return 1
   grep -Fq 'cargo test --locked -p ficant-storage --lib' <<<"$rust" || return 1
   grep -Fq 'ref: ${{ github.event.pull_request.head.sha || github.sha }}' <<<"$supply" || return 1
   grep -Fq 'FICANT_TRUSTED_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}' <<<"$supply" || return 1
@@ -157,7 +158,7 @@ root = pathlib.Path(sys.argv[2])
 root.mkdir()
 mutations = {
     "no-corepack-activation.yml": ("corepack prepare pnpm@10.12.4 --activate", "true"),
-    "rust-reruns-integration.yml": (" --exclude ficant-acceptance --exclude ficant-storage", ""),
+    "rust-reruns-integration.yml": (" --exclude ficant-acceptance --exclude ficant-data --exclude ficant-storage", ""),
     "rust-reruns-contract-tests.yml": (" --exclude ficant-contract-tests", ""),
     "unpinned-upload.yml": ("actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02", "actions/upload-artifact@v4"),
     "unbound-output.yml": ("${{ runner.temp }}/ficant-supply-evidence", "/tmp/unbound-supply-evidence"),

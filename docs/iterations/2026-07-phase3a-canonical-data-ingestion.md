@@ -39,8 +39,12 @@
 
 ## 最终真实测试证据
 
-- 待最终候选形成后填写；中间子循环命令由编排运行状态承载，不在仓库新增状态文档。
+- `./scripts/check.ps1`：exit 0。最终树通过 Rust fmt/strict Clippy/workspace build 与非环境测试；generated contract 12/12、C++ CTest 8/8、Phase 2C/2D 独立 Oracle 各 3/3、Phase 2E live Python SDK parity 1/1、Phase 3A Canonical ingestion 5/5、Web 29/29，其余 Phase 1/2 回归同一命令全部通过。
+- `./scripts/check-phase3a.ps1`，使用隔离的 disposable PostgreSQL 16：exit 0。真实 `DataSource` registry SIT 1/1，文件/PostgreSQL 双源 Canonical parity SIT 1/1。
+- `cargo test --offline --locked -p ficant-storage --test migration_acceptance -- --test-threads=1`，使用同一隔离 PostgreSQL 16：exit 0，4/4；九个 forward migration 可从空库执行且重复运行，既有负向升级边界保持通过。
+- `bash .github/scripts/tests/run-repo-policy-tests.sh`：exit 0；中文、CI 与路径 fixture 全部通过，CI 已显式运行 Phase 3A 单元测试和真实 PostgreSQL 双源测试。
 
 ## 残余风险
 
-- 待最终候选形成后填写。首版只覆盖批量读取的中国国债双边净价 Quote，不承诺实时订阅、供应商全量语义或其他 fact kind。
+- 首版只覆盖批量读取的中国国债双边净价 Quote，不承诺实时订阅、供应商全量语义、任意 SQL/文件格式或其他 fact kind；新增供应商必须先冻结其 raw contract 和映射规则。
+- Canonical RecordBatch 仍是进程内值：没有 Parquet、Manifest、Ceph durable refs 或发布后 required read，不能作为可复现实验输入。Phase 3B 必须证明内容寻址发布、篡改失败关闭、重启重读，以及绑定快照后的读取路径不再调用外部 adapter。

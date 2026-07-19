@@ -1163,6 +1163,8 @@ PostgreSQL 16 schema
 
 **目标：** 从异构输入形成可复现研究数据。
 
+**当前状态（2026-07-19）：** Phase 3A 已交付版本化 DataSource 注册、文件 NDJSON 与 PostgreSQL 两种异构输入、精确 Instrument/Calendar/Unit 版本映射、observed/visible 双时间点时过滤、失败关闭的数据质量规则，以及固定 16 列的 Canonical Quote Arrow Schema。两种来源已在真实 PostgreSQL 验收中形成 schema hash 与业务内容一致的 RecordBatch。Parquet Snapshot、Manifest、Ceph RGW 发布/重读和实验脱离外部数据源仍属于 Phase 3B，完成前不得宣称 Phase 3 已退出。
+
 优先实现：
 
 - DataSource 注册；
@@ -1373,7 +1375,7 @@ ficant/
 ├── Cargo.toml / Cargo.lock         # Rust workspace 与依赖锁
 ├── rust-toolchain.toml             # 固定 Rust 工具链
 ├── interface/                      # 唯一 Protobuf 契约源及生成配置
-│   └── proto/ficant/{core,market,research,app}/
+│   └── proto/ficant/{core,market,research,app,rates}/
 ├── crates/                         # Rust 库；各 crate 自有 src/ 与 tests/
 │   ├── ficant-domain/
 │   ├── ficant-application/
@@ -1382,6 +1384,7 @@ ficant/
 │   ├── ficant-runtime/
 │   ├── ficant-contracts/
 │   ├── ficant-contract-tests/
+│   ├── ficant-data/
 │   └── ficant-acceptance/
 ├── binaries/                       # Rust composition roots
 │   ├── ficant-bootstrap/
@@ -1407,7 +1410,7 @@ ficant/
 └── .github/scripts/               # CI、供应链、Compose 与发布门禁
 ```
 
-规划中的 `ficant-data`、`ficant-research`、simulation/AI/sandbox crates、`domain-packs/`、Rates Research Lab、CGB Futures Lab、openGauss migration 与信创部署目录，仅在对应 Phase 进入并通过设计确认后创建。根 `proto/` 永久禁止；跨边界契约只在 `interface/` 定义。
+规划中的 `ficant-research`、simulation/AI/sandbox crates、`domain-packs/`、Rates Research Lab、CGB Futures Lab、openGauss migration 与信创部署目录，仅在对应 Phase 进入并通过设计确认后创建。根 `proto/` 永久禁止；跨边界契约只在 `interface/` 定义。
 
 ---
 

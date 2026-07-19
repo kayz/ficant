@@ -1,6 +1,6 @@
 # ficant 产品范围
 
-**状态：** Phase 0 / Phase 1 / Phase 2 已完成；Phase 2A–2E 已交付现券分析、曲线与 Carry/Roll-down、国债期货交割价值链、单合约 CTD DV01 套保比例以及 Python SDK 一致性闭环；对象存储统一为 Ceph RGW + Apache `object_store`；Phase 3+ 仍为后续范围
+**状态：** Phase 0 / Phase 1 / Phase 2 已完成；Phase 3A 已交付双源 Canonical Quote 接入，Phase 3B 不可变快照仍在后续范围；对象存储统一为 Ceph RGW + Apache `object_store`
 
 **实现状态：** 当前能力以已合并代码、冻结合同和可重放本地证据为准，不把局部纵向切片扩写为完整 Phase 或最终产品
 
@@ -12,7 +12,7 @@ ficant 是面向专业投资研究团队的 AI 原生量化研究平台。平台
 
 正式产品终点保持为 `ResearchArtifact`、`SimulationResult`、`ReportArtifact`、`SignalSet` 和 `TargetExposure`。平台不拥有订单和外部交易执行，不建设 OMS、EMS、对外报单、清算、结算或投资组合会计。
 
-首个市场仍是中国国债现券与国债期货。当前已完成 Phase 0 仓库/合同基线、Phase 1 领域内核，并交付 Phase 2A 国债分析、Phase 2B 收益率曲线/Carry-Roll-down、Phase 2C 国债期货交割价值链、Phase 2D 单合约 CTD DV01 套保比例和 Phase 2E Python SDK 五个纵向切片。Python SDK 通过同一 Protobuf/gRPC 合同调用真实 Rust/C++ 生产路径，结果与冻结参考一致；这不表示外部数据适配、完整研究产品页面或 Phase 3+ 已实现。
+首个市场仍是中国国债现券与国债期货。当前已完成 Phase 0 仓库/合同基线、Phase 1 领域内核和 Phase 2 固定收益参考数值库，并交付 Phase 3A 双源 Canonical Quote 接入。Python SDK 通过同一 Protobuf/gRPC 合同调用真实 Rust/C++ 生产路径，结果与冻结参考一致；文件与 PostgreSQL adapter 已把外部报价转换为相同 Arrow Schema，但尚未形成 Phase 3B 的不可变 Parquet Snapshot，也不表示完整研究产品页面或 Phase 4+ 已实现。
 
 ## Phase 0 已落地边界
 
@@ -83,6 +83,12 @@ total_return = carry + roll_down
 
 每个请求显式绑定 owner、DataSnapshot、MarketRulePack、算法/约定/ABI 版本和对应市场对象，服务端要求 `rates:analyze` scope 并在进入 provider 前失败关闭非法身份与输入。真实服务进程上的跨语言 Golden Case 已覆盖现券、曲线、Carry/Roll-down、交割篮子/CTD 和套保五类调用，并证明 Python 结果与冻结参考一致。
 
+## 2026-07 / Phase 3A 已落地双源 Canonical Quote 接入
+
+当前实现新增版本化 `DataSource` 注册和 `ficant-data` 接入边界。文件 NDJSON 与 PostgreSQL adapter 只消费冻结的 raw quote 合同，通过精确 Instrument、Calendar、Unit 版本映射以及 observed/visible 双时间点时选择，生成固定 16 列的 `ficant.market.quote.canonical.v1` Arrow RecordBatch。
+
+质量规则对重复 source record、非法时间、映射缺失/重叠、闭市或会话外数据、空双边、交叉报价、Decimal scale 与 Unit 漂移失败关闭，整批失败而不返回部分结果。真实 PostgreSQL 双源验收已证明 schema ID/hash、字段类型、nullable、metadata、稳定排序与业务列一致。本切片不写 Parquet、不发布 Snapshot/Manifest，也不授权实验绕过快照访问外部数据源；这些边界只由 Phase 3B 关闭。
+
 ## WebApp 产品边界
 
 当前可用产品界面是 Platform Shell，不是完整 DMQuant：
@@ -110,7 +116,7 @@ WebApp 可以定义独立研究体验，但不能自建身份权限、直连外�
 ## 明确尚未实现与后续范围
 
 - 关键期限/多合约曲线风险对冲和组合层优化；Phase 2E 的 Python SDK 首版只提供同步一元调用，不承诺批量、流式或长任务调度。
-- Phase 3 的外部数据源适配、采集与快照数据平台；当前 Snapshot 领域对象和内部 Artifact 闭环不能视为外部数据接入。
+- Phase 3B 的 Parquet Snapshot、Snapshot Manifest、Ceph RGW 发布/重读和实验快照绑定；Phase 3A 的 Canonical RecordBatch 不能冒充不可变研究快照。
 - 完整 DMQuant 业务 WebApp，包括策略生成、回测、Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell。
 - openGauss 迁移、GeneratedNode/gVisor 业务运行、OMS/EMS 和任何外部交易执行。
 - 信用债、ABS、可转债、完整利率互换生命周期、真实询价通讯与清算交割。

@@ -65,7 +65,7 @@ jobs:
           --volume "${{ github.workspace }}:/workspace"
           --workdir /workspace
           rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663
-          sh -ec 'cargo build --workspace --all-targets --locked && cargo test --workspace --locked --exclude ficant-acceptance --exclude ficant-storage --exclude ficant-contract-tests && cargo test --locked -p ficant-storage --lib'
+          sh -ec 'cargo build --workspace --all-targets --locked && cargo test --workspace --locked --exclude ficant-acceptance --exclude ficant-data --exclude ficant-storage --exclude ficant-contract-tests && cargo test --locked -p ficant-storage --lib && cargo test --locked -p ficant-data --test canonical_ingestion'
 
   python:
     runs-on: ubuntu-24.04
@@ -172,7 +172,7 @@ jobs:
             --env FICANT_TEST_DATABASE_URL=postgres://ficant:ficant-ci-password@127.0.0.1:5432/ficant \
             --volume "${{ github.workspace }}:/workspace" --workdir /workspace \
             rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 \
-            cargo test --locked -p ficant-storage --test migration_acceptance -- --test-threads=1
+            sh -ec 'cargo test --locked -p ficant-storage --test migration_acceptance -- --test-threads=1 && cargo test --locked -p ficant-storage --test data_source_registry_sit -- --test-threads=1 && cargo test --locked -p ficant-data --test dual_source_sit -- --test-threads=1'
 
   business-loop:
     runs-on: ubuntu-24.04
