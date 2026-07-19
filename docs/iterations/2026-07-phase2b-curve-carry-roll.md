@@ -38,6 +38,7 @@
 - `./scripts/check-fast.ps1`：exit 0；包含 Phase 2B domain/native 回归及 storage library 3/3。
 - `./scripts/check.ps1`：exit 0；严格 Clippy/build/test、生成契约 11/11、C++ CTest 6/6、Phase 2A matrix 36/36、Phase 2B matrix 16/16、Python 1/1、Web 4 files / 29 tests 全部通过。
 - `./scripts/check.ps1 -IncludeIntegration`：exit 0；真实 PostgreSQL 16 + Ceph RGW 20.2.2 上 migration 4/4、Phase 1 业务闭环 1/1、负向不变量 13/13、Phase 2B `real_postgres_ceph_publish_restart_replay_and_tamper_fail_closed` 1/1。Phase 2B 用例验证正式发布、adapter 重建后的重放、确定性复算、size 篡改 fail-closed，以及 staging/orphan 均清零。
+- GitHub 同步候选使用中央 `supply-chain` 生成的同树 Syft SBOM 刷新一方源码完整性锁；`verify-license-inventory.py verify --require-first-party` exit 0，第三方许可证判断和 allowlist 未改变。
 - 集成时发现并修复 Windows CRLF 导致 Ceph entrypoint `bash\r` 的可复现性缺陷；重建后 RGW healthy。验收完成后已删除仅属于 `ficant-phase2b` 的 2 个容器、2 个命名卷和网络，剩余容器/卷均为 0；测试数据不可恢复且不含共享或生产数据。
 
 ## 残余风险
