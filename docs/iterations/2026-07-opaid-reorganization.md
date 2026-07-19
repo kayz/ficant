@@ -35,13 +35,13 @@
 ## 最终真实测试证据
 
 - `.\scripts\check-fast.ps1`：exit 0；174 项测试通过，0 failed、0 ignored。
-- `.\scripts\check.ps1`：exit 1；Rust、契约和 C++ 步骤通过后，`uv run --offline --locked` 因本机 uv cache 缺少锁定的 `pygments==2.20.0` wheel 而在 Acceptance-matrix 步骤失败。未联网补包，该结果不是完整检查通过证据。
-- 锁定 Node 22.17.0 / pnpm 10.12.4 下的 `typecheck`、production build 与 Web test：exit 0；4 个 test files、29 项测试通过。
-- `.github/scripts/tests/run-repo-policy-tests.sh` 与 `.github/scripts/verify-repo-policy.sh --stage final`：均 exit 0。
+- `.\scripts\check.ps1`：exit 0；锁定工具链下 Rust strict Clippy、workspace build、非环境测试、storage library 与 generated-contract tests 全部通过；C++ 4/4、Q-001..Q-036 为 36 mapped / 0 missing、Python 1/1、Web 4 files / 29 tests，并完成 production build。
+- `.github/scripts/tests/run-gates-tests.sh`：exit 0；固定供应链、许可证、风险接受和负向 fixture 全部符合预期。
+- `.github/scripts/tests/run-repo-policy-tests.sh` 与 `.github/scripts/verify-repo-policy.sh --stage final`：均 exit 0；`git diff --check`：exit 0。
 - 未运行 `.\scripts\check.ps1 -IncludeIntegration`：本轮不改变业务或存储运行时，且未把共享环境作为本地治理检查的替代品。
 
 ## 残余风险
 
-- 完整本地门禁尚未通过；Draft PR 只解决本地资产可能无声丢失的问题，不得作为已关闭迭代或可合并候选。
+- 供应链拓扑锁定 `main` 精确 base、两项线性 forward-only commit 和无 merge 历史；GitHub 仍须在推送后的同一精确候选上重新运行 required checks，远端结果不得由本地证据代替。
 - 对象存储运行时继续 fail-closed；本轮不迁移 `minio` client 或 server。该风险只能作为一次性本地/CI fixture 的受控缓冲，必须在共享 SIT、运行时装配、真实数据接入或 2026-10-13（最早者）之前另行关闭或由 Human 重新接受。
 - 本轮不重新验证 CI/CD、部署或目标环境；这些结果仍由中央 CICD 合同独立产生。

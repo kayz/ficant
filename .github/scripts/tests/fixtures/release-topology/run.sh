@@ -11,6 +11,10 @@ expect_pass() {
   "$gate" --verify-release-fixture "$1" "$2" "$3" "$gitleaks"
 }
 
+expect_pass_count() {
+  "$gate" --verify-release-fixture "$1" "$2" "$3" "$gitleaks" "$4"
+}
+
 expect_fail() {
   local label=$1
   shift
@@ -103,6 +107,7 @@ make_candidate "$repo" first-candidate
 make_candidate "$repo" second-candidate
 candidate=$(git -C "$repo" rev-parse HEAD)
 expect_fail multi-commit "$repo" "$base" "$candidate"
+expect_pass_count "$repo" "$base" "$candidate" 2
 
 repo="$tmp/merge-parent"
 init_clean_repo "$repo"
