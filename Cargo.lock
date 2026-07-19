@@ -812,6 +812,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ficant-data"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "async-trait",
+ "chrono",
+ "chrono-tz",
+ "ficant-application",
+ "ficant-domain",
+ "ficant-storage",
+ "rust_decimal",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "ficant-domain"
 version = "0.1.0"
 dependencies = [

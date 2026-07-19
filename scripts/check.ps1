@@ -16,7 +16,7 @@ $steps = @(
     New-FicantCheckStep -Name 'Rust formatting' -FilePath 'cargo' -ArgumentList @('fmt', '--all', '--', '--check')
     New-FicantCheckStep -Name 'Rust strict Clippy' -FilePath 'cargo' -ArgumentList @('clippy', '--offline', '--workspace', '--all-targets', '--locked', '--exclude', 'ficant-contracts', '--exclude', 'ficant-contract-tests', '--no-deps', '--', '-D', 'warnings')
     New-FicantCheckStep -Name 'Rust workspace build' -FilePath 'cargo' -ArgumentList @('build', '--offline', '--workspace', '--all-targets', '--locked')
-    New-FicantCheckStep -Name 'Rust non-environment tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--workspace', '--locked', '--exclude', 'ficant-acceptance', '--exclude', 'ficant-storage', '--exclude', 'ficant-contract-tests')
+    New-FicantCheckStep -Name 'Rust non-environment tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--workspace', '--locked', '--exclude', 'ficant-acceptance', '--exclude', 'ficant-data', '--exclude', 'ficant-storage', '--exclude', 'ficant-contract-tests')
     New-FicantCheckStep -Name 'Rust storage library tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--lib')
     New-FicantCheckStep -Name 'Rust generated-contract tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-contract-tests')
     New-FicantCheckStep -Name 'C++ configure' -FilePath 'cmake' -ArgumentList @('-S', 'cpp/fixed-income-kernel', '-B', $cppBuildDirectory, '-G', 'Ninja', "-DCMAKE_CXX_COMPILER=$cppCompiler", '-DCMAKE_BUILD_TYPE=Release')
@@ -32,6 +32,7 @@ $steps = @(
     New-FicantCheckStep -Name 'Phase 2D deterministic artifact tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'futures_hedge_arrow')
     New-FicantCheckStep -Name 'Python generated-contract tests' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'python/tests')
     New-FicantCheckStep -Name 'Phase 2E live Python SDK parity' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-File', 'scripts/check-phase2e-sdk.ps1')
+    New-FicantCheckStep -Name 'Phase 3A canonical data tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-data', '--test', 'canonical_ingestion')
     New-FicantCheckStep -Name 'Web type check' -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', 'typecheck') -WorkingDirectory $webDirectory
     New-FicantCheckStep -Name 'Web production build' -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', 'build') -WorkingDirectory $webDirectory
     New-FicantCheckStep -Name 'Web unit and component tests' -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', 'test', '--', '--run') -WorkingDirectory $webDirectory
@@ -45,6 +46,7 @@ if ($IncludeIntegration) {
         New-FicantCheckStep -Name 'Phase 2B carry-roll integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'carry_roll_sit', '--', '--test-threads=1')
         New-FicantCheckStep -Name 'Phase 2C futures-delivery integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'futures_delivery_sit', '--', '--test-threads=1')
         New-FicantCheckStep -Name 'Phase 2D futures-hedge integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'futures_hedge_sit', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'Phase 3A data-source integration' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-File', 'scripts/check-phase3a.ps1')
     )
 }
 
