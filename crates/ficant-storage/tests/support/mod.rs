@@ -23,7 +23,8 @@ pub async fn postgres_pool() -> PgPool {
 
 pub async fn reset_postgres(pool: &PgPool) {
     sqlx::raw_sql(
-        "DROP SCHEMA IF EXISTS storage CASCADE;
+        "DROP SCHEMA IF EXISTS data CASCADE;
+         DROP SCHEMA IF EXISTS storage CASCADE;
          DROP SCHEMA IF EXISTS research CASCADE;
          DROP SCHEMA IF EXISTS market CASCADE;
          DROP SCHEMA IF EXISTS core CASCADE;

@@ -34,7 +34,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     let rows = sqlx::query(
         "SELECT schemaname, tablename
          FROM pg_catalog.pg_tables
-         WHERE schemaname IN ('core', 'market', 'research', 'storage')",
+         WHERE schemaname IN ('core', 'data', 'market', 'research', 'storage')",
     )
     .fetch_all(&pool)
     .await
@@ -50,6 +50,8 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     let required = [
         "core.definition_identities",
         "core.idempotency_records",
+        "data.source_identities",
+        "data.sources",
         "market.bonds",
         "market.calendars",
         "market.cashflows",
@@ -83,7 +85,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
             .fetch_one(&pool)
             .await
             .expect("migration history must be queryable");
-    assert_eq!(migration_count, 8);
+    assert_eq!(migration_count, 9);
     let artifact_column: bool = sqlx::query_scalar(
         "SELECT EXISTS(
              SELECT 1 FROM information_schema.columns
