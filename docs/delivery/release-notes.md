@@ -1,5 +1,11 @@
 # 交付发布说明
 
+## Phase 2C 国债期货交割价值链候选（2026-07-19）
+
+- 新增中金所 `TS`、`TF`、`T`、`TL` 合约参数和可交割券资格，并交付 CF、交割发票价、基差、含融资成本净基差、未再投资 IRR 与 CTD；公共 Protobuf、数据库 migration 和既有 Phase 2A/2B expected、Oracle、容差不变。
+- C++20 内核从冻结债券日程推导 `x`、`n`、购入/交割应计利息和持有期票息；生产 Rust/C++ 结果通过独立 Decimal Golden Case，对中金所规则事实绑定官方来源与内容摘要。
+- 结果以确定性 Arrow Artifact 绑定完整输入和血缘，并通过真实 PostgreSQL 16 + Ceph RGW 发布、adapter 重建后重放和篡改 fail-closed。期现套保比例、外部数据适配、保证金、交易所交割流程和 UI 不在本候选；完整验收与残余风险以 [`docs/iterations/2026-07-phase2c-futures-delivery.md`](../iterations/2026-07-phase2c-futures-delivery.md) 为准。
+
 ## Phase 2B 收益率曲线与 Carry/Roll-down 候选（2026-07-19）
 
 - 新增 CFETS 风格区间内线性 YTM 曲线，以及固定利率/贴现国债的未融资 Carry/Roll-down 分解；公共 Protobuf、数据库 migration 和既有 Phase 2A expected/Oracle/容差不变。

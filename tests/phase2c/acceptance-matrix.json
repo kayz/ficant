@@ -1,0 +1,185 @@
+{
+  "schema": "ficant.quality.phase2c.acceptance-matrix.v1",
+  "base_commit": "93dcf1efa1ed842a0c114457f356557f310ed18a",
+  "guarded_files": {
+    "tests/golden-cases/china-rates/phase2c-futures-delivery-inputs.json": "423f5631e10630179a481cd164d91ae4b146bc721fc025e53eaf3d9a11bb9e56",
+    "tests/golden-cases/china-rates/expected/phase2c-futures-delivery-v1-expected.json": "bbda9521f9dfd01c9e050ac5304dbe06cd52e68913b1be4aaaf2b4c25f874dfe",
+    "tests/golden-cases/china-rates/phase2c-cffex-source-manifest.json": "fd11e7437c63b840aceddfd82be128d0b31bb759b70aa069615abdf76469f78e",
+    "tests/oracle/china-rates/phase2c_manual_oracle.py": "71f155ee4e8116498c04412c81212914856d4480e8b3b9c6cd795b6fe89fc516",
+    "tests/oracle/china-rates/test_phase2c_manual_oracle.py": "cbdfa5d0f9efca5353e4fda59d8fb07ac2aa64da4098b5340d3d6fb9c8542c48",
+    "crates/ficant-domain/tests/futures_delivery_contracts.rs": "ab117b753778db8389a8f22301191a87a74f7296131cc4591517e60b949e5efc",
+    "crates/ficant-fixed-income-native/tests/futures_delivery_acceptance.rs": "1ff7838e2800d7f88d4951e9dc0ebf5701adc3a21d377c13e8ca552e368c63f3",
+    "crates/ficant-storage/tests/futures_delivery_arrow.rs": "1b1d39ff59fe662a0f56e9191cd6f41b850e000a9eb4ac352e63700bc816b073",
+    "crates/ficant-storage/tests/futures_delivery_sit.rs": "14f37e4c2849b605a5023c80e5efa2c670e9a84031a6ef09b005402665878a8d",
+    "cpp/fixed-income-kernel/tests/test_futures_delivery.cpp": "b6babf4ade9d24393c69e453239c19e1c88bdab5515d93ef155cc4fd0bb23e1d",
+    "cpp/fixed-income-kernel/tests/test_constants_and_layout.cpp": "fb4d67719cf4f0279a9a9db89d71ba94aa85ff8ca58fd5d6c16abf7eccb99c9c"
+  },
+  "acceptance": [
+    {
+      "id": "P2C-001",
+      "category": "product-eligibility-boundaries",
+      "automation": [{
+        "source": "crates/ficant-domain/tests/futures_delivery_contracts.rs",
+        "selector": "all_four_products_accept_and_reject_exact_residual_boundaries",
+        "command": "cargo test --locked -p ficant-domain --test futures_delivery_contracts"
+      }]
+    },
+    {
+      "id": "P2C-002",
+      "category": "invalid-input-fail-closed",
+      "automation": [{
+        "source": "crates/ficant-domain/tests/futures_delivery_contracts.rs",
+        "selector": "input_rejects_non_quarter_delivery_and_ineligible_bond",
+        "command": "cargo test --locked -p ficant-domain --test futures_delivery_contracts"
+      }]
+    },
+    {
+      "id": "P2C-003",
+      "category": "c-abi-layout",
+      "automation": [{
+        "source": "cpp/fixed-income-kernel/tests/test_constants_and_layout.cpp",
+        "selector": "sizeof(cgb_futures_delivery_input_v1) == 72",
+        "command": "ctest --test-dir build/local-cpp-vs-llvm-19 --output-on-failure"
+      }]
+    },
+    {
+      "id": "P2C-004",
+      "category": "conversion-factor-and-schedule",
+      "automation": [{
+        "source": "cpp/fixed-income-kernel/tests/test_futures_delivery.cpp",
+        "selector": "T candidate is deliverable",
+        "command": "ctest --test-dir build/local-cpp-vs-llvm-19 --output-on-failure"
+      }]
+    },
+    {
+      "id": "P2C-005",
+      "category": "safe-rust-adapter-identities",
+      "automation": [{
+        "source": "crates/ficant-fixed-income-native/tests/futures_delivery_acceptance.rs",
+        "selector": "ten_year_candidate_crosses_safe_rust_adapter_and_preserves_identities",
+        "command": "cargo test --locked -p ficant-fixed-income-native --test futures_delivery_acceptance"
+      }]
+    },
+    {
+      "id": "P2C-006",
+      "category": "invoice-price",
+      "automation": [{
+        "source": "tests/oracle/china-rates/phase2c_manual_oracle.py",
+        "selector": "invoice = CONTEXT.add(converted_futures, schedule.delivery_accrued_interest)",
+        "command": "uv run --offline --locked --project python python -m pytest tests/oracle/china-rates/test_phase2c_manual_oracle.py -q"
+      }]
+    },
+    {
+      "id": "P2C-007",
+      "category": "basis-and-net-basis",
+      "automation": [{
+        "source": "crates/ficant-fixed-income-native/tests/futures_delivery_acceptance.rs",
+        "selector": "production_matches_all_four_frozen_decimal_oracle_cases",
+        "command": "cargo test --locked -p ficant-fixed-income-native --test futures_delivery_acceptance"
+      }]
+    },
+    {
+      "id": "P2C-008",
+      "category": "financing-and-interim-coupons",
+      "automation": [{
+        "source": "tests/oracle/china-rates/test_phase2c_manual_oracle.py",
+        "selector": "test_golden_suite_covers_all_products_and_coupon_paths",
+        "command": "uv run --offline --locked --project python python -m pytest tests/oracle/china-rates/test_phase2c_manual_oracle.py -q"
+      }]
+    },
+    {
+      "id": "P2C-009",
+      "category": "implied-repo-rate",
+      "automation": [{
+        "source": "tests/oracle/china-rates/phase2c_manual_oracle.py",
+        "selector": "\"implied_repo_rate\": irr",
+        "command": "uv run --offline --locked --project python python -m pytest tests/oracle/china-rates/test_phase2c_manual_oracle.py -q"
+      }]
+    },
+    {
+      "id": "P2C-010",
+      "category": "ctd-and-stable-tie-break",
+      "automation": [{
+        "source": "crates/ficant-fixed-income-native/tests/futures_delivery_acceptance.rs",
+        "selector": "basket_selects_maximum_irr_then_stable_bond_id",
+        "command": "cargo test --locked -p ficant-fixed-income-native --test futures_delivery_acceptance"
+      }]
+    },
+    {
+      "id": "P2C-011",
+      "category": "independent-decimal-oracle",
+      "automation": [{
+        "source": "tests/oracle/china-rates/test_phase2c_manual_oracle.py",
+        "selector": "test_independent_decimal_oracle_matches_frozen_expected",
+        "command": "uv run --offline --locked --project python python -m pytest tests/oracle/china-rates/test_phase2c_manual_oracle.py -q"
+      }]
+    },
+    {
+      "id": "P2C-012",
+      "category": "official-source-facts",
+      "automation": [{
+        "source": "tests/oracle/china-rates/test_phase2c_manual_oracle.py",
+        "selector": "test_source_manifest_normalized_facts_digest_is_bound",
+        "command": "uv run --offline --locked --project python python -m pytest tests/oracle/china-rates/test_phase2c_manual_oracle.py -q"
+      }]
+    },
+    {
+      "id": "P2C-013",
+      "category": "deterministic-arrow",
+      "automation": [{
+        "source": "crates/ficant-storage/tests/futures_delivery_arrow.rs",
+        "selector": "native_basket_round_trips_through_deterministic_arrow_file",
+        "command": "cargo test --locked -p ficant-storage --test futures_delivery_arrow"
+      }]
+    },
+    {
+      "id": "P2C-014",
+      "category": "artifact-input-drift-fail-closed",
+      "automation": [{
+        "source": "crates/ficant-storage/tests/futures_delivery_arrow.rs",
+        "selector": "assert_ne!(drifted[0].fingerprint(), inputs[0].fingerprint())",
+        "command": "cargo test --locked -p ficant-storage --test futures_delivery_arrow"
+      }]
+    },
+    {
+      "id": "P2C-015",
+      "category": "verified-publication-replay",
+      "automation": [{
+        "source": "crates/ficant-storage/tests/futures_delivery_sit.rs",
+        "selector": "real_postgres_ceph_futures_publish_restart_replay_and_tamper_fail_closed",
+        "command": "cargo test --locked -p ficant-storage --test futures_delivery_sit -- --test-threads=1"
+      }]
+    },
+    {
+      "id": "P2C-016",
+      "category": "real-postgres-ceph-restart",
+      "automation": [{
+        "source": "crates/ficant-storage/tests/futures_delivery_sit.rs",
+        "selector": "restart-safe replay must reproduce exact canonical bytes",
+        "command": "cargo test --locked -p ficant-storage --test futures_delivery_sit -- --test-threads=1"
+      }]
+    },
+    {
+      "id": "P2C-017",
+      "category": "tamper-fail-closed",
+      "automation": [{
+        "source": "crates/ficant-storage/tests/futures_delivery_sit.rs",
+        "selector": "tampered formal size must fail closed",
+        "command": "cargo test --locked -p ficant-storage --test futures_delivery_sit -- --test-threads=1"
+      }]
+    },
+    {
+      "id": "P2C-018",
+      "category": "phase2a-phase2b-regression",
+      "automation": [{
+        "source": "cpp/fixed-income-kernel/tests/test_futures_delivery.cpp",
+        "selector": "profit equals negative net basis",
+        "command": "ctest --test-dir build/local-cpp-vs-llvm-19 --output-on-failure"
+      }, {
+        "source": "tests/phase2b/verify_acceptance_matrix.py",
+        "selector": "Phase 2B acceptance matrix: PASS",
+        "command": "uv run --offline --locked --project python python tests/phase2b/verify_acceptance_matrix.py"
+      }]
+    }
+  ]
+}

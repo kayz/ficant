@@ -39,8 +39,16 @@
 
 ## 最终真实测试证据
 
-- 待最终候选形成后填写；中间命令和 Agent 交流不写入本 brief。
+- 独立 Oracle：`uv run --offline --locked --project python python -m pytest tests/oracle/china-rates/test_phase2c_manual_oracle.py -q`，exit 0，3/3；覆盖冻结 expected 精确生成、四个期限品种及年付息/半年付息和持有期有/无付息，并校验中金所官方来源事实摘要 `d1149c4594f3cc14ad977200e1bab6e48de3475d17dc03c7bb096ca369e05499`。
+- Phase 2C acceptance matrix：`uv run --offline --locked --project python python tests/phase2c/verify_acceptance_matrix.py`，exit 0，18/18；输入、expected、来源 manifest、Oracle、领域/ABI/native/Arrow/SIT 路径均由 SHA-256 fail closed。
+- `./scripts/check-fast.ps1`：exit 0；包含 Phase 2C domain/native 回归和 storage library 3/3。
+- `./scripts/check.ps1`：exit 0；严格 Clippy/build/test、生成契约 11/11、C++ CTest 7/7、Phase 2A matrix 36/36、Phase 2B matrix 16/16、Phase 2C matrix 18/18、Phase 2C Oracle 3/3、确定性 Arrow 1/1、Python 1/1、Web 4 files / 29 tests 全部通过。
+- `./scripts/check.ps1 -IncludeIntegration`：exit 0；真实 PostgreSQL 16 + Ceph RGW 20.2.2 上 migration 4/4、Phase 1 业务闭环 1/1、负向不变量 13/13、Phase 2B 发布重放 1/1、Phase 2C `real_postgres_ceph_futures_publish_restart_replay_and_tamper_fail_closed` 1/1。Phase 2C 用例验证正式发布、adapter 重建后精确重放、确定性复算、size 篡改 fail-closed，以及 staging/orphan 均清零。
+- 集成使用命名的一次性 Compose 项目 `ficant-phase2c`；测试后容器、网络、命名卷和测试数据均删除，复核残留计数为 0。
 
 ## 残余风险
 
-- 待最终候选形成后填写。当前明确：参考算法只覆盖冻结的交割价值链，不等同于实时交易建议；交割篮子和规则更新仍需后续外部数据适配保证时效性。
+- 参考算法只覆盖冻结的交割价值链，不等同于实时交易建议；交割篮子和规则更新仍需后续外部数据适配保证时效性。
+- 当前融资口径固定为单利 `actual_days / 365`，票息不再投资，也不包含税费、交易成本、债券借贷成本、保证金或真实交割流程；这些扩展必须新增显式版本和独立验收，不能改变 v1 结果。
+- Phase 2 仍未完成期现 DV01 套保比例、曲线风险对冲和组合层优化；这些能力由独立 Phase 2D 迭代交付，不以本候选的 CTD 结果冒充。
+- 生产 Ceph 高可用拓扑、外部中金所数据时效和服务器装配不由本地 OPAID 证明，仍分别受运维、数据适配和中央 CI/CD 合同约束。
