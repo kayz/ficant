@@ -1,0 +1,44 @@
+{
+  "schema": "ficant.phase2c.cffex-source-manifest.v1",
+  "retrieved_at": "2026-07-19",
+  "sources": [
+    {
+      "url": "https://www.cffex.com.cn/cn/jysgz.html",
+      "purpose": "现行国债期货合约交易细则与交割细则索引"
+    },
+    {
+      "url": "https://www.cffex.com.cn/cn/cp.html",
+      "purpose": "TS、TF、T、TL 产品合约表入口"
+    },
+    {
+      "url": "https://www.cffex.com.cn/10tf/",
+      "purpose": "T 合约参数、转换因子和应计利息公式"
+    },
+    {
+      "url": "https://www.cffex.com.cn/30tl/",
+      "purpose": "TL 合约参数、转换因子和应计利息公式"
+    },
+    {
+      "url": "https://www.cffex.com.cn/u/cms/www/oldsys/P020130830612915071896.pdf",
+      "purpose": "中金所国债期货交易策略材料中的交割货款、基差、IRR 与 CTD 定义"
+    }
+  ],
+  "normalized_facts": {
+    "notional_cny": 1000000,
+    "nominal_coupon": "0.03",
+    "quote_basis": "clean_price_per_cny_100",
+    "products": {
+      "TS": {"original_term_max_months": 60, "residual_min_months": 18, "residual_max_months": 27},
+      "TF": {"original_term_max_months": 84, "residual_min_months": 48, "residual_max_months": 63},
+      "T": {"original_term_max_months": 120, "residual_min_months": 78, "residual_max_months": null},
+      "TL": {"original_term_max_months": 360, "residual_min_months": 300, "residual_max_months": null}
+    },
+    "conversion_factor_rounding_places": 4,
+    "accrued_interest_day_count": "actual/actual",
+    "accrued_interest_rounding_places": 7,
+    "invoice_price": "futures_clean_price * conversion_factor + delivery_accrued_interest",
+    "gross_basis": "spot_clean_price - futures_clean_price * conversion_factor",
+    "irr_day_basis": 365
+  },
+  "normalized_facts_sha256": "d1149c4594f3cc14ad977200e1bab6e48de3475d17dc03c7bb096ca369e05499"
+}

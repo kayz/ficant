@@ -188,14 +188,9 @@ typedef struct {
     int32_t  delivery_month_first;
     int32_t  purchase_date;
     int32_t  delivery_date;
-    uint32_t months_to_next_coupon;
-    uint32_t remaining_coupon_count;
     uint32_t reserved;
     double   coupon_rate;
     double   spot_clean_price;
-    double   purchase_accrued_interest;
-    double   delivery_accrued_interest;
-    double   interim_coupons;
     double   futures_clean_price;
     double   financing_rate;
 } ficant_kernel_cgb_futures_delivery_input_v1;
@@ -205,7 +200,12 @@ typedef struct {
     uint32_t abi_version;
     uint32_t status_code;
     uint32_t eligible;
+    uint32_t months_to_next_coupon;
+    uint32_t remaining_coupon_count;
     double   conversion_factor;
+    double   purchase_accrued_interest;
+    double   delivery_accrued_interest;
+    double   interim_coupons;
     double   invoice_price;
     double   purchase_dirty_price;
     double   gross_basis;

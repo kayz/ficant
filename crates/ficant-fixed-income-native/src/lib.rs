@@ -53,13 +53,8 @@ impl FuturesDeliveryEngine for NativeFuturesDeliveryEngine {
                 delivery_month_first: epoch_days(input.delivery_month_first())?,
                 purchase_date: epoch_days(input.purchase_date())?,
                 delivery_date: epoch_days(input.delivery_date())?,
-                months_to_next_coupon: input.months_to_next_coupon(),
-                remaining_coupon_count: input.remaining_coupon_count(),
                 coupon_rate: decimal_to_f64(terms.coupon_rate())?,
                 spot_clean_price: decimal_to_f64(input.spot_clean_price())?,
-                purchase_accrued_interest: decimal_to_f64(input.purchase_accrued_interest())?,
-                delivery_accrued_interest: decimal_to_f64(input.delivery_accrued_interest())?,
-                interim_coupons: decimal_to_f64(input.interim_coupons())?,
                 futures_clean_price: decimal_to_f64(input.futures_clean_price())?,
                 financing_rate: decimal_to_f64(input.financing_rate())?,
             },
@@ -69,6 +64,9 @@ impl FuturesDeliveryEngine for NativeFuturesDeliveryEngine {
             return Err(AnalyticsError::InvalidInput);
         }
         let conversion_factor = decimal_from_f64(native.conversion_factor)?;
+        let purchase_accrued_interest = decimal_from_f64(native.purchase_accrued_interest)?;
+        let delivery_accrued_interest = decimal_from_f64(native.delivery_accrued_interest)?;
+        let interim_coupons = decimal_from_f64(native.interim_coupons)?;
         let invoice_price = decimal_from_f64(native.invoice_price)?;
         let purchase_dirty_price = decimal_from_f64(native.purchase_dirty_price)?;
         let gross_basis = decimal_from_f64(native.gross_basis)?;
@@ -83,7 +81,12 @@ impl FuturesDeliveryEngine for NativeFuturesDeliveryEngine {
         verify_native_measure(native.net_basis, net_basis)?;
         verify_native_measure(native.delivery_profit, delivery_profit)?;
         let measures = FuturesDeliveryMeasures::new(
+            native.months_to_next_coupon,
+            native.remaining_coupon_count,
             conversion_factor,
+            purchase_accrued_interest,
+            delivery_accrued_interest,
+            interim_coupons,
             invoice_price,
             purchase_dirty_price,
             gross_basis,

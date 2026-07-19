@@ -10,7 +10,7 @@
 ## 验收
 
 - `TS`、`TF`、`T`、`TL` 的名义票息均为 3%，合约面值为 100 万元，百元净价报价；可交割券原始期限和交割月首日剩余期限严格按中金所现行合约表判断，边界日期有正负用例。
-- CF 使用中金所公布公式，`r=3%`，输入为交割月至下一付息月的月数 `x`、剩余付息次数 `n`、可交割券票息 `c` 和年付息次数 `f`，结果按十进制四舍五入至小数点后 4 位。
+- CF 使用中金所公布公式，`r=3%`；交割月至下一付息月的月数 `x` 和剩余付息次数 `n` 必须由冻结债券日程推导，不接受调用方直接提供，可交割券票息为 `c`、年付息次数为 `f`，结果按十进制四舍五入至小数点后 4 位。
 - 每百元交割发票价固定为 `futures_clean_price * conversion_factor + delivery_accrued_interest`，交割应计利息按实际天数/实际天数计算并四舍五入至 7 位。
 - 每百元基差固定为 `spot_clean_price - futures_clean_price * conversion_factor`。持有收益固定为 `delivery_accrued_interest - purchase_accrued_interest + interim_coupons - financing_cost`，其中 `financing_cost = purchase_dirty_price * financing_rate * actual_days / 365`；净基差为 `gross_basis - holding_carry`。
 - 未再投资 IRR 固定为 `((invoice_price + interim_coupons) / purchase_dirty_price - 1) * 365 / actual_days`。篮子 CTD 按 IRR 由高到低选择；IRR 相同则按净基差由低到高、再按稳定 bond ID 字典序选择。

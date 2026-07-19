@@ -107,12 +107,7 @@ fn build(value: InputTuple) -> ficant_domain::DomainResult<FuturesDeliverableInp
         value.8,
         value.9,
         value.10,
-        3,
-        12,
         fixed("101.25"),
-        fixed("0.45"),
-        fixed("0.80"),
-        FixedDecimal::ZERO,
         fixed("99.50"),
         fixed("0.018"),
     )

@@ -22,8 +22,8 @@ ficant_kernel_cgb_futures_delivery_input_v1 input() {
         sizeof(ficant_kernel_cgb_futures_delivery_input_v1), FICANT_KERNEL_ABI_VERSION,
         FICANT_KERNEL_CGB_FUTURES_T, FICANT_KERNEL_FREQUENCY_SEMIANNUAL,
         date(2024, 8, 15), date(2034, 8, 15), date(2026, 9, 1),
-        date(2026, 7, 21), date(2026, 9, 18), 5, 16, 0,
-        0.025, 101.25, 0.45, 0.80, 0.0, 99.50, 0.018
+        date(2026, 7, 21), date(2026, 9, 18), 0,
+        0.025, 101.25, 99.50, 0.018
     };
 }
 
@@ -42,6 +42,8 @@ int main() {
     CHECK(status == FICANT_KERNEL_STATUS_OK, "T deliverable analysis succeeds");
     CHECK(output.eligible == 1U, "T candidate is deliverable");
     CHECK(output.conversion_factor > 0.9 && output.conversion_factor < 1.1, "CF plausible");
+    CHECK(output.months_to_next_coupon == 5U, "x is derived from coupon schedule");
+    CHECK(output.remaining_coupon_count == 16U, "n is derived from coupon schedule");
     CHECK(std::fabs(output.delivery_profit + output.net_basis) < 1e-12, "profit equals negative net basis");
 
     request.maturity_date = date(2032, 12, 31);

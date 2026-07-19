@@ -19,7 +19,12 @@ uint32_t finish(ficant_kernel_cgb_futures_delivery_result_v1* result,
 void zero_result(ficant_kernel_cgb_futures_delivery_result_v1* result) noexcept {
     result->status_code = FICANT_KERNEL_STATUS_INVALID_ARGUMENT;
     result->eligible = 0;
+    result->months_to_next_coupon = 0;
+    result->remaining_coupon_count = 0;
     result->conversion_factor = 0.0;
+    result->purchase_accrued_interest = 0.0;
+    result->delivery_accrued_interest = 0.0;
+    result->interim_coupons = 0.0;
     result->invoice_price = 0.0;
     result->purchase_dirty_price = 0.0;
     result->gross_basis = 0.0;
@@ -47,9 +52,6 @@ bool valid_delivery_month(int32_t date) noexcept {
 bool all_finite(const ficant_kernel_cgb_futures_delivery_input_v1& input) noexcept {
     return std::isfinite(input.coupon_rate)
         && std::isfinite(input.spot_clean_price)
-        && std::isfinite(input.purchase_accrued_interest)
-        && std::isfinite(input.delivery_accrued_interest)
-        && std::isfinite(input.interim_coupons)
         && std::isfinite(input.futures_clean_price)
         && std::isfinite(input.financing_rate);
 }
@@ -81,17 +83,13 @@ extern "C" uint32_t ficant_kernel_analyze_cgb_futures_delivery_v1(
             && input->frequency != FICANT_KERNEL_FREQUENCY_SEMIANNUAL)
         || !valid_delivery_month(input->delivery_month_first)
         || input->purchase_date >= input->delivery_date
-        || input->delivery_date >= input->maturity_date
-        || input->remaining_coupon_count == 0
-        || input->months_to_next_coupon >= 12U / input->frequency) {
+        || input->delivery_date >= input->maturity_date) {
         return finish(result, FICANT_KERNEL_STATUS_INVALID_ARGUMENT);
     }
     if (!all_finite(*input)) {
         return finish(result, FICANT_KERNEL_STATUS_NON_FINITE);
     }
     if (input->coupon_rate <= 0.0 || input->spot_clean_price <= 0.0
-        || input->purchase_accrued_interest < 0.0
-        || input->delivery_accrued_interest < 0.0 || input->interim_coupons < 0.0
         || input->futures_clean_price <= 0.0 || input->financing_rate < 0.0) {
         return finish(result, FICANT_KERNEL_STATUS_INVALID_ARGUMENT);
     }
@@ -102,22 +100,29 @@ extern "C" uint32_t ficant_kernel_analyze_cgb_futures_delivery_v1(
             result->eligible = 0;
             return finish(result, FICANT_KERNEL_STATUS_OK);
         }
+        ficant::futures_math::CouponScheduleMetrics schedule{};
+        if (!ficant::futures_math::coupon_schedule_metrics(
+                input->issue_date, input->maturity_date, input->frequency,
+                input->coupon_rate, input->purchase_date, input->delivery_month_first,
+                input->delivery_date, schedule)) {
+            return finish(result, FICANT_KERNEL_STATUS_INVALID_ARGUMENT);
+        }
         const double conversion_factor = ficant::futures_math::cffex_conversion_factor(
-            input->coupon_rate, input->frequency, input->months_to_next_coupon,
-            input->remaining_coupon_count);
+            input->coupon_rate, input->frequency, schedule.months_to_next_coupon,
+            schedule.remaining_coupon_count);
         const double purchase_dirty =
-            input->spot_clean_price + input->purchase_accrued_interest;
+            input->spot_clean_price + schedule.purchase_accrued_interest;
         const double actual_days = static_cast<double>(input->delivery_date - input->purchase_date);
         const double invoice =
-            input->futures_clean_price * conversion_factor + input->delivery_accrued_interest;
+            input->futures_clean_price * conversion_factor + schedule.delivery_accrued_interest;
         const double gross_basis =
             input->spot_clean_price - input->futures_clean_price * conversion_factor;
         const double financing_cost =
             purchase_dirty * input->financing_rate * actual_days / 365.0;
-        const double holding_carry = input->delivery_accrued_interest
-            - input->purchase_accrued_interest + input->interim_coupons - financing_cost;
+        const double holding_carry = schedule.delivery_accrued_interest
+            - schedule.purchase_accrued_interest + schedule.interim_coupons - financing_cost;
         const double net_basis = gross_basis - holding_carry;
-        const double irr = ((invoice + input->interim_coupons) / purchase_dirty - 1.0)
+        const double irr = ((invoice + schedule.interim_coupons) / purchase_dirty - 1.0)
             * 365.0 / actual_days;
         if (!std::isfinite(conversion_factor) || !std::isfinite(invoice)
             || !std::isfinite(purchase_dirty) || !std::isfinite(gross_basis)
@@ -127,7 +132,12 @@ extern "C" uint32_t ficant_kernel_analyze_cgb_futures_delivery_v1(
             return finish(result, FICANT_KERNEL_STATUS_NON_FINITE);
         }
         result->eligible = 1;
+        result->months_to_next_coupon = schedule.months_to_next_coupon;
+        result->remaining_coupon_count = schedule.remaining_coupon_count;
         result->conversion_factor = conversion_factor;
+        result->purchase_accrued_interest = schedule.purchase_accrued_interest;
+        result->delivery_accrued_interest = schedule.delivery_accrued_interest;
+        result->interim_coupons = schedule.interim_coupons;
         result->invoice_price = invoice;
         result->purchase_dirty_price = purchase_dirty;
         result->gross_basis = gross_basis;

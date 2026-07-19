@@ -67,12 +67,7 @@ pub struct FuturesDeliverableInput {
     delivery_date: NaiveDate,
     product: CgbFuturesProduct,
     terms: BondTerms,
-    months_to_next_coupon: u32,
-    remaining_coupon_count: u32,
     spot_clean_price: FixedDecimal,
-    purchase_accrued_interest: FixedDecimal,
-    delivery_accrued_interest: FixedDecimal,
-    interim_coupons: FixedDecimal,
     futures_clean_price: FixedDecimal,
     financing_rate: FixedDecimal,
 }
@@ -91,16 +86,10 @@ impl FuturesDeliverableInput {
         delivery_date: NaiveDate,
         product: CgbFuturesProduct,
         terms: BondTerms,
-        months_to_next_coupon: u32,
-        remaining_coupon_count: u32,
         spot_clean_price: FixedDecimal,
-        purchase_accrued_interest: FixedDecimal,
-        delivery_accrued_interest: FixedDecimal,
-        interim_coupons: FixedDecimal,
         futures_clean_price: FixedDecimal,
         financing_rate: FixedDecimal,
     ) -> DomainResult<Self> {
-        let coupon_months = 12 / (terms.frequency() as u32);
         if valuation_at.market_timezone() != MARKET_TIMEZONE
             || valuation_at.local_trading_date() > purchase_date
             || purchase_date < terms.issue_date()
@@ -112,12 +101,7 @@ impl FuturesDeliverableInput {
             || delivery_date.month() != delivery_month_first.month()
             || !terms.coupon_rate().is_positive()
             || terms.face_amount().scaled() != FACE_PER_HUNDRED_SCALED
-            || months_to_next_coupon >= coupon_months
-            || remaining_coupon_count == 0
             || !spot_clean_price.is_positive()
-            || !purchase_accrued_interest.is_non_negative()
-            || !delivery_accrued_interest.is_non_negative()
-            || !interim_coupons.is_non_negative()
             || !futures_clean_price.is_positive()
             || !financing_rate.is_non_negative()
         {
@@ -138,12 +122,7 @@ impl FuturesDeliverableInput {
             delivery_date,
             product,
             terms,
-            months_to_next_coupon,
-            remaining_coupon_count,
             spot_clean_price,
-            purchase_accrued_interest,
-            delivery_accrued_interest,
-            interim_coupons,
             futures_clean_price,
             financing_rate,
         })
@@ -194,28 +173,8 @@ impl FuturesDeliverableInput {
         &self.terms
     }
     #[must_use]
-    pub const fn months_to_next_coupon(&self) -> u32 {
-        self.months_to_next_coupon
-    }
-    #[must_use]
-    pub const fn remaining_coupon_count(&self) -> u32 {
-        self.remaining_coupon_count
-    }
-    #[must_use]
     pub const fn spot_clean_price(&self) -> FixedDecimal {
         self.spot_clean_price
-    }
-    #[must_use]
-    pub const fn purchase_accrued_interest(&self) -> FixedDecimal {
-        self.purchase_accrued_interest
-    }
-    #[must_use]
-    pub const fn delivery_accrued_interest(&self) -> FixedDecimal {
-        self.delivery_accrued_interest
-    }
-    #[must_use]
-    pub const fn interim_coupons(&self) -> FixedDecimal {
-        self.interim_coupons
     }
     #[must_use]
     pub const fn futures_clean_price(&self) -> FixedDecimal {
@@ -255,7 +214,12 @@ pub fn is_deliverable(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FuturesDeliveryMeasures {
+    months_to_next_coupon: u32,
+    remaining_coupon_count: u32,
     conversion_factor: FixedDecimal,
+    purchase_accrued_interest: FixedDecimal,
+    delivery_accrued_interest: FixedDecimal,
+    interim_coupons: FixedDecimal,
     invoice_price: FixedDecimal,
     purchase_dirty_price: FixedDecimal,
     gross_basis: FixedDecimal,
@@ -269,7 +233,12 @@ pub struct FuturesDeliveryMeasures {
 impl FuturesDeliveryMeasures {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        months_to_next_coupon: u32,
+        remaining_coupon_count: u32,
         conversion_factor: FixedDecimal,
+        purchase_accrued_interest: FixedDecimal,
+        delivery_accrued_interest: FixedDecimal,
+        interim_coupons: FixedDecimal,
         invoice_price: FixedDecimal,
         purchase_dirty_price: FixedDecimal,
         gross_basis: FixedDecimal,
@@ -279,7 +248,11 @@ impl FuturesDeliveryMeasures {
         implied_repo_rate: FixedDecimal,
         delivery_profit: FixedDecimal,
     ) -> DomainResult<Self> {
-        if !conversion_factor.is_positive()
+        if remaining_coupon_count == 0
+            || !conversion_factor.is_positive()
+            || !purchase_accrued_interest.is_non_negative()
+            || !delivery_accrued_interest.is_non_negative()
+            || !interim_coupons.is_non_negative()
             || !invoice_price.is_positive()
             || !purchase_dirty_price.is_positive()
             || !financing_cost.is_non_negative()
@@ -289,7 +262,12 @@ impl FuturesDeliveryMeasures {
             return Err(DomainErrorCode::InvalidValue);
         }
         Ok(Self {
+            months_to_next_coupon,
+            remaining_coupon_count,
             conversion_factor,
+            purchase_accrued_interest,
+            delivery_accrued_interest,
+            interim_coupons,
             invoice_price,
             purchase_dirty_price,
             gross_basis,
@@ -302,8 +280,28 @@ impl FuturesDeliveryMeasures {
     }
 
     #[must_use]
+    pub const fn months_to_next_coupon(self) -> u32 {
+        self.months_to_next_coupon
+    }
+    #[must_use]
+    pub const fn remaining_coupon_count(self) -> u32 {
+        self.remaining_coupon_count
+    }
+    #[must_use]
     pub const fn conversion_factor(self) -> FixedDecimal {
         self.conversion_factor
+    }
+    #[must_use]
+    pub const fn purchase_accrued_interest(self) -> FixedDecimal {
+        self.purchase_accrued_interest
+    }
+    #[must_use]
+    pub const fn delivery_accrued_interest(self) -> FixedDecimal {
+        self.delivery_accrued_interest
+    }
+    #[must_use]
+    pub const fn interim_coupons(self) -> FixedDecimal {
+        self.interim_coupons
     }
     #[must_use]
     pub const fn invoice_price(self) -> FixedDecimal {

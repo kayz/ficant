@@ -122,13 +122,8 @@ pub struct CgbFuturesDeliveryInputV1 {
     pub delivery_month_first: i32,
     pub purchase_date: i32,
     pub delivery_date: i32,
-    pub months_to_next_coupon: u32,
-    pub remaining_coupon_count: u32,
     pub coupon_rate: f64,
     pub spot_clean_price: f64,
-    pub purchase_accrued_interest: f64,
-    pub delivery_accrued_interest: f64,
-    pub interim_coupons: f64,
     pub futures_clean_price: f64,
     pub financing_rate: f64,
 }
@@ -137,7 +132,12 @@ pub struct CgbFuturesDeliveryInputV1 {
 pub struct CgbFuturesDeliveryResultV1 {
     pub status_code: u32,
     pub eligible: bool,
+    pub months_to_next_coupon: u32,
+    pub remaining_coupon_count: u32,
     pub conversion_factor: f64,
+    pub purchase_accrued_interest: f64,
+    pub delivery_accrued_interest: f64,
+    pub interim_coupons: f64,
     pub invoice_price: f64,
     pub purchase_dirty_price: f64,
     pub gross_basis: f64,
@@ -280,14 +280,9 @@ struct RawCgbFuturesDeliveryInputV1 {
     delivery_month_first: i32,
     purchase_date: i32,
     delivery_date: i32,
-    months_to_next_coupon: u32,
-    remaining_coupon_count: u32,
     reserved: u32,
     coupon_rate: f64,
     spot_clean_price: f64,
-    purchase_accrued_interest: f64,
-    delivery_accrued_interest: f64,
-    interim_coupons: f64,
     futures_clean_price: f64,
     financing_rate: f64,
 }
@@ -299,7 +294,12 @@ struct RawCgbFuturesDeliveryResultV1 {
     abi_version: u32,
     status_code: u32,
     eligible: u32,
+    months_to_next_coupon: u32,
+    remaining_coupon_count: u32,
     conversion_factor: f64,
+    purchase_accrued_interest: f64,
+    delivery_accrued_interest: f64,
+    interim_coupons: f64,
     invoice_price: f64,
     purchase_dirty_price: f64,
     gross_basis: f64,
@@ -533,14 +533,9 @@ pub fn analyze_cgb_futures_delivery(
         delivery_month_first: input.delivery_month_first,
         purchase_date: input.purchase_date,
         delivery_date: input.delivery_date,
-        months_to_next_coupon: input.months_to_next_coupon,
-        remaining_coupon_count: input.remaining_coupon_count,
         reserved: 0,
         coupon_rate: input.coupon_rate,
         spot_clean_price: input.spot_clean_price,
-        purchase_accrued_interest: input.purchase_accrued_interest,
-        delivery_accrued_interest: input.delivery_accrued_interest,
-        interim_coupons: input.interim_coupons,
         futures_clean_price: input.futures_clean_price,
         financing_rate: input.financing_rate,
     };
@@ -559,7 +554,12 @@ pub fn analyze_cgb_futures_delivery(
         CgbFuturesDeliveryResultV1 {
             status_code: raw_result.status_code,
             eligible: raw_result.eligible == 1,
+            months_to_next_coupon: raw_result.months_to_next_coupon,
+            remaining_coupon_count: raw_result.remaining_coupon_count,
             conversion_factor: raw_result.conversion_factor,
+            purchase_accrued_interest: raw_result.purchase_accrued_interest,
+            delivery_accrued_interest: raw_result.delivery_accrued_interest,
+            interim_coupons: raw_result.interim_coupons,
             invoice_price: raw_result.invoice_price,
             purchase_dirty_price: raw_result.purchase_dirty_price,
             gross_basis: raw_result.gross_basis,
@@ -639,8 +639,8 @@ mod tests {
         assert_eq!(core::mem::size_of::<RawYieldCurveResultV1>(), 24);
         assert_eq!(core::mem::size_of::<RawCarryRollInputV1>(), 40);
         assert_eq!(core::mem::size_of::<RawCarryRollResultV1>(), 40);
-        assert_eq!(core::mem::size_of::<RawCgbFuturesDeliveryInputV1>(), 104);
-        assert_eq!(core::mem::size_of::<RawCgbFuturesDeliveryResultV1>(), 88);
+        assert_eq!(core::mem::size_of::<RawCgbFuturesDeliveryInputV1>(), 72);
+        assert_eq!(core::mem::size_of::<RawCgbFuturesDeliveryResultV1>(), 120);
 
         assert_eq!(core::mem::offset_of!(RawBondInputV1, struct_size), 0);
         assert_eq!(core::mem::offset_of!(RawBondInputV1, coupon_rate), 32);
@@ -660,11 +660,11 @@ mod tests {
         );
         assert_eq!(
             core::mem::offset_of!(RawCgbFuturesDeliveryInputV1, coupon_rate),
-            48
+            40
         );
         assert_eq!(
             core::mem::offset_of!(RawCgbFuturesDeliveryResultV1, conversion_factor),
-            16
+            24
         );
         assert_eq!(
             core::mem::offset_of!(RawCarryRollInputV1, initial_dirty_price),
