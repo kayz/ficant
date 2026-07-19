@@ -71,6 +71,8 @@ int main() {
           "CALENDAR_RESOLUTION_PROVISIONAL_WEEKEND_ONLY == 2");
     CHECK(FICANT_KERNEL_CURVE_INTERPOLATION_LINEAR_YIELD == UINT32_C(1),
           "CURVE_INTERPOLATION_LINEAR_YIELD == 1");
+    CHECK(FICANT_KERNEL_CGB_FUTURES_TS == UINT32_C(1), "CGB_FUTURES_TS == 1");
+    CHECK(FICANT_KERNEL_CGB_FUTURES_TL == UINT32_C(4), "CGB_FUTURES_TL == 4");
 
     /* ── Struct sizes ──────────────────────────────────────────── */
     CHECK(sizeof(ficant_kernel_bond_input_v1) == 48,
@@ -93,6 +95,10 @@ int main() {
           "sizeof(carry_roll_input_v1) == 40");
     CHECK(sizeof(ficant_kernel_carry_roll_result_v1) == 40,
           "sizeof(carry_roll_result_v1) == 40");
+    CHECK(sizeof(ficant_kernel_cgb_futures_delivery_input_v1) == 104,
+          "sizeof(cgb_futures_delivery_input_v1) == 104");
+    CHECK(sizeof(ficant_kernel_cgb_futures_delivery_result_v1) == 88,
+          "sizeof(cgb_futures_delivery_result_v1) == 88");
 
     /* ── Key offsets (ABI stability) ───────────────────────────── */
     CHECK(offsetof(ficant_kernel_bond_input_v1, struct_size) == 0,
@@ -129,6 +135,10 @@ int main() {
           "carry_roll_input.initial_dirty_price offset 8");
     CHECK(offsetof(ficant_kernel_carry_roll_result_v1, carry) == 16,
           "carry_roll_result.carry offset 16");
+    CHECK(offsetof(ficant_kernel_cgb_futures_delivery_input_v1, coupon_rate) == 48,
+          "futures_delivery_input.coupon_rate offset 48");
+    CHECK(offsetof(ficant_kernel_cgb_futures_delivery_result_v1, conversion_factor) == 16,
+          "futures_delivery_result.conversion_factor offset 16");
 
     if (failures > 0) {
         std::fprintf(stderr, "%d failures\n", failures);

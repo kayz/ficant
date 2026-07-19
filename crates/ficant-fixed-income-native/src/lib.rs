@@ -1,5 +1,7 @@
 use chrono::{NaiveDate, TimeDelta};
-use ficant_application::ports::{BondAnalyticsEngine, CarryRollEngine, YieldCurveEngine};
+use ficant_application::ports::{
+    BondAnalyticsEngine, CarryRollEngine, FuturesDeliveryEngine, YieldCurveEngine,
+};
 use ficant_domain::analytics::{
     ABI_VERSION, AnalyticsError, AnalyticsMeasures, AnalyticsMode, BondAnalyticsInput,
     BondAnalyticsResult, BusinessDayConvention, CalendarRequirement, CalendarResolution,
@@ -8,6 +10,9 @@ use ficant_domain::analytics::{
 use ficant_domain::curves::{
     CarryRollInput, CarryRollMeasures, CarryRollResult, YieldCurveInterpolation, YieldCurvePoint,
     YieldCurveQuery,
+};
+use ficant_domain::futures_delivery::{
+    CgbFuturesProduct, FuturesDeliverableInput, FuturesDeliveryMeasures, FuturesDeliveryResult,
 };
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -18,6 +23,80 @@ pub struct NativeYieldCurveEngine;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NativeCarryRollEngine;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NativeFuturesDeliveryEngine;
+
+impl FuturesDeliveryEngine for NativeFuturesDeliveryEngine {
+    fn calculate(
+        &self,
+        input: &FuturesDeliverableInput,
+    ) -> Result<FuturesDeliveryResult, AnalyticsError> {
+        if ficant_kernel_sys::abi_version() != ABI_VERSION {
+            return Err(AnalyticsError::AbiMismatch);
+        }
+        let terms = input.terms();
+        let (status, native) = ficant_kernel_sys::analyze_cgb_futures_delivery(
+            &ficant_kernel_sys::CgbFuturesDeliveryInputV1 {
+                product: match input.product() {
+                    CgbFuturesProduct::TwoYear => ficant_kernel_sys::CGB_FUTURES_TS,
+                    CgbFuturesProduct::FiveYear => ficant_kernel_sys::CGB_FUTURES_TF,
+                    CgbFuturesProduct::TenYear => ficant_kernel_sys::CGB_FUTURES_T,
+                    CgbFuturesProduct::ThirtyYear => ficant_kernel_sys::CGB_FUTURES_TL,
+                },
+                frequency: match terms.frequency() {
+                    CouponFrequency::Annual => ficant_kernel_sys::FREQUENCY_ANNUAL,
+                    CouponFrequency::Semiannual => ficant_kernel_sys::FREQUENCY_SEMIANNUAL,
+                },
+                issue_date: epoch_days(terms.issue_date())?,
+                maturity_date: epoch_days(terms.maturity_date())?,
+                delivery_month_first: epoch_days(input.delivery_month_first())?,
+                purchase_date: epoch_days(input.purchase_date())?,
+                delivery_date: epoch_days(input.delivery_date())?,
+                months_to_next_coupon: input.months_to_next_coupon(),
+                remaining_coupon_count: input.remaining_coupon_count(),
+                coupon_rate: decimal_to_f64(terms.coupon_rate())?,
+                spot_clean_price: decimal_to_f64(input.spot_clean_price())?,
+                purchase_accrued_interest: decimal_to_f64(input.purchase_accrued_interest())?,
+                delivery_accrued_interest: decimal_to_f64(input.delivery_accrued_interest())?,
+                interim_coupons: decimal_to_f64(input.interim_coupons())?,
+                futures_clean_price: decimal_to_f64(input.futures_clean_price())?,
+                financing_rate: decimal_to_f64(input.financing_rate())?,
+            },
+        );
+        map_status(status)?;
+        if native.status_code != ficant_kernel_sys::STATUS_OK || !native.eligible {
+            return Err(AnalyticsError::InvalidInput);
+        }
+        let conversion_factor = decimal_from_f64(native.conversion_factor)?;
+        let invoice_price = decimal_from_f64(native.invoice_price)?;
+        let purchase_dirty_price = decimal_from_f64(native.purchase_dirty_price)?;
+        let gross_basis = decimal_from_f64(native.gross_basis)?;
+        let financing_cost = decimal_from_f64(native.financing_cost)?;
+        let holding_carry = decimal_from_f64(native.holding_carry)?;
+        let net_basis = gross_basis
+            .checked_sub(holding_carry)
+            .map_err(|_| AnalyticsError::Internal)?;
+        let delivery_profit = FixedDecimal::ZERO
+            .checked_sub(net_basis)
+            .map_err(|_| AnalyticsError::Internal)?;
+        verify_native_measure(native.net_basis, net_basis)?;
+        verify_native_measure(native.delivery_profit, delivery_profit)?;
+        let measures = FuturesDeliveryMeasures::new(
+            conversion_factor,
+            invoice_price,
+            purchase_dirty_price,
+            gross_basis,
+            financing_cost,
+            holding_carry,
+            net_basis,
+            decimal_from_f64(native.implied_repo_rate)?,
+            delivery_profit,
+        )
+        .map_err(|_| AnalyticsError::Internal)?;
+        Ok(FuturesDeliveryResult::new(input.clone(), measures))
+    }
+}
 
 impl YieldCurveEngine for NativeYieldCurveEngine {
     fn interpolate(&self, query: &YieldCurveQuery) -> Result<YieldCurvePoint, AnalyticsError> {

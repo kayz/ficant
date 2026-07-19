@@ -23,6 +23,10 @@ pub const CALENDAR_REQUIREMENT_EXACT_MARKET: u32 = 2;
 pub const CALENDAR_RESOLUTION_EXACT: u32 = 1;
 pub const CALENDAR_RESOLUTION_PROVISIONAL_WEEKEND_ONLY: u32 = 2;
 pub const CURVE_INTERPOLATION_LINEAR_YIELD: u32 = 1;
+pub const CGB_FUTURES_TS: u32 = 1;
+pub const CGB_FUTURES_TF: u32 = 2;
+pub const CGB_FUTURES_T: u32 = 3;
+pub const CGB_FUTURES_TL: u32 = 4;
 
 const MAX_CASHFLOWS: usize = 4_096;
 
@@ -107,6 +111,41 @@ pub struct CarryRollResultV1 {
     pub carry: f64,
     pub roll_down: f64,
     pub total_return: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct CgbFuturesDeliveryInputV1 {
+    pub product: u32,
+    pub frequency: u32,
+    pub issue_date: i32,
+    pub maturity_date: i32,
+    pub delivery_month_first: i32,
+    pub purchase_date: i32,
+    pub delivery_date: i32,
+    pub months_to_next_coupon: u32,
+    pub remaining_coupon_count: u32,
+    pub coupon_rate: f64,
+    pub spot_clean_price: f64,
+    pub purchase_accrued_interest: f64,
+    pub delivery_accrued_interest: f64,
+    pub interim_coupons: f64,
+    pub futures_clean_price: f64,
+    pub financing_rate: f64,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CgbFuturesDeliveryResultV1 {
+    pub status_code: u32,
+    pub eligible: bool,
+    pub conversion_factor: f64,
+    pub invoice_price: f64,
+    pub purchase_dirty_price: f64,
+    pub gross_basis: f64,
+    pub financing_cost: f64,
+    pub holding_carry: f64,
+    pub net_basis: f64,
+    pub implied_repo_rate: f64,
+    pub delivery_profit: f64,
 }
 
 #[repr(C)]
@@ -230,6 +269,47 @@ struct RawCarryRollResultV1 {
     total_return: f64,
 }
 
+#[repr(C)]
+struct RawCgbFuturesDeliveryInputV1 {
+    struct_size: u32,
+    abi_version: u32,
+    product: u32,
+    frequency: u32,
+    issue_date: i32,
+    maturity_date: i32,
+    delivery_month_first: i32,
+    purchase_date: i32,
+    delivery_date: i32,
+    months_to_next_coupon: u32,
+    remaining_coupon_count: u32,
+    reserved: u32,
+    coupon_rate: f64,
+    spot_clean_price: f64,
+    purchase_accrued_interest: f64,
+    delivery_accrued_interest: f64,
+    interim_coupons: f64,
+    futures_clean_price: f64,
+    financing_rate: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct RawCgbFuturesDeliveryResultV1 {
+    struct_size: u32,
+    abi_version: u32,
+    status_code: u32,
+    eligible: u32,
+    conversion_factor: f64,
+    invoice_price: f64,
+    purchase_dirty_price: f64,
+    gross_basis: f64,
+    financing_cost: f64,
+    holding_carry: f64,
+    net_basis: f64,
+    implied_repo_rate: f64,
+    delivery_profit: f64,
+}
+
 unsafe extern "C" {
     fn ficant_kernel_abi_version() -> c_uint;
     fn ficant_kernel_calculate_bond_v1(
@@ -247,6 +327,10 @@ unsafe extern "C" {
     fn ficant_kernel_decompose_carry_roll_v1(
         input: *const RawCarryRollInputV1,
         result: *mut RawCarryRollResultV1,
+    ) -> c_uint;
+    fn ficant_kernel_analyze_cgb_futures_delivery_v1(
+        input: *const RawCgbFuturesDeliveryInputV1,
+        result: *mut RawCgbFuturesDeliveryResultV1,
     ) -> c_uint;
 }
 
@@ -435,6 +519,59 @@ pub fn decompose_carry_roll(input: &CarryRollInputV1) -> (u32, CarryRollResultV1
     )
 }
 
+#[must_use]
+pub fn analyze_cgb_futures_delivery(
+    input: &CgbFuturesDeliveryInputV1,
+) -> (u32, CgbFuturesDeliveryResultV1) {
+    let raw_input = RawCgbFuturesDeliveryInputV1 {
+        struct_size: size_of_u32::<RawCgbFuturesDeliveryInputV1>(),
+        abi_version: ABI_VERSION,
+        product: input.product,
+        frequency: input.frequency,
+        issue_date: input.issue_date,
+        maturity_date: input.maturity_date,
+        delivery_month_first: input.delivery_month_first,
+        purchase_date: input.purchase_date,
+        delivery_date: input.delivery_date,
+        months_to_next_coupon: input.months_to_next_coupon,
+        remaining_coupon_count: input.remaining_coupon_count,
+        reserved: 0,
+        coupon_rate: input.coupon_rate,
+        spot_clean_price: input.spot_clean_price,
+        purchase_accrued_interest: input.purchase_accrued_interest,
+        delivery_accrued_interest: input.delivery_accrued_interest,
+        interim_coupons: input.interim_coupons,
+        futures_clean_price: input.futures_clean_price,
+        financing_rate: input.financing_rate,
+    };
+    let mut raw_result = RawCgbFuturesDeliveryResultV1 {
+        struct_size: size_of_u32::<RawCgbFuturesDeliveryResultV1>(),
+        abi_version: ABI_VERSION,
+        ..RawCgbFuturesDeliveryResultV1::default()
+    };
+    // SAFETY: both pointers reference live, correctly-laid-out values for the full call and the
+    // C++ implementation does not retain them.
+    let status = unsafe {
+        ficant_kernel_analyze_cgb_futures_delivery_v1(&raw const raw_input, &raw mut raw_result)
+    };
+    (
+        status,
+        CgbFuturesDeliveryResultV1 {
+            status_code: raw_result.status_code,
+            eligible: raw_result.eligible == 1,
+            conversion_factor: raw_result.conversion_factor,
+            invoice_price: raw_result.invoice_price,
+            purchase_dirty_price: raw_result.purchase_dirty_price,
+            gross_basis: raw_result.gross_basis,
+            financing_cost: raw_result.financing_cost,
+            holding_carry: raw_result.holding_carry,
+            net_basis: raw_result.net_basis,
+            implied_repo_rate: raw_result.implied_repo_rate,
+            delivery_profit: raw_result.delivery_profit,
+        },
+    )
+}
+
 fn size_of_u32<T>() -> u32 {
     u32::try_from(core::mem::size_of::<T>()).unwrap_or(u32::MAX)
 }
@@ -486,8 +623,8 @@ fn convert_cashflow(value: RawCashflowV1) -> CashflowV1 {
 mod tests {
     use super::{
         RawBondInputV1, RawCalculateInputV1, RawCarryRollInputV1, RawCarryRollResultV1,
-        RawCashflowV1, RawResultV1, RawYieldCurveInputV1, RawYieldCurveNodeV1,
-        RawYieldCurveQueryV1, RawYieldCurveResultV1,
+        RawCashflowV1, RawCgbFuturesDeliveryInputV1, RawCgbFuturesDeliveryResultV1, RawResultV1,
+        RawYieldCurveInputV1, RawYieldCurveNodeV1, RawYieldCurveQueryV1, RawYieldCurveResultV1,
     };
 
     #[test]
@@ -502,6 +639,8 @@ mod tests {
         assert_eq!(core::mem::size_of::<RawYieldCurveResultV1>(), 24);
         assert_eq!(core::mem::size_of::<RawCarryRollInputV1>(), 40);
         assert_eq!(core::mem::size_of::<RawCarryRollResultV1>(), 40);
+        assert_eq!(core::mem::size_of::<RawCgbFuturesDeliveryInputV1>(), 104);
+        assert_eq!(core::mem::size_of::<RawCgbFuturesDeliveryResultV1>(), 88);
 
         assert_eq!(core::mem::offset_of!(RawBondInputV1, struct_size), 0);
         assert_eq!(core::mem::offset_of!(RawBondInputV1, coupon_rate), 32);
@@ -517,6 +656,14 @@ mod tests {
         assert_eq!(core::mem::offset_of!(RawYieldCurveInputV1, nodes), 16);
         assert_eq!(
             core::mem::offset_of!(RawYieldCurveResultV1, yield_to_maturity),
+            16
+        );
+        assert_eq!(
+            core::mem::offset_of!(RawCgbFuturesDeliveryInputV1, coupon_rate),
+            48
+        );
+        assert_eq!(
+            core::mem::offset_of!(RawCgbFuturesDeliveryResultV1, conversion_factor),
             16
         );
         assert_eq!(

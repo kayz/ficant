@@ -831,6 +831,7 @@ dependencies = [
  "ficant-application",
  "ficant-domain",
  "ficant-kernel-sys",
+ "rust_decimal",
  "serde_json",
 ]
 
