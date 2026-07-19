@@ -30,4 +30,20 @@ double linear_yield(const YieldNode* nodes, uint32_t count,
     return std::numeric_limits<double>::quiet_NaN();
 }
 
+CarryRollResult decompose_carry_roll(
+    double initial_dirty_price,
+    double horizon_dirty_at_initial_yield,
+    double horizon_dirty_at_rolled_yield,
+    double paid_cashflows) noexcept {
+    const double carry = horizon_dirty_at_initial_yield
+        + paid_cashflows - initial_dirty_price;
+    const double roll_down = horizon_dirty_at_rolled_yield
+        - horizon_dirty_at_initial_yield;
+    return {
+        carry,
+        roll_down,
+        carry + roll_down,
+    };
+}
+
 } // namespace ficant::curve_math

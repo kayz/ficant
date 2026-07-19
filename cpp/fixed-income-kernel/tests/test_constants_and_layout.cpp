@@ -89,6 +89,10 @@ int main() {
           "sizeof(yield_curve_query_v1) == 16");
     CHECK(sizeof(ficant_kernel_yield_curve_result_v1) == 24,
           "sizeof(yield_curve_result_v1) == 24");
+    CHECK(sizeof(ficant_kernel_carry_roll_input_v1) == 40,
+          "sizeof(carry_roll_input_v1) == 40");
+    CHECK(sizeof(ficant_kernel_carry_roll_result_v1) == 40,
+          "sizeof(carry_roll_result_v1) == 40");
 
     /* ── Key offsets (ABI stability) ───────────────────────────── */
     CHECK(offsetof(ficant_kernel_bond_input_v1, struct_size) == 0,
@@ -121,6 +125,10 @@ int main() {
           "yield_curve_input.nodes offset 16");
     CHECK(offsetof(ficant_kernel_yield_curve_result_v1, yield_to_maturity) == 16,
           "yield_curve_result.yield_to_maturity offset 16");
+    CHECK(offsetof(ficant_kernel_carry_roll_input_v1, initial_dirty_price) == 8,
+          "carry_roll_input.initial_dirty_price offset 8");
+    CHECK(offsetof(ficant_kernel_carry_roll_result_v1, carry) == 16,
+          "carry_roll_result.carry offset 16");
 
     if (failures > 0) {
         std::fprintf(stderr, "%d failures\n", failures);

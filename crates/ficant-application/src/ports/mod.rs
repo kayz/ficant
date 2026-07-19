@@ -23,7 +23,7 @@ pub use analytics::{
 pub use artifacts::{ArtifactRepository, PublishArtifact};
 pub use blob_store::{BeginBlobStage, BlobStore, StagedBlobRef, VerifiedBlobRef, VerifyBlobStage};
 pub use cursor::{AeadCursorCodec, Cursor, CursorKey};
-pub use curves::YieldCurveEngine;
+pub use curves::{CarryRollEngine, YieldCurveEngine};
 pub use definitions::{
     AppendDefinitionVersion, DefinitionIdentity, DefinitionKind, DefinitionRepository,
     DefinitionValue, InstrumentDefinition, InstrumentSubtype,

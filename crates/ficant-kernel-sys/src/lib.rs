@@ -93,6 +93,22 @@ pub struct YieldCurveResultV1 {
     pub yield_to_maturity: f64,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct CarryRollInputV1 {
+    pub initial_dirty_price: f64,
+    pub horizon_dirty_at_initial_yield: f64,
+    pub horizon_dirty_at_rolled_yield: f64,
+    pub paid_cashflows: f64,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CarryRollResultV1 {
+    pub status_code: u32,
+    pub carry: f64,
+    pub roll_down: f64,
+    pub total_return: f64,
+}
+
 #[repr(C)]
 struct RawBondInputV1 {
     struct_size: u32,
@@ -192,6 +208,28 @@ struct RawYieldCurveResultV1 {
     yield_to_maturity: f64,
 }
 
+#[repr(C)]
+struct RawCarryRollInputV1 {
+    struct_size: u32,
+    abi_version: u32,
+    initial_dirty_price: f64,
+    horizon_dirty_at_initial_yield: f64,
+    horizon_dirty_at_rolled_yield: f64,
+    paid_cashflows: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct RawCarryRollResultV1 {
+    struct_size: u32,
+    abi_version: u32,
+    status_code: u32,
+    reserved: u32,
+    carry: f64,
+    roll_down: f64,
+    total_return: f64,
+}
+
 unsafe extern "C" {
     fn ficant_kernel_abi_version() -> c_uint;
     fn ficant_kernel_calculate_bond_v1(
@@ -205,6 +243,10 @@ unsafe extern "C" {
         curve_input: *const RawYieldCurveInputV1,
         query: *const RawYieldCurveQueryV1,
         result: *mut RawYieldCurveResultV1,
+    ) -> c_uint;
+    fn ficant_kernel_decompose_carry_roll_v1(
+        input: *const RawCarryRollInputV1,
+        result: *mut RawCarryRollResultV1,
     ) -> c_uint;
 }
 
@@ -363,6 +405,36 @@ pub fn interpolate_yield_curve(
     )
 }
 
+#[must_use]
+pub fn decompose_carry_roll(input: &CarryRollInputV1) -> (u32, CarryRollResultV1) {
+    let raw_input = RawCarryRollInputV1 {
+        struct_size: size_of_u32::<RawCarryRollInputV1>(),
+        abi_version: ABI_VERSION,
+        initial_dirty_price: input.initial_dirty_price,
+        horizon_dirty_at_initial_yield: input.horizon_dirty_at_initial_yield,
+        horizon_dirty_at_rolled_yield: input.horizon_dirty_at_rolled_yield,
+        paid_cashflows: input.paid_cashflows,
+    };
+    let mut raw_result = RawCarryRollResultV1 {
+        struct_size: size_of_u32::<RawCarryRollResultV1>(),
+        abi_version: ABI_VERSION,
+        ..RawCarryRollResultV1::default()
+    };
+    // SAFETY: both pointers reference live, correctly-laid-out values and the C++ function does
+    // not retain either pointer after returning.
+    let status =
+        unsafe { ficant_kernel_decompose_carry_roll_v1(&raw const raw_input, &raw mut raw_result) };
+    (
+        status,
+        CarryRollResultV1 {
+            status_code: raw_result.status_code,
+            carry: raw_result.carry,
+            roll_down: raw_result.roll_down,
+            total_return: raw_result.total_return,
+        },
+    )
+}
+
 fn size_of_u32<T>() -> u32 {
     u32::try_from(core::mem::size_of::<T>()).unwrap_or(u32::MAX)
 }
@@ -413,8 +485,9 @@ fn convert_cashflow(value: RawCashflowV1) -> CashflowV1 {
 #[cfg(test)]
 mod tests {
     use super::{
-        RawBondInputV1, RawCalculateInputV1, RawCashflowV1, RawResultV1, RawYieldCurveInputV1,
-        RawYieldCurveNodeV1, RawYieldCurveQueryV1, RawYieldCurveResultV1,
+        RawBondInputV1, RawCalculateInputV1, RawCarryRollInputV1, RawCarryRollResultV1,
+        RawCashflowV1, RawResultV1, RawYieldCurveInputV1, RawYieldCurveNodeV1,
+        RawYieldCurveQueryV1, RawYieldCurveResultV1,
     };
 
     #[test]
@@ -427,6 +500,8 @@ mod tests {
         assert_eq!(core::mem::size_of::<RawYieldCurveInputV1>(), 32);
         assert_eq!(core::mem::size_of::<RawYieldCurveQueryV1>(), 16);
         assert_eq!(core::mem::size_of::<RawYieldCurveResultV1>(), 24);
+        assert_eq!(core::mem::size_of::<RawCarryRollInputV1>(), 40);
+        assert_eq!(core::mem::size_of::<RawCarryRollResultV1>(), 40);
 
         assert_eq!(core::mem::offset_of!(RawBondInputV1, struct_size), 0);
         assert_eq!(core::mem::offset_of!(RawBondInputV1, coupon_rate), 32);
@@ -444,5 +519,10 @@ mod tests {
             core::mem::offset_of!(RawYieldCurveResultV1, yield_to_maturity),
             16
         );
+        assert_eq!(
+            core::mem::offset_of!(RawCarryRollInputV1, initial_dirty_price),
+            8
+        );
+        assert_eq!(core::mem::offset_of!(RawCarryRollResultV1, carry), 16);
     }
 }

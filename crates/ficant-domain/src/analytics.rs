@@ -100,6 +100,13 @@ impl FixedDecimal {
             .map(Self)
             .ok_or(DomainErrorCode::InvalidValue)
     }
+
+    pub fn checked_sub(self, other: Self) -> DomainResult<Self> {
+        self.0
+            .checked_sub(other.0)
+            .map(Self)
+            .ok_or(DomainErrorCode::InvalidValue)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

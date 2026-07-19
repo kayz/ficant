@@ -1,4 +1,5 @@
 #include "ficant_kernel.h"
+#include "../src/date_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -36,6 +37,30 @@ void check_abs(double actual, double expected, double tolerance, const char* lab
 void check_risk(double actual, double expected, const char* label) {
     const double tolerance = std::max(RISK_ABS_TOL, RISK_REL_TOL * std::fabs(expected));
     check_abs(actual, expected, tolerance, label);
+}
+
+void test_gregorian_january_february_round_trip() {
+    for (const auto date : {
+             ficant::date_utils::ymd_to_days(2024, 1, 31),
+             ficant::date_utils::ymd_to_days(2024, 2, 29),
+             ficant::date_utils::ymd_to_days(2026, 1, 1),
+             ficant::date_utils::ymd_to_days(2026, 2, 28),
+         }) {
+        int year = 0;
+        unsigned month = 0;
+        unsigned day = 0;
+        ficant::date_utils::days_to_ymd(date, year, month, day);
+        check(ficant::date_utils::ymd_to_days(year, month, day) == date,
+              "Gregorian January/February epoch round trip");
+    }
+    check(ficant::date_utils::add_months(
+              ficant::date_utils::ymd_to_days(2026, 1, 1), 12)
+              == ficant::date_utils::ymd_to_days(2027, 1, 1),
+          "January annual schedule anchor remains January");
+    check(ficant::date_utils::add_months(
+              ficant::date_utils::ymd_to_days(2024, 2, 29), 12)
+              == ficant::date_utils::ymd_to_days(2025, 2, 28),
+          "leap-day annual schedule clamps to February month end");
 }
 
 constexpr int32_t ymd_to_days(int y, unsigned m, unsigned d) noexcept {
@@ -471,6 +496,7 @@ void test_error_matrix() {
 } // namespace
 
 int main() {
+    test_gregorian_january_february_round_trip();
     test_following_exact_result();
     test_isma_and_price_round_trip();
     test_discount_full_result();

@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 use ficant_domain::DomainErrorCode;
 use ficant_domain::analytics::{AnalyticsObjectRef, FixedDecimal};
 use ficant_domain::curves::{
-    YieldCurveBinding, YieldCurveInterpolation, YieldCurveNode, YieldCurveQuery,
+    CarryRollMeasures, YieldCurveBinding, YieldCurveInterpolation, YieldCurveNode, YieldCurveQuery,
 };
 use ficant_domain::primitives::{ContentHash, Ulid, Version, VersionRef};
 
@@ -74,6 +74,39 @@ fn curve_query_is_closed_to_the_frozen_node_range() {
     assert_eq!(
         YieldCurveQuery::new(curve, date(2028, 7, 18)),
         Err(DomainErrorCode::InvalidEffectiveTime)
+    );
+}
+
+#[test]
+fn carry_roll_measures_enforce_the_frozen_decomposition_identity() {
+    let valid = CarryRollMeasures::new(
+        rate("0.020"),
+        rate("0.018"),
+        rate("100.0"),
+        rate("100.4"),
+        rate("101.1"),
+        rate("1.2"),
+        rate("1.6"),
+        rate("0.7"),
+        rate("2.3"),
+    )
+    .unwrap();
+    assert_eq!(valid.carry(), rate("1.6"));
+    assert_eq!(valid.roll_down(), rate("0.7"));
+    assert_eq!(valid.total_return(), rate("2.3"));
+    assert_eq!(
+        CarryRollMeasures::new(
+            rate("0.020"),
+            rate("0.018"),
+            rate("100.0"),
+            rate("100.4"),
+            rate("101.1"),
+            rate("1.2"),
+            rate("1.5"),
+            rate("0.7"),
+            rate("2.2"),
+        ),
+        Err(DomainErrorCode::InvalidValue)
     );
 }
 

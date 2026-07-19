@@ -82,7 +82,7 @@ constexpr void days_to_ymd(int32_t days, int& y, unsigned& m, unsigned& d) noexc
     const unsigned doy = doe - (365U * yoe + yoe / 4U - yoe / 100U);
     const unsigned mp = (5U * doy + 2U) / 153U;
     d = doy - (153U * mp + 2U) / 5U + 1U;
-    m = mp + (mp < 10U ? 3U : 9U);
+    m = (mp < 10U) ? mp + 3U : mp - 9U;
     y += static_cast<int>(m <= 2U);
 }
 

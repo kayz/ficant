@@ -152,6 +152,25 @@ typedef struct {
     double   yield_to_maturity;
 } ficant_kernel_yield_curve_result_v1;
 
+typedef struct {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    double   initial_dirty_price;
+    double   horizon_dirty_at_initial_yield;
+    double   horizon_dirty_at_rolled_yield;
+    double   paid_cashflows;
+} ficant_kernel_carry_roll_input_v1;
+
+typedef struct {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t status_code;
+    uint32_t reserved;
+    double   carry;
+    double   roll_down;
+    double   total_return;
+} ficant_kernel_carry_roll_result_v1;
+
 /* ── ABI functions ───────────────────────────────────────────────── */
 
 /** Return the ABI version this shared library was compiled with. */
@@ -198,6 +217,15 @@ FICANT_KERNEL_API uint32_t ficant_kernel_interpolate_yield_curve_v1(
     const ficant_kernel_yield_curve_input_v1* curve_input,
     const ficant_kernel_yield_curve_query_v1* query,
     ficant_kernel_yield_curve_result_v1*      result)
+#if defined(__cplusplus) && __cplusplus >= 201103L
+    noexcept
+#endif
+;
+
+/** Decompose an unfunded dirty-price holding return into carry and roll-down. */
+FICANT_KERNEL_API uint32_t ficant_kernel_decompose_carry_roll_v1(
+    const ficant_kernel_carry_roll_input_v1* input,
+    ficant_kernel_carry_roll_result_v1*      result)
 #if defined(__cplusplus) && __cplusplus >= 201103L
     noexcept
 #endif

@@ -33,6 +33,14 @@ uint32_t validate_result(ficant_kernel_yield_curve_result_v1* result) noexcept {
     return FICANT_KERNEL_STATUS_OK;
 }
 
+uint32_t finish(ficant_kernel_carry_roll_result_v1* result,
+                uint32_t status) noexcept {
+    if (result != nullptr) {
+        result->status_code = status;
+    }
+    return status;
+}
+
 } // namespace
 
 extern "C" uint32_t ficant_kernel_interpolate_yield_curve_v1(
@@ -96,4 +104,59 @@ extern "C" uint32_t ficant_kernel_interpolate_yield_curve_v1(
     } catch (...) {
         return finish(result, FICANT_KERNEL_STATUS_INTERNAL_ERROR);
     }
+}
+
+extern "C" uint32_t ficant_kernel_decompose_carry_roll_v1(
+    const ficant_kernel_carry_roll_input_v1* input,
+    ficant_kernel_carry_roll_result_v1* result) noexcept {
+    if (result == nullptr) {
+        return FICANT_KERNEL_STATUS_INVALID_ARGUMENT;
+    }
+    if (result->abi_version != FICANT_KERNEL_ABI_VERSION) {
+        return FICANT_KERNEL_STATUS_ABI_MISMATCH;
+    }
+    if (result->struct_size != sizeof(ficant_kernel_carry_roll_result_v1)) {
+        return FICANT_KERNEL_STATUS_INVALID_ARGUMENT;
+    }
+    result->status_code = FICANT_KERNEL_STATUS_INVALID_ARGUMENT;
+    result->reserved = 0;
+    result->carry = 0.0;
+    result->roll_down = 0.0;
+    result->total_return = 0.0;
+    if (input == nullptr) {
+        return finish(result, FICANT_KERNEL_STATUS_INVALID_ARGUMENT);
+    }
+    if (input->abi_version != FICANT_KERNEL_ABI_VERSION) {
+        return finish(result, FICANT_KERNEL_STATUS_ABI_MISMATCH);
+    }
+    if (input->struct_size != sizeof(ficant_kernel_carry_roll_input_v1)) {
+        return finish(result, FICANT_KERNEL_STATUS_INVALID_ARGUMENT);
+    }
+    if (!std::isfinite(input->initial_dirty_price)
+        || !std::isfinite(input->horizon_dirty_at_initial_yield)
+        || !std::isfinite(input->horizon_dirty_at_rolled_yield)
+        || !std::isfinite(input->paid_cashflows)) {
+        return finish(result, FICANT_KERNEL_STATUS_NON_FINITE);
+    }
+    if (input->initial_dirty_price <= 0.0
+        || input->horizon_dirty_at_initial_yield <= 0.0
+        || input->horizon_dirty_at_rolled_yield <= 0.0
+        || input->paid_cashflows < 0.0) {
+        return finish(result, FICANT_KERNEL_STATUS_INVALID_ARGUMENT);
+    }
+    const ficant::curve_math::CarryRollResult decomposed =
+        ficant::curve_math::decompose_carry_roll(
+            input->initial_dirty_price,
+            input->horizon_dirty_at_initial_yield,
+            input->horizon_dirty_at_rolled_yield,
+            input->paid_cashflows);
+    if (!std::isfinite(decomposed.carry)
+        || !std::isfinite(decomposed.roll_down)
+        || !std::isfinite(decomposed.total_return)) {
+        return finish(result, FICANT_KERNEL_STATUS_NON_FINITE);
+    }
+    result->carry = decomposed.carry;
+    result->roll_down = decomposed.roll_down;
+    result->total_return = decomposed.total_return;
+    return finish(result, FICANT_KERNEL_STATUS_OK);
 }
