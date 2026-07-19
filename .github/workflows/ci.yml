@@ -259,6 +259,8 @@ jobs:
           wait "$crates_pid" "$pypi_pid" "$npm_pid"
           stat -c '%n %s' /tmp/crates.io-all.zip /tmp/PyPI-all.zip /tmp/npm-all.zip
           sha256sum /tmp/crates.io-all.zip /tmp/PyPI-all.zip /tmp/npm-all.zip
+          mkdir -p "${{ runner.temp }}/ficant-supply-evidence"
+          cp /tmp/crates.io-all.zip /tmp/PyPI-all.zip /tmp/npm-all.zip "${{ runner.temp }}/ficant-supply-evidence/"
           exit 1
       - run: bash .github/scripts/verify-supply-chain.sh
         env:
