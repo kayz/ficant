@@ -13,6 +13,7 @@ use prost_types::{
 use ficant_contracts::ficant::app::v1::AppRegistry;
 use ficant_contracts::ficant::core::v1::DecimalValue;
 use ficant_contracts::ficant::market::v1::{Instrument, InstrumentKind};
+use ficant_contracts::ficant::rates::v1::AnalyzeBondRequest;
 use ficant_contracts::ficant::research::v1::{ExperimentRun, RunState};
 
 const DEFAULT_BUF: &str = "/usr/local/bin/buf";
@@ -46,12 +47,14 @@ fn generated_rust_consumer_exports_representative_contracts() {
     let decimal = DecimalValue::default();
     let run = ExperimentRun::default();
     let registry = AppRegistry::default();
+    let rates = AnalyzeBondRequest::default();
 
     assert!(instrument.instrument_id.is_none());
     assert_eq!(instrument.kind, InstrumentKind::Unspecified as i32);
     assert!(decimal.unit.is_none());
     assert_eq!(run.state, RunState::Unspecified as i32);
     assert!(registry.apps.is_empty());
+    assert!(rates.context.is_none());
 }
 
 #[derive(Clone, Copy)]
@@ -228,6 +231,16 @@ fn platform_service_has_exact_seven_rpc_security_contract() {
 }
 
 #[test]
+fn rates_analytics_service_has_exact_phase2e_signatures() {
+    let descriptor_set = descriptor_set();
+    assert_exact_service(
+        descriptor_set,
+        "ficant.rates.v1.RatesAnalyticsService",
+        &rates_analytics_methods(),
+    );
+}
+
+#[test]
 fn platform_messages_fields_enums_and_oneofs_are_exact() {
     let descriptor_set = descriptor_set();
     let messages = top_level_messages(descriptor_set);
@@ -394,6 +407,7 @@ fn assert_allowed_packages(descriptor_set: &FileDescriptorSet) {
         "ficant.market.v1",
         "ficant.research.v1",
         "ficant.app.v1",
+        "ficant.rates.v1",
     ]);
     for file in &descriptor_set.file {
         let Some(name) = file.name.as_deref() else {
@@ -1516,6 +1530,36 @@ fn platform_methods() -> Vec<ExpectedMethod> {
     ]
 }
 
+fn rates_analytics_methods() -> Vec<ExpectedMethod> {
+    vec![
+        ExpectedMethod::new(
+            "AnalyzeBond",
+            ".ficant.rates.v1.AnalyzeBondRequest",
+            ".ficant.rates.v1.AnalyzeBondResponse",
+        ),
+        ExpectedMethod::new(
+            "InterpolateYieldCurve",
+            ".ficant.rates.v1.InterpolateYieldCurveRequest",
+            ".ficant.rates.v1.InterpolateYieldCurveResponse",
+        ),
+        ExpectedMethod::new(
+            "AnalyzeCarryRoll",
+            ".ficant.rates.v1.AnalyzeCarryRollRequest",
+            ".ficant.rates.v1.AnalyzeCarryRollResponse",
+        ),
+        ExpectedMethod::new(
+            "AnalyzeFuturesDelivery",
+            ".ficant.rates.v1.AnalyzeFuturesDeliveryRequest",
+            ".ficant.rates.v1.AnalyzeFuturesDeliveryResponse",
+        ),
+        ExpectedMethod::new(
+            "AnalyzeFuturesHedge",
+            ".ficant.rates.v1.AnalyzeFuturesHedgeRequest",
+            ".ficant.rates.v1.AnalyzeFuturesHedgeResponse",
+        ),
+    ]
+}
+
 #[test]
 fn service_inventory_rejects_an_unauthorized_ficant_service() {
     let mut actual = expected_service_fqns();
@@ -1523,7 +1567,7 @@ fn service_inventory_rejects_an_unauthorized_ficant_service() {
 
     assert!(
         validate_service_inventory(&actual).is_err(),
-        "an unauthorized seventh ficant service must be rejected"
+        "an unauthorized additional ficant service must be rejected"
     );
 }
 
@@ -1556,6 +1600,7 @@ fn expected_service_fqns() -> BTreeSet<String> {
         "ficant.research.v1.ExperimentService".to_owned(),
         "ficant.research.v1.ArtifactService".to_owned(),
         "ficant.app.v1.PlatformService".to_owned(),
+        "ficant.rates.v1.RatesAnalyticsService".to_owned(),
     ])
 }
 

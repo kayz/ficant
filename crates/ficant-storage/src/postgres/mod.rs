@@ -1,6 +1,7 @@
 pub mod artifacts;
 mod codec;
 pub(crate) mod common;
+pub mod data_sources;
 pub mod definitions;
 mod execution;
 pub mod facts;

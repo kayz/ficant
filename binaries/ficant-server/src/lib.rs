@@ -1,6 +1,10 @@
 use ficant_api::{
-    GrpcWebServeError, GrpcWebServerConfig, PlatformApplication, PlatformGrpcService,
-    SessionPolicy, SystemClock, TrustedIdentity, serve_grpc_web,
+    GrpcWebServeError, GrpcWebServerConfig, PlatformApplication, PlatformGrpcService, PlatformPort,
+    RatesGrpcService, SessionPolicy, SystemClock, TrustedIdentity, serve_grpc_web_with_rates,
+};
+use ficant_fixed_income_native::{
+    NativeBondAnalyticsEngine, NativeCarryRollEngine, NativeFuturesDeliveryEngine,
+    NativeFuturesHedgeEngine, NativeYieldCurveEngine,
 };
 use std::collections::BTreeMap;
 use std::env;
@@ -161,6 +165,37 @@ impl From<GrpcWebServeError> for ServerError {
 pub fn build_platform_service(
     settings: &ServerSettings,
 ) -> Result<PlatformGrpcService, ServerError> {
+    let application = build_platform_application(settings)?;
+    PlatformGrpcService::new(application, &settings.trace_key).map_err(config)
+}
+
+/// Composes the platform and Phase 2 analytics services over one identity boundary.
+///
+/// # Errors
+///
+/// Returns an error if validated settings cannot construct either transport adapter.
+pub fn build_grpc_services(
+    settings: &ServerSettings,
+) -> Result<(PlatformGrpcService, RatesGrpcService), ServerError> {
+    let application = build_platform_application(settings)?;
+    let platform =
+        PlatformGrpcService::new(Arc::clone(&application), &settings.trace_key).map_err(config)?;
+    let rates = RatesGrpcService::new(
+        application,
+        Arc::new(NativeBondAnalyticsEngine),
+        Arc::new(NativeYieldCurveEngine),
+        Arc::new(NativeCarryRollEngine),
+        Arc::new(NativeFuturesDeliveryEngine),
+        Arc::new(NativeFuturesHedgeEngine),
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+    Ok((platform, rates))
+}
+
+fn build_platform_application(
+    settings: &ServerSettings,
+) -> Result<Arc<dyn PlatformPort>, ServerError> {
     let identities = settings.bearer_identity.clone().into_iter().collect();
     let application = PlatformApplication::try_new(
         Arc::new(SystemClock),
@@ -171,7 +206,7 @@ pub fn build_platform_service(
         Vec::new(),
     )
     .map_err(config)?;
-    PlatformGrpcService::new(Arc::new(application), &settings.trace_key).map_err(config)
+    Ok(Arc::new(application))
 }
 
 /// Loads settings, composes the service, and serves until the process is stopped.
@@ -185,13 +220,14 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         .filter_map(|key| env::var(key).ok().map(|value| ((*key).to_owned(), value)))
         .collect();
     let settings = ServerSettings::try_from_values(&values)?;
-    let service = build_platform_service(&settings)?;
-    serve_grpc_web(
+    let (platform, rates) = build_grpc_services(&settings)?;
+    serve_grpc_web_with_rates(
         GrpcWebServerConfig {
             bind: settings.bind,
             allowed_origins: settings.allowed_origins.clone(),
         },
-        service,
+        platform,
+        rates,
     )
     .await?;
     Ok(())

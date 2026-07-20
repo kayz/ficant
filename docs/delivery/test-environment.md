@@ -36,7 +36,7 @@
 
 ## 数据库回滚边界
 
-代码回滚不自动执行 down migration。migration 必须遵循扩展—兼容—收缩；破坏性 schema 变更需要独立人工审批和备份/恢复方案。当前八个 migration 从空库向前执行。
+代码回滚不自动执行 down migration。migration 必须遵循扩展—兼容—收缩；破坏性 schema 变更需要独立人工审批和备份/恢复方案。当前九个 migration 从空库向前执行。
 
 ## 安全边界与已知代价
 

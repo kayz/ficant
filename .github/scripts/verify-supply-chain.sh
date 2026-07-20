@@ -4,7 +4,7 @@ set -euo pipefail
 
 scripts_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 lock_file="$scripts_dir/supply-chain.lock.json"
-SUPPLY_LOCK_SHA256=4a7706d4639af9e30e041965e9fc30dbfb4f313306ca097d334ffb1554ab700f
+SUPPLY_LOCK_SHA256=c1a5c8808d5f769d3eea4cd7ba17bc7b03949cef02e6038ad741e134d9a20378
 
 die() {
   printf 'supply-chain: %s\n' "$1" >&2
@@ -38,7 +38,7 @@ verify_lock() {
   local lock_sha
   lock_sha=$(sha256_file "$lock_file") || die 'cannot hash supply-chain lock'
   [[ $lock_sha == "$SUPPLY_LOCK_SHA256" ]] || die "supply-chain lock hash mismatch: $lock_sha"
-  python3 - "$lock_file" <<'PY'
+  python3 - "$lock_file" "$scripts_dir/../.." <<'PY'
 import datetime, hashlib, json, pathlib, sys, urllib.parse
 try:
     data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
@@ -57,8 +57,44 @@ if data.get("cargo_reachability") != {
     "command": ["tree", "--locked", "--all-features", "--target", "all", "--prefix", "none", "--format", "{p}"],
 }:
     print("supply-chain: frozen Cargo reachability contract mismatch", file=sys.stderr); raise SystemExit(2)
-if len(data.get("first_party_packages", [])) != 15 or len({item.get("purl") for item in data["first_party_packages"]}) != 15:
+if len(data.get("first_party_packages", [])) != 16 or len({item.get("purl") for item in data["first_party_packages"]}) != 16:
     print("supply-chain: exact first-party policy mismatch", file=sys.stderr); raise SystemExit(2)
+expected_vendored = [{
+    "purl": "pkg:cargo/parquet@59.1.0",
+    "ecosystem": "crates.io",
+    "name": "parquet",
+    "version": "59.1.0",
+    "source": "crates/vendor/parquet-59.1.0",
+    "license_expression": "Apache-2.0",
+    "upstream_source_locator": "https://crates.io/api/v1/crates/parquet/59.1.0/download",
+    "upstream_source_integrity": "sha256:5302d4da74d6596a1f11f9928767995b53bca657cbeea1e4e8c5074f8a1157dd",
+    "upstream_patch_repository": "https://github.com/apache/arrow-rs",
+    "upstream_patch_commit": "bc4e672607f00587349b1308f6cf717fc6518848",
+    "upstream_patch_file": "src/arrow/arrow_reader/statistics.rs",
+    "upstream_patch_blob_sha1": "c096448b6b9a6820ae9fea904916629cebdca2a5",
+    "exit_condition": "replace with the first crates.io parquet release that contains upstream patch commit bc4e672607f00587349b1308f6cf717fc6518848",
+}]
+if data.get("vendored_third_party_packages") != expected_vendored:
+    print("supply-chain: exact vendored third-party policy mismatch", file=sys.stderr); raise SystemExit(2)
+vendored = expected_vendored[0]
+vendor_root = pathlib.Path(sys.argv[2]).resolve() / vendored["source"]
+patch_path = vendor_root / vendored["upstream_patch_file"]
+try:
+    payload = patch_path.read_bytes()
+except OSError as exc:
+    print(f"supply-chain: vendored upstream patch missing: {exc}", file=sys.stderr); raise SystemExit(2)
+blob_sha1 = hashlib.sha1(f"blob {len(payload)}\0".encode() + payload).hexdigest()
+if blob_sha1 != vendored["upstream_patch_blob_sha1"]:
+    print("supply-chain: vendored upstream patch blob mismatch", file=sys.stderr); raise SystemExit(2)
+for manifest_name in ("Cargo.toml", "Cargo.toml.orig"):
+    manifest = vendor_root / manifest_name
+    if not manifest.is_file() or "paste" in manifest.read_text(encoding="utf-8"):
+        print(f"supply-chain: vendored manifest patch mismatch: {manifest_name}", file=sys.stderr); raise SystemExit(2)
+for forbidden in ("Cargo.lock", "benches", "examples", "pytest", "tests", "regen.sh",
+                  "src/column/chunker/cdc_codegen.py"):
+    candidate = vendor_root / forbidden
+    if candidate.is_file() or (candidate.is_dir() and any(item.is_file() for item in candidate.rglob("*"))):
+        print(f"supply-chain: vendored non-production dependency input present: {forbidden}", file=sys.stderr); raise SystemExit(2)
 if {item.get("purl") for item in data.get("license_scoped_exceptions", [])} != {
     "pkg:cargo/webpki-roots@0.26.11", "pkg:cargo/webpki-root-certs@1.0.9",
     "pkg:cargo/webpki-roots@1.0.9", "pkg:npm/caniuse-lite@1.0.30001805",

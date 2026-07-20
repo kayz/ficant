@@ -1,5 +1,8 @@
 /.gitattributes text eol=lf
 *.rs text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.h text eol=lf
 *.sh text eol=lf
 /Cargo.lock text eol=lf
 /python/uv.lock text eol=lf
@@ -12,7 +15,16 @@
 /docs/history/hoqa/deploy-execution/tests/*.ps1 text eol=lf
 /tests/golden-cases/china-rates/iteration-3-cgb-basic-info-source-manifest.json text eol=lf
 /tests/golden-cases/china-rates/expected/cgb-reference-v1-expected.json text eol=lf
+/tests/golden-cases/** text eol=lf
+/tests/oracle/** text eol=lf
+/tests/iteration-3/** text eol=lf
+/tests/phase2b/** text eol=lf
+/tests/phase2c/** text eol=lf
+/tests/phase2d/** text eol=lf
 /tests/oracle/china-rates/build_oracle.py text eol=lf
 /tests/oracle/china-rates/quantlib_oracle.cpp text eol=lf
 /tests/oracle/china-rates/test_candidate_contract.py text eol=lf
+/crates/ficant-contracts/src/generated/** text eol=lf -whitespace
+/python/node-contracts/src/ficant_contracts/generated/** text eol=lf -whitespace
+/web-dm/packages/contracts-generated/src/** text eol=lf -whitespace
 /docs/history/hoqa/governance/history/proqaid-superseded/archive/iteration-1/orchestrator/iteration-1-checklist.md -whitespace

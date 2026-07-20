@@ -24,6 +24,13 @@ pub mod ficant {
         }
     }
 
+    pub mod rates {
+        pub mod v1 {
+            include!("generated/ficant.rates.v1.rs");
+            include!("generated/ficant.rates.v1.tonic.rs");
+        }
+    }
+
     pub mod research {
         pub mod v1 {
             include!("generated/ficant.research.v1.rs");

@@ -10,6 +10,7 @@ version.workspace = true
 async-trait = { workspace = true }
 ficant-application = { path = "../../crates/ficant-application" }
 ficant-api = { path = "../../crates/ficant-api" }
+ficant-fixed-income-native = { path = "../../crates/ficant-fixed-income-native" }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 

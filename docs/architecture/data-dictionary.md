@@ -1,6 +1,6 @@
 # ficant 架构与数据字典
 
-**状态：** Phase 0 / Phase 1 已实现架构字典
+**状态：** Phase 0 / Phase 1 / Phase 2 / Phase 3 已实现架构字典
 
 **权威边界：** `README.md` 定义系统约束，`interface/` 定义跨边界字段，Rust Domain/Application 定义业务不变量，Migration 定义持久映射；架构选择与依据记录在 `docs/architecture/adr/`
 
@@ -14,6 +14,13 @@ Rust API ─────────→ Application ─────────�
    └→ Contracts         └→ Runtime ──────────┘
                             ↑
 Storage adapters/codecs ─→ narrow Application ports ─→ Domain
+
+External file / PostgreSQL
+          ↓ fixed raw quote contract
+ficant-data adapters → point-in-time + mapping + quality → Canonical Arrow RecordBatch
+       → deterministic Parquet + canonical Manifest
+       → Application dual-blob publication → PostgreSQL + Ceph RGW DataSnapshot
+       → required read + three-way verification → Canonical Arrow RecordBatch
 
 iteration-3 目标边界：
 Application → BondAnalyticsEngine port ← ficant-fixed-income-native adapter
@@ -138,6 +145,22 @@ iteration-3 的小范围 Phase 2A 已实现固定利率和贴现国债的现金�
 2026-07 Phase 2C 新增内部 `CgbFuturesProduct` / `FuturesDeliverableInput` / `FuturesDeliveryMeasures` / `FuturesDeliveryBasket` 语义：输入绑定 owner、FuturesContract、Bond、MarketRulePack、DataSnapshot、估值/购入/交割日期、算法/约定/ABI 版本；生产内核从债券日程推导转换因子、应计利息和持有期票息，并输出交割发票价、基差、融资成本、净基差、IRR 与 CTD。结果使用独立确定性 Arrow schema 作为内部 Artifact 发布，输入、血缘、hash 或 size 漂移均 fail closed。该类型不是外部行情事实，也不包含期现套保比例、保证金或交易所交割流程。
 
 Storage adapter 通过 Apache `object_store 0.14.1` 访问 S3，并以 Ceph RGW 20.2.2 作为受支持的服务端实现；bucket、endpoint、access key 和 secret key 仍由运行环境注入。`minio` 与 `async-std` 已从锁文件和可达依赖图移除，旧 D-026 限时接受不再是活动风险处置。开发与 CI 的单节点 Ceph 只验证 S3 兼容性、内容完整性、重启和业务闭环，不代表生产高可用拓扑；选择依据和升级条件见 [ADR-0010](adr/0010-ceph-rgw-and-apache-object-store.md)。
+
+## Phase 3A 数据接入语义
+
+`DataSource` 是带 tenant/owner 的版本化定义，当前只开放 `FileNdjson` 与 `Postgres`。领域对象只保存非敏感 connection binding 和逻辑 dataset；真实路径、数据库 URL 与凭据由 composition 注入，不进入对象、日志或错误文本。Storage 使用 `data.source_identities` 与 `data.sources` 保存 append-only identity/version，并复核授权、幂等 fingerprint 和连续版本。
+
+`ficant-data` 独占 raw source row、Instrument 映射、市场会话、点时选择、质量规则与 Canonical Arrow 编码。点时读取同时要求 `observed_at <= as_of`、`visible_at <= visible_at_cutoff` 和 `as_of <= visible_at_cutoff`；Instrument mapping 使用 source identity、外部 key 和半开有效区间解析到 exact `VersionRef`，Calendar 与 Unit 同样绑定精确版本。
+
+Canonical Quote Schema v1 固定为 16 列，schema ID 为 `ficant.market.quote.canonical.v1`，schema SHA-256 为 `e804a0becec18e51dde1be4250384ffe667cf4149c34dc3d2cfc82a206d71502`。行按 `(observed_at, instrument_id, source_record_id)` 稳定排序；任一 raw row 不满足唯一 ID、规范时间、可见性、映射、交易会话、双边存在性、bid/ask 顺序或 Decimal/Unit 规则时整批失败。进程内 RecordBatch 只有经过下述 Phase 3B 发布与验证边界后才是正式研究快照输入。
+
+## Phase 3B 不可变快照语义
+
+`ficant-data` 使用固定 Apache Arrow/Parquet Rust `59.1.0` writer，把 Canonical Quote batch 编码为一个未压缩、无 dictionary、writer version 2.0/data page v2、单 row-group Parquet 文件。writer 的 `created_by`、batch/page row limit、统计信息和 offset index 均冻结；相同输入产生完全相同 bytes、大小和 SHA-256。任何 schema metadata、列、nullable、行序或值漂移都失败关闭。
+
+`ficant.data.snapshot-manifest.v1` 是字段顺序固定、无空白且以换行结束的 UTF-8 canonical JSON。它绑定 `DataSnapshot`/tenant/owner、Canonical schema ID/hash、Parquet hash/size/row count、as-of/visible cutoff/market timezone、DataSource exact version、Instrument mapping digest、Calendar/Unit exact version、实际 Instrument exact versions、质量计数和所有 writer 参数；不包含运行时当前时间或绝对路径。
+
+Application 的 `PublishDataSnapshot` 在 I/O 前复核授权、非空 payload 和两个 domain hash，再复用 Phase 1 staging/promote、`VerifiedSnapshotProof::data` 与 `SnapshotRepository` 发布 metadata。正式消费必须先用 `VerifiedReadFacade::read_verified_snapshot` 取得两个 required payload，再由 `CanonicalSnapshotCodec::decode_verified` 校验 Snapshot/Manifest/Parquet 三方绑定、Parquet footer/schema/row group 和血缘；任一缺失、篡改或非 canonical Manifest 均不返回部分 batch。DataSource 已加入 PostgreSQL 血缘目标解析，因此 Snapshot 绑定的 source exact version 与 Calendar、Unit、实际 Instrument 一样由 storage 复核。
 
 ## Validity
 

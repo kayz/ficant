@@ -119,31 +119,42 @@ expect_fail lock-drift verify "$tmp/pass.json" "$root/packages.syft.json" "$tmp/
 
 # A first-party package is an exact package/version/purl/source member of the
 # Syft universe and carries the project's exact MIT open-source grant.
-mkdir -p "$tmp/release/internal-component"
+mkdir -p "$tmp/release/internal-component" "$tmp/release/vendor-component"
 printf 'internal source\n' >"$tmp/release/internal-component/source.txt"
+printf 'vendored source\n' >"$tmp/release/vendor-component/source.txt"
+first_cargo="$tmp/first-Cargo.lock"
+cp "$cargo_lock" "$first_cargo"
+printf '\n[[package]]\nname = "vendor-component"\nversion = "1.0.0"\n' >>"$first_cargo"
 python3 - "$root/../../../supply-chain.lock.json" "$tmp/first-supply.json" "$root/packages.syft.json" "$tmp/first-syft.json" "$tmp/unresolved.json" <<'PY'
 import json,pathlib,sys
 source,out,syft_in,syft_out,unresolved=sys.argv[1:]
 lock=json.loads(pathlib.Path(source).read_text())
 item={"name":"internal-component","version":"0.1.0","purl":"pkg:cargo/internal-component@0.1.0","ecosystem":"crates.io","source":"internal-component"}
 lock["first_party_packages"]=[item]
+vendor={"name":"vendor-component","version":"1.0.0","purl":"pkg:cargo/vendor-component@1.0.0","ecosystem":"crates.io","source":"vendor-component","license_expression":"Apache-2.0","upstream_source_locator":"https://crates.io/api/v1/crates/vendor-component/1.0.0/download","upstream_source_integrity":"sha256:"+"d"*64}
+lock["vendored_third_party_packages"]=[vendor]
 pathlib.Path(out).write_text(json.dumps(lock,sort_keys=True,separators=(",",":"))+"\n")
 syft=json.loads(pathlib.Path(syft_in).read_text()); syft["artifacts"].append({"name":item["name"],"version":item["version"],"purl":item["purl"]})
+syft["artifacts"].append({"name":vendor["name"],"version":vendor["version"],"purl":vendor["purl"]})
 pathlib.Path(syft_out).write_text(json.dumps(syft,sort_keys=True,separators=(",",":"))+"\n")
 pathlib.Path(unresolved).write_text(json.dumps([{key:item[key] for key in ("purl","ecosystem","name","version")}])+"\n")
 PY
 python3 - "$tmp/pass.json" "$tmp/blocked.json" "$tmp/unresolved.json" <<'PY'
 import json,pathlib,sys
 d=json.loads(pathlib.Path(sys.argv[1]).read_text()); d["status"]="blocked_first_party_license_decision"; d["unresolved_first_party_keys"]=json.loads(pathlib.Path(sys.argv[3]).read_text())
+d["packages"].append({"classification":"third-party","ecosystem":"crates.io","license_expression":"Apache-2.0","name":"vendor-component","purl":"pkg:cargo/vendor-component@1.0.0","source_integrity":"sha256:"+"d"*64,"source_locator":"https://crates.io/api/v1/crates/vendor-component/1.0.0/download","version":"1.0.0"})
 pathlib.Path(sys.argv[2]).write_text(json.dumps(d,sort_keys=True,separators=(",",":"))+"\n")
 PY
 python3 "$tool" finalize-first-party --inventory "$tmp/blocked.json" --syft "$tmp/first-syft.json" --release-root "$tmp/release" \
-  --cargo-lock "$cargo_lock" --uv-lock "$uv_lock" --pnpm-lock "$pnpm_lock" --supply-lock "$tmp/first-supply.json" --output "$tmp/first-final.json"
+  --cargo-lock "$first_cargo" --uv-lock "$uv_lock" --pnpm-lock "$pnpm_lock" --supply-lock "$tmp/first-supply.json" --output "$tmp/first-final.json"
 python3 "$tool" verify --inventory "$tmp/first-final.json" --syft "$tmp/first-syft.json" --release-root "$tmp/release" --require-first-party \
-  --cargo-lock "$cargo_lock" --uv-lock "$uv_lock" --pnpm-lock "$pnpm_lock" --supply-lock "$tmp/first-supply.json"
+  --cargo-lock "$first_cargo" --uv-lock "$uv_lock" --pnpm-lock "$pnpm_lock" --supply-lock "$tmp/first-supply.json"
+printf 'changed vendored source\n' >"$tmp/release/vendor-component/source.txt"
+expect_fail vendor-source-drift python3 "$tool" verify --inventory "$tmp/first-final.json" --syft "$tmp/first-syft.json" --release-root "$tmp/release" --require-first-party --cargo-lock "$first_cargo" --uv-lock "$uv_lock" --pnpm-lock "$pnpm_lock" --supply-lock "$tmp/first-supply.json"
+printf 'vendored source\n' >"$tmp/release/vendor-component/source.txt"
 printf 'changed internal source\n' >"$tmp/release/internal-component/source.txt"
 python3 "$tool" finalize-first-party --inventory "$tmp/blocked.json" --syft "$tmp/first-syft.json" --release-root "$tmp/release" \
-  --cargo-lock "$cargo_lock" --uv-lock "$uv_lock" --pnpm-lock "$pnpm_lock" --supply-lock "$tmp/first-supply.json" --output "$tmp/first-source-changed.json"
+  --cargo-lock "$first_cargo" --uv-lock "$uv_lock" --pnpm-lock "$pnpm_lock" --supply-lock "$tmp/first-supply.json" --output "$tmp/first-source-changed.json"
 python3 - "$tmp/first-final.json" "$tmp/first-source-changed.json" <<'PY'
 import json,pathlib,sys
 before,after=(json.loads(pathlib.Path(path).read_text()) for path in sys.argv[1:])
@@ -161,8 +172,8 @@ p=pathlib.Path(sys.argv[1]); d=json.loads(p.read_text()); exec(sys.argv[2],{"dat
 PY
 }
 mutate_first first-source-drift 'next(x for x in data["packages"] if x["classification"]=="first-party-open-source")["source_integrity"]="sha256:bad"'
-expect_fail first-source-drift python3 "$tool" verify --inventory "$tmp/first-source-drift.json" --syft "$tmp/first-syft.json" --release-root "$tmp/release" --require-first-party --cargo-lock "$cargo_lock" --uv-lock "$uv_lock" --pnpm-lock "$pnpm_lock" --supply-lock "$tmp/first-supply.json"
-expect_fail first-missing python3 "$tool" finalize-first-party --inventory "$tmp/blocked.json" --syft "$root/packages.syft.json" --release-root "$tmp/release" --cargo-lock "$cargo_lock" --uv-lock "$uv_lock" --pnpm-lock "$pnpm_lock" --supply-lock "$tmp/first-supply.json" --output "$tmp/missing-final.json"
+expect_fail first-source-drift python3 "$tool" verify --inventory "$tmp/first-source-drift.json" --syft "$tmp/first-syft.json" --release-root "$tmp/release" --require-first-party --cargo-lock "$first_cargo" --uv-lock "$uv_lock" --pnpm-lock "$pnpm_lock" --supply-lock "$tmp/first-supply.json"
+expect_fail first-missing python3 "$tool" finalize-first-party --inventory "$tmp/blocked.json" --syft "$root/packages.syft.json" --release-root "$tmp/release" --cargo-lock "$first_cargo" --uv-lock "$uv_lock" --pnpm-lock "$pnpm_lock" --supply-lock "$tmp/first-supply.json" --output "$tmp/missing-final.json"
 
 # Non-global licenses are allowed only by an exact purl/name/version/source match.
 python3 - "$root/../../../supply-chain.lock.json" "$tmp/scoped-supply.json" "$root/registry-metadata.json" "$tmp/scoped-metadata.json" <<'PY'

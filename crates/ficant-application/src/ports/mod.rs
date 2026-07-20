@@ -4,6 +4,7 @@ mod artifacts;
 mod blob_store;
 mod cursor;
 mod curves;
+mod data_sources;
 mod definitions;
 mod execution;
 mod facts;
@@ -28,6 +29,7 @@ pub use cursor::{AeadCursorCodec, Cursor, CursorKey};
 pub use curves::{
     CarryRollArtifactCodec, CarryRollEngine, EncodedCarryRollArtifact, YieldCurveEngine,
 };
+pub use data_sources::{DataSourceRepository, RegisterDataSource};
 pub use definitions::{
     AppendDefinitionVersion, DefinitionIdentity, DefinitionKind, DefinitionRepository,
     DefinitionValue, InstrumentDefinition, InstrumentSubtype,

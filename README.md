@@ -1127,7 +1127,7 @@ PostgreSQL 16 schema
 
 **目标：** 建立平台权威基准，供 AI 节点和研究实现比较。
 
-**当前状态（2026-07-19）：** Phase 2A 已交付固定利率/贴现国债的现金流、价格、YTM、久期、凸性与 DV01；Phase 2B 已交付区间内实际日数线性 YTM 曲线和未融资 Carry/Roll-down 分解；Phase 2C 已交付中金所 `TS`/`TF`/`T`/`TL` 合约与可交割券资格、CF、交割发票价、基差、含融资成本净基差、IRR 和 CTD；Phase 2D 已交付基于 CTD、转换因子和带符号目标 DV01 的单合约期现套保比例。四个切片均贯通独立 Oracle、确定性 Arrow 与真实 PostgreSQL/Ceph RGW 发布重放，下面的参考算法优先清单已完成。Phase 2 尚未正式退出：Python SDK 与参考结果一致性这一退出条件仍未交付；各切片边界与残余风险见 [Phase 2D iteration brief](docs/iterations/2026-07-phase2d-futures-hedge.md)。
+**当前状态（2026-07-19）：** Phase 2A 已交付固定利率/贴现国债的现金流、价格、YTM、久期、凸性与 DV01；Phase 2B 已交付区间内实际日数线性 YTM 曲线和未融资 Carry/Roll-down 分解；Phase 2C 已交付中金所 `TS`/`TF`/`T`/`TL` 合约与可交割券资格、CF、交割发票价、基差、含融资成本净基差、IRR 和 CTD；Phase 2D 已交付基于 CTD、转换因子和带符号目标 DV01 的单合约期现套保比例；Phase 2E 已通过加法式 `ficant.rates.v1.RatesAnalyticsService` 和 Python SDK 暴露五类真实生产调用。所有切片均贯通冻结合同、独立 Oracle 或 Golden Case、C++/Rust 生产路径和确定性结果验证；Python SDK 的结果与参考结果一致，因此 Phase 2 已正式退出。公共边界、最终证据与残余风险见 [Phase 2E iteration brief](docs/iterations/2026-07-phase2e-python-sdk.md)。
 
 优先实现：
 
@@ -1162,6 +1162,8 @@ PostgreSQL 16 schema
 ### Phase 3：数据适配与不可变快照
 
 **目标：** 从异构输入形成可复现研究数据。
+
+**当前状态（2026-07-20）：** Phase 3A 已交付版本化 DataSource、文件 NDJSON 与 PostgreSQL 双源接入、精确版本映射、双时间点时过滤、失败关闭的数据质量规则和固定 16 列 Canonical Quote Arrow Schema。Phase 3B 已把该 RecordBatch 编码为参数冻结的确定性 Parquet 与 canonical Manifest，并复用 Phase 1 双 blob proof 发布为真实 `DataSnapshot`。正式重读先完成 PostgreSQL metadata、Ceph RGW 两个 required payload 和内容摘要校验，再校验 Snapshot/Manifest/Parquet 三方绑定后解码；真实验收在销毁外部 source adapter、重建存储 adapter 后仍只按 Snapshot ID 得到相同 RecordBatch，外源调用次数保持一次。因此 Phase 3 已正式退出；最终证据与残余风险见 [Phase 3B iteration brief](docs/iterations/2026-07-phase3b-immutable-parquet-snapshot.md)。
 
 优先实现：
 
@@ -1373,7 +1375,7 @@ ficant/
 ├── Cargo.toml / Cargo.lock         # Rust workspace 与依赖锁
 ├── rust-toolchain.toml             # 固定 Rust 工具链
 ├── interface/                      # 唯一 Protobuf 契约源及生成配置
-│   └── proto/ficant/{core,market,research,app}/
+│   └── proto/ficant/{core,market,research,app,rates}/
 ├── crates/                         # Rust 库；各 crate 自有 src/ 与 tests/
 │   ├── ficant-domain/
 │   ├── ficant-application/
@@ -1382,6 +1384,7 @@ ficant/
 │   ├── ficant-runtime/
 │   ├── ficant-contracts/
 │   ├── ficant-contract-tests/
+│   ├── ficant-data/
 │   └── ficant-acceptance/
 ├── binaries/                       # Rust composition roots
 │   ├── ficant-bootstrap/
@@ -1394,6 +1397,7 @@ ficant/
 ├── python/                         # 节点运行时与生成契约，不含控制平面
 │   ├── node-runtime/
 │   ├── node-contracts/
+│   ├── sdk/                        # 仅通过 gRPC 使用平台能力的 Python SDK
 │   └── tests/
 ├── web-dm/                         # pnpm workspace 与全部 WebApp
 │   ├── platform-shell/
@@ -1406,7 +1410,7 @@ ficant/
 └── .github/scripts/               # CI、供应链、Compose 与发布门禁
 ```
 
-规划中的 `ficant-data`、`ficant-research`、simulation/AI/sandbox crates、`domain-packs/`、Python SDK、Rates Research Lab、CGB Futures Lab、openGauss migration 与信创部署目录，仅在对应 Phase 进入并通过设计确认后创建。根 `proto/` 永久禁止；跨边界契约只在 `interface/` 定义。
+规划中的 `ficant-research`、simulation/AI/sandbox crates、`domain-packs/`、Rates Research Lab、CGB Futures Lab、openGauss migration 与信创部署目录，仅在对应 Phase 进入并通过设计确认后创建。根 `proto/` 永久禁止；跨边界契约只在 `interface/` 定义。
 
 ---
 

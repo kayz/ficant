@@ -17,7 +17,7 @@ import urllib.error
 import urllib.request
 import zipfile
 
-GENERATOR = {"name": "ficant-license-inventory", "version": 3}
+GENERATOR = {"name": "ficant-license-inventory", "version": 4}
 FIRST_PARTY_CLASSIFICATION = "first-party-open-source"
 FIRST_PARTY_LICENSE = "MIT"
 ECOSYSTEMS = {"cargo": "crates.io", "pypi": "PyPI", "npm": "npm"}
@@ -72,7 +72,7 @@ def inventory_digest(packages):
 
 def tree_integrity(root, relative):
     base = pathlib.Path(root) / relative; entries = []
-    if not base.is_dir(): fail(f"first-party source missing: {relative}")
+    if not base.is_dir(): fail(f"release-tree source missing: {relative}")
     files = (item for item in base.rglob("*") if item.is_file())
     for path in sorted(files, key=lambda item: item.relative_to(base).as_posix().encode()):
         rel = path.relative_to(base)
@@ -105,15 +105,33 @@ def syft_keys(path):
     return sorted(keys, key=lambda item: (item["ecosystem"], item["name"], item["version"], item["purl"]))
 
 
-def cargo_sources(path):
+def vendored_policies(supply_lock):
+    supply = read_json(supply_lock)
+    policies = supply.get("vendored_third_party_packages", [])
+    if not isinstance(policies, list):
+        fail("vendored third-party policy is invalid")
+    return policies
+
+
+def cargo_sources(path, supply_lock):
     data = tomllib.loads(pathlib.Path(path).read_text(encoding="utf-8"))
     result = {}
+    local = set()
     for package in data.get("package", []):
         checksum = package.get("checksum")
         if checksum:
             result[(package["name"], package["version"])] = {
                 "integrity": f"sha256:{checksum}",
                 "locator": f"https://crates.io/api/v1/crates/{urllib.parse.quote(package['name'], safe='')}/{package['version']}/download",
+            }
+        else:
+            local.add((package["name"], package["version"]))
+    for policy in vendored_policies(supply_lock):
+        key = (policy.get("name"), policy.get("version"))
+        if key in local:
+            result[key] = {
+                "integrity": policy.get("upstream_source_integrity"),
+                "locator": policy.get("upstream_source_locator"),
             }
     return result
 
@@ -163,9 +181,9 @@ def pnpm_sources(path):
     return result
 
 
-def sources(cargo_lock, uv_lock, pnpm_lock):
+def sources(cargo_lock, uv_lock, pnpm_lock, supply_lock):
     return {
-        "crates.io": cargo_sources(cargo_lock),
+        "crates.io": cargo_sources(cargo_lock, supply_lock),
         "PyPI": uv_sources(uv_lock),
         "npm": pnpm_sources(pnpm_lock),
     }
@@ -398,11 +416,11 @@ def header(keys, packages, cargo_lock, uv_lock, pnpm_lock, supply_lock):
     lock_hashes = {"Cargo.lock": native_lf_sha256(cargo_lock), "python/uv.lock": native_lf_sha256(uv_lock), "web-dm/pnpm-lock.yaml": native_lf_sha256(pnpm_lock)}
     supply = read_json(supply_lock)
     syft = next(item for item in supply["tools"] if item["name"] == "syft")
-    first_party_sources = sorted([
+    release_tree_sources = sorted([
         {name: package[name] for name in ("purl", "source_locator", "source_integrity")}
-        for package in packages if package.get("classification") == FIRST_PARTY_CLASSIFICATION
+        for package in packages if str(package.get("source_locator", "")).startswith("release-tree:")
     ], key=lambda item: item["purl"])
-    input_digest = hashlib.sha256(canonical({"locks": lock_hashes, "package_keys": keys, "first_party_sources": first_party_sources})).hexdigest()
+    input_digest = hashlib.sha256(canonical({"locks": lock_hashes, "package_keys": keys, "release_tree_sources": release_tree_sources})).hexdigest()
     return {
         "schema_version": 1,
         "generator": GENERATOR,
@@ -415,7 +433,7 @@ def header(keys, packages, cargo_lock, uv_lock, pnpm_lock, supply_lock):
 
 def generate(args):
     keys = syft_keys(args.syft)
-    source_maps = sources(args.cargo_lock, args.uv_lock, args.pnpm_lock)
+    source_maps = sources(args.cargo_lock, args.uv_lock, args.pnpm_lock, args.supply_lock)
     fixed_metadata = read_json(args.metadata) if args.metadata else None
     cache_root = pathlib.Path(args.cache_dir) if args.cache_dir else None
     if cache_root: cache_root.mkdir(parents=True, exist_ok=True)
@@ -480,6 +498,15 @@ def finalize_first_party(args):
         item["license_expression"] = normalize_license(item.get("license_expression"), item.get("purl", "package"))
         item["classification"] = "third-party"
         packages.append(item)
+    vendored = {item["purl"]: item for item in supply.get("vendored_third_party_packages", [])}
+    for package in packages:
+        policy_item = vendored.get(package["purl"])
+        if policy_item:
+            package.update({
+                "license_expression": policy_item["license_expression"],
+                "source_locator": f"release-tree:{policy_item['source']}",
+                "source_integrity": tree_integrity(args.release_root, policy_item["source"]),
+            })
     for item in policy:
         package = {name: item[name] for name in ("purl", "ecosystem", "name", "version")}
         package.update({"classification": FIRST_PARTY_CLASSIFICATION, "license_expression": FIRST_PARTY_LICENSE, "source_locator": f"release-tree:{item['source']}", "source_integrity": tree_integrity(args.release_root, item["source"])})
@@ -512,8 +539,9 @@ def verify(args):
         fail("inventory header or digest drift")
     supply = read_json(args.supply_lock)
     allowlist = set(supply["license_allowlist"])
-    source_maps = sources(args.cargo_lock, args.uv_lock, args.pnpm_lock)
+    source_maps = sources(args.cargo_lock, args.uv_lock, args.pnpm_lock, args.supply_lock)
     first_policy = {item["purl"]: item for item in supply.get("first_party_packages", [])}
+    vendored_policy = {item["purl"]: item for item in supply.get("vendored_third_party_packages", [])}
     if args.require_first_party:
         if document.get("status") != "complete" or document.get("first_party_packages") != supply.get("first_party_packages"):
             fail("first-party policy binding missing")
@@ -524,6 +552,13 @@ def verify(args):
                 fail(f"first-party package binding mismatch: {package.get('purl')}")
             continue
         if args.require_first_party and package.get("classification") != "third-party": fail(f"third-party classification missing: {package.get('purl')}")
+        vendored = vendored_policy.get(package.get("purl"))
+        if vendored:
+            if (not args.release_root or package.get("license_expression") != vendored["license_expression"]
+                    or package.get("source_locator") != f"release-tree:{vendored['source']}"
+                    or package.get("source_integrity") != tree_integrity(args.release_root, vendored["source"])):
+                fail(f"vendored third-party package binding mismatch: {package.get('purl')}")
+            continue
         locked = source_for(package, source_maps)
         if not source_matches(package, package.get("source_locator"), package.get("source_integrity"), locked):
             fail(f"source integrity mismatch: {package.get('purl')}")

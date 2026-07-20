@@ -44,8 +44,34 @@ for document in documents:
         print("reproducibility: manifest has no artifacts", file=sys.stderr)
         raise SystemExit(2)
 if documents[0]["artifacts"] != documents[1]["artifacts"]:
-    print("reproducibility: artifact hash mismatch", file=sys.stderr)
+    names = sorted(set(documents[0]["artifacts"]) | set(documents[1]["artifacts"]))
+    for name in names:
+        left = documents[0]["artifacts"].get(name, "<missing>")
+        right = documents[1]["artifacts"].get(name, "<missing>")
+        if left != right:
+            print(
+                f"reproducibility: artifact hash mismatch: {name}: a={left} b={right}",
+                file=sys.stderr,
+            )
     raise SystemExit(1)
+PY
+}
+
+normalize_python_freeze() {
+  [[ $# -eq 3 ]] || die '--normalize-python-freeze requires source-root raw-freeze output-freeze'
+  python3 - "$1" "$2" "$3" <<'PY'
+import pathlib
+import sys
+
+source_root = pathlib.Path(sys.argv[1]).resolve().as_uri()
+raw_path = pathlib.Path(sys.argv[2])
+output_path = pathlib.Path(sys.argv[3])
+lines = [
+    line.replace(source_root, "file://<SOURCE_ROOT>")
+    for line in raw_path.read_text(encoding="utf-8").splitlines()
+    if line
+]
+output_path.write_text("\n".join(sorted(lines)) + "\n", encoding="utf-8")
 PY
 }
 
@@ -196,6 +222,11 @@ if [[ ${1:-} == '--verify-manifests' ]]; then
   verify_manifests "$@"
   exit $?
 fi
+if [[ ${1:-} == '--normalize-python-freeze' ]]; then
+  shift
+  normalize_python_freeze "$@"
+  exit $?
+fi
 if [[ ${1:-} == '--python-build-manifest' ]]; then
   shift
   python_build_manifest "$@"
@@ -237,7 +268,14 @@ build_copy() {
   local tag=$3
   export CARGO_TARGET_DIR="$root/build/rust"
   rust_build() { (cd "$root" && cargo build --workspace --all-targets --locked --release); }
-  python_environment() { (cd "$root/python" && uv sync --frozen --dev && uv pip freeze --python .venv/bin/python | LC_ALL=C sort >"$root/build/python-freeze.txt"); }
+  python_environment() {
+    (cd "$root/python" && \
+      uv sync --frozen --dev && \
+      uv pip freeze --python .venv/bin/python >"$root/build/python-freeze.raw.txt" && \
+      normalize_python_freeze "$root/python" "$root/build/python-freeze.raw.txt" "$root/build/python-freeze.txt" && \
+      rm "$root/build/python-freeze.raw.txt"
+    )
+  }
   cpp_configure() { cmake -S "$root/cpp/fixed-income-kernel" -B "$root/build/cpp" -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_BUILD_TYPE=Release; }
   cpp_build() { cmake --build "$root/build/cpp" --parallel; }
   web_build() { (cd "$root/web-dm" && corepack pnpm@10.12.4 install --frozen-lockfile --store-dir "$tmp/pnpm-store-$tag" && corepack pnpm@10.12.4 build); }

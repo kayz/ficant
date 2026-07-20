@@ -1,5 +1,23 @@
 # 交付发布说明
 
+## Phase 3B 不可变 Parquet Snapshot 候选（2026-07-20）
+
+- 新增确定性 Canonical Quote Parquet codec 与 `ficant.data.snapshot-manifest.v1` canonical JSON；固定 Arrow/Parquet `59.1.0`、单 row group、无压缩、无 dictionary、writer/data page v2，并把 schema、hash/size/rows、点时窗口、DataSource/映射/Calendar/Unit/Instrument 血缘、质量与 writer 参数完整绑定。
+- 新增 application 双 payload 发布用例，复用 Phase 1 `BlobStore`、`VerifiedSnapshotProof::data`、`SnapshotRepository` 和 required read，不增加第二套 metadata、object key 或完整性语义。缺失、篡改、非 canonical Manifest、Parquet 元数据或血缘漂移全部失败关闭。
+- 真实 PostgreSQL 16 + Ceph RGW 验收证明外源只调用一次；销毁 `RawQuoteSource`、重建 storage adapters 后，只按 `DataSnapshot` ID 仍得到相同 Canonical RecordBatch。Phase 3 因而正式退出；最终命令、测试数量和残余风险以 [`docs/iterations/2026-07-phase3b-immutable-parquet-snapshot.md`](../iterations/2026-07-phase3b-immutable-parquet-snapshot.md) 为准。
+- 供应链一方包集合新增 `ficant-data`，同步修正 Phase 2E 的 `ficant-sdk` 包身份，并由冻结 Syft 1.46.0 重建 640 包许可证清单。`parquet 59.1.0` 的可达 `paste 1.0.15` 无维护 advisory 通过官方 crates.io 源码加 Apache 已合并提交 `bc4e672` 的最小 vendoring 消除；上游制品、补丁 blob、最终发布树和退出条件均被门禁锁定，不新增风险忽略或 Git 运行时依赖。
+
+## Phase 3A 双源 Canonical Quote 接入候选（2026-07-19）
+
+- 新增版本化 DataSource 注册、文件 NDJSON 与 PostgreSQL 两种 adapter，并将同一中国国债双边净价输入转换为固定 16 列 Canonical Arrow Schema；路径、数据库 URL 与凭据不进入领域对象或错误文本。
+- 接入边界对 Instrument/Calendar/Unit 精确版本、observed/visible 双时间点时选择、交易会话、Decimal 和双边报价质量失败关闭；任一坏行使整批失败。真实 PostgreSQL 双源验收证明 schema hash、metadata、稳定排序和业务列一致。
+- 本候选不写 Parquet、不发布 Snapshot/Manifest，也不宣称实验已脱离外部数据源；Phase 3B 将单独交付该退出条件。最终命令、测试数量和残余风险以 [`docs/iterations/2026-07-phase3a-canonical-data-ingestion.md`](../iterations/2026-07-phase3a-canonical-data-ingestion.md) 为准。
+
+## Phase 2E Python SDK 一致性候选（2026-07-19）
+
+- 新增 `ficant.rates.v1.RatesAnalyticsService` 与可安装 `ficant-sdk`，通过五个认证后一元 RPC 调用 Phase 2A–2D 的真实 Rust/C++ 生产路径；Python 不重写数值算法，不直连 PostgreSQL、Ceph RGW 或 C ABI。
+- 真实服务进程上的跨语言 Golden Case 覆盖现券、曲线/Carry-Roll-down、交割篮子/CTD 与套保，结果与冻结参考一致，Phase 2 正式退出。完整证据以 [`docs/iterations/2026-07-phase2e-python-sdk.md`](../iterations/2026-07-phase2e-python-sdk.md) 为准。
+
 ## Phase 2D 国债期货 DV01 套保比例候选（2026-07-19）
 
 - 新增基于带符号目标 DV01、CTD 每百元 DV01 与转换因子的单合约套保参考实现，输出连续合约数、推荐整数手数、剩余 DV01 与套保有效性；固定中金所 `TS`、`TF`、`T`、`TL` 100 万元合约面值和稳定整数平局规则。
@@ -30,7 +48,7 @@
 - Human 已授权第一个 GitHub `test` Environment 和 Linux 测试机发布链路；这是一项 Iteration 3 关闭后的 Delivery 活动，不恢复业务迭代。
 - 发布对象仅为 `ficant-server`、`ficant-worker`、`ficant-web` 三个 Linux 镜像。精确 `cargo tree --locked -p <binary>` 依赖闭包均排除 `minio` 和 `async-std`。
 - GitHub Runner 构建并推送 GHCR `sha-<commit>` 镜像、SBOM 和 provenance，Trivy 对可修复 HIGH/CRITICAL 运行时漏洞 fail-closed。
-- Linux 测试机不编译源码，只执行固定 PostgreSQL 镜像、八项版本化 migration、SHA 镜像拉取、Compose、健康和冒烟检查。
+- Linux 测试机不编译源码，只执行固定 PostgreSQL 镜像、九项版本化 migration、SHA 镜像拉取、Compose、健康和冒烟检查。
 - MinIO、对象存储 adapter、完整业务 UAT 和生产发布不在本次授权内。`RUSTSEC-2025-0052` 的源码接受范围不扩展到对象存储运行时；在任何对象存储运行时或 2026-10-13（取较早者）重新评估。
 - 自动回滚只切换已构建镜像；数据库 migration 不自动向下回滚，继续要求扩展—兼容—收缩。
 
