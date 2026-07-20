@@ -83,8 +83,8 @@ check_ci_recovery_contracts() {
   local business
   business=$(workflow_job "$candidate" business-loop)
   grep -Fq 'cargo test --locked -p ficant-data --test snapshot_publication_sit -- --test-threads=1' <<<"$business" || return 1
-  grep -Fq 'ref: ${{ github.event.pull_request.head.sha || github.sha }}' <<<"$supply" || return 1
-  grep -Fq 'FICANT_TRUSTED_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}' <<<"$supply" || return 1
+  grep -Fq 'ref: ${{ github.sha }}' <<<"$supply" || return 1
+  grep -Fq 'FICANT_TRUSTED_BASE: ${{ github.event.before }}' <<<"$supply" || return 1
   grep -Fq 'FICANT_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}' <<<"$supply" || return 1
   grep -Fq 'FICANT_EVENT_NAME: ${{ github.event_name }}' <<<"$supply" || return 1
   grep -Fq 'FICANT_REF_NAME: ${{ github.ref_name }}' <<<"$supply" || return 1
@@ -92,6 +92,46 @@ check_ci_recovery_contracts() {
   grep -Fq 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' <<<"$supply" || return 1
   grep -Fq 'if-no-files-found: error' <<<"$supply" || return 1
   [[ $(grep -Fc '${{ runner.temp }}/ficant-supply-evidence' <<<"$supply") -ge 2 ]]
+}
+
+check_version_trigger_contract() {
+  local candidate=$1
+  "$python" - "$candidate" <<'PY'
+import pathlib
+import re
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+header, separator, jobs = text.partition("\njobs:\n")
+if not separator:
+    raise SystemExit(1)
+if not re.search(r'(?m)^on:\n  push:\n    tags:\n      - "v\*"\n$', header):
+    raise SystemExit(1)
+if "pull_request:" in header or "workflow_dispatch:" in header:
+    raise SystemExit(1)
+if "cancel-in-progress: false" not in header:
+    raise SystemExit(1)
+
+authorize = re.search(r"(?ms)^  authorize-version:\n(.*?)(?=^  [a-z0-9-]+:\n|\Z)", jobs)
+if authorize is None:
+    raise SystemExit(1)
+for marker in (
+    '[[ "${{ github.ref_type }}" == tag ]]',
+    '^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$',
+    '[[ "$GITHUB_SHA" == $(git rev-parse "refs/tags/$version^{commit}") ]]',
+    '[[ "$GITHUB_SHA" == $(git rev-parse origin/main) ]]',
+):
+    if marker not in authorize.group(0):
+        raise SystemExit(1)
+
+for job in (
+    "repo-policy", "contract", "rust", "python", "cpp", "web",
+    "migration", "business-loop", "supply-chain", "reproducibility",
+):
+    match = re.search(rf"(?ms)^  {re.escape(job)}:\n(.*?)(?=^  [a-z0-9-]+:\n|\Z)", jobs)
+    if match is None or not re.search(r"(?m)^    needs: authorize-version$", match.group(0)):
+        raise SystemExit(1)
+PY
 }
 
 check_contract_node_toolchain() {
@@ -141,6 +181,10 @@ expect_fail "empty Chinese document" env LC_ALL=C.UTF-8 "$gate" --check-chinese 
 expect_fail "invalid UTF-8" env LC_ALL=C.UTF-8 "$gate" --check-chinese "$tmp/invalid-utf8.md"
 
 "$gate" --check-ci "$workflow"
+check_version_trigger_contract "$workflow" || {
+  printf 'repo-policy-tests: full CI must require an immutable version tag on current main\n' >&2
+  exit 1
+}
 check_ci_recovery_contracts "$workflow" || {
   printf 'repo-policy-tests: CI recovery ownership/evidence contract missing\n' >&2
   exit 1
@@ -174,6 +218,27 @@ for name, (old, new) in mutations.items():
 PY
 for candidate in "$tmp"/ci-recovery/*.yml; do
   expect_fail "CI recovery mutation $(basename "$candidate")" check_ci_recovery_contracts "$candidate"
+done
+
+"$python" - "$workflow" "$tmp/version-trigger" <<'PY'
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+root = pathlib.Path(sys.argv[2])
+root.mkdir()
+mutations = {
+    "pull-request-trigger.yml": ('      - "v*"', '      - "v*"\n  pull_request:'),
+    "movable-main-tag.yml": ('          [[ "$GITHUB_SHA" == $(git rev-parse origin/main) ]]', '          true'),
+    "unguarded-job.yml": ('  repo-policy:\n    needs: authorize-version', '  repo-policy:'),
+}
+for name, (old, new) in mutations.items():
+    if old not in source:
+        raise SystemExit(f"missing version trigger mutation marker: {old}")
+    (root / name).write_text(source.replace(old, new, 1), encoding="utf-8")
+PY
+for candidate in "$tmp"/version-trigger/*.yml; do
+  expect_fail "version trigger mutation $(basename "$candidate")" check_version_trigger_contract "$candidate"
 done
 
 "$python" - "$workflow" "$toolchain_lock" "$tmp/node-toolchain" <<'PY'

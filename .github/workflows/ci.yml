@@ -2,17 +2,38 @@ name: ci
 
 on:
   push:
-  pull_request:
+    tags:
+      - "v*"
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  authorize-version:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Authorize exact version tag on current main
+        shell: bash
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "${{ github.ref_type }}" == tag ]]
+          version=$VERSION
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]
+          git fetch origin main --tags --force
+          [[ "$GITHUB_SHA" == $(git rev-parse "refs/tags/$version^{commit}") ]]
+          [[ "$GITHUB_SHA" == $(git rev-parse origin/main) ]]
+
   repo-policy:
+    needs: authorize-version
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -23,6 +44,7 @@ jobs:
       - run: python3 .github/scripts/tests/test_compose_security_gate.py -v
 
   contract:
+    needs: authorize-version
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -54,6 +76,7 @@ jobs:
       - run: bash .github/scripts/verify-contract-generation.sh
 
   rust:
+    needs: authorize-version
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -68,6 +91,7 @@ jobs:
           sh -ec 'cargo build --workspace --all-targets --locked && cargo test --workspace --locked --exclude ficant-acceptance --exclude ficant-data --exclude ficant-storage --exclude ficant-contract-tests && cargo test --locked -p ficant-storage --lib && cargo test --locked -p ficant-data --test canonical_ingestion && cargo test --locked -p ficant-data --test snapshot_codec'
 
   python:
+    needs: authorize-version
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -77,6 +101,7 @@ jobs:
       - run: docker run --rm ficant-python-node-runtime:ci
 
   cpp:
+    needs: authorize-version
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -101,6 +126,7 @@ jobs:
       - run: ctest --test-dir build/cpp --output-on-failure
 
   web:
+    needs: authorize-version
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -146,6 +172,7 @@ jobs:
             sh -ec 'corepack enable && corepack prepare pnpm@10.12.4 --activate && corepack pnpm@10.12.4 install --frozen-lockfile && pnpm typecheck && pnpm build && pnpm test && pnpm exec playwright install --with-deps chromium && pnpm test:e2e && pnpm test:e2e:grpc'
 
   migration:
+    needs: authorize-version
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -175,6 +202,7 @@ jobs:
             sh -ec 'cargo test --locked -p ficant-storage --test migration_acceptance -- --test-threads=1 && cargo test --locked -p ficant-storage --test data_source_registry_sit -- --test-threads=1 && cargo test --locked -p ficant-data --test dual_source_sit -- --test-threads=1'
 
   business-loop:
+    needs: authorize-version
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -240,16 +268,17 @@ jobs:
             sh -ec 'cargo test --locked -p ficant-acceptance --test phase1_business_loop -- --test-threads=1 && cargo test --locked -p ficant-acceptance --test negative_invariants -- --test-threads=1 && cargo test --locked -p ficant-data --test snapshot_publication_sit -- --test-threads=1'
 
   supply-chain:
+    needs: authorize-version
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
       - run: bash .github/scripts/verify-supply-chain.sh
         env:
           FICANT_GATE_OUTPUT_DIR: ${{ runner.temp }}/ficant-supply-evidence
-          FICANT_TRUSTED_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          FICANT_TRUSTED_BASE: ${{ github.event.before }}
           FICANT_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           FICANT_EVENT_NAME: ${{ github.event_name }}
           FICANT_REF_NAME: ${{ github.ref_name }}
@@ -261,6 +290,7 @@ jobs:
           if-no-files-found: error
 
   reproducibility:
+    needs: authorize-version
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

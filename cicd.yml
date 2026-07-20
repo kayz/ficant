@@ -7,6 +7,8 @@
   },
   "ci": {
     "required_workflow": "ci",
+    "trigger": "version-tag",
+    "version_tag_pattern": "v*",
     "cancel_outdated_runs": true
   },
   "images": [
@@ -24,14 +26,18 @@
       "name": "ficant-web",
       "dockerfile": "deploy/dev/RustService.Dockerfile",
       "build_arg": "ficant-web"
+    },
+    {
+      "name": "ficant-ui",
+      "dockerfile": "deploy/test/FicantUi.Dockerfile",
+      "build_arg": null
     }
   ],
   "deploy": {
     "environment": "test",
-    "trigger": "main-ci-success",
+    "trigger": "tag",
     "remote_root": "/srv/ficant-test",
     "compose_file": "deploy/test/compose.test.yml",
     "automatic_rollback": true
   }
 }
-

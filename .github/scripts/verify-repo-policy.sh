@@ -162,13 +162,13 @@ validate_ci() {
     return
   }
 
-  local expected=(business-loop contract cpp migration python repo-policy reproducibility rust supply-chain web)
+  local expected=(authorize-version business-loop contract cpp migration python repo-policy reproducibility rust supply-chain web)
   mapfile -t actual < <(awk '
     $0 == "jobs:" { inside=1; next }
     inside && $0 ~ /^  [a-z0-9-]+:$/ { value=$0; sub(/^  /, "", value); sub(/:$/, "", value); print value }
   ' "$workflow" | LC_ALL=C sort)
   if [[ ${actual[*]} != "${expected[*]}" ]]; then
-    record_failure "CI jobs must be exactly: ${expected[*]}"
+    record_failure "CI jobs must be the version authorization job plus exactly ten gates: ${expected[*]}"
   fi
 
   while IFS= read -r line; do
@@ -186,7 +186,7 @@ validate_ci() {
   local checkout_count depth_count
   checkout_count=$(grep -Ec 'uses:[[:space:]]*actions/checkout@' "$workflow" || true)
   depth_count=$(grep -Ec 'fetch-depth:[[:space:]]*0([[:space:]#]|$)' "$workflow" || true)
-  [[ $checkout_count -eq 10 && $depth_count -eq 10 ]] || record_failure "all ten CI jobs require checkout with fetch-depth: 0"
+  [[ $checkout_count -eq 11 && $depth_count -eq 11 ]] || record_failure "version authorization and all ten CI gates require checkout with fetch-depth: 0"
 
   grep -Eq '^  compose-security:$' "$workflow" && record_failure "compose-security must not be an independent CI job"
   grep -Eq 'docker compose .*\b(up|down|ps|start|stop|restart)\b|docker inspect' "$workflow" && record_failure "live Compose/runtime inspection is forbidden in CI"
@@ -213,8 +213,10 @@ validate_ci() {
   require_job_marker "$workflow" migration 'migration_acceptance'
   require_job_marker "$workflow" business-loop 'phase1_business_loop'
   require_job_marker "$workflow" business-loop 'negative_invariants'
-  require_job_marker "$workflow" supply-chain 'ref: ${{ github.event.pull_request.head.sha || github.sha }}'
-  require_job_marker "$workflow" supply-chain 'FICANT_TRUSTED_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}'
+  require_job_marker "$workflow" authorize-version '[[ "${{ github.ref_type }}" == tag ]]'
+  require_job_marker "$workflow" authorize-version '[[ "$GITHUB_SHA" == $(git rev-parse origin/main) ]]'
+  require_job_marker "$workflow" supply-chain 'ref: ${{ github.sha }}'
+  require_job_marker "$workflow" supply-chain 'FICANT_TRUSTED_BASE: ${{ github.event.before }}'
   require_job_marker "$workflow" supply-chain 'FICANT_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}'
   require_job_marker "$workflow" supply-chain 'FICANT_EVENT_NAME: ${{ github.event_name }}'
   require_job_marker "$workflow" supply-chain 'FICANT_REF_NAME: ${{ github.ref_name }}'
