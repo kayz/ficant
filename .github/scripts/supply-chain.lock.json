@@ -124,6 +124,23 @@
           "source": "binaries/ficant-worker"
       }
   ],
+  "vendored_third_party_packages": [
+    {
+      "purl": "pkg:cargo/parquet@59.1.0",
+      "ecosystem": "crates.io",
+      "name": "parquet",
+      "version": "59.1.0",
+      "source": "crates/vendor/parquet-59.1.0",
+      "license_expression": "Apache-2.0",
+      "upstream_source_locator": "https://crates.io/api/v1/crates/parquet/59.1.0/download",
+      "upstream_source_integrity": "sha256:5302d4da74d6596a1f11f9928767995b53bca657cbeea1e4e8c5074f8a1157dd",
+      "upstream_patch_repository": "https://github.com/apache/arrow-rs",
+      "upstream_patch_commit": "bc4e672607f00587349b1308f6cf717fc6518848",
+      "upstream_patch_file": "src/arrow/arrow_reader/statistics.rs",
+      "upstream_patch_blob_sha1": "c096448b6b9a6820ae9fea904916629cebdca2a5",
+      "exit_condition": "replace with the first crates.io parquet release that contains upstream patch commit bc4e672607f00587349b1308f6cf717fc6518848"
+    }
+  ],
   "license_scoped_exceptions": [
     {
       "purl": "pkg:cargo/webpki-roots@0.26.11",

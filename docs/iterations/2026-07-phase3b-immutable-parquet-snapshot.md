@@ -28,7 +28,7 @@
 
 - `interface/` 与 PostgreSQL schema 不变。`ficant-data` 新增内部 `SnapshotManifest`、确定性 Parquet codec、snapshot package builder 和 verified snapshot decoder；它们不是跨进程 API。
 - `ficant-application` 新增通用的 DataSnapshot 双 payload publication use case，只依赖既有 `BlobStore` 与 `SnapshotRepository` ports，不依赖 Arrow、Parquet、SQLx 或 Ceph 实现。
-- 根依赖新增精确 `parquet = 59.1.0` 与已锁定 `serde = 1.0.228`；普通开发门禁保持 `--offline --locked`，不加入联网安装行为。
+- 根依赖新增精确 `parquet = 59.1.0` 与已锁定 `serde = 1.0.228`；因该版本经生产可达路径引入无维护且无修复版本的 `paste 1.0.15`，Parquet 改为 `crates/vendor/parquet-59.1.0` 的本地精确来源。vendored 树以官方 crates.io 制品 `sha256:5302d4...1157dd` 为基线，只应用 Apache Arrow 已合并提交 `bc4e672` 的移除 `paste` 补丁，并由补丁 blob 与发布树摘要双重失败关闭；普通开发门禁保持 `--offline --locked`，不加入 Git 仓库或联网安装行为。
 
 ## 需 Human 决策
 
@@ -42,11 +42,14 @@
 - `./scripts/check.ps1`：exit 0；Rust fmt/strict Clippy/workspace build、generated contract 12/12、C++ CTest 8/8、Phase 2C/2D 独立 Oracle 各 3/3、Phase 2E live SDK 1/1、Phase 3A 5/5、Phase 3B 2/2、Web 29/29，其余非环境回归全部通过。
 - `./scripts/check.ps1 -IncludeIntegration`：exit 0；在同一 disposable PostgreSQL 16 + Ceph RGW 上，migration 4/4、Phase 1 业务闭环 1/1、负向不变量 13/13、Phase 2B/2C/2D 发布重放各 1/1、Phase 3A registry 与双源各 1/1、Phase 3B codec 2/2 与脱离外源发布重读 1/1。统一入口曾发现旧 Phase 1 acceptance 清理未删除 Phase 3A 新增 `data` schema；最终候选已显式清理并通过上述完整串行回归。
 - `bash .github/scripts/tests/run-repo-policy-tests.sh`：exit 0；中文、路径、CI 合同和恢复 fixture 全部通过，CI 已显式运行 Phase 3B codec 与真实存储验收。
-- 冻结 Syft 1.46.0 扫描发布树得到 641 个 Cargo/PyPI/npm 包，其中一方包 16 个；`verify-license-inventory.py verify --require-first-party --require-native-lf` exit 0，inventory digest 为 `7361f7134f4779ac81cf81b12f132f7a7903554a6abfac4c7bb73d3e504151ac`。
+- `cargo test --offline --locked -p ficant-data --test snapshot_codec`：exit 0，2/2；Apache 上游补丁后的 Parquet codec 保持字节确定性、精确重读与篡改失败关闭。
+- `bash .github/scripts/tests/run-gates-tests.sh`：exit 0；新增 vendored 第三方来源/最终树绑定与源码漂移负向 fixture，既有门禁 fixture 全部通过。
+- 冻结 Syft 1.46.0 扫描发布树得到 640 个 Cargo/PyPI/npm 包，其中一方包 16 个；`paste` 为 0，`parquet 59.1.0` 恰好一项且标记为 Apache-2.0 第三方发布树来源。`verify-license-inventory.py verify --require-first-party` exit 0，inventory digest 为 `dff34ad7877eeb715a7599f03db9fae856946851cd94a5c683d99293eb4dde5b`。
 
 ## 残余风险
 
 - 首版只交付单个 Canonical Quote batch 的单文件快照，不承诺大规模分区、压缩比、谓词下推或 schema evolution；真实验收只覆盖小型固定数据集，不代表生产吞吐与容量结论。
 - Parquet writer 参数和库版本属于字节确定性合同；未来升级 Arrow/Parquet、开启压缩或分区必须作为显式兼容迭代，不能静默改写历史快照。
+- 当前 vendoring 是针对无修复 `paste` advisory 的临时供应链措施；退出条件是 crates.io 上首个包含 Apache 提交 `bc4e672607f00587349b1308f6cf717fc6518848` 的 Parquet 正式版本。升级时必须重新跑字节兼容验收并删除 vendored 树，不能长期形成私有 fork。
 - Phase 4 ResearchGraph 尚未实现；本迭代冻结并验证的是它唯一允许使用的 verified Canonical Snapshot 解码边界，不宣称已有完整实验运行时或业务 UI。
-- 本地 OSV cache 仍是 2026-07-16 旧快照，无法离线重跑锁定的 2026-07-19 全量漏洞数据库；本地未把旧快照冒充新快照。许可证/包集合已按锁文件独立验证，GitHub required `supply-chain` job 仍须使用锁定 release snapshot 给出正式候选结果。
+- 本地许可证/包集合已按锁文件独立验证；锁定 OSV release snapshot 的正式结论仍以更新候选的 GitHub required `supply-chain` job 为准，本地结果不冒充远端 CI。

@@ -5,7 +5,7 @@
 - 新增确定性 Canonical Quote Parquet codec 与 `ficant.data.snapshot-manifest.v1` canonical JSON；固定 Arrow/Parquet `59.1.0`、单 row group、无压缩、无 dictionary、writer/data page v2，并把 schema、hash/size/rows、点时窗口、DataSource/映射/Calendar/Unit/Instrument 血缘、质量与 writer 参数完整绑定。
 - 新增 application 双 payload 发布用例，复用 Phase 1 `BlobStore`、`VerifiedSnapshotProof::data`、`SnapshotRepository` 和 required read，不增加第二套 metadata、object key 或完整性语义。缺失、篡改、非 canonical Manifest、Parquet 元数据或血缘漂移全部失败关闭。
 - 真实 PostgreSQL 16 + Ceph RGW 验收证明外源只调用一次；销毁 `RawQuoteSource`、重建 storage adapters 后，只按 `DataSnapshot` ID 仍得到相同 Canonical RecordBatch。Phase 3 因而正式退出；最终命令、测试数量和残余风险以 [`docs/iterations/2026-07-phase3b-immutable-parquet-snapshot.md`](../iterations/2026-07-phase3b-immutable-parquet-snapshot.md) 为准。
-- 供应链一方包集合新增 `ficant-data`，同步修正 Phase 2E 的 `ficant-sdk` 包身份，并由冻结 Syft 1.46.0 重建 641 包许可证清单；新增 Parquet、Python SDK 构建/运行依赖均来自锁文件且许可证在冻结允许范围内。
+- 供应链一方包集合新增 `ficant-data`，同步修正 Phase 2E 的 `ficant-sdk` 包身份，并由冻结 Syft 1.46.0 重建 640 包许可证清单。`parquet 59.1.0` 的可达 `paste 1.0.15` 无维护 advisory 通过官方 crates.io 源码加 Apache 已合并提交 `bc4e672` 的最小 vendoring 消除；上游制品、补丁 blob、最终发布树和退出条件均被门禁锁定，不新增风险忽略或 Git 运行时依赖。
 
 ## Phase 3A 双源 Canonical Quote 接入候选（2026-07-19）
 

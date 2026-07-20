@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["binaries/*", "crates/*"]
+exclude = ["crates/vendor"]
 
 [workspace.package]
 edition = "2024"
@@ -39,5 +40,5 @@ tonic-web = "=0.14.6"
 tower-layer = "=0.3.3"
 ulid = { version = "=1.2.1", default-features = false }
 object_store = { version = "=0.14.1", default-features = false, features = ["aws"] }
-parquet = { version = "=59.1.0", default-features = false, features = ["arrow"] }
+parquet = { path = "crates/vendor/parquet-59.1.0", version = "=59.1.0", default-features = false, features = ["arrow"] }
 serde = { version = "=1.0.228", features = ["derive"] }
