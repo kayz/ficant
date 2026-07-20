@@ -2,16 +2,16 @@
 
 ## 范围
 
-本合同覆盖 `ficant` 的第一个自动化测试发布：GitHub main CI 成功、GHCR 不可变镜像、Linux 测试机 Docker Compose、PostgreSQL migration、健康检查、冒烟测试、部署记录和镜像回滚。
+本合同覆盖 `ficant` 的自动化版本测试交付：Human 版本 tag 授权、GitHub 版本 CI、GHCR 不可变镜像、Linux 测试机 Docker Compose、PostgreSQL migration、健康检查、冒烟测试、部署记录和镜像回滚。
 
 它不授权生产发布，不宣称完整业务 UAT，也不启用任何对象存储 adapter。
 
 ## 触发与制品
 
-- 自动触发：默认分支 `main` 的 `ci` workflow 因 push 成功结束。
-- 手动触发：`release-test` workflow dispatch，只允许 main 可达的精确 Commit。
-- 镜像：`ghcr.io/kayz/ficant-{server,worker,web}:sha-<40位CommitSHA>`。
-- 可变 `test-latest` 仅用于人类浏览；Compose 必须使用 SHA 标签。
+- 自动触发：Human 创建符合版本格式、指向当前 `main` 精确提交的不可变 `v*` tag；普通 branch push、Pull Request 和 `main` 合并不运行完整 GitHub CI。
+- 手动重试：`release-test` workflow dispatch，只接受已存在且仍指向当前 `main` 的同一版本 tag，不接受裸 Commit SHA。
+- 镜像：先构建 `ghcr.io/kayz/ficant-{server,worker,web,ui}:sha-<40位CommitSHA>`；全部镜像扫描通过后，再提升为对应的不可变 `:<version>` tag。
+- Compose 必须使用 SHA 标签；不得创建或更新可变 `latest`/`test-latest`。
 - Dockerfile、Rust 工具链和基础镜像沿用仓库锁定版本；构建和 SBOM/provenance 只发生在 GitHub Linux Runner。
 
 ## 测试机
@@ -24,10 +24,10 @@
 
 ## 部署事务
 
-1. 校验 40 位 Commit SHA 和对应 migration 目录。
-2. 使用工作流短期 `GITHUB_TOKEN` 登录 GHCR，拉取三个 SHA 镜像。
+1. 校验版本 tag、其 40 位 Commit SHA、当前 `main` 绑定和对应 migration 目录。
+2. 使用工作流短期 `GITHUB_TOKEN` 登录 GHCR，拉取四个 SHA 镜像。
 3. 启动固定 digest 的 PostgreSQL，串行执行版本化 migration。
-4. 启动三个应用服务并等待容器健康。
+4. 启动四个应用服务并等待容器健康。
 5. 验证 server TCP、worker/web readiness 和 migration 计数。
 6. 成功后原子更新 `state/current.env`，并把旧 current 写入 `state/previous.env`。
 7. 写入 `state/deployments/<sha>.json`。
@@ -44,5 +44,5 @@
 - 应用 Secret 只保存在测试机 `/srv/ficant-test/.env`，权限为 `0600`。
 - 服务为非 root、只读根文件系统、`cap_drop=ALL`、`no-new-privileges`，并只发布到 `127.0.0.1`。
 - 当前主机 Docker 为 rootful；`ficant-deploy` 的 Docker group 成员资格具有较高主机权限。它比直接 root SSH 缩小了日常账号范围，但不等价于真正的 rootless 隔离。若测试机承载更多不互信项目，应迁移到 rootless Docker、独立 VM 或受限部署代理。
-- 公开仓库启用 main branch protection；GitHub `test` Environment 的 required reviewer 仍应按当前账户套餐能力配置，不能配置时由工作流授权门与人工合并流程兜底。
+- 公开仓库启用 main branch protection，保留 Pull Request、线性历史、conversation resolution、禁止 force-push 和 deletion；普通迭代不要求 GitHub status checks。版本 tag 的创建是测试交付授权，不替代生产环境的独立 Human 审批。
 

@@ -6,9 +6,9 @@ on:
     types: [completed]
   workflow_dispatch:
     inputs:
-      commit_sha:
-        description: Exact 40-character commit on main; blank means current main
-        required: false
+      version:
+        description: Existing v* version tag on the current main commit
+        required: true
         type: string
 
 permissions:
@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || inputs.commit_sha || github.sha }}
+  DEPLOY_VERSION: ${{ github.event.workflow_run.head_branch || inputs.version }}
 
 jobs:
   authorize:
@@ -27,27 +27,33 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'main')
+       startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-24.04
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
+      version: ${{ steps.candidate.outputs.version }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
-          ref: ${{ env.DEPLOY_SHA }}
+          ref: ${{ env.DEPLOY_VERSION }}
       - id: candidate
         shell: bash
         run: |
           set -euo pipefail
+          version=$DEPLOY_VERSION
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]
           sha=$(git rev-parse HEAD)
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
-          git fetch origin main --no-tags
-          git merge-base --is-ancestor "$sha" origin/main
+          git fetch origin main --tags --force
+          [[ "$sha" == $(git rev-parse "refs/tags/$version^{commit}") ]]
+          [[ "$sha" == $(git rev-parse origin/main) ]]
           if [[ "${{ github.event_name }}" == workflow_run ]]; then
-            [[ "$sha" == $(git rev-parse origin/main) ]]
+            [[ "$version" == "${{ github.event.workflow_run.head_branch }}" ]]
+            [[ "$sha" == "${{ github.event.workflow_run.head_sha }}" ]]
           fi
           printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
       - name: Validate resolved release topology
         shell: bash
         env:
@@ -96,11 +102,10 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ matrix.package }}:sha-${{ needs.authorize.outputs.sha }}
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.package }}:test-latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ needs.authorize.outputs.sha }}
-            org.opencontainers.image.version=sha-${{ needs.authorize.outputs.sha }}
+            org.opencontainers.image.version=${{ needs.authorize.outputs.version }}
             org.opencontainers.image.licenses=MIT
           cache-from: type=gha,scope=${{ matrix.package }}
           cache-to: type=gha,mode=max,scope=${{ matrix.package }}
@@ -130,11 +135,10 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/ficant-ui:sha-${{ needs.authorize.outputs.sha }}
-            ghcr.io/${{ github.repository_owner }}/ficant-ui:test-latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ needs.authorize.outputs.sha }}
-            org.opencontainers.image.version=sha-${{ needs.authorize.outputs.sha }}
+            org.opencontainers.image.version=${{ needs.authorize.outputs.version }}
             org.opencontainers.image.licenses=MIT
           cache-from: type=gha,scope=ficant-ui
           cache-to: type=gha,mode=max,scope=ficant-ui
@@ -174,8 +178,35 @@ jobs:
           path: trivy-${{ matrix.package }}.sarif
           if-no-files-found: error
 
-  deploy:
+  promote:
     needs: [authorize, scan]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Promote scanned SHA images to the immutable version tag
+        shell: bash
+        env:
+          SHA: ${{ needs.authorize.outputs.sha }}
+          VERSION: ${{ needs.authorize.outputs.version }}
+        run: |
+          set -euo pipefail
+          for package in ficant-server ficant-worker ficant-web ficant-ui; do
+            image="ghcr.io/${{ github.repository_owner }}/$package"
+            docker buildx imagetools create \
+              --tag "$image:$VERSION" \
+              "$image:sha-$SHA"
+          done
+
+  deploy:
+    needs: [authorize, promote]
     runs-on: ubuntu-24.04
     environment: test
     permissions:

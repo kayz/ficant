@@ -22,9 +22,10 @@ FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三�
 
 ## 开发与发布边界（2026-07-17）
 
-- [OPAID](docs/development.md) 管理从任务冻结、实现和本地测试到精确自测候选；它不执行 CI/CD、部署、UAT 或服务器管理。
+- [OPAID](docs/development.md) 管理从任务冻结、实现和本地测试到精确自测候选及唯一 Human brief；它不执行 CI/CD、部署、UAT 或服务器管理。
 - Windows PowerShell 7 统一入口为 `.\scripts\check-fast.ps1` 与 `.\scripts\check.ps1`；两者支持 `-ListOnly`，完整检查可显式增加 `-IncludeIntegration`。
-- 中央 `kayz/cicd` 管理候选合并后的 GitHub CI、Linux 镜像、GHCR、测试环境部署、健康/冒烟检查和回滚。本地通过不能替代正式质量门槛。
+- Human 阅读 brief 后可以要求一次完整本地检查与人工复测，也可以接受现有证据、合并并进入下一迭代。普通 branch push、Pull Request 和 `main` 合并不运行完整 GitHub CI。
+- 数个迭代后，Human 创建指向当前 `main` 的不可变 `v*` 版本 tag，才把候选交给中央 `kayz/cicd`。该 tag 授权 GitHub 版本 CI、Linux 镜像、GHCR、测试环境部署、健康/冒烟检查和回滚；本地通过不能替代这些版本交付证据。
 - 历史 HOQA/PROQAID 材料保留在 `docs/history/hoqa/` 作为当时证据，不再驱动当前工作；权威边界见 [ADR-0009](docs/architecture/adr/0009-opaid-local-development-and-cicd-release-boundary.md)。
 
 > 本文是 ficant 当前唯一的系统技术基线。除非通过正式 ADR 修改，后续设计和实现不得引入平行后台语言、平行数据库、平行 API 契约或平行运行体系。
@@ -33,7 +34,7 @@ FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三�
 
 - 本节属于中央 `cicd` 发布管理边界，不是 OPAID 本地自测的一部分。
 - 中央管理源位于私有仓库 `kayz/cicd` 的 `ficant/`；本仓库中的 `cicd.yml`、`.github/workflows/release-test.yml` 和 `deploy/test/` 是固定平台版本生成的业务接入文件。
-- `main` 的现有十项 `ci` 全部成功后，GitHub Linux Runner 从精确 Commit SHA 构建 `ficant-server`、`ficant-worker` 和 `ficant-web` 镜像，推送 `sha-<commit>` 与 `test-latest` 标签到 GHCR。测试机始终部署 SHA 标签，不依赖 `latest`。
+- Human 创建符合版本格式且指向当前 `main` 精确提交的 `v*` tag 后，GitHub 才运行现有十项完整 `ci`。CI 成功后 Linux Runner 构建 `ficant-server`、`ficant-worker`、`ficant-web` 和 `ficant-ui` 的 `sha-<commit>` 镜像；全部扫描通过后，再把同一组镜像提升为不可变版本 tag。测试机始终部署 SHA 标签，不维护 `test-latest`。
 - GitHub `test` Environment 通过专用 SSH 身份连接测试机的 `ficant-deploy` 账号；测试机只拉镜像、执行版本化 PostgreSQL migration 和 Docker Compose，不现场编译源码。
 - 发布脚本记录 current、previous、镜像 SHA、部署时间、migration、健康检查和冒烟结果；失败时如存在 previous SHA，直接切回上一组镜像。
 - 当前测试发布拓扑仍未把对象存储 adapter 装配进三个发布二进制；源码 Workspace 已统一迁移到 Apache `object_store` + Ceph RGW，锁文件与可达依赖图均不再包含 `minio`/`async-std`，既有 `RUSTSEC-2025-0052` 风险接受已退出。开发与 CI 使用锁定摘要的单节点 RGW 夹具，生产 Ceph 集群拓扑仍需独立运维授权。

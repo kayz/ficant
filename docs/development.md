@@ -1,6 +1,6 @@
 # FICANT 本地开发与测试
 
-FICANT 使用 OPAID 组织本地开发和测试候选，使用中央 `cicd` 平台处理合并后的 CI/CD 与发布。本文只描述本地边界；服务器、GHCR、GitHub Environment、部署和回滚不属于本地入口。
+FICANT 使用 OPAID 组织本地开发、测试候选和 Human brief，使用中央 `cicd` 平台处理 Human 建立的版本候选。本文只描述本地边界；服务器、GHCR、GitHub Environment、部署和回滚不属于本地入口。
 
 ## OPAID round contract
 
@@ -13,7 +13,7 @@ FICANT 使用 OPAID 组织本地开发和测试候选，使用中央 `cicd` 平�
 5. 有界任务的依赖关系、允许和禁止写路径；
 6. 只有 Root/Human 能改变的公共契约和业务决定。
 
-Worker 只承担一个有界任务，返回 changed files、实际命令、exit code、可得的 test count、blocker 和 residual risk。Root 检查真实 diff，在所有修改完成后对精确集成候选重新运行规定测试。OPAID 到“本地自测候选”即结束，不等待远端 CI，也不创建仓库内状态 ledger、agent registry、mailbox 或治理 checklist。
+Worker 只承担一个有界任务，返回 changed files、实际命令、exit code、可得的 test count、blocker 和 residual risk。Root 检查真实 diff，在所有修改完成后对精确集成候选重新运行规定测试。OPAID 到“本地自测候选与完成的 Human brief”即结束，不等待远端 CI，也不创建仓库内状态 ledger、agent registry、mailbox 或治理 checklist。
 
 ## 单一迭代 brief
 
@@ -101,6 +101,11 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 
 ## 交接给 CICD
 
-OPAID 交接物是一个精确 Commit SHA 的本地自测候选，包含真实 changed files、命令、退出码、测试数量和剩余风险。候选进入 Pull Request 后，GitHub CI 仍是正式质量门槛；本地通过不能替代 Linux Runner、供应链扫描或发布授权。
+OPAID 先把精确 Commit SHA 的本地自测候选和唯一 brief 交给 Human。brief 包含真实 changed files、命令、退出码、测试数量和剩余风险。Human 有两个迭代验收选择：
 
-合并 `main` 后，由版本化中央 `cicd` 逻辑负责构建 SHA 镜像、推送 GHCR、部署 Linux 测试环境、执行健康/冒烟检查和失败回滚。普通 OPAID 工作不得修改 `.github/**`、`cicd.yml` 或 `deploy/**` 来绕过这个交接边界。
+1. 在同一精确候选上运行一次完整本地检查（本地 CI），并完成风险相关的人工复测；
+2. 按 brief 和已有证据验收，合并并直接进入下一迭代。
+
+两个选择都不启动 GitHub 完整 CI。普通 branch push、Pull Request 和 `main` 合并只维护远端源码历史；本地检查是普通迭代的正式证据，但不能冒充 Linux Runner、在线供应链、制品或目标环境证据。
+
+数个迭代后，Human 确定版本号并创建符合版本格式、指向当前 `main` 精确提交的不可变 `v*` tag。创建 tag 即把版本候选交给 CICD，并授权完整 GitHub CI、SHA 镜像构建、扫描、不可变版本标签提升、Linux 测试环境部署、健康/冒烟检查和失败回滚。版本失败后不得移动原 tag；修复进入新的 OPAID 迭代，再建立 forward-only 版本候选。普通 OPAID 工作不得修改 `.github/**`、`cicd.yml` 或 `deploy/**` 来绕过这个交接边界。
