@@ -44,7 +44,15 @@ for document in documents:
         print("reproducibility: manifest has no artifacts", file=sys.stderr)
         raise SystemExit(2)
 if documents[0]["artifacts"] != documents[1]["artifacts"]:
-    print("reproducibility: artifact hash mismatch", file=sys.stderr)
+    names = sorted(set(documents[0]["artifacts"]) | set(documents[1]["artifacts"]))
+    for name in names:
+        left = documents[0]["artifacts"].get(name, "<missing>")
+        right = documents[1]["artifacts"].get(name, "<missing>")
+        if left != right:
+            print(
+                f"reproducibility: artifact hash mismatch: {name}: a={left} b={right}",
+                file=sys.stderr,
+            )
     raise SystemExit(1)
 PY
 }
