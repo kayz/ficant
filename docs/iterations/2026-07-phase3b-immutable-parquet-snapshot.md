@@ -40,7 +40,8 @@
 - `./scripts/check-phase3b.ps1`：exit 0；确定性编码/精确重读与 Parquet、Manifest、lineage 篡改失败关闭 2/2，真实 PostgreSQL 16 + Ceph RGW 双 payload 发布、adapter 重建、脱离外源重读 1/1。
 - `./scripts/check-fast.ps1`：exit 0；workspace check 与非环境回归通过，Phase 3A Canonical ingestion 5/5、Phase 3B codec 2/2。
 - `./scripts/check.ps1`：exit 0；Rust fmt/strict Clippy/workspace build、generated contract 12/12、C++ CTest 8/8、Phase 2C/2D 独立 Oracle 各 3/3、Phase 2E live SDK 1/1、Phase 3A 5/5、Phase 3B 2/2、Web 29/29，其余非环境回归全部通过。
-- `./scripts/check.ps1 -IncludeIntegration`：exit 0；在同一 disposable PostgreSQL 16 + Ceph RGW 上，migration 4/4、Phase 1 业务闭环 1/1、负向不变量 13/13、Phase 2B/2C/2D 发布重放各 1/1、Phase 3A registry 与双源各 1/1、Phase 3B codec 2/2 与脱离外源发布重读 1/1。统一入口曾发现旧 Phase 1 acceptance 清理未删除 Phase 3A 新增 `data` schema；最终候选已显式清理并通过上述完整串行回归。
+- `./scripts/check.ps1 -IncludeIntegration` 在供应链修补前的同业务树 `d224f07`：exit 0；在同一 disposable PostgreSQL 16 + Ceph RGW 上，migration 4/4、Phase 1 业务闭环 1/1、负向不变量 13/13、Phase 2B/2C/2D 发布重放各 1/1、Phase 3A registry 与双源各 1/1、Phase 3B codec 2/2 与脱离外源发布重读 1/1。统一入口曾发现旧 Phase 1 acceptance 清理未删除 Phase 3A 新增 `data` schema；最终业务树已显式清理并通过上述完整串行回归。
+- Parquet 供应链修补提交 `44435ad` 上 `./scripts/check-fast.ps1`：exit 0，含 workspace check、非环境回归、Phase 3A 5/5 与 Phase 3B 2/2；`cargo check --offline --locked -p ficant-data` 及 `cargo test --offline --locked -p ficant-data --test snapshot_codec` 均 exit 0。`./scripts/check.ps1 -IncludeIntegration` 在运行任何测试前因当前终端缺少冻结 `uv 0.7.13` 而预检 exit 1；未自动安装、未用 shim 冒充，更新候选的跨平台完整结论交由 GitHub required jobs 补齐。
 - `bash .github/scripts/tests/run-repo-policy-tests.sh`：exit 0；中文、路径、CI 合同和恢复 fixture 全部通过，CI 已显式运行 Phase 3B codec 与真实存储验收。
 - `cargo test --offline --locked -p ficant-data --test snapshot_codec`：exit 0，2/2；Apache 上游补丁后的 Parquet codec 保持字节确定性、精确重读与篡改失败关闭。
 - `bash .github/scripts/tests/run-gates-tests.sh`：exit 0；新增 vendored 第三方来源/最终树绑定与源码漂移负向 fixture，既有门禁 fixture 全部通过。
