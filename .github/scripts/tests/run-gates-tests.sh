@@ -92,6 +92,17 @@ cp "$tmp/build-a.json" "$tmp/build-b.json"
 expect_exit 0 "$scripts_dir/verify-reproducibility.sh" --verify-manifests \
   "$tmp/build-a.json" "$tmp/build-b.json"
 
+# A local Python project has identical dependency content in different materialization roots.
+mkdir -p "$tmp/freeze-a/python" "$tmp/freeze-b/python"
+printf 'grpcio==1.73.1\nficant-sdk @ file://%s\n' "$tmp/freeze-a/python" >"$tmp/freeze-a.raw"
+printf 'ficant-sdk @ file://%s\ngrpcio==1.73.1\n' "$tmp/freeze-b/python" >"$tmp/freeze-b.raw"
+expect_exit 0 "$scripts_dir/verify-reproducibility.sh" --normalize-python-freeze \
+  "$tmp/freeze-a/python" "$tmp/freeze-a.raw" "$tmp/freeze-a.txt"
+expect_exit 0 "$scripts_dir/verify-reproducibility.sh" --normalize-python-freeze \
+  "$tmp/freeze-b/python" "$tmp/freeze-b.raw" "$tmp/freeze-b.txt"
+cmp "$tmp/freeze-a.txt" "$tmp/freeze-b.txt"
+grep -Fx 'ficant-sdk @ file://<SOURCE_ROOT>' "$tmp/freeze-a.txt" >/dev/null
+
 # Python wheel/sdist evidence includes source while ignoring filesystem timestamps.
 mkdir -p "$tmp/python-a/node-contracts/src/ficant_contracts"
 cat >"$tmp/python-a/pyproject.toml" <<'TOML'
