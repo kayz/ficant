@@ -1,6 +1,6 @@
 # ficant 产品范围
 
-**状态：** Phase 0 / Phase 1 / Phase 2 / Phase 3 已完成；对象存储统一为 Ceph RGW + Apache `object_store`
+**状态：** Phase 0 / Phase 1 / Phase 2 / Phase 3 已完成；Phase 4A 强类型 ResearchGraph 定义合同已落地；对象存储统一为 Ceph RGW + Apache `object_store`
 
 **实现状态：** 当前能力以已合并代码、冻结合同和可重放本地证据为准，不把局部纵向切片扩写为完整 Phase 或最终产品
 
@@ -12,7 +12,7 @@ ficant 是面向专业投资研究团队的 AI 原生量化研究平台。平台
 
 正式产品终点保持为 `ResearchArtifact`、`SimulationResult`、`ReportArtifact`、`SignalSet` 和 `TargetExposure`。平台不拥有订单和外部交易执行，不建设 OMS、EMS、对外报单、清算、结算或投资组合会计。
 
-首个市场仍是中国国债现券与国债期货。当前已完成 Phase 0 仓库/合同基线、Phase 1 领域内核、Phase 2 固定收益参考数值库和 Phase 3 可复现数据链。Python SDK 通过同一 Protobuf/gRPC 合同调用真实 Rust/C++ 生产路径，结果与冻结参考一致；文件与 PostgreSQL adapter 把外部报价转换为相同 Canonical Arrow Schema，再发布为可校验、可脱离外源重读的不可变 Parquet `DataSnapshot`。这不表示完整研究产品页面或 Phase 4+ 已实现。
+首个市场仍是中国国债现券与国债期货。当前已完成 Phase 0 仓库/合同基线、Phase 1 领域内核、Phase 2 固定收益参考数值库和 Phase 3 可复现数据链，并交付 Phase 4A 的强类型 ResearchGraph 定义合同。Python SDK 通过同一 Protobuf/gRPC 合同调用真实 Rust/C++ 生产路径，结果与冻结参考一致；文件与 PostgreSQL adapter 把外部报价转换为相同 Canonical Arrow Schema，再发布为可校验、可脱离外源重读的不可变 Parquet `DataSnapshot`。这不表示完整研究产品页面或 Phase 4 运行时已实现。
 
 ## Phase 0 已落地边界
 
@@ -95,6 +95,12 @@ total_return = carry + roll_down
 
 Application 复用既有 `BlobStore`、`VerifiedSnapshotProof::data` 与 `SnapshotRepository` 完成 Parquet/Manifest 双 payload 发布；正式读取复用 `VerifiedReadFacade` required read，再由 `ficant-data` 对 metadata、两个 payload、canonical Manifest、Parquet 元数据、schema、行数与血缘失败关闭。真实 PostgreSQL 16 + Ceph RGW 验收证明外源只在 ingest 时调用一次；销毁 source adapter 并重建存储 adapter 后，仍可只按 `DataSnapshot` ID 取得完全相同的 Canonical RecordBatch。
 
+## 2026-07 / Phase 4A 已落地强类型 ResearchGraph 定义合同
+
+当前领域层新增版本化 `ResearchNodeContract` 与 `ResearchGraph`。节点合同精确绑定输入/输出类型及 schema hash、状态和参数 schema、确定性等级、权限、资源限制和必守不变量；图只接受存在的节点与端口、完全匹配的类型、每个必需输入唯一绑定的有向无环结构。
+
+合同声明、节点和边在构造时规范化；确定性拓扑排序以节点 ID 稳定打破并列关系，图摘要不受调用方 collection 顺序影响。该切片只是不可变 Definition 边界，尚不包含节点执行、Run 状态机扩展、Lease Queue、持久化、恢复、Artifact 节点血缘或实验比较，不得描述为 Phase 4 已完成。
+
 ## WebApp 产品边界
 
 当前可用产品界面是 Platform Shell，不是完整 DMQuant：
@@ -125,7 +131,7 @@ WebApp 可以定义独立研究体验，但不能自建身份权限、直连外�
 - 完整 DMQuant 业务 WebApp，包括策略生成、回测、Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell。
 - openGauss 迁移、GeneratedNode/gVisor 业务运行、OMS/EMS 和任何外部交易执行。
 - 信用债、ABS、可转债、完整利率互换生命周期、真实询价通讯与清算交割。
-- README Phase 4–9 的 ResearchGraph 运行时、研究 Lab、仿真、AI 基础设施和后续发布流程仍为规划能力，不得描述为当前已完成。
+- README Phase 4B–9 的 ResearchGraph 执行与恢复、研究 Lab、仿真、AI 基础设施和后续发布流程仍为规划能力，不得描述为当前已完成。
 
 ## Validity
 
