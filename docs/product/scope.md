@@ -1,6 +1,6 @@
 # ficant 产品范围
 
-**状态：** Phase 0 / Phase 1 / Phase 2 / Phase 3 已完成；Phase 4A–4C 的强类型 ResearchGraph、图执行状态机与 PostgreSQL Lease Queue 已落地；对象存储统一为 Ceph RGW + Apache `object_store`
+**状态：** Phase 0–Phase 4 研究运行时内核已完成；对象存储统一为 Ceph RGW + Apache `object_store`
 
 **实现状态：** 当前能力以已合并代码、冻结合同和可重放本地证据为准，不把局部纵向切片扩写为完整 Phase 或最终产品
 
@@ -113,6 +113,12 @@ Application 复用既有 `BlobStore`、`VerifiedSnapshotProof::data` 与 `Snapsh
 
 lease 绑定 worker ULID 与 lease ULID，续租和完成只接受未过期的当前所有者；完成证据 hash 不可变且相同重试幂等。进程中断后无需原位修复旧行，过期 lease 可由另一 worker 原子回收并增加 claim count。真实 PostgreSQL 16 已覆盖并发 claim、错误所有者、完成漂移、过期恢复、tenant 隔离及 11 个 migration 的重复/失败原子性。
 
+## 2026-07 / Phase 4D-E 已落地 NativeNode、节点血缘与实验比较
+
+当前 runtime 新增 `ExecutionIdentity`，精确绑定 DataSnapshot、UniverseSnapshot、ResearchGraph、参数、runtime image、环境摘要、seed 与每个节点实现 digest。NativeNode engine 只按图的确定性拓扑序运行，输入来自已验证上游端口，输出必须逐端口匹配 type ID、version 和 schema hash；缺失/重复实现或任何类型漂移失败关闭。
+
+每个节点生成不可变 `NativeNodeArtifact`，绑定 execution identity、节点/合同/实现、所有上游节点 artifact 和有序输出 hash；最终 result digest 再绑定完整节点 artifact 链。相同冻结身份的重放要求对象级完全一致，实验比较会分别报告 Snapshot、Graph、Parameters、RuntimeImage、Environment、Seed、Implementation 与 Result 差异。至此 README Phase 4 的强类型图、NativeNode、状态/Journal、Lease Queue、安全点恢复、逐节点血缘、环境/seed 和比较已在本地内核与真实 PostgreSQL 协议层闭合。
+
 ## WebApp 产品边界
 
 当前可用产品界面是 Platform Shell，不是完整 DMQuant：
@@ -143,7 +149,7 @@ WebApp 可以定义独立研究体验，但不能自建身份权限、直连外�
 - 完整 DMQuant 业务 WebApp，包括策略生成、回测、Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell。
 - openGauss 迁移、GeneratedNode/gVisor 业务运行、OMS/EMS 和任何外部交易执行。
 - 信用债、ABS、可转债、完整利率互换生命周期、真实询价通讯与清算交割。
-- README Phase 4D–9 的 Worker 进程装配、节点真实执行与 Artifact 血缘、实验比较、研究 Lab、仿真、AI 基础设施和后续发布流程仍为规划能力，不得描述为当前已完成。
+- README Phase 5–9 的研究 Lab、仿真、AI 基础设施、GeneratedNode 和后续发布流程仍为规划能力，不得描述为当前已完成。`ficant-worker` 的持续消费循环与业务 NativeNode catalog 将随首个 Phase 5 纵向切片装配；Phase 4 完成不等于已有可用研究 UI。
 
 ## Validity
 
