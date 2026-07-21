@@ -66,6 +66,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         "research.artifacts",
         "research.data_snapshots",
         "research.experiment_runs",
+        "research.execution_tasks",
         "research.lineage_edges",
         "research.run_journal",
         "research.run_journal_sequences",
@@ -85,7 +86,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
             .fetch_one(&pool)
             .await
             .expect("migration history must be queryable");
-    assert_eq!(migration_count, 9);
+    assert_eq!(migration_count, 11);
     let artifact_column: bool = sqlx::query_scalar(
         "SELECT EXISTS(
              SELECT 1 FROM information_schema.columns

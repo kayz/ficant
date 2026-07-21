@@ -1,6 +1,6 @@
 # ficant 产品范围
 
-**状态：** Phase 0 / Phase 1 / Phase 2 / Phase 3 已完成；Phase 4A–4B 的强类型 ResearchGraph 与图执行状态机已落地；对象存储统一为 Ceph RGW + Apache `object_store`
+**状态：** Phase 0 / Phase 1 / Phase 2 / Phase 3 已完成；Phase 4A–4C 的强类型 ResearchGraph、图执行状态机与 PostgreSQL Lease Queue 已落地；对象存储统一为 Ceph RGW + Apache `object_store`
 
 **实现状态：** 当前能力以已合并代码、冻结合同和可重放本地证据为准，不把局部纵向切片扩写为完整 Phase 或最终产品
 
@@ -107,6 +107,12 @@ Application 复用既有 `BlobStore`、`VerifiedSnapshotProof::data` 与 `Snapsh
 
 图重放会返回已完成节点、最后安全 checkpoint（节点、attempt、输出 hash、Journal sequence/hash）和下一恢复节点；缺失/错序节点、错误 attempt、提前成功、checkpoint 漂移或损坏的 Journal 链全部失败关闭。PostgreSQL 事件类型约束已前向扩展，但 Lease Queue、Worker 认领、租约恢复和真实持久化并发验收属于 Phase 4C。
 
+## 2026-07 / Phase 4C 已落地 PostgreSQL Lease Queue
+
+当前 storage 新增 tenant 隔离的 `execution_tasks` 与 `PostgresLeaseQueue`。任务不可变绑定 run、node、node attempt、graph digest 和稳定 task key；相同 key + 相同业务字段幂等返回，任一字段漂移冲突。claim 使用数据库时钟、`FOR UPDATE SKIP LOCKED` 和稳定排序，使多个 worker 原子取得不同任务。
+
+lease 绑定 worker ULID 与 lease ULID，续租和完成只接受未过期的当前所有者；完成证据 hash 不可变且相同重试幂等。进程中断后无需原位修复旧行，过期 lease 可由另一 worker 原子回收并增加 claim count。真实 PostgreSQL 16 已覆盖并发 claim、错误所有者、完成漂移、过期恢复、tenant 隔离及 11 个 migration 的重复/失败原子性。
+
 ## WebApp 产品边界
 
 当前可用产品界面是 Platform Shell，不是完整 DMQuant：
@@ -137,7 +143,7 @@ WebApp 可以定义独立研究体验，但不能自建身份权限、直连外�
 - 完整 DMQuant 业务 WebApp，包括策略生成、回测、Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell。
 - openGauss 迁移、GeneratedNode/gVisor 业务运行、OMS/EMS 和任何外部交易执行。
 - 信用债、ABS、可转债、完整利率互换生命周期、真实询价通讯与清算交割。
-- README Phase 4C–9 的 Lease Queue/Worker 恢复、节点真实执行与 Artifact 血缘、研究 Lab、仿真、AI 基础设施和后续发布流程仍为规划能力，不得描述为当前已完成。
+- README Phase 4D–9 的 Worker 进程装配、节点真实执行与 Artifact 血缘、实验比较、研究 Lab、仿真、AI 基础设施和后续发布流程仍为规划能力，不得描述为当前已完成。
 
 ## Validity
 
