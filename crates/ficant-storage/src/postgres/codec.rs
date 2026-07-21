@@ -872,6 +872,10 @@ const fn journal_event_type_code(value: JournalEventType) -> u8 {
         JournalEventType::RunCancelled => 5,
         JournalEventType::ArtifactPublished => 6,
         JournalEventType::SignalSetPublished => 7,
+        JournalEventType::NodeStarted => 8,
+        JournalEventType::NodeSucceeded => 9,
+        JournalEventType::NodeFailed => 10,
+        JournalEventType::NodeCheckpointed => 11,
     }
 }
 
@@ -884,6 +888,10 @@ fn decode_journal_event_type(value: u8) -> CodecResult<JournalEventType> {
         5 => Ok(JournalEventType::RunCancelled),
         6 => Ok(JournalEventType::ArtifactPublished),
         7 => Ok(JournalEventType::SignalSetPublished),
+        8 => Ok(JournalEventType::NodeStarted),
+        9 => Ok(JournalEventType::NodeSucceeded),
+        10 => Ok(JournalEventType::NodeFailed),
+        11 => Ok(JournalEventType::NodeCheckpointed),
         _ => Err(codec_error()),
     }
 }
@@ -1168,5 +1176,21 @@ mod tests {
         assert_eq!(decoded, event);
         assert_eq!(decoded.content_hash(), event.content_hash());
         assert_ne!(decoded.content_hash(), &ContentHash::digest(b"different"));
+
+        for event_type in [
+            JournalEventType::NodeStarted,
+            JournalEventType::NodeSucceeded,
+            JournalEventType::NodeFailed,
+            JournalEventType::NodeCheckpointed,
+        ] {
+            let mut node_input = input.clone();
+            node_input.event_type = event_type;
+            let node_event =
+                RunJournal::new(node_input.clone(), &node_input.canonical_hash().unwrap()).unwrap();
+            assert_eq!(
+                decode_journal(&encode_journal(&node_event)).unwrap(),
+                node_event
+            );
+        }
     }
 }

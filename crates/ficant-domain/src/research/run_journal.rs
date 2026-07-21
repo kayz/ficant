@@ -15,6 +15,10 @@ pub enum JournalEventType {
     RunCancelled,
     ArtifactPublished,
     SignalSetPublished,
+    NodeStarted,
+    NodeSucceeded,
+    NodeFailed,
+    NodeCheckpointed,
 }
 
 impl JournalEventType {
@@ -27,6 +31,10 @@ impl JournalEventType {
             Self::RunCancelled => 5,
             Self::ArtifactPublished => 6,
             Self::SignalSetPublished => 7,
+            Self::NodeStarted => 8,
+            Self::NodeSucceeded => 9,
+            Self::NodeFailed => 10,
+            Self::NodeCheckpointed => 11,
         }
     }
 }

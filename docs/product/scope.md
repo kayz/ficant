@@ -1,6 +1,6 @@
 # ficant 产品范围
 
-**状态：** Phase 0 / Phase 1 / Phase 2 / Phase 3 已完成；Phase 4A 强类型 ResearchGraph 定义合同已落地；对象存储统一为 Ceph RGW + Apache `object_store`
+**状态：** Phase 0 / Phase 1 / Phase 2 / Phase 3 已完成；Phase 4A–4B 的强类型 ResearchGraph 与图执行状态机已落地；对象存储统一为 Ceph RGW + Apache `object_store`
 
 **实现状态：** 当前能力以已合并代码、冻结合同和可重放本地证据为准，不把局部纵向切片扩写为完整 Phase 或最终产品
 
@@ -101,6 +101,12 @@ Application 复用既有 `BlobStore`、`VerifiedSnapshotProof::data` 与 `Snapsh
 
 合同声明、节点和边在构造时规范化；确定性拓扑排序以节点 ID 稳定打破并列关系，图摘要不受调用方 collection 顺序影响。该切片只是不可变 Definition 边界，尚不包含节点执行、Run 状态机扩展、Lease Queue、持久化、恢复、Artifact 节点血缘或实验比较，不得描述为 Phase 4 已完成。
 
+## 2026-07 / Phase 4B 已落地图执行状态机与 checkpoint Journal
+
+当前 runtime 在既有 hash-chained、sequence-contiguous、幂等 append-only `RunJournal` 上新增 node started/succeeded/failed/checkpointed 四类事件，并严格按 ResearchGraph 的确定性拓扑序重放。节点输出只有在 succeeded 事件之后以完全相同 hash 提交 checkpoint 才算完成；中断在 node started 或未 checkpoint 的 succeeded 之后，都从同一节点以递增 attempt 重跑。
+
+图重放会返回已完成节点、最后安全 checkpoint（节点、attempt、输出 hash、Journal sequence/hash）和下一恢复节点；缺失/错序节点、错误 attempt、提前成功、checkpoint 漂移或损坏的 Journal 链全部失败关闭。PostgreSQL 事件类型约束已前向扩展，但 Lease Queue、Worker 认领、租约恢复和真实持久化并发验收属于 Phase 4C。
+
 ## WebApp 产品边界
 
 当前可用产品界面是 Platform Shell，不是完整 DMQuant：
@@ -131,7 +137,7 @@ WebApp 可以定义独立研究体验，但不能自建身份权限、直连外�
 - 完整 DMQuant 业务 WebApp，包括策略生成、回测、Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell。
 - openGauss 迁移、GeneratedNode/gVisor 业务运行、OMS/EMS 和任何外部交易执行。
 - 信用债、ABS、可转债、完整利率互换生命周期、真实询价通讯与清算交割。
-- README Phase 4B–9 的 ResearchGraph 执行与恢复、研究 Lab、仿真、AI 基础设施和后续发布流程仍为规划能力，不得描述为当前已完成。
+- README Phase 4C–9 的 Lease Queue/Worker 恢复、节点真实执行与 Artifact 血缘、研究 Lab、仿真、AI 基础设施和后续发布流程仍为规划能力，不得描述为当前已完成。
 
 ## Validity
 
