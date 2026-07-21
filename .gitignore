@@ -2,6 +2,7 @@
 /*
 
 !/.gitignore
+!/.dockerignore
 !/.gitattributes
 !/README.md
 !/LICENSE
