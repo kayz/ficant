@@ -1094,6 +1094,8 @@ PostgreSQL 16 schema
 - Protobuf 可生成 Rust、Python 和 TypeScript 类型；
 - PostgreSQL Migration 可从空库执行。
 
+**当前候选（2026-07-24）：** 开发 Compose 现在以 `deploy/dev/docker-compose.yml` 为唯一入口；在当前 PowerShell 进程提供本地一次性凭据后，`docker compose --file .\deploy\dev\docker-compose.yml --profile dev up --build --detach --wait` 启动 PostgreSQL、Ceph RGW 与开发服务。Rust、Python、C++、Web、Protobuf 生成及空库 migration 已取得本地可重放证据；正式 Rust 服务 Dockerfile 的精确锁定基础镜像冷构建和完整测试环境交付仍须由 Human 指定版本号后的 version Action 闭合，不能由源码声明或诊断镜像冒充。
+
 ### Phase 1：领域内核
 
 **目标：** 建立稳定的市场事实和研究资产模型。
@@ -1210,6 +1212,8 @@ PostgreSQL 16 schema
 - 同一快照、图、参数、代码和种子得到相同结果；
 - 实验中断后可从安全点恢复；
 - 任意输出可追踪到每个节点。
+
+**当前候选（2026-07-24）：** Phase 4 的实现从进程内内核延伸到持久化执行闭环：ResearchGraph、外部输入声明/绑定、可复现身份与单次 ExperimentRun 身份可持久化；CGB 固收分析 NativeNode 通过与 API 共用的真实 Rust/C++ 计算路径执行；worker 按节点领取 PostgreSQL lease，以租约 fencing 和 Journal 重放恢复中断。输出先进入 Ceph RGW，再在一个 PostgreSQL 事务中提交 Artifact、Journal、checkpoint、节点状态和 lease 完成；后继节点按确定性图顺序继续。本地真实 PostgreSQL + Ceph RGW 已验证对象提升后/事务前中断、attempt 2 恢复、旧 fence 拒绝、两节点推进和最终 Journal 重放；强类型依赖边及篡改失败由 runtime 与 required-read 测试覆盖。
 
 ### Phase 5：Rates Research Lab
 
@@ -1386,6 +1390,7 @@ ficant/
 │   ├── ficant-contracts/
 │   ├── ficant-contract-tests/
 │   ├── ficant-data/
+│   ├── ficant-native-nodes/
 │   └── ficant-acceptance/
 ├── binaries/                       # Rust composition roots
 │   ├── ficant-bootstrap/

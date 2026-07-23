@@ -26,6 +26,7 @@ const LEGACY_SIGNAL_HEX: &str = concat!(
 );
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     let pool = support::postgres_pool().await;
     support::reset_postgres(&pool).await;
@@ -66,7 +67,14 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         "research.artifacts",
         "research.data_snapshots",
         "research.experiment_runs",
+        "research.execution_tasks",
+        "research.execution_identities",
+        "research.execution_external_inputs",
+        "research.execution_node_implementations",
+        "research.execution_rule_packs",
         "research.lineage_edges",
+        "research.node_executions",
+        "research.research_graphs",
         "research.run_journal",
         "research.run_journal_sequences",
         "research.signal_sets",
@@ -85,7 +93,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
             .fetch_one(&pool)
             .await
             .expect("migration history must be queryable");
-    assert_eq!(migration_count, 9);
+    assert_eq!(migration_count, 13);
     let artifact_column: bool = sqlx::query_scalar(
         "SELECT EXISTS(
              SELECT 1 FROM information_schema.columns

@@ -1,5 +1,7 @@
 use ficant_application::ports::{
-    DefinitionValue, InstrumentDefinition, InstrumentSubtype, MarketFact, SnapshotValue,
+    DefinitionValue, ExecutionExternalInput, ExecutionInstanceIdentity, InstrumentDefinition,
+    InstrumentSubtype, MarketFact, NodeImplementation, ReproducibilityIdentity,
+    ReproducibilityIdentityInput, RulePackBinding, SnapshotValue,
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_domain::market::{
@@ -13,14 +15,324 @@ use ficant_domain::primitives::{
     VersionRef,
 };
 use ficant_domain::research::{
-    Artifact, ArtifactKind, DataSnapshot, DataSnapshotInput, ExperimentRun, ExperimentRunInput,
-    JournalEventType, RunJournal, RunJournalInput, RunState, SignalSet, SignalSetInput,
-    UniverseSnapshot,
+    Artifact, ArtifactKind, DataSnapshot, DataSnapshotInput, DeterminismClass, ExperimentRun,
+    ExperimentRunInput, FilesystemPermission, GraphExternalInput, GraphExternalInputBinding,
+    JournalEventType, NodePermissions, PortType, ResearchEdge, ResearchGraph, ResearchGraphInput,
+    ResearchNode, ResearchNodeContract, ResearchNodeContractInput, ResourceLimits, RunJournal,
+    RunJournalInput, RunState, SignalSet, SignalSetInput, TypedValue, UniverseSnapshot,
 };
 use ficant_domain::{ContentAddressed, Lineaged, VersionedDefinition};
 use sqlx::types::chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 
 type CodecResult<T> = Result<T, ApplicationError>;
+
+pub(crate) fn encode_research_graph(value: &ResearchGraph) -> Vec<u8> {
+    let mut encoder = Encoder::new();
+    encoder.string(value.graph_id().as_str());
+    encoder.u64(value.version().get());
+    encode_owner(&mut encoder, value.owner());
+    encoder.len(value.nodes().len());
+    for node in value.nodes() {
+        encoder.string(node.node_id().as_str());
+        let contract = node.contract();
+        encoder.string(contract.contract_id());
+        encoder.u64(contract.contract_version().get());
+        encode_ports(&mut encoder, contract.input_types());
+        encode_ports(&mut encoder, contract.output_types());
+        encoder.bytes(contract.state_schema().as_bytes());
+        encoder.bytes(contract.parameter_schema().as_bytes());
+        encoder.u8(match contract.determinism_class() {
+            DeterminismClass::Deterministic => 1,
+            DeterminismClass::Seeded => 2,
+        });
+        let permissions = contract.permissions();
+        encoder.bool(permissions.network);
+        encoder.bool(permissions.database);
+        encoder.u8(match permissions.filesystem {
+            FilesystemPermission::None => 1,
+            FilesystemPermission::TemporaryOnly => 2,
+        });
+        let limits = contract.resource_limits();
+        encoder.u32(u32::from(limits.cpu_cores()));
+        encoder.u32(limits.memory_mb());
+        encoder.u32(limits.timeout_seconds());
+        encoder.len(contract.required_invariants().len());
+        for invariant in contract.required_invariants() {
+            encoder.string(invariant);
+        }
+        encoder.bytes(node.parameters_hash().as_bytes());
+    }
+    encoder.len(value.edges().len());
+    for edge in value.edges() {
+        encoder.string(edge.from_node().as_str());
+        encoder.string(edge.from_port());
+        encoder.string(edge.to_node().as_str());
+        encoder.string(edge.to_port());
+    }
+    encoder.len(value.external_inputs().len());
+    for input in value.external_inputs() {
+        encoder.string(input.input_id());
+        encode_typed_value(&mut encoder, input.value_type());
+    }
+    encoder.len(value.external_input_bindings().len());
+    for binding in value.external_input_bindings() {
+        encoder.string(binding.input_id());
+        encoder.string(binding.to_node().as_str());
+        encoder.string(binding.to_port());
+    }
+    encoder.bytes(value.digest().as_bytes());
+    encoder.finish()
+}
+
+#[allow(clippy::too_many_lines)]
+pub(crate) fn decode_research_graph(bytes: &[u8]) -> CodecResult<ResearchGraph> {
+    let mut decoder = Decoder::new(bytes)?;
+    let graph_id = decode_ulid(&mut decoder)?;
+    let version = decode_version(&mut decoder)?;
+    let owner = decode_owner(&mut decoder)?;
+    let node_count = decoder.len()?;
+    let mut nodes = Vec::with_capacity(node_count);
+    for _ in 0..node_count {
+        let node_id = decode_ulid(&mut decoder)?;
+        let contract_id = decoder.string()?;
+        let contract_version = decode_version(&mut decoder)?;
+        let input_types = decode_ports(&mut decoder)?;
+        let output_types = decode_ports(&mut decoder)?;
+        let state_schema = decode_hash(&mut decoder)?;
+        let parameter_schema = decode_hash(&mut decoder)?;
+        let determinism_class = match decoder.u8()? {
+            1 => DeterminismClass::Deterministic,
+            2 => DeterminismClass::Seeded,
+            _ => return Err(codec_error()),
+        };
+        let permissions = NodePermissions {
+            network: decoder.bool()?,
+            database: decoder.bool()?,
+            filesystem: match decoder.u8()? {
+                1 => FilesystemPermission::None,
+                2 => FilesystemPermission::TemporaryOnly,
+                _ => return Err(codec_error()),
+            },
+        };
+        let cpu = u16::try_from(decoder.u32()?).map_err(|_| codec_error())?;
+        let resource_limits = ResourceLimits::new(cpu, decoder.u32()?, decoder.u32()?)
+            .map_err(ficant_application::map_domain_error)?;
+        let invariant_count = decoder.len()?;
+        let mut required_invariants = Vec::with_capacity(invariant_count);
+        for _ in 0..invariant_count {
+            required_invariants.push(decoder.string()?);
+        }
+        let contract = ResearchNodeContract::new(ResearchNodeContractInput {
+            contract_id,
+            contract_version,
+            input_types,
+            output_types,
+            state_schema,
+            parameter_schema,
+            determinism_class,
+            permissions,
+            resource_limits,
+            required_invariants,
+        })
+        .map_err(ficant_application::map_domain_error)?;
+        nodes.push(ResearchNode::new(
+            node_id,
+            contract,
+            decode_hash(&mut decoder)?,
+        ));
+    }
+    let edge_count = decoder.len()?;
+    let mut edges = Vec::with_capacity(edge_count);
+    for _ in 0..edge_count {
+        edges.push(
+            ResearchEdge::new(
+                decode_ulid(&mut decoder)?,
+                decoder.string()?,
+                decode_ulid(&mut decoder)?,
+                decoder.string()?,
+            )
+            .map_err(ficant_application::map_domain_error)?,
+        );
+    }
+    let external_count = decoder.len()?;
+    let mut external_inputs = Vec::with_capacity(external_count);
+    for _ in 0..external_count {
+        external_inputs.push(
+            GraphExternalInput::new(decoder.string()?, decode_typed_value(&mut decoder)?)
+                .map_err(ficant_application::map_domain_error)?,
+        );
+    }
+    let binding_count = decoder.len()?;
+    let mut bindings = Vec::with_capacity(binding_count);
+    for _ in 0..binding_count {
+        bindings.push(
+            GraphExternalInputBinding::new(
+                decoder.string()?,
+                decode_ulid(&mut decoder)?,
+                decoder.string()?,
+            )
+            .map_err(ficant_application::map_domain_error)?,
+        );
+    }
+    let claimed = decode_hash(&mut decoder)?;
+    decoder.end()?;
+    let graph = ResearchGraph::new_with_external_inputs(
+        ResearchGraphInput {
+            graph_id,
+            version,
+            owner,
+            nodes,
+            edges,
+        },
+        external_inputs,
+        bindings,
+    )
+    .map_err(ficant_application::map_domain_error)?;
+    if graph.digest() != &claimed {
+        return Err(codec_error());
+    }
+    Ok(graph)
+}
+
+pub(crate) fn encode_execution_identity(value: &ExecutionInstanceIdentity) -> Vec<u8> {
+    let mut encoder = Encoder::new();
+    encoder.string(value.run_id().as_str());
+    let reproducibility = value.reproducibility();
+    encoder.len(reproducibility.external_inputs().len());
+    for input in reproducibility.external_inputs() {
+        encoder.string(input.input_id());
+        encode_typed_value(&mut encoder, input.value_type());
+        encoder.bytes(input.payload());
+    }
+    for hash in [
+        reproducibility.data_snapshot_hash(),
+        reproducibility.universe_snapshot_hash(),
+        reproducibility.parameters_hash(),
+        reproducibility.runtime_image_digest(),
+        reproducibility.environment_digest(),
+    ] {
+        encoder.bytes(hash.as_bytes());
+    }
+    encoder.u64(reproducibility.seed());
+    encoder.len(reproducibility.rule_pack_bindings().len());
+    for binding in reproducibility.rule_pack_bindings() {
+        encoder.string(&binding.rule_pack_id);
+        encoder.u64(binding.version.get());
+        encoder.bytes(binding.content_hash.as_bytes());
+    }
+    encoder.len(reproducibility.node_implementations().len());
+    for binding in reproducibility.node_implementations() {
+        encoder.string(binding.node_id.as_str());
+        encoder.bytes(binding.implementation_digest.as_bytes());
+    }
+    encoder.bytes(value.reproducibility_digest().as_bytes());
+    encoder.bytes(value.digest().as_bytes());
+    encoder.finish()
+}
+
+pub(crate) fn decode_execution_identity(
+    bytes: &[u8],
+    graph: &ResearchGraph,
+) -> CodecResult<ExecutionInstanceIdentity> {
+    let mut decoder = Decoder::new(bytes)?;
+    let run_id = decode_ulid(&mut decoder)?;
+    let input_count = decoder.len()?;
+    let mut external_inputs = Vec::with_capacity(input_count);
+    for _ in 0..input_count {
+        external_inputs.push(
+            ExecutionExternalInput::new(
+                decoder.string()?,
+                decode_typed_value(&mut decoder)?,
+                decoder.bytes()?,
+            )
+            .map_err(|error| ficant_application::map_runtime_error(&error))?,
+        );
+    }
+    let data_snapshot_hash = decode_hash(&mut decoder)?;
+    let universe_snapshot_hash = decode_hash(&mut decoder)?;
+    let parameters_hash = decode_hash(&mut decoder)?;
+    let runtime_image_digest = decode_hash(&mut decoder)?;
+    let environment_digest = decode_hash(&mut decoder)?;
+    let seed = decoder.u64()?;
+    let rule_count = decoder.len()?;
+    let mut rule_pack_bindings = Vec::with_capacity(rule_count);
+    for _ in 0..rule_count {
+        rule_pack_bindings.push(RulePackBinding {
+            rule_pack_id: decoder.string()?,
+            version: decode_version(&mut decoder)?,
+            content_hash: decode_hash(&mut decoder)?,
+        });
+    }
+    let implementation_count = decoder.len()?;
+    let mut node_implementations = Vec::with_capacity(implementation_count);
+    for _ in 0..implementation_count {
+        node_implementations.push(NodeImplementation {
+            node_id: decode_ulid(&mut decoder)?,
+            implementation_digest: decode_hash(&mut decoder)?,
+        });
+    }
+    let claimed_reproducibility = decode_hash(&mut decoder)?;
+    let claimed_execution = decode_hash(&mut decoder)?;
+    decoder.end()?;
+    let reproducibility = ReproducibilityIdentity::new(
+        graph,
+        ReproducibilityIdentityInput {
+            external_inputs,
+            data_snapshot_hash,
+            universe_snapshot_hash,
+            parameters_hash,
+            runtime_image_digest,
+            environment_digest,
+            seed,
+            rule_pack_bindings,
+            node_implementations,
+        },
+    )
+    .map_err(|error| ficant_application::map_runtime_error(&error))?;
+    if reproducibility.digest() != &claimed_reproducibility {
+        return Err(codec_error());
+    }
+    let identity = ExecutionInstanceIdentity::from_reproducibility(run_id, reproducibility);
+    if identity.digest() != &claimed_execution {
+        return Err(codec_error());
+    }
+    Ok(identity)
+}
+
+fn encode_ports(encoder: &mut Encoder, values: &[PortType]) {
+    encoder.len(values.len());
+    for value in values {
+        encoder.string(value.port_name());
+        encode_typed_value(encoder, value.value_type());
+    }
+}
+
+fn decode_ports(decoder: &mut Decoder<'_>) -> CodecResult<Vec<PortType>> {
+    let count = decoder.len()?;
+    let mut values = Vec::with_capacity(count);
+    for _ in 0..count {
+        values.push(
+            PortType::new(decoder.string()?, decode_typed_value(decoder)?)
+                .map_err(ficant_application::map_domain_error)?,
+        );
+    }
+    Ok(values)
+}
+
+fn encode_typed_value(encoder: &mut Encoder, value: &TypedValue) {
+    encoder.string(value.type_id());
+    encoder.u64(value.type_version().get());
+    encoder.bytes(value.schema_hash().as_bytes());
+}
+
+fn decode_typed_value(decoder: &mut Decoder<'_>) -> CodecResult<TypedValue> {
+    TypedValue::new(
+        decoder.string()?,
+        decode_version(decoder)?,
+        decode_hash(decoder)?,
+    )
+    .map_err(ficant_application::map_domain_error)
+}
 
 pub(crate) fn encode_definition(value: &DefinitionValue) -> Vec<u8> {
     let mut encoder = Encoder::new();
@@ -872,6 +1184,10 @@ const fn journal_event_type_code(value: JournalEventType) -> u8 {
         JournalEventType::RunCancelled => 5,
         JournalEventType::ArtifactPublished => 6,
         JournalEventType::SignalSetPublished => 7,
+        JournalEventType::NodeStarted => 8,
+        JournalEventType::NodeSucceeded => 9,
+        JournalEventType::NodeFailed => 10,
+        JournalEventType::NodeCheckpointed => 11,
     }
 }
 
@@ -884,6 +1200,10 @@ fn decode_journal_event_type(value: u8) -> CodecResult<JournalEventType> {
         5 => Ok(JournalEventType::RunCancelled),
         6 => Ok(JournalEventType::ArtifactPublished),
         7 => Ok(JournalEventType::SignalSetPublished),
+        8 => Ok(JournalEventType::NodeStarted),
+        9 => Ok(JournalEventType::NodeSucceeded),
+        10 => Ok(JournalEventType::NodeFailed),
+        11 => Ok(JournalEventType::NodeCheckpointed),
         _ => Err(codec_error()),
     }
 }
@@ -1168,5 +1488,21 @@ mod tests {
         assert_eq!(decoded, event);
         assert_eq!(decoded.content_hash(), event.content_hash());
         assert_ne!(decoded.content_hash(), &ContentHash::digest(b"different"));
+
+        for event_type in [
+            JournalEventType::NodeStarted,
+            JournalEventType::NodeSucceeded,
+            JournalEventType::NodeFailed,
+            JournalEventType::NodeCheckpointed,
+        ] {
+            let mut node_input = input.clone();
+            node_input.event_type = event_type;
+            let node_event =
+                RunJournal::new(node_input.clone(), &node_input.canonical_hash().unwrap()).unwrap();
+            assert_eq!(
+                decode_journal(&encode_journal(&node_event)).unwrap(),
+                node_event
+            );
+        }
     }
 }

@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package ficant.research.v1;
+
+import "ficant/core/v1/common.proto";
+
+enum DeterminismClass {
+  DETERMINISM_CLASS_UNSPECIFIED = 0;
+  DETERMINISM_CLASS_DETERMINISTIC = 1;
+  DETERMINISM_CLASS_SEEDED = 2;
+}
+
+enum FilesystemPermission {
+  FILESYSTEM_PERMISSION_UNSPECIFIED = 0;
+  FILESYSTEM_PERMISSION_NONE = 1;
+  FILESYSTEM_PERMISSION_TEMPORARY_ONLY = 2;
+}
+
+message TypedValue {
+  string type_id = 1;
+  uint64 type_version = 2;
+  ficant.core.v1.Sha256 schema_hash = 3;
+}
+
+message PortType {
+  string port_name = 1;
+  TypedValue value_type = 2;
+}
+
+message NodePermissions {
+  bool network = 1;
+  bool database = 2;
+  FilesystemPermission filesystem = 3;
+}
+
+message ResourceLimits {
+  uint32 cpu_cores = 1;
+  uint32 memory_mb = 2;
+  uint32 timeout_seconds = 3;
+}
+
+message ResearchNodeContract {
+  string contract_id = 1;
+  uint64 contract_version = 2;
+  repeated PortType input_types = 3;
+  repeated PortType output_types = 4;
+  ficant.core.v1.Sha256 state_schema = 5;
+  ficant.core.v1.Sha256 parameter_schema = 6;
+  DeterminismClass determinism_class = 7;
+  NodePermissions permissions = 8;
+  ResourceLimits resource_limits = 9;
+  repeated string required_invariants = 10;
+  ficant.core.v1.Sha256 digest = 11;
+}
+
+message ExternalInputDeclaration {
+  string input_id = 1;
+  TypedValue value_type = 2;
+}
+
+message ResearchNode {
+  ficant.core.v1.Ulid node_id = 1;
+  ResearchNodeContract contract = 2;
+  ficant.core.v1.Sha256 parameters_hash = 3;
+}
+
+message ResearchEdge {
+  ficant.core.v1.Ulid from_node_id = 1;
+  string from_port = 2;
+  ficant.core.v1.Ulid to_node_id = 3;
+  string to_port = 4;
+}
+
+message ExternalInputBinding {
+  string input_id = 1;
+  ficant.core.v1.Ulid to_node_id = 2;
+  string to_port = 3;
+}
+
+message ResearchGraph {
+  ficant.core.v1.Ulid graph_id = 1;
+  uint64 version = 2;
+  ficant.core.v1.OwnerRef owner = 3;
+  repeated ResearchNode nodes = 4;
+  repeated ResearchEdge edges = 5;
+  repeated ExternalInputDeclaration external_inputs = 6;
+  repeated ExternalInputBinding external_input_bindings = 7;
+  repeated ficant.core.v1.Ulid topological_order = 8;
+  ficant.core.v1.Sha256 digest = 9;
+}

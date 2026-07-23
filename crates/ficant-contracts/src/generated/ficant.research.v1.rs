@@ -152,6 +152,327 @@ impl ArtifactKind {
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TypedValue {
+    #[prost(string, tag="1")]
+    pub type_id: ::prost::alloc::string::String,
+    #[prost(uint64, tag="2")]
+    pub type_version: u64,
+    #[prost(message, optional, tag="3")]
+    pub schema_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PortType {
+    #[prost(string, tag="1")]
+    pub port_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub value_type: ::core::option::Option<TypedValue>,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NodePermissions {
+    #[prost(bool, tag="1")]
+    pub network: bool,
+    #[prost(bool, tag="2")]
+    pub database: bool,
+    #[prost(enumeration="FilesystemPermission", tag="3")]
+    pub filesystem: i32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ResourceLimits {
+    #[prost(uint32, tag="1")]
+    pub cpu_cores: u32,
+    #[prost(uint32, tag="2")]
+    pub memory_mb: u32,
+    #[prost(uint32, tag="3")]
+    pub timeout_seconds: u32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResearchNodeContract {
+    #[prost(string, tag="1")]
+    pub contract_id: ::prost::alloc::string::String,
+    #[prost(uint64, tag="2")]
+    pub contract_version: u64,
+    #[prost(message, repeated, tag="3")]
+    pub input_types: ::prost::alloc::vec::Vec<PortType>,
+    #[prost(message, repeated, tag="4")]
+    pub output_types: ::prost::alloc::vec::Vec<PortType>,
+    #[prost(message, optional, tag="5")]
+    pub state_schema: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="6")]
+    pub parameter_schema: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(enumeration="DeterminismClass", tag="7")]
+    pub determinism_class: i32,
+    #[prost(message, optional, tag="8")]
+    pub permissions: ::core::option::Option<NodePermissions>,
+    #[prost(message, optional, tag="9")]
+    pub resource_limits: ::core::option::Option<ResourceLimits>,
+    #[prost(string, repeated, tag="10")]
+    pub required_invariants: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(message, optional, tag="11")]
+    pub digest: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExternalInputDeclaration {
+    #[prost(string, tag="1")]
+    pub input_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub value_type: ::core::option::Option<TypedValue>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResearchNode {
+    #[prost(message, optional, tag="1")]
+    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub contract: ::core::option::Option<ResearchNodeContract>,
+    #[prost(message, optional, tag="3")]
+    pub parameters_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ResearchEdge {
+    #[prost(message, optional, tag="1")]
+    pub from_node_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(string, tag="2")]
+    pub from_port: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="3")]
+    pub to_node_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(string, tag="4")]
+    pub to_port: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExternalInputBinding {
+    #[prost(string, tag="1")]
+    pub input_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub to_node_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(string, tag="3")]
+    pub to_port: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResearchGraph {
+    #[prost(message, optional, tag="1")]
+    pub graph_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(uint64, tag="2")]
+    pub version: u64,
+    #[prost(message, optional, tag="3")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, repeated, tag="4")]
+    pub nodes: ::prost::alloc::vec::Vec<ResearchNode>,
+    #[prost(message, repeated, tag="5")]
+    pub edges: ::prost::alloc::vec::Vec<ResearchEdge>,
+    #[prost(message, repeated, tag="6")]
+    pub external_inputs: ::prost::alloc::vec::Vec<ExternalInputDeclaration>,
+    #[prost(message, repeated, tag="7")]
+    pub external_input_bindings: ::prost::alloc::vec::Vec<ExternalInputBinding>,
+    #[prost(message, repeated, tag="8")]
+    pub topological_order: ::prost::alloc::vec::Vec<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="9")]
+    pub digest: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum DeterminismClass {
+    Unspecified = 0,
+    Deterministic = 1,
+    Seeded = 2,
+}
+impl DeterminismClass {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "DETERMINISM_CLASS_UNSPECIFIED",
+            Self::Deterministic => "DETERMINISM_CLASS_DETERMINISTIC",
+            Self::Seeded => "DETERMINISM_CLASS_SEEDED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "DETERMINISM_CLASS_UNSPECIFIED" => Some(Self::Unspecified),
+            "DETERMINISM_CLASS_DETERMINISTIC" => Some(Self::Deterministic),
+            "DETERMINISM_CLASS_SEEDED" => Some(Self::Seeded),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum FilesystemPermission {
+    Unspecified = 0,
+    None = 1,
+    TemporaryOnly = 2,
+}
+impl FilesystemPermission {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "FILESYSTEM_PERMISSION_UNSPECIFIED",
+            Self::None => "FILESYSTEM_PERMISSION_NONE",
+            Self::TemporaryOnly => "FILESYSTEM_PERMISSION_TEMPORARY_ONLY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FILESYSTEM_PERMISSION_UNSPECIFIED" => Some(Self::Unspecified),
+            "FILESYSTEM_PERMISSION_NONE" => Some(Self::None),
+            "FILESYSTEM_PERMISSION_TEMPORARY_ONLY" => Some(Self::TemporaryOnly),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NodeImplementationBinding {
+    #[prost(message, optional, tag="1")]
+    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub implementation_digest: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RulePackBinding {
+    #[prost(message, optional, tag="1")]
+    pub rule_pack_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(uint64, tag="2")]
+    pub version: u64,
+    #[prost(message, optional, tag="3")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExecutionExternalInput {
+    #[prost(string, tag="1")]
+    pub input_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub value_type: ::core::option::Option<TypedValue>,
+    #[prost(message, optional, tag="3")]
+    pub resolved_artifact: ::core::option::Option<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="4")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpstreamNodeOutput {
+    #[prost(message, optional, tag="1")]
+    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(string, tag="2")]
+    pub port_name: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NodeInputBinding {
+    #[prost(message, optional, tag="1")]
+    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(string, tag="2")]
+    pub port_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="3")]
+    pub value_type: ::core::option::Option<TypedValue>,
+    #[prost(message, optional, tag="6")]
+    pub resolved_artifact: ::core::option::Option<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="7")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(oneof="node_input_binding::DeclaredSource", tags="4, 5")]
+    pub declared_source: ::core::option::Option<node_input_binding::DeclaredSource>,
+}
+/// Nested message and enum types in `NodeInputBinding`.
+pub mod node_input_binding {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum DeclaredSource {
+        #[prost(string, tag="4")]
+        ExternalInputId(::prost::alloc::string::String),
+        #[prost(message, tag="5")]
+        UpstreamOutput(super::UpstreamNodeOutput),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReproducibilityIdentity {
+    #[prost(message, optional, tag="1")]
+    pub graph_digest: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="2")]
+    pub data_snapshot_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="3")]
+    pub universe_snapshot_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="4")]
+    pub parameters_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="5")]
+    pub runtime_image_digest: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="6")]
+    pub environment_digest: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(uint64, tag="7")]
+    pub seed: u64,
+    #[prost(message, repeated, tag="8")]
+    pub rule_packs: ::prost::alloc::vec::Vec<RulePackBinding>,
+    #[prost(message, repeated, tag="9")]
+    pub node_implementations: ::prost::alloc::vec::Vec<NodeImplementationBinding>,
+    #[prost(message, repeated, tag="10")]
+    pub external_inputs: ::prost::alloc::vec::Vec<ExecutionExternalInput>,
+    #[prost(message, optional, tag="11")]
+    pub digest: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ExecutionInstanceIdentity {
+    #[prost(message, optional, tag="1")]
+    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub reproducibility: ::core::option::Option<ReproducibilityIdentity>,
+    #[prost(message, optional, tag="3")]
+    pub digest: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NodeOutputBinding {
+    #[prost(string, tag="1")]
+    pub port_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub value_type: ::core::option::Option<TypedValue>,
+    #[prost(message, optional, tag="3")]
+    pub artifact: ::core::option::Option<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="4")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodeOutputManifestContent {
+    #[prost(message, optional, tag="1")]
+    pub reproducibility_digest: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="2")]
+    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="3")]
+    pub node_contract_digest: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="4")]
+    pub implementation_digest: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, repeated, tag="5")]
+    pub inputs: ::prost::alloc::vec::Vec<NodeInputBinding>,
+    #[prost(message, repeated, tag="6")]
+    pub outputs: ::prost::alloc::vec::Vec<NodeOutputBinding>,
+    #[prost(message, optional, tag="7")]
+    pub manifest_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodeOutputManifest {
+    #[prost(message, optional, tag="1")]
+    pub execution: ::core::option::Option<ExecutionInstanceIdentity>,
+    #[prost(uint32, tag="2")]
+    pub attempt: u32,
+    #[prost(message, optional, tag="3")]
+    pub content: ::core::option::Option<NodeOutputManifestContent>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodeCheckpoint {
+    #[prost(message, optional, tag="1")]
+    pub execution: ::core::option::Option<ExecutionInstanceIdentity>,
+    #[prost(message, optional, tag="2")]
+    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(uint32, tag="3")]
+    pub attempt: u32,
+    #[prost(message, optional, tag="4")]
+    pub output_manifest: ::core::option::Option<NodeOutputManifest>,
+    #[prost(uint64, tag="5")]
+    pub journal_sequence: u64,
+    #[prost(message, optional, tag="6")]
+    pub journal_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="7")]
+    pub checkpoint_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RunJournal {
     #[prost(message, optional, tag="1")]
     pub journal_event_id: ::core::option::Option<super::super::core::v1::Ulid>,
@@ -185,6 +506,10 @@ pub enum JournalEventType {
     RunCancelled = 5,
     ArtifactPublished = 6,
     SignalSetPublished = 7,
+    NodeStarted = 8,
+    NodeSucceeded = 9,
+    NodeFailed = 10,
+    NodeCheckpointed = 11,
 }
 impl JournalEventType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -201,6 +526,10 @@ impl JournalEventType {
             Self::RunCancelled => "JOURNAL_EVENT_TYPE_RUN_CANCELLED",
             Self::ArtifactPublished => "JOURNAL_EVENT_TYPE_ARTIFACT_PUBLISHED",
             Self::SignalSetPublished => "JOURNAL_EVENT_TYPE_SIGNAL_SET_PUBLISHED",
+            Self::NodeStarted => "JOURNAL_EVENT_TYPE_NODE_STARTED",
+            Self::NodeSucceeded => "JOURNAL_EVENT_TYPE_NODE_SUCCEEDED",
+            Self::NodeFailed => "JOURNAL_EVENT_TYPE_NODE_FAILED",
+            Self::NodeCheckpointed => "JOURNAL_EVENT_TYPE_NODE_CHECKPOINTED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -214,6 +543,10 @@ impl JournalEventType {
             "JOURNAL_EVENT_TYPE_RUN_CANCELLED" => Some(Self::RunCancelled),
             "JOURNAL_EVENT_TYPE_ARTIFACT_PUBLISHED" => Some(Self::ArtifactPublished),
             "JOURNAL_EVENT_TYPE_SIGNAL_SET_PUBLISHED" => Some(Self::SignalSetPublished),
+            "JOURNAL_EVENT_TYPE_NODE_STARTED" => Some(Self::NodeStarted),
+            "JOURNAL_EVENT_TYPE_NODE_SUCCEEDED" => Some(Self::NodeSucceeded),
+            "JOURNAL_EVENT_TYPE_NODE_FAILED" => Some(Self::NodeFailed),
+            "JOURNAL_EVENT_TYPE_NODE_CHECKPOINTED" => Some(Self::NodeCheckpointed),
             _ => None,
         }
     }

@@ -42,6 +42,9 @@ $steps = @(
 if ($IncludeIntegration) {
     $steps += @(
         New-FicantCheckStep -Name 'PostgreSQL migration integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'migration_acceptance', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'Phase 4C PostgreSQL lease queue integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'lease_queue_sit', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'Phase 4 PostgreSQL execution closure integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'phase4_execution_sit', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'Phase 4 production worker integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-worker', '--features', 'integration-tests', '--test', 'phase4_worker_sit', '--', '--test-threads=1')
         New-FicantCheckStep -Name 'Phase 1 business-loop integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-acceptance', '--test', 'phase1_business_loop', '--', '--test-threads=1')
         New-FicantCheckStep -Name 'Negative-invariant integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-acceptance', '--test', 'negative_invariants', '--', '--test-threads=1')
         New-FicantCheckStep -Name 'Phase 2B carry-roll integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'carry_roll_sit', '--', '--test-threads=1')

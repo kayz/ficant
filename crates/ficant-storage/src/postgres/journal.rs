@@ -200,6 +200,10 @@ const fn event_type(value: JournalEventType) -> &'static str {
         JournalEventType::RunCancelled => "RUN_CANCELLED",
         JournalEventType::ArtifactPublished => "ARTIFACT_PUBLISHED",
         JournalEventType::SignalSetPublished => "SIGNAL_SET_PUBLISHED",
+        JournalEventType::NodeStarted => "NODE_STARTED",
+        JournalEventType::NodeSucceeded => "NODE_SUCCEEDED",
+        JournalEventType::NodeFailed => "NODE_FAILED",
+        JournalEventType::NodeCheckpointed => "NODE_CHECKPOINTED",
     }
 }
 

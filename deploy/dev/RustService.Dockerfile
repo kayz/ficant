@@ -10,6 +10,7 @@ WORKDIR /workspace
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY binaries ./binaries
 COPY crates ./crates
+COPY cpp ./cpp
 RUN cargo \
         --config 'source.crates-io.replace-with="github-index"' \
         --config 'source.github-index.registry="sparse+https://raw.githubusercontent.com/rust-lang/crates.io-index/master/"' \
