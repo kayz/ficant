@@ -7,7 +7,29 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
+async-trait = { workspace = true }
+ficant-application = { path = "../../crates/ficant-application" }
 ficant-bootstrap = { path = "../ficant-bootstrap" }
+ficant-contracts = { path = "../../crates/ficant-contracts" }
+ficant-domain = { path = "../../crates/ficant-domain" }
+ficant-native-nodes = { path = "../../crates/ficant-native-nodes" }
+ficant-runtime = { path = "../../crates/ficant-runtime" }
+ficant-storage = { path = "../../crates/ficant-storage" }
+prost = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true, features = ["signal"] }
+
+[dev-dependencies]
+chrono = { workspace = true }
+prost-types = { workspace = true }
+
+[features]
+integration-tests = []
+
+[[test]]
+name = "phase4_worker_sit"
+path = "tests/phase4_worker_sit.rs"
+required-features = ["integration-tests"]
 
 [lints]
 workspace = true

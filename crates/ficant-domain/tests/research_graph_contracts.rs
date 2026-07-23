@@ -1,9 +1,9 @@
 use ficant_domain::DomainErrorCode;
 use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid, Version};
 use ficant_domain::research::{
-    DeterminismClass, FilesystemPermission, NodePermissions, PortType, ResearchEdge, ResearchGraph,
-    ResearchGraphInput, ResearchNode, ResearchNodeContract, ResearchNodeContractInput,
-    ResourceLimits, TypedValue,
+    DeterminismClass, FilesystemPermission, GraphExternalInput, GraphExternalInputBinding,
+    NodePermissions, PortType, ResearchEdge, ResearchGraph, ResearchGraphInput, ResearchNode,
+    ResearchNodeContract, ResearchNodeContractInput, ResourceLimits, TypedValue,
 };
 
 const ULID_PREFIX: &str = "01ARZ3NDEKTSV4RRFFQ69G5FA";
@@ -320,4 +320,140 @@ fn graph_rejects_cycles_and_duplicate_node_identities() {
         edges: vec![],
     });
     assert_eq!(duplicate, Err(DomainErrorCode::InvalidValue));
+}
+
+#[test]
+fn external_inputs_are_canonical_and_bound_exactly_once() {
+    let raw = value_type("ficant.market.raw", b"raw-v1");
+    let source = node(
+        'A',
+        contract(
+            "ficant.data.external",
+            vec![port("raw", &raw)],
+            vec![port("clean", &raw)],
+        ),
+    );
+    let graph_input = || ResearchGraphInput {
+        graph_id: id('G'),
+        version: Version::new(1).unwrap(),
+        owner: owner(),
+        nodes: vec![source.clone()],
+        edges: vec![],
+    };
+    let declaration = GraphExternalInput::new("market-data", raw.clone()).unwrap();
+    let binding = GraphExternalInputBinding::new("market-data", id('A'), "raw").unwrap();
+    let graph = ResearchGraph::new_with_external_inputs(
+        graph_input(),
+        vec![declaration.clone()],
+        vec![binding.clone()],
+    )
+    .unwrap();
+    assert_eq!(graph.external_inputs(), std::slice::from_ref(&declaration));
+    assert_eq!(
+        graph.external_input_bindings(),
+        std::slice::from_ref(&binding)
+    );
+
+    let reordered = ResearchGraph::new_with_external_inputs(
+        graph_input(),
+        vec![declaration.clone()],
+        vec![binding.clone()],
+    )
+    .unwrap();
+    assert_eq!(graph.digest(), reordered.digest());
+
+    let renamed = ResearchGraph::new_with_external_inputs(
+        graph_input(),
+        vec![GraphExternalInput::new("renamed-data", raw.clone()).unwrap()],
+        vec![GraphExternalInputBinding::new("renamed-data", id('A'), "raw").unwrap()],
+    )
+    .unwrap();
+    assert_ne!(graph.digest(), renamed.digest());
+
+    let fanout_target = node(
+        'B',
+        contract(
+            "ficant.data.external.second",
+            vec![port("raw", &raw)],
+            vec![port("clean", &raw)],
+        ),
+    );
+    let fanout = ResearchGraph::new_with_external_inputs(
+        ResearchGraphInput {
+            graph_id: id('G'),
+            version: Version::new(1).unwrap(),
+            owner: owner(),
+            nodes: vec![source.clone(), fanout_target],
+            edges: vec![],
+        },
+        vec![declaration.clone()],
+        vec![
+            binding.clone(),
+            GraphExternalInputBinding::new("market-data", id('B'), "raw").unwrap(),
+        ],
+    )
+    .unwrap();
+    assert_eq!(fanout.external_input_bindings().len(), 2);
+
+    assert_eq!(
+        ResearchGraph::new_with_external_inputs(graph_input(), vec![declaration.clone()], vec![]),
+        Err(DomainErrorCode::BrokenLineage)
+    );
+    assert_eq!(
+        ResearchGraph::new_with_external_inputs(
+            graph_input(),
+            vec![declaration.clone()],
+            vec![
+                binding.clone(),
+                GraphExternalInputBinding::new("market-data", id('A'), "raw").unwrap(),
+            ],
+        ),
+        Err(DomainErrorCode::InvalidValue)
+    );
+    assert_eq!(
+        ResearchGraph::new_with_external_inputs(
+            graph_input(),
+            vec![declaration.clone()],
+            vec![GraphExternalInputBinding::new("unknown", id('A'), "raw").unwrap()],
+        ),
+        Err(DomainErrorCode::BrokenLineage)
+    );
+    let wrong = value_type("ficant.market.wrong", b"wrong");
+    assert_eq!(
+        ResearchGraph::new_with_external_inputs(
+            graph_input(),
+            vec![GraphExternalInput::new("market-data", wrong).unwrap()],
+            vec![binding],
+        ),
+        Err(DomainErrorCode::InvalidValue)
+    );
+}
+
+#[test]
+fn edge_and_external_input_cannot_bind_the_same_port() {
+    let raw = value_type("ficant.market.raw", b"raw-v1");
+    let source = node(
+        'A',
+        contract("ficant.data.source", vec![], vec![port("raw", &raw)]),
+    );
+    let target = node(
+        'B',
+        contract(
+            "ficant.data.target",
+            vec![port("raw", &raw)],
+            vec![port("clean", &raw)],
+        ),
+    );
+    let graph = ResearchGraph::new_with_external_inputs(
+        ResearchGraphInput {
+            graph_id: id('G'),
+            version: Version::new(1).unwrap(),
+            owner: owner(),
+            nodes: vec![source, target],
+            edges: vec![ResearchEdge::new(id('A'), "raw", id('B'), "raw").unwrap()],
+        },
+        vec![GraphExternalInput::new("market-data", raw).unwrap()],
+        vec![GraphExternalInputBinding::new("market-data", id('B'), "raw").unwrap()],
+    );
+    assert_eq!(graph, Err(DomainErrorCode::InvalidValue));
 }

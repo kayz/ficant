@@ -12,6 +12,7 @@ mod fingerprint;
 mod futures_delivery;
 mod futures_hedge;
 mod journal;
+mod phase4_execution;
 mod required_reads;
 mod rule_pack_resolution;
 mod runs;
@@ -49,6 +50,13 @@ pub use futures_hedge::{
     EncodedFuturesHedgeArtifact, FuturesHedgeArtifactCodec, FuturesHedgeEngine,
 };
 pub use journal::{AppendJournalEvent, RunJournalRepository};
+pub use phase4_execution::{
+    BeginNode, CompleteNode, EnqueueNode, ExecutionExternalInput, ExecutionInstanceIdentity,
+    ExternalInputArtifactBinding, FailNode, GraphNodeEvent, GraphReplayResult, NodeBeginResult,
+    NodeFailureResult, NodeImplementation, NodeJournalEvidence, NodeLeaseFence, NodeSuccessResult,
+    Phase4ExecutionRepository, ReproducibilityIdentity, ReproducibilityIdentityInput,
+    RulePackBinding, StoredExecutionIdentity, replay_graph_execution, stable_node_artifact_id,
+};
 pub(crate) use required_reads::SnapshotVerifiedReadMetadataParts;
 pub use required_reads::{
     IntegrityEvent, IntegrityEventSeverity, IntegrityEventSink, IntegrityFailureReason,

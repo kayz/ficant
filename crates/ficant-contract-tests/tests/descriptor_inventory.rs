@@ -14,7 +14,9 @@ use ficant_contracts::ficant::app::v1::AppRegistry;
 use ficant_contracts::ficant::core::v1::DecimalValue;
 use ficant_contracts::ficant::market::v1::{Instrument, InstrumentKind};
 use ficant_contracts::ficant::rates::v1::AnalyzeBondRequest;
-use ficant_contracts::ficant::research::v1::{ExperimentRun, RunState};
+use ficant_contracts::ficant::research::v1::{
+    ExecutionInstanceIdentity, ExperimentRun, ReproducibilityIdentity, ResearchGraph, RunState,
+};
 
 const DEFAULT_BUF: &str = "/usr/local/bin/buf";
 const BUF_VERSION: &str = "1.56.0";
@@ -48,6 +50,9 @@ fn generated_rust_consumer_exports_representative_contracts() {
     let run = ExperimentRun::default();
     let registry = AppRegistry::default();
     let rates = AnalyzeBondRequest::default();
+    let graph = ResearchGraph::default();
+    let reproducibility = ReproducibilityIdentity::default();
+    let execution = ExecutionInstanceIdentity::default();
 
     assert!(instrument.instrument_id.is_none());
     assert_eq!(instrument.kind, InstrumentKind::Unspecified as i32);
@@ -55,6 +60,9 @@ fn generated_rust_consumer_exports_representative_contracts() {
     assert_eq!(run.state, RunState::Unspecified as i32);
     assert!(registry.apps.is_empty());
     assert!(rates.context.is_none());
+    assert!(graph.nodes.is_empty());
+    assert!(reproducibility.node_implementations.is_empty());
+    assert!(execution.reproducibility.is_none());
 }
 
 #[derive(Clone, Copy)]
@@ -126,6 +134,16 @@ impl ExpectedField {
             name,
             field_type: Type::Message,
             type_name: Some(type_name),
+            repeated: false,
+            oneof: Some(oneof),
+        }
+    }
+
+    const fn oneof_scalar(name: &'static str, field_type: Type, oneof: &'static str) -> Self {
+        Self {
+            name,
+            field_type,
+            type_name: None,
             repeated: false,
             oneof: Some(oneof),
         }
@@ -218,6 +236,12 @@ fn architecture_query_messages_have_exact_schemas() {
     let descriptor_set = descriptor_set();
     let messages = top_level_messages(descriptor_set);
     assert_query_contracts(&messages);
+}
+
+#[test]
+fn phase4_graph_and_execution_messages_have_exact_schemas() {
+    let messages = top_level_messages(descriptor_set());
+    assert_phase4_contracts(&messages);
 }
 
 #[test]
@@ -1012,6 +1036,251 @@ fn assert_platform_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     );
 }
 
+fn assert_phase4_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
+    let id = ".ficant.core.v1.Ulid";
+    let owner = ".ficant.core.v1.OwnerRef";
+    let hash = ".ficant.core.v1.Sha256";
+    let lineage = ".ficant.core.v1.LineageRef";
+    let typed_value = ".ficant.research.v1.TypedValue";
+    let execution = ".ficant.research.v1.ExecutionInstanceIdentity";
+
+    let specs: &[(&str, &[ExpectedField])] = &[
+        (
+            "ficant.research.v1.TypedValue",
+            &[
+                ExpectedField::scalar("type_id", Type::String),
+                ExpectedField::scalar("type_version", Type::Uint64),
+                ExpectedField::message("schema_hash", hash),
+            ],
+        ),
+        (
+            "ficant.research.v1.PortType",
+            &[
+                ExpectedField::scalar("port_name", Type::String),
+                ExpectedField::message("value_type", typed_value),
+            ],
+        ),
+        (
+            "ficant.research.v1.NodePermissions",
+            &[
+                ExpectedField::scalar("network", Type::Bool),
+                ExpectedField::scalar("database", Type::Bool),
+                ExpectedField::enumeration(
+                    "filesystem",
+                    ".ficant.research.v1.FilesystemPermission",
+                ),
+            ],
+        ),
+        (
+            "ficant.research.v1.ResourceLimits",
+            &[
+                ExpectedField::scalar("cpu_cores", Type::Uint32),
+                ExpectedField::scalar("memory_mb", Type::Uint32),
+                ExpectedField::scalar("timeout_seconds", Type::Uint32),
+            ],
+        ),
+        (
+            "ficant.research.v1.ResearchNodeContract",
+            &[
+                ExpectedField::scalar("contract_id", Type::String),
+                ExpectedField::scalar("contract_version", Type::Uint64),
+                ExpectedField::repeated_message("input_types", ".ficant.research.v1.PortType"),
+                ExpectedField::repeated_message("output_types", ".ficant.research.v1.PortType"),
+                ExpectedField::message("state_schema", hash),
+                ExpectedField::message("parameter_schema", hash),
+                ExpectedField::enumeration(
+                    "determinism_class",
+                    ".ficant.research.v1.DeterminismClass",
+                ),
+                ExpectedField::message("permissions", ".ficant.research.v1.NodePermissions"),
+                ExpectedField::message("resource_limits", ".ficant.research.v1.ResourceLimits"),
+                ExpectedField::repeated_scalar("required_invariants", Type::String),
+                ExpectedField::message("digest", hash),
+            ],
+        ),
+        (
+            "ficant.research.v1.ExternalInputDeclaration",
+            &[
+                ExpectedField::scalar("input_id", Type::String),
+                ExpectedField::message("value_type", typed_value),
+            ],
+        ),
+        (
+            "ficant.research.v1.ResearchNode",
+            &[
+                ExpectedField::message("node_id", id),
+                ExpectedField::message("contract", ".ficant.research.v1.ResearchNodeContract"),
+                ExpectedField::message("parameters_hash", hash),
+            ],
+        ),
+        (
+            "ficant.research.v1.ResearchEdge",
+            &[
+                ExpectedField::message("from_node_id", id),
+                ExpectedField::scalar("from_port", Type::String),
+                ExpectedField::message("to_node_id", id),
+                ExpectedField::scalar("to_port", Type::String),
+            ],
+        ),
+        (
+            "ficant.research.v1.ExternalInputBinding",
+            &[
+                ExpectedField::scalar("input_id", Type::String),
+                ExpectedField::message("to_node_id", id),
+                ExpectedField::scalar("to_port", Type::String),
+            ],
+        ),
+        (
+            "ficant.research.v1.ResearchGraph",
+            &[
+                ExpectedField::message("graph_id", id),
+                ExpectedField::scalar("version", Type::Uint64),
+                ExpectedField::message("owner", owner),
+                ExpectedField::repeated_message("nodes", ".ficant.research.v1.ResearchNode"),
+                ExpectedField::repeated_message("edges", ".ficant.research.v1.ResearchEdge"),
+                ExpectedField::repeated_message(
+                    "external_inputs",
+                    ".ficant.research.v1.ExternalInputDeclaration",
+                ),
+                ExpectedField::repeated_message(
+                    "external_input_bindings",
+                    ".ficant.research.v1.ExternalInputBinding",
+                ),
+                ExpectedField::repeated_message("topological_order", id),
+                ExpectedField::message("digest", hash),
+            ],
+        ),
+        (
+            "ficant.research.v1.NodeImplementationBinding",
+            &[
+                ExpectedField::message("node_id", id),
+                ExpectedField::message("implementation_digest", hash),
+            ],
+        ),
+        (
+            "ficant.research.v1.RulePackBinding",
+            &[
+                ExpectedField::message("rule_pack_id", id),
+                ExpectedField::scalar("version", Type::Uint64),
+                ExpectedField::message("content_hash", hash),
+            ],
+        ),
+        (
+            "ficant.research.v1.ExecutionExternalInput",
+            &[
+                ExpectedField::scalar("input_id", Type::String),
+                ExpectedField::message("value_type", typed_value),
+                ExpectedField::message("resolved_artifact", lineage),
+                ExpectedField::message("content_hash", hash),
+            ],
+        ),
+        (
+            "ficant.research.v1.UpstreamNodeOutput",
+            &[
+                ExpectedField::message("node_id", id),
+                ExpectedField::scalar("port_name", Type::String),
+            ],
+        ),
+        (
+            "ficant.research.v1.NodeInputBinding",
+            &[
+                ExpectedField::message("node_id", id),
+                ExpectedField::scalar("port_name", Type::String),
+                ExpectedField::message("value_type", typed_value),
+                ExpectedField::oneof_scalar("external_input_id", Type::String, "declared_source"),
+                ExpectedField::oneof_message(
+                    "upstream_output",
+                    ".ficant.research.v1.UpstreamNodeOutput",
+                    "declared_source",
+                ),
+                ExpectedField::message("resolved_artifact", lineage),
+                ExpectedField::message("content_hash", hash),
+            ],
+        ),
+        (
+            "ficant.research.v1.ReproducibilityIdentity",
+            &[
+                ExpectedField::message("graph_digest", hash),
+                ExpectedField::message("data_snapshot_hash", hash),
+                ExpectedField::message("universe_snapshot_hash", hash),
+                ExpectedField::message("parameters_hash", hash),
+                ExpectedField::message("runtime_image_digest", hash),
+                ExpectedField::message("environment_digest", hash),
+                ExpectedField::scalar("seed", Type::Uint64),
+                ExpectedField::repeated_message(
+                    "rule_packs",
+                    ".ficant.research.v1.RulePackBinding",
+                ),
+                ExpectedField::repeated_message(
+                    "node_implementations",
+                    ".ficant.research.v1.NodeImplementationBinding",
+                ),
+                ExpectedField::repeated_message(
+                    "external_inputs",
+                    ".ficant.research.v1.ExecutionExternalInput",
+                ),
+                ExpectedField::message("digest", hash),
+            ],
+        ),
+        (
+            "ficant.research.v1.ExecutionInstanceIdentity",
+            &[
+                ExpectedField::message("run_id", id),
+                ExpectedField::message(
+                    "reproducibility",
+                    ".ficant.research.v1.ReproducibilityIdentity",
+                ),
+                ExpectedField::message("digest", hash),
+            ],
+        ),
+        (
+            "ficant.research.v1.NodeOutputBinding",
+            &[
+                ExpectedField::scalar("port_name", Type::String),
+                ExpectedField::message("value_type", typed_value),
+                ExpectedField::message("artifact", lineage),
+                ExpectedField::message("content_hash", hash),
+            ],
+        ),
+        (
+            "ficant.research.v1.NodeOutputManifestContent",
+            &[
+                ExpectedField::message("reproducibility_digest", hash),
+                ExpectedField::message("node_id", id),
+                ExpectedField::message("node_contract_digest", hash),
+                ExpectedField::message("implementation_digest", hash),
+                ExpectedField::repeated_message("inputs", ".ficant.research.v1.NodeInputBinding"),
+                ExpectedField::repeated_message("outputs", ".ficant.research.v1.NodeOutputBinding"),
+                ExpectedField::message("manifest_hash", hash),
+            ],
+        ),
+        (
+            "ficant.research.v1.NodeOutputManifest",
+            &[
+                ExpectedField::message("execution", execution),
+                ExpectedField::scalar("attempt", Type::Uint32),
+                ExpectedField::message("content", ".ficant.research.v1.NodeOutputManifestContent"),
+            ],
+        ),
+        (
+            "ficant.research.v1.NodeCheckpoint",
+            &[
+                ExpectedField::message("execution", execution),
+                ExpectedField::message("node_id", id),
+                ExpectedField::scalar("attempt", Type::Uint32),
+                ExpectedField::message("output_manifest", ".ficant.research.v1.NodeOutputManifest"),
+                ExpectedField::scalar("journal_sequence", Type::Uint64),
+                ExpectedField::message("journal_hash", hash),
+                ExpectedField::message("checkpoint_hash", hash),
+            ],
+        ),
+    ];
+
+    for (message, fields) in specs {
+        assert_fields(messages, message, fields);
+    }
+}
+
 fn assert_query_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     let id = ".ficant.core.v1.Ulid";
     let page_request = ".ficant.core.v1.PageRequest";
@@ -1275,6 +1544,28 @@ fn assert_domain_enums(enums: &BTreeMap<String, &EnumDescriptorProto>) {
             ("JOURNAL_EVENT_TYPE_RUN_CANCELLED", 5),
             ("JOURNAL_EVENT_TYPE_ARTIFACT_PUBLISHED", 6),
             ("JOURNAL_EVENT_TYPE_SIGNAL_SET_PUBLISHED", 7),
+            ("JOURNAL_EVENT_TYPE_NODE_STARTED", 8),
+            ("JOURNAL_EVENT_TYPE_NODE_SUCCEEDED", 9),
+            ("JOURNAL_EVENT_TYPE_NODE_FAILED", 10),
+            ("JOURNAL_EVENT_TYPE_NODE_CHECKPOINTED", 11),
+        ],
+    );
+    assert_enum(
+        enums,
+        "ficant.research.v1.DeterminismClass",
+        &[
+            ("DETERMINISM_CLASS_UNSPECIFIED", 0),
+            ("DETERMINISM_CLASS_DETERMINISTIC", 1),
+            ("DETERMINISM_CLASS_SEEDED", 2),
+        ],
+    );
+    assert_enum(
+        enums,
+        "ficant.research.v1.FilesystemPermission",
+        &[
+            ("FILESYSTEM_PERMISSION_UNSPECIFIED", 0),
+            ("FILESYSTEM_PERMISSION_NONE", 1),
+            ("FILESYSTEM_PERMISSION_TEMPORARY_ONLY", 2),
         ],
     );
 }

@@ -10,9 +10,9 @@ pub use artifact::{Artifact, ArtifactKind};
 pub use data_snapshot::{DataSnapshot, DataSnapshotInput};
 pub use experiment_run::{ExperimentRun, ExperimentRunInput, RunState};
 pub use research_graph::{
-    DeterminismClass, FilesystemPermission, NodePermissions, PortType, ResearchEdge, ResearchGraph,
-    ResearchGraphInput, ResearchNode, ResearchNodeContract, ResearchNodeContractInput,
-    ResourceLimits, TypedValue,
+    DeterminismClass, FilesystemPermission, GraphExternalInput, GraphExternalInputBinding,
+    NodePermissions, PortType, ResearchEdge, ResearchGraph, ResearchGraphInput, ResearchNode,
+    ResearchNodeContract, ResearchNodeContractInput, ResourceLimits, TypedValue,
 };
 pub use run_journal::{JournalEventType, RunJournal, RunJournalInput};
 pub use signal_set::{SignalSet, SignalSetInput};

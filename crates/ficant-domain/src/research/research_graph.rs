@@ -333,12 +333,76 @@ impl ResearchEdge {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GraphExternalInput {
+    input_id: String,
+    value_type: TypedValue,
+}
+
+impl GraphExternalInput {
+    pub fn new(input_id: impl Into<String>, value_type: TypedValue) -> DomainResult<Self> {
+        let input_id = input_id.into();
+        ensure_symbol(&input_id)?;
+        Ok(Self {
+            input_id,
+            value_type,
+        })
+    }
+
+    pub fn input_id(&self) -> &str {
+        &self.input_id
+    }
+
+    pub fn value_type(&self) -> &TypedValue {
+        &self.value_type
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct GraphExternalInputBinding {
+    input_id: String,
+    to_node: Ulid,
+    to_port: String,
+}
+
+impl GraphExternalInputBinding {
+    pub fn new(
+        input_id: impl Into<String>,
+        to_node: Ulid,
+        to_port: impl Into<String>,
+    ) -> DomainResult<Self> {
+        let input_id = input_id.into();
+        let to_port = to_port.into();
+        ensure_symbol(&input_id)?;
+        ensure_symbol(&to_port)?;
+        Ok(Self {
+            input_id,
+            to_node,
+            to_port,
+        })
+    }
+
+    pub fn input_id(&self) -> &str {
+        &self.input_id
+    }
+
+    pub fn to_node(&self) -> &Ulid {
+        &self.to_node
+    }
+
+    pub fn to_port(&self) -> &str {
+        &self.to_port
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResearchGraph {
     graph_id: Ulid,
     version: Version,
     owner: OwnerRef,
     nodes: Vec<ResearchNode>,
     edges: Vec<ResearchEdge>,
+    external_inputs: Vec<GraphExternalInput>,
+    external_input_bindings: Vec<GraphExternalInputBinding>,
     topological_order: Vec<Ulid>,
     digest: ContentHash,
 }
@@ -354,6 +418,14 @@ pub struct ResearchGraphInput {
 
 impl ResearchGraph {
     pub fn new(input: ResearchGraphInput) -> DomainResult<Self> {
+        Self::new_with_external_inputs(input, vec![], vec![])
+    }
+
+    pub fn new_with_external_inputs(
+        input: ResearchGraphInput,
+        mut external_inputs: Vec<GraphExternalInput>,
+        mut external_input_bindings: Vec<GraphExternalInputBinding>,
+    ) -> DomainResult<Self> {
         if input.nodes.is_empty() {
             return Err(DomainErrorCode::InvalidValue);
         }
@@ -374,7 +446,26 @@ impl ResearchGraph {
         if edges.windows(2).any(|pair| pair[0] == pair[1]) {
             return Err(DomainErrorCode::InvalidValue);
         }
-        validate_edges(&node_map, &edges)?;
+        external_inputs.sort_by(|left, right| left.input_id.cmp(&right.input_id));
+        if external_inputs
+            .windows(2)
+            .any(|pair| pair[0].input_id == pair[1].input_id)
+        {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        external_input_bindings.sort();
+        if external_input_bindings
+            .windows(2)
+            .any(|pair| pair[0] == pair[1])
+        {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        validate_bindings(
+            &node_map,
+            &edges,
+            &external_inputs,
+            &external_input_bindings,
+        )?;
         let topological_order = topological_order(&node_map, &edges)?;
         let mut result = Self {
             graph_id: input.graph_id,
@@ -382,6 +473,8 @@ impl ResearchGraph {
             owner: input.owner,
             nodes,
             edges,
+            external_inputs,
+            external_input_bindings,
             topological_order,
             digest: ContentHash::digest(b"uninitialized"),
         };
@@ -407,6 +500,14 @@ impl ResearchGraph {
 
     pub fn edges(&self) -> &[ResearchEdge] {
         &self.edges
+    }
+
+    pub fn external_inputs(&self) -> &[GraphExternalInput] {
+        &self.external_inputs
+    }
+
+    pub fn external_input_bindings(&self) -> &[GraphExternalInputBinding] {
+        &self.external_input_bindings
     }
 
     pub fn topological_order(&self) -> &[Ulid] {
@@ -436,6 +537,17 @@ impl ResearchGraph {
             push_str(&mut bytes, edge.to_node.as_str());
             push_str(&mut bytes, &edge.to_port);
         }
+        push_u64(&mut bytes, self.external_inputs.len() as u64);
+        for input in &self.external_inputs {
+            push_str(&mut bytes, &input.input_id);
+            push_typed_value(&mut bytes, &input.value_type);
+        }
+        push_u64(&mut bytes, self.external_input_bindings.len() as u64);
+        for binding in &self.external_input_bindings {
+            push_str(&mut bytes, &binding.input_id);
+            push_str(&mut bytes, binding.to_node.as_str());
+            push_str(&mut bytes, &binding.to_port);
+        }
         bytes
     }
 }
@@ -450,9 +562,11 @@ impl VersionedDefinition for ResearchGraph {
     }
 }
 
-fn validate_edges(
+fn validate_bindings(
     nodes: &BTreeMap<Ulid, &ResearchNode>,
     edges: &[ResearchEdge],
+    external_inputs: &[GraphExternalInput],
+    external_input_bindings: &[GraphExternalInputBinding],
 ) -> DomainResult<()> {
     let mut bindings = BTreeSet::new();
     for edge in edges {
@@ -470,6 +584,30 @@ fn validate_edges(
         if !bindings.insert((edge.to_node.clone(), edge.to_port.clone())) {
             return Err(DomainErrorCode::InvalidValue);
         }
+    }
+    let declarations: BTreeMap<&str, &GraphExternalInput> = external_inputs
+        .iter()
+        .map(|input| (input.input_id.as_str(), input))
+        .collect();
+    let mut used_external_inputs = BTreeSet::new();
+    for binding in external_input_bindings {
+        let declaration = declarations
+            .get(binding.input_id.as_str())
+            .ok_or(DomainErrorCode::BrokenLineage)?;
+        let target = nodes
+            .get(&binding.to_node)
+            .ok_or(DomainErrorCode::BrokenLineage)?;
+        let input = port(&target.contract.input_types, &binding.to_port)?;
+        if declaration.value_type != input.value_type {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        if !bindings.insert((binding.to_node.clone(), binding.to_port.clone())) {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        used_external_inputs.insert(binding.input_id.as_str());
+    }
+    if used_external_inputs.len() != external_inputs.len() {
+        return Err(DomainErrorCode::BrokenLineage);
     }
     for node in nodes.values() {
         for input in &node.contract.input_types {
@@ -578,10 +716,14 @@ fn push_ports(bytes: &mut Vec<u8>, ports: &[PortType]) {
     push_u64(bytes, ports.len() as u64);
     for port in ports {
         push_str(bytes, &port.port_name);
-        push_str(bytes, &port.value_type.type_id);
-        push_u64(bytes, port.value_type.type_version.get());
-        bytes.extend_from_slice(port.value_type.schema_hash.as_bytes());
+        push_typed_value(bytes, &port.value_type);
     }
+}
+
+fn push_typed_value(bytes: &mut Vec<u8>, value: &TypedValue) {
+    push_str(bytes, &value.type_id);
+    push_u64(bytes, value.type_version.get());
+    bytes.extend_from_slice(value.schema_hash.as_bytes());
 }
 
 fn push_str(bytes: &mut Vec<u8>, value: &str) {

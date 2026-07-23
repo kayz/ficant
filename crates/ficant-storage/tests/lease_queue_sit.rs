@@ -17,8 +17,9 @@ fn task(suffix: char, key: &str) -> EnqueueTask {
         task_id: id(suffix),
         run_id: id('R'),
         node_id: id(suffix),
-        node_attempt: 1,
         graph_digest: ContentHash::digest(b"graph-v1"),
+        execution_identity_digest: ContentHash::digest(b"execution-v1"),
+        planned_artifact_id: id(suffix),
         task_key: key.to_owned(),
     }
 }
@@ -35,6 +36,36 @@ async fn insert_run(pool: &sqlx::PgPool) {
     .bind(id('W').as_str())
     .bind("lease-queue-run")
     .bind(vec![7_u8; 32])
+    .bind(vec![1_u8])
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO research.research_graphs
+         (tenant_id,graph_id,version,owner_id,graph_digest,payload)
+         VALUES ($1,$2,1,$3,$4,$5)",
+    )
+    .bind(id('T').as_str())
+    .bind(id('Q').as_str())
+    .bind(id('W').as_str())
+    .bind(hash_hex(&ContentHash::digest(b"graph-v1")))
+    .bind(vec![1_u8])
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO research.execution_identities
+         (tenant_id,run_id,owner_id,graph_id,graph_version,graph_digest,
+          reproducibility_digest,execution_identity_digest,payload)
+         VALUES ($1,$2,$3,$4,1,$5,$6,$7,$8)",
+    )
+    .bind(id('T').as_str())
+    .bind(id('R').as_str())
+    .bind(id('W').as_str())
+    .bind(id('Q').as_str())
+    .bind(hash_hex(&ContentHash::digest(b"graph-v1")))
+    .bind(hash_hex(&ContentHash::digest(b"repro-v1")))
+    .bind(hash_hex(&ContentHash::digest(b"execution-v1")))
     .bind(vec![1_u8])
     .execute(pool)
     .await
@@ -93,7 +124,14 @@ async fn verify_idempotent_lifecycle(queue: &PostgresLeaseQueue) {
 
     let completion = ContentHash::digest(b"node-output");
     let completed = queue
-        .complete(&id('T'), &id('C'), &worker_x, &lease_g, &completion)
+        .complete(
+            &id('T'),
+            &id('C'),
+            &worker_x,
+            &lease_g,
+            &completion,
+            &id('C'),
+        )
         .await
         .unwrap();
     assert!(completed.completed());
@@ -101,7 +139,14 @@ async fn verify_idempotent_lifecycle(queue: &PostgresLeaseQueue) {
     assert_eq!(completed.task().completion_hash(), Some(&completion));
     assert!(
         !queue
-            .complete(&id('T'), &id('C'), &worker_x, &lease_g, &completion)
+            .complete(
+                &id('T'),
+                &id('C'),
+                &worker_x,
+                &lease_g,
+                &completion,
+                &id('C'),
+            )
             .await
             .unwrap()
             .completed()
@@ -113,7 +158,8 @@ async fn verify_idempotent_lifecycle(queue: &PostgresLeaseQueue) {
                 &id('C'),
                 &worker_x,
                 &lease_g,
-                &ContentHash::digest(b"changed")
+                &ContentHash::digest(b"changed"),
+                &id('C'),
             )
             .await,
         Err(LeaseQueueError::Conflict)
@@ -146,6 +192,7 @@ async fn verify_concurrent_claims(queue: &PostgresLeaseQueue) {
             left.lease_owner().unwrap(),
             left.lease_id().unwrap(),
             &left_hash,
+            left.planned_artifact_id(),
         )
         .await
         .unwrap();
@@ -156,9 +203,22 @@ async fn verify_concurrent_claims(queue: &PostgresLeaseQueue) {
             right.lease_owner().unwrap(),
             right.lease_id().unwrap(),
             &right_hash,
+            right.planned_artifact_id(),
         )
         .await
         .unwrap();
+}
+
+fn hash_hex(value: &ContentHash) -> String {
+    use std::fmt::Write as _;
+
+    value
+        .as_bytes()
+        .iter()
+        .fold(String::with_capacity(64), |mut output, byte| {
+            write!(output, "{byte:02x}").unwrap();
+            output
+        })
 }
 
 async fn verify_expired_recovery(queue: &PostgresLeaseQueue, pool: &sqlx::PgPool) {

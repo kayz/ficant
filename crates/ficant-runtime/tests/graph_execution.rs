@@ -214,7 +214,7 @@ fn interruption_before_checkpoint_reruns_the_same_node_with_next_attempt() {
 }
 
 #[test]
-fn replay_rejects_wrong_node_attempt_and_checkpoint_hash() {
+fn replay_rejects_wrong_node_terminal_attempt_and_checkpoint_hash() {
     let graph = graph();
 
     let mut wrong_node = run_prefix();
@@ -230,11 +230,17 @@ fn replay_rejects_wrong_node_attempt_and_checkpoint_hash() {
         ))
     );
 
+    let output = ContentHash::digest(b"output");
     let mut wrong_attempt = run_prefix();
     push_event(
         &mut wrong_attempt,
         JournalEventType::NodeStarted,
         Some(started('A', 2)),
+    );
+    push_event(
+        &mut wrong_attempt,
+        JournalEventType::NodeSucceeded,
+        Some(evidenced('A', 1, &output)),
     );
     assert_eq!(
         replay_graph_execution(&graph, &wrong_attempt),
@@ -243,7 +249,6 @@ fn replay_rejects_wrong_node_attempt_and_checkpoint_hash() {
         ))
     );
 
-    let output = ContentHash::digest(b"output");
     let mut drift = run_prefix();
     push_event(
         &mut drift,
@@ -264,6 +269,67 @@ fn replay_rejects_wrong_node_attempt_and_checkpoint_hash() {
         replay_graph_execution(&graph, &drift),
         Err(RuntimeError::Domain(DomainErrorCode::InvalidValue))
     );
+}
+
+#[test]
+fn fencing_claim_gaps_allow_first_attempt_two_and_active_one_to_jump_to_three() {
+    let graph = graph();
+
+    let mut first_gap = run_prefix();
+    push_event(
+        &mut first_gap,
+        JournalEventType::NodeStarted,
+        Some(started('A', 2)),
+    );
+    let first = replay_graph_execution(&graph, &first_gap).unwrap();
+    assert_eq!(first.resume_node(), Some(&id('A')));
+
+    let output = ContentHash::digest(b"attempt-three-output");
+    let mut active_gap = run_prefix();
+    push_event(
+        &mut active_gap,
+        JournalEventType::NodeStarted,
+        Some(started('A', 1)),
+    );
+    push_event(
+        &mut active_gap,
+        JournalEventType::NodeStarted,
+        Some(started('A', 3)),
+    );
+    push_event(
+        &mut active_gap,
+        JournalEventType::NodeSucceeded,
+        Some(evidenced('A', 3, &output)),
+    );
+    push_event(
+        &mut active_gap,
+        JournalEventType::NodeCheckpointed,
+        Some(evidenced('A', 3, &output)),
+    );
+    let recovered = replay_graph_execution(&graph, &active_gap).unwrap();
+    assert_eq!(recovered.completed_nodes(), [id('A')]);
+    assert_eq!(recovered.last_checkpoint().unwrap().attempt(), 3);
+}
+
+#[test]
+fn fencing_attempts_must_be_strictly_increasing() {
+    let graph = graph();
+    for attempts in [[2, 2], [3, 2]] {
+        let mut events = run_prefix();
+        for attempt in attempts {
+            push_event(
+                &mut events,
+                JournalEventType::NodeStarted,
+                Some(started('A', attempt)),
+            );
+        }
+        assert_eq!(
+            replay_graph_execution(&graph, &events),
+            Err(RuntimeError::Domain(
+                DomainErrorCode::InvalidStateTransition
+            ))
+        );
+    }
 }
 
 #[test]

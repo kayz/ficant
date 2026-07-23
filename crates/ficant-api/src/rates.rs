@@ -112,35 +112,7 @@ impl RatesGrpcService {
         &self,
         request: &pb::AnalyzeBondRequest,
     ) -> Result<pb::AnalyzeBondResult, ApplicationError> {
-        let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::bond())?;
-        let terms = parse_bond_terms(request.terms.as_ref(), &context.units)?;
-        let (mode, input_value) = match request.input.as_ref() {
-            Some(pb::analyze_bond_request::Input::YieldToMaturity(value)) => (
-                AnalyticsMode::YieldIn,
-                parse_fixed_decimal(value, &context.units.rate)?,
-            ),
-            Some(pb::analyze_bond_request::Input::CleanPrice(value)) => (
-                AnalyticsMode::PriceIn,
-                parse_fixed_decimal(value, &context.units.price_per_100)?,
-            ),
-            None => return Err(invalid()),
-        };
-        let input = BondAnalyticsInput::new(
-            context.owner,
-            parse_object(request.bond.as_ref())?,
-            context.rule_pack,
-            context.data_snapshot,
-            parse_market_time(request.valuation_at.as_ref())?,
-            parse_date(&request.settlement_date)?,
-            parse_calendar_requirement(request.calendar_requirement)?,
-            parse_calendar(request.calendar.as_ref())?,
-            terms,
-            mode,
-            input_value,
-        )
-        .map_err(map_domain_error)?;
-        let result = CalculateBondAnalytics::new(self.bond.as_ref()).execute(&input)?;
-        Ok(bond_result(&result, &context.units))
+        analyze_bond_request(self.bond.as_ref(), request)
     }
 
     fn interpolate_curve_value(
@@ -270,6 +242,86 @@ impl RatesGrpcService {
         let result = CalculateFuturesHedge::new(self.futures_hedge.as_ref()).execute(&input)?;
         Ok(futures_hedge_result(&result, &context.units))
     }
+}
+
+/// Fully parsed bond-analysis request shared by gRPC and native research nodes.
+pub struct ParsedBondAnalyticsRequest {
+    input: BondAnalyticsInput,
+    units: UnitBindings,
+}
+
+impl ParsedBondAnalyticsRequest {
+    #[must_use]
+    pub fn input(&self) -> &BondAnalyticsInput {
+        &self.input
+    }
+}
+
+/// Parses and validates every field of the public bond-analysis contract without I/O.
+///
+/// # Errors
+///
+/// Returns a stable application validation error for any incomplete or inconsistent binding.
+pub fn parse_analyze_bond_request(
+    request: &pb::AnalyzeBondRequest,
+) -> Result<ParsedBondAnalyticsRequest, ApplicationError> {
+    let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::bond())?;
+    let terms = parse_bond_terms(request.terms.as_ref(), &context.units)?;
+    let (mode, input_value) = match request.input.as_ref() {
+        Some(pb::analyze_bond_request::Input::YieldToMaturity(value)) => (
+            AnalyticsMode::YieldIn,
+            parse_fixed_decimal(value, &context.units.rate)?,
+        ),
+        Some(pb::analyze_bond_request::Input::CleanPrice(value)) => (
+            AnalyticsMode::PriceIn,
+            parse_fixed_decimal(value, &context.units.price_per_100)?,
+        ),
+        None => return Err(invalid()),
+    };
+    let input = BondAnalyticsInput::new(
+        context.owner,
+        parse_object(request.bond.as_ref())?,
+        context.rule_pack,
+        context.data_snapshot,
+        parse_market_time(request.valuation_at.as_ref())?,
+        parse_date(&request.settlement_date)?,
+        parse_calendar_requirement(request.calendar_requirement)?,
+        parse_calendar(request.calendar.as_ref())?,
+        terms,
+        mode,
+        input_value,
+    )
+    .map_err(map_domain_error)?;
+    Ok(ParsedBondAnalyticsRequest {
+        input,
+        units: context.units,
+    })
+}
+
+/// Executes an already parsed bond request and maps the domain result to its protobuf contract.
+///
+/// # Errors
+///
+/// Returns the application error produced by the real analytics engine.
+pub fn execute_parsed_bond_request(
+    engine: &dyn BondAnalyticsEngine,
+    request: &ParsedBondAnalyticsRequest,
+) -> Result<pb::AnalyzeBondResult, ApplicationError> {
+    let result = CalculateBondAnalytics::new(engine).execute(&request.input)?;
+    Ok(bond_result(&result, &request.units))
+}
+
+/// Runs the shared pure parse, native calculation, and protobuf result mapping path.
+///
+/// # Errors
+///
+/// Returns a stable application error for validation or analytics failure.
+pub fn analyze_bond_request(
+    engine: &dyn BondAnalyticsEngine,
+    request: &pb::AnalyzeBondRequest,
+) -> Result<pb::AnalyzeBondResult, ApplicationError> {
+    let parsed = parse_analyze_bond_request(request)?;
+    execute_parsed_bond_request(engine, &parsed)
 }
 
 #[tonic::async_trait]

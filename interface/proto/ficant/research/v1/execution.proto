@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package ficant.research.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/research/v1/graph.proto";
+
+message NodeImplementationBinding {
+  ficant.core.v1.Ulid node_id = 1;
+  ficant.core.v1.Sha256 implementation_digest = 2;
+}
+
+message RulePackBinding {
+  ficant.core.v1.Ulid rule_pack_id = 1;
+  uint64 version = 2;
+  ficant.core.v1.Sha256 content_hash = 3;
+}
+
+message ExecutionExternalInput {
+  string input_id = 1;
+  TypedValue value_type = 2;
+  ficant.core.v1.LineageRef resolved_artifact = 3;
+  ficant.core.v1.Sha256 content_hash = 4;
+}
+
+message UpstreamNodeOutput {
+  ficant.core.v1.Ulid node_id = 1;
+  string port_name = 2;
+}
+
+message NodeInputBinding {
+  ficant.core.v1.Ulid node_id = 1;
+  string port_name = 2;
+  TypedValue value_type = 3;
+  oneof declared_source {
+    string external_input_id = 4;
+    UpstreamNodeOutput upstream_output = 5;
+  }
+  ficant.core.v1.LineageRef resolved_artifact = 6;
+  ficant.core.v1.Sha256 content_hash = 7;
+}
+
+message ReproducibilityIdentity {
+  ficant.core.v1.Sha256 graph_digest = 1;
+  ficant.core.v1.Sha256 data_snapshot_hash = 2;
+  ficant.core.v1.Sha256 universe_snapshot_hash = 3;
+  ficant.core.v1.Sha256 parameters_hash = 4;
+  ficant.core.v1.Sha256 runtime_image_digest = 5;
+  ficant.core.v1.Sha256 environment_digest = 6;
+  uint64 seed = 7;
+  repeated RulePackBinding rule_packs = 8;
+  repeated NodeImplementationBinding node_implementations = 9;
+  repeated ExecutionExternalInput external_inputs = 10;
+  ficant.core.v1.Sha256 digest = 11;
+}
+
+message ExecutionInstanceIdentity {
+  ficant.core.v1.Ulid run_id = 1;
+  ReproducibilityIdentity reproducibility = 2;
+  ficant.core.v1.Sha256 digest = 3;
+}
+
+message NodeOutputBinding {
+  string port_name = 1;
+  TypedValue value_type = 2;
+  ficant.core.v1.LineageRef artifact = 3;
+  ficant.core.v1.Sha256 content_hash = 4;
+}
+
+message NodeOutputManifestContent {
+  ficant.core.v1.Sha256 reproducibility_digest = 1;
+  ficant.core.v1.Ulid node_id = 2;
+  ficant.core.v1.Sha256 node_contract_digest = 3;
+  ficant.core.v1.Sha256 implementation_digest = 4;
+  repeated NodeInputBinding inputs = 5;
+  repeated NodeOutputBinding outputs = 6;
+  ficant.core.v1.Sha256 manifest_hash = 7;
+}
+
+message NodeOutputManifest {
+  ExecutionInstanceIdentity execution = 1;
+  uint32 attempt = 2;
+  NodeOutputManifestContent content = 3;
+}
+
+message NodeCheckpoint {
+  ExecutionInstanceIdentity execution = 1;
+  ficant.core.v1.Ulid node_id = 2;
+  uint32 attempt = 3;
+  NodeOutputManifest output_manifest = 4;
+  uint64 journal_sequence = 5;
+  ficant.core.v1.Sha256 journal_hash = 6;
+  ficant.core.v1.Sha256 checkpoint_hash = 7;
+}

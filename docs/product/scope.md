@@ -1,8 +1,8 @@
 # ficant 产品范围
 
-**状态：** Phase 0–Phase 4 研究运行时内核已完成；对象存储统一为 Ceph RGW + Apache `object_store`
+**状态：** 当前候选已具备 Phase 0 开发环境/migration 合同与 Phase 4 持久化执行闭环，并通过本地多语言及真实 PostgreSQL + Ceph RGW 验证；正式镜像冷构建和测试环境交付待 version Action 闭合；对象存储统一为 Ceph RGW + Apache `object_store`
 
-**实现状态：** 当前能力以已合并代码、冻结合同和可重放本地证据为准，不把局部纵向切片扩写为完整 Phase 或最终产品
+**实现状态：** 当前能力以冻结合同、当前候选代码和已记录的真实本地证据为准；尚未运行的集成命令不得写成通过，不把局部纵向切片扩写为最终产品
 
 **来源：** `README.md`、`interface/`、`web-dm/` 与当前生产实现
 
@@ -12,13 +12,13 @@ ficant 是面向专业投资研究团队的 AI 原生量化研究平台。平台
 
 正式产品终点保持为 `ResearchArtifact`、`SimulationResult`、`ReportArtifact`、`SignalSet` 和 `TargetExposure`。平台不拥有订单和外部交易执行，不建设 OMS、EMS、对外报单、清算、结算或投资组合会计。
 
-首个市场仍是中国国债现券与国债期货。当前已完成 Phase 0 仓库/合同基线、Phase 1 领域内核、Phase 2 固定收益参考数值库和 Phase 3 可复现数据链，并交付 Phase 4A 的强类型 ResearchGraph 定义合同。Python SDK 通过同一 Protobuf/gRPC 合同调用真实 Rust/C++ 生产路径，结果与冻结参考一致；文件与 PostgreSQL adapter 把外部报价转换为相同 Canonical Arrow Schema，再发布为可校验、可脱离外源重读的不可变 Parquet `DataSnapshot`。这不表示完整研究产品页面或 Phase 4 运行时已实现。
+首个市场仍是中国国债现券与国债期货。Phase 1 领域内核、Phase 2 固定收益参考数值库和 Phase 3 可复现数据链已有各自冻结证据；Python SDK 通过同一 Protobuf/gRPC 合同调用真实 Rust/C++ 生产路径，文件与 PostgreSQL adapter 把外部报价转换为同一 Canonical Arrow Schema 后发布为可校验、可脱离外源重读的不可变 Parquet `DataSnapshot`。当前候选补齐了 Phase 4 持久化执行路径，但仍不表示完整研究产品页面、GeneratedNode 或 Phase 5 业务体验已经实现。
 
 ## Phase 0 已落地边界
 
 - Rust Workspace 是唯一后台实现；Python 只承担生成节点运行时/合同消费，C++20 只保留稳定 C ABI 数值库边界。
 - `interface/` 是后台 Protobuf 唯一来源，并生成 Rust、Python、TypeScript consumer；不建立平行 REST/OpenAPI DTO。
-- PostgreSQL Migration、Ceph RGW 内容寻址对象、开发 Compose、固定工具链和多语言构建已进入发布候选。
+- PostgreSQL Migration、Ceph RGW 内容寻址对象、开发 Compose、固定工具链和多语言构建有冻结合同；开发夹具用一条 Compose 命令启动，正式 Rust 服务 Dockerfile 冷构建和空库 migration 是本轮候选必须保留的真实证据。
 - React Platform Shell 已实现真实 Rust gRPC-Web 路径、会话、应用目录和短期应用启动授权。
 - 多 WebApp 的页面设计、代码和测试统一位于 `web-dm/`；后台接口设计保留在根 `interface/`，避免未来 WebApp 各自复制后台合同。
 
@@ -95,29 +95,15 @@ total_return = carry + roll_down
 
 Application 复用既有 `BlobStore`、`VerifiedSnapshotProof::data` 与 `SnapshotRepository` 完成 Parquet/Manifest 双 payload 发布；正式读取复用 `VerifiedReadFacade` required read，再由 `ficant-data` 对 metadata、两个 payload、canonical Manifest、Parquet 元数据、schema、行数与血缘失败关闭。真实 PostgreSQL 16 + Ceph RGW 验收证明外源只在 ingest 时调用一次；销毁 source adapter 并重建存储 adapter 后，仍可只按 `DataSnapshot` ID 取得完全相同的 Canonical RecordBatch。
 
-## 2026-07 / Phase 4A 已落地强类型 ResearchGraph 定义合同
+## 当前候选 / Phase 4 持久化 ResearchGraph 执行闭环
 
-当前领域层新增版本化 `ResearchNodeContract` 与 `ResearchGraph`。节点合同精确绑定输入/输出类型及 schema hash、状态和参数 schema、确定性等级、权限、资源限制和必守不变量；图只接受存在的节点与端口、完全匹配的类型、每个必需输入唯一绑定的有向无环结构。
+ResearchNodeContract 与 ResearchGraph 是版本化 Definition：节点合同绑定输入/输出 type ID、version、schema hash、状态/参数 schema、确定性等级、权限、资源限制和不变量；图将节点、边、外部输入声明和外部输入绑定规范化，并拒绝类型不匹配、循环或未满足的必需输入。实际外部值连同内容 hash 进入可复现身份；身份还绑定 Data/Universe Snapshot、参数、runtime/environment、seed、RulePack 的 ID/version/content hash 与节点实现 digest。`ExperimentRun` 只标识一次执行实例，不进入计算或 Artifact 的可复现 digest。
 
-合同声明、节点和边在构造时规范化；确定性拓扑排序以节点 ID 稳定打破并列关系，图摘要不受调用方 collection 顺序影响。该切片只是不可变 Definition 边界，尚不包含节点执行、Run 状态机扩展、Lease Queue、持久化、恢复、Artifact 节点血缘或实验比较，不得描述为 Phase 4 已完成。
+首个生产 NativeNode 是 CGB 固收分析节点：它消费既有 `ficant.rates.v1.AnalyzeBondRequest`，经与 gRPC API 共用的 Rust/C++ 生产计算路径生成确定性 `AnalyzeBondResult`；不是测试桩、模拟定价或第二套算法。节点输出采用确定性多端口 envelope，Artifact 和结果 digest 绑定可复现身份、合同、实现、上游 Artifact 和输出 hash，因此同一冻结身份的不同 Run 必须得到同一结果，任何漂移均失败关闭。
 
-## 2026-07 / Phase 4B 已落地图执行状态机与 checkpoint Journal
+当前 worker 将 graph、identity、RulePack、外部输入、节点实现、任务和 Journal 持久化在 PostgreSQL。每个节点任务在入队时冻结计划 Artifact ID；worker 用数据库时钟和 `FOR UPDATE SKIP LOCKED` 领取 lease，只有当前 lease/fencing epoch 才能开始、续租或完成。它重放 Journal 后从安全 checkpoint 恢复，先把输出提升到 Ceph RGW，随后在同一 PostgreSQL 事务中写 Artifact、Journal、checkpoint、节点状态、后继任务或 Run 完成并释放 lease。租约过期的旧 worker 不能覆盖新尝试；多节点图在已验证上游 Artifact 的基础上按确定性顺序推进。
 
-当前 runtime 在既有 hash-chained、sequence-contiguous、幂等 append-only `RunJournal` 上新增 node started/succeeded/failed/checkpointed 四类事件，并严格按 ResearchGraph 的确定性拓扑序重放。节点输出只有在 succeeded 事件之后以完全相同 hash 提交 checkpoint 才算完成；中断在 node started 或未 checkpoint 的 succeeded 之后，都从同一节点以递增 attempt 重跑。
-
-图重放会返回已完成节点、最后安全 checkpoint（节点、attempt、输出 hash、Journal sequence/hash）和下一恢复节点；缺失/错序节点、错误 attempt、提前成功、checkpoint 漂移或损坏的 Journal 链全部失败关闭。PostgreSQL 事件类型约束已前向扩展，但 Lease Queue、Worker 认领、租约恢复和真实持久化并发验收属于 Phase 4C。
-
-## 2026-07 / Phase 4C 已落地 PostgreSQL Lease Queue
-
-当前 storage 新增 tenant 隔离的 `execution_tasks` 与 `PostgresLeaseQueue`。任务不可变绑定 run、node、node attempt、graph digest 和稳定 task key；相同 key + 相同业务字段幂等返回，任一字段漂移冲突。claim 使用数据库时钟、`FOR UPDATE SKIP LOCKED` 和稳定排序，使多个 worker 原子取得不同任务。
-
-lease 绑定 worker ULID 与 lease ULID，续租和完成只接受未过期的当前所有者；完成证据 hash 不可变且相同重试幂等。进程中断后无需原位修复旧行，过期 lease 可由另一 worker 原子回收并增加 claim count。真实 PostgreSQL 16 已覆盖并发 claim、错误所有者、完成漂移、过期恢复、tenant 隔离及 11 个 migration 的重复/失败原子性。
-
-## 2026-07 / Phase 4D-E 已落地 NativeNode、节点血缘与实验比较
-
-当前 runtime 新增 `ExecutionIdentity`，精确绑定 DataSnapshot、UniverseSnapshot、ResearchGraph、参数、runtime image、环境摘要、seed 与每个节点实现 digest。NativeNode engine 只按图的确定性拓扑序运行，输入来自已验证上游端口，输出必须逐端口匹配 type ID、version 和 schema hash；缺失/重复实现或任何类型漂移失败关闭。
-
-每个节点生成不可变 `NativeNodeArtifact`，绑定 execution identity、节点/合同/实现、所有上游节点 artifact 和有序输出 hash；最终 result digest 再绑定完整节点 artifact 链。相同冻结身份的重放要求对象级完全一致，实验比较会分别报告 Snapshot、Graph、Parameters、RuntimeImage、Environment、Seed、Implementation 与 Result 差异。至此 README Phase 4 的强类型图、NativeNode、状态/Journal、Lease Queue、安全点恢复、逐节点血缘、环境/seed 和比较已在本地内核与真实 PostgreSQL 协议层闭合。
+真实 PostgreSQL 16 + Ceph RGW 已验证对象提升后/事务前 worker 中断、attempt 2 重新领取、旧 fencing epoch 拒绝、两节点推进、Artifact/Journal/checkpoint/Run 原子收口与最终重放；强类型依赖边和输入篡改失败由 runtime 及 required-read 测试覆盖。Phase 4 的退出范围仍限于 Rust NativeNode 执行闭环，不包含 GeneratedNode/gVisor、业务 UI 或 Phase 5 Lab。
 
 ## WebApp 产品边界
 
@@ -149,7 +135,7 @@ WebApp 可以定义独立研究体验，但不能自建身份权限、直连外�
 - 完整 DMQuant 业务 WebApp，包括策略生成、回测、Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell。
 - openGauss 迁移、GeneratedNode/gVisor 业务运行、OMS/EMS 和任何外部交易执行。
 - 信用债、ABS、可转债、完整利率互换生命周期、真实询价通讯与清算交割。
-- README Phase 5–9 的研究 Lab、仿真、AI 基础设施、GeneratedNode 和后续发布流程仍为规划能力，不得描述为当前已完成。`ficant-worker` 的持续消费循环与业务 NativeNode catalog 将随首个 Phase 5 纵向切片装配；Phase 4 完成不等于已有可用研究 UI。
+- README Phase 5–9 的研究 Lab、仿真、AI 基础设施、GeneratedNode 和后续发布流程仍为规划能力，不得描述为当前已完成。当前 worker 只装配 CGB 固收 NativeNode 与 Phase 4 证据化执行路径；扩充业务节点 catalog 或提供可用研究 UI 属于后续纵向切片。
 
 ## Validity
 

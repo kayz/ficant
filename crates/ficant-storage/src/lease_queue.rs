@@ -9,6 +9,7 @@ pub enum LeaseTaskState {
     Pending,
     Leased,
     Completed,
+    Failed,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -17,8 +18,9 @@ pub struct LeaseTask {
     task_id: Ulid,
     run_id: Ulid,
     node_id: Ulid,
-    node_attempt: u32,
     graph_digest: ContentHash,
+    execution_identity_digest: ContentHash,
+    planned_artifact_id: Ulid,
     task_key: String,
     state: LeaseTaskState,
     lease_owner: Option<Ulid>,
@@ -26,6 +28,7 @@ pub struct LeaseTask {
     lease_expires_at: Option<DateTime<Utc>>,
     claim_count: u64,
     completion_hash: Option<ContentHash>,
+    failure_hash: Option<ContentHash>,
 }
 
 impl LeaseTask {
@@ -46,12 +49,16 @@ impl LeaseTask {
         &self.node_id
     }
     #[must_use]
-    pub fn node_attempt(&self) -> u32 {
-        self.node_attempt
-    }
-    #[must_use]
     pub fn graph_digest(&self) -> &ContentHash {
         &self.graph_digest
+    }
+    #[must_use]
+    pub fn execution_identity_digest(&self) -> &ContentHash {
+        &self.execution_identity_digest
+    }
+    #[must_use]
+    pub fn planned_artifact_id(&self) -> &Ulid {
+        &self.planned_artifact_id
     }
     #[must_use]
     pub fn task_key(&self) -> &str {
@@ -81,6 +88,10 @@ impl LeaseTask {
     pub fn completion_hash(&self) -> Option<&ContentHash> {
         self.completion_hash.as_ref()
     }
+    #[must_use]
+    pub fn failure_hash(&self) -> Option<&ContentHash> {
+        self.failure_hash.as_ref()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -89,8 +100,9 @@ pub struct EnqueueTask {
     pub task_id: Ulid,
     pub run_id: Ulid,
     pub node_id: Ulid,
-    pub node_attempt: u32,
     pub graph_digest: ContentHash,
+    pub execution_identity_digest: ContentHash,
+    pub planned_artifact_id: Ulid,
     pub task_key: String,
 }
 
@@ -155,23 +167,21 @@ impl PostgresLeaseQueue {
     /// Returns a stable validation, conflict, lineage, or storage error.
     pub async fn enqueue(&self, input: EnqueueTask) -> Result<EnqueueResult, LeaseQueueError> {
         validate_task_key(&input.task_key)?;
-        if input.node_attempt == 0 {
-            return Err(LeaseQueueError::InvalidValue);
-        }
-        let node_attempt = i64::from(input.node_attempt);
         let mut transaction = self.pool.begin().await.map_err(map_error)?;
         let inserted = sqlx::query(
             "INSERT INTO research.execution_tasks
-             (tenant_id, task_id, run_id, node_id, node_attempt, graph_digest, task_key, state)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'PENDING')
+             (tenant_id, task_id, run_id, node_id, graph_digest,
+              execution_identity_digest, planned_artifact_id, task_key, state)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PENDING')
              ON CONFLICT (tenant_id, task_key) DO NOTHING",
         )
         .bind(input.tenant_id.as_str())
         .bind(input.task_id.as_str())
         .bind(input.run_id.as_str())
         .bind(input.node_id.as_str())
-        .bind(node_attempt)
         .bind(hash_hex(&input.graph_digest))
+        .bind(hash_hex(&input.execution_identity_digest))
+        .bind(input.planned_artifact_id.as_str())
         .bind(&input.task_key)
         .execute(&mut *transaction)
         .await
@@ -184,8 +194,9 @@ impl PostgresLeaseQueue {
         if task.task_id != input.task_id
             || task.run_id != input.run_id
             || task.node_id != input.node_id
-            || task.node_attempt != input.node_attempt
             || task.graph_digest != input.graph_digest
+            || task.execution_identity_digest != input.execution_identity_digest
+            || task.planned_artifact_id != input.planned_artifact_id
         {
             return Err(LeaseQueueError::Conflict);
         }
@@ -227,6 +238,51 @@ impl PostgresLeaseQueue {
              RETURNING task.*",
         )
         .bind(tenant_id.as_str())
+        .bind(worker_id.as_str())
+        .bind(lease_id.as_str())
+        .bind(seconds)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_error)?;
+        row.map(|row| decode_task(&row)).transpose()
+    }
+
+    /// Atomically claims the oldest pending or expired task across tenants.
+    ///
+    /// This method is intentionally unscoped: it is for the trusted internal worker service,
+    /// which discovers tenant ownership from the claimed row rather than accepting it from an
+    /// untrusted caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation failure for an invalid lease duration and a stable storage error when
+    /// the atomic global claim cannot be completed.
+    pub async fn claim_next(
+        &self,
+        worker_id: &Ulid,
+        lease_id: &Ulid,
+        lease_seconds: u32,
+    ) -> Result<Option<LeaseTask>, LeaseQueueError> {
+        validate_duration(lease_seconds)?;
+        let seconds = i32::try_from(lease_seconds).map_err(|_| LeaseQueueError::InvalidValue)?;
+        let row = sqlx::query(
+            "WITH candidate AS (
+                 SELECT tenant_id, task_id
+                 FROM research.execution_tasks
+                 WHERE state = 'PENDING'
+                    OR (state = 'LEASED' AND lease_expires_at <= CURRENT_TIMESTAMP)
+                 ORDER BY created_at, tenant_id, task_id
+                 FOR UPDATE SKIP LOCKED
+                 LIMIT 1
+             )
+             UPDATE research.execution_tasks task
+             SET state = 'LEASED', lease_owner = $1, lease_id = $2,
+                 lease_expires_at = CURRENT_TIMESTAMP + make_interval(secs => $3),
+                 claim_count = claim_count + 1, updated_at = CURRENT_TIMESTAMP
+             FROM candidate
+             WHERE task.tenant_id = candidate.tenant_id AND task.task_id = candidate.task_id
+             RETURNING task.*",
+        )
         .bind(worker_id.as_str())
         .bind(lease_id.as_str())
         .bind(seconds)
@@ -285,6 +341,7 @@ impl PostgresLeaseQueue {
         worker_id: &Ulid,
         lease_id: &Ulid,
         completion_hash: &ContentHash,
+        stable_artifact_id: &Ulid,
     ) -> Result<CompleteResult, LeaseQueueError> {
         let mut transaction = self.pool.begin().await.map_err(map_error)?;
         let existing = fetch_by_id(&mut transaction, tenant_id.as_str(), task_id.as_str())
@@ -294,6 +351,7 @@ impl PostgresLeaseQueue {
             if existing.lease_owner.as_ref() == Some(worker_id)
                 && existing.lease_id.as_ref() == Some(lease_id)
                 && existing.completion_hash.as_ref() == Some(completion_hash)
+                && &existing.planned_artifact_id == stable_artifact_id
             {
                 transaction.commit().await.map_err(map_error)?;
                 return Ok(CompleteResult {
@@ -308,6 +366,7 @@ impl PostgresLeaseQueue {
              SET state = 'COMPLETED', completion_hash = $5, updated_at = CURRENT_TIMESTAMP
              WHERE tenant_id = $1 AND task_id = $2 AND state = 'LEASED'
                AND lease_owner = $3 AND lease_id = $4
+               AND planned_artifact_id = $6
                AND lease_expires_at > CURRENT_TIMESTAMP
              RETURNING *",
         )
@@ -316,6 +375,7 @@ impl PostgresLeaseQueue {
         .bind(worker_id.as_str())
         .bind(lease_id.as_str())
         .bind(hash_hex(completion_hash))
+        .bind(stable_artifact_id.as_str())
         .fetch_optional(&mut *transaction)
         .await
         .map_err(map_error)?;
@@ -370,23 +430,26 @@ async fn fetch_by_id(
 fn decode_task(row: &sqlx::postgres::PgRow) -> Result<LeaseTask, LeaseQueueError> {
     let state: String = row.try_get("state").map_err(map_error)?;
     let claim_count: i64 = row.try_get("claim_count").map_err(map_error)?;
-    let node_attempt: i64 = row.try_get("node_attempt").map_err(map_error)?;
     Ok(LeaseTask {
         tenant_id: parse_id(row.try_get("tenant_id").map_err(map_error)?)?,
         task_id: parse_id(row.try_get("task_id").map_err(map_error)?)?,
         run_id: parse_id(row.try_get("run_id").map_err(map_error)?)?,
         node_id: parse_id(row.try_get("node_id").map_err(map_error)?)?,
-        node_attempt: u32::try_from(node_attempt)
-            .map_err(|_| LeaseQueueError::StorageUnavailable)?,
         graph_digest: parse_hash(
             &row.try_get::<String, _>("graph_digest")
                 .map_err(map_error)?,
         )?,
+        execution_identity_digest: parse_hash(
+            &row.try_get::<String, _>("execution_identity_digest")
+                .map_err(map_error)?,
+        )?,
+        planned_artifact_id: parse_id(row.try_get("planned_artifact_id").map_err(map_error)?)?,
         task_key: row.try_get("task_key").map_err(map_error)?,
         state: match state.as_str() {
             "PENDING" => LeaseTaskState::Pending,
             "LEASED" => LeaseTaskState::Leased,
             "COMPLETED" => LeaseTaskState::Completed,
+            "FAILED" => LeaseTaskState::Failed,
             _ => return Err(LeaseQueueError::StorageUnavailable),
         },
         lease_owner: parse_optional_id(row.try_get("lease_owner").map_err(map_error)?)?,
@@ -395,6 +458,11 @@ fn decode_task(row: &sqlx::postgres::PgRow) -> Result<LeaseTask, LeaseQueueError
         claim_count: u64::try_from(claim_count).map_err(|_| LeaseQueueError::StorageUnavailable)?,
         completion_hash: row
             .try_get::<Option<String>, _>("completion_hash")
+            .map_err(map_error)?
+            .map(|value| parse_hash(&value))
+            .transpose()?,
+        failure_hash: row
+            .try_get::<Option<String>, _>("failure_hash")
             .map_err(map_error)?
             .map(|value| parse_hash(&value))
             .transpose()?,

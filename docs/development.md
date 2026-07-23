@@ -59,7 +59,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 .\scripts\check.ps1
 ```
 
-它在不依赖目标服务器的前提下运行：严格 Rust format/Clippy/build/test、生成契约测试、C++ Release build 与七项 CTest、Phase 2A/2B/2C acceptance matrix 完整性、Phase 2C 独立 Oracle 与确定性 Artifact 测试、Python 生成契约测试，以及 Web typecheck/build/Vitest。默认不运行需要持久化服务的测试。
+它在不依赖目标服务器的前提下运行：严格 Rust format/Clippy/build/test、生成契约测试、C++ Release build 与当前 CMake/CTest catalog 中登记的全部测试、Phase 2A/2B/2C acceptance matrix 完整性、Phase 2C 独立 Oracle 与确定性 Artifact 测试、Python 生成契约测试，以及 Web typecheck/build/Vitest。默认不运行需要持久化服务的测试。CTest 数量由当前 catalog 决定，文档不另行硬编码一个会漂移的计数。
 
 可选本地集成回归：
 
@@ -79,7 +79,40 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 
 脚本不会创建、部署或清理服务器，也不会打印这些值。数据库必须可以安全地被测试 migration 重置；不得指向共享、测试发布或生产数据库。集成计划依次覆盖 migration、Phase 1 正向业务闭环、13 项负向不变量，以及 Phase 2B Carry/Roll-down、Phase 2C 国债期货交割价值链的真实发布重放与篡改检测。
 
-仓库内 `deploy/dev/docker-compose.yml` 提供锁定镜像摘要的 PostgreSQL 与单节点 Ceph RGW 开发夹具，可用于准备上述一次性环境；它不是生产 Ceph 部署模板。RGW 使用 `FICANT_S3_ACCESS_KEY`、`FICANT_S3_SECRET_KEY`、`FICANT_S3_BUCKET` 和可选的 `FICANT_S3_PORT`，对象存储数据位于独立 `ceph-data` 命名卷。检查脚本本身仍不自动启动、停止或下载该夹具。
+仓库内 `deploy/dev/docker-compose.yml` 是当前唯一的本地 Compose 入口，提供锁定基础镜像摘要的 PostgreSQL、单节点 Ceph RGW 和三个 Rust 服务；它不是生产 Ceph 部署模板。启动前，在当前 PowerShell 进程中注入以下变量。示例只在内存中生成本地一次性值，不把 secret 写入仓库、命令行参数或下面的文档：
+
+```powershell
+$env:FICANT_POSTGRES_PASSWORD = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
+$env:FICANT_S3_ACCESS_KEY = 'ficant-local'
+$env:FICANT_S3_SECRET_KEY = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
+$env:FICANT_S3_BUCKET = 'ficant'
+$env:FICANT_PLATFORM_SIGNING_KEY_HEX = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
+$env:FICANT_PLATFORM_TRACE_KEY_HEX = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
+```
+
+其中必须显式提供的非 secret 标识是 `FICANT_S3_ACCESS_KEY`；`FICANT_S3_BUCKET` 有安全默认值但建议显式提供。secret 变量是 `FICANT_POSTGRES_PASSWORD`、`FICANT_S3_SECRET_KEY`、`FICANT_PLATFORM_SIGNING_KEY_HEX` 和 `FICANT_PLATFORM_TRACE_KEY_HEX`。可选端口变量为 `FICANT_POSTGRES_PORT`、`FICANT_S3_PORT`、`FICANT_SERVER_PORT`、`FICANT_WORKER_PORT` 与 `FICANT_WEB_PORT`；未设置时使用 Compose 文件中的本机回环端口默认值。不要复用共享、测试发布或生产凭据。
+
+从仓库根目录启动当前完整 Ceph 开发栈的唯一命令是：
+
+```powershell
+docker compose --file .\deploy\dev\docker-compose.yml --profile dev up --build --detach --wait
+```
+
+这条命令可能为了冷构建或缺失的锁定基础镜像访问网络。它不会替代 `check.ps1 -IncludeIntegration` 所需的 `FICANT_TEST_*` 变量；测试调用者仍须把上述本地服务地址和本轮精确 runtime image digest 映射到测试变量。
+
+停止容器和网络但保留 `postgres-data`、`ceph-data` 命名卷：
+
+```powershell
+docker compose --file .\deploy\dev\docker-compose.yml --profile dev down
+```
+
+只有明确要丢弃全部本地 PostgreSQL/Ceph 数据时才运行下面的破坏性清理；`--volumes` 会删除两个命名卷，数据不可由 Compose 恢复：
+
+```powershell
+docker compose --file .\deploy\dev\docker-compose.yml --profile dev down --volumes --remove-orphans
+```
+
+检查脚本本身仍不自动启动、停止、清理或下载该夹具。
 
 ## 本地依赖能力
 
@@ -109,3 +142,5 @@ OPAID 先把精确 Commit SHA 的本地自测候选和唯一 brief 交给 Human�
 两个选择都不启动 GitHub 完整 CI。普通 branch push、Pull Request 和 `main` 合并只维护远端源码历史；本地检查是普通迭代的正式证据，但不能冒充 Linux Runner、在线供应链、制品或目标环境证据。
 
 数个迭代后，Human 确定版本号并创建符合版本格式、指向当前 `main` 精确提交的不可变 `v*` tag。创建 tag 即把版本候选交给 CICD，并授权完整 GitHub CI、SHA 镜像构建、扫描、不可变版本标签提升、Linux 测试环境部署、健康/冒烟检查和失败回滚。版本失败后不得移动原 tag；修复进入新的 OPAID 迭代，再建立 forward-only 版本候选。普通 OPAID 工作不得修改 `.github/**`、`cicd.yml` 或 `deploy/**` 来绕过这个交接边界。
+
+本地镜像验证必须使用仓库正式的 `deploy/dev/RustService.Dockerfile` 做冷构建，并保留其精确候选和构建结果。为了排查网络或环境问题而使用的临时 Dockerfile、复制宿主机构建产物后组装的 runtime 镜像，最多只能作为诊断证据，不能冒充正式镜像构建通过。版本制品的最终证据只能来自 Human 创建版本 tag 后触发的 GitHub version Action：它在 Linux Runner 上用正式 Dockerfile 构建并发布 Commit SHA 标识的不可变镜像。普通 branch、Pull Request、`main` 合并以及本地临时镜像均不得被描述为这项最终证据。

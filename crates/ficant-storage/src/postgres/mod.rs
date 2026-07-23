@@ -6,6 +6,7 @@ pub mod definitions;
 mod execution;
 pub mod facts;
 pub mod journal;
+pub mod phase4_execution;
 pub mod runs;
 pub mod signals;
 pub mod snapshots;

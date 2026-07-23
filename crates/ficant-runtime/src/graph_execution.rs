@@ -312,19 +312,24 @@ fn transition(
         (Phase::Created, JournalEventType::RunStarted) => Ok(Phase::Ready { index: 0 }),
         (Phase::Ready { index }, JournalEventType::NodeStarted) => {
             let payload = GraphNodeEvent::decode(event)?;
-            require_node(&payload, order, index, 1)?;
-            Ok(Phase::Active { index, attempt: 1 })
+            require_node_identity(&payload, order, index)?;
+            Ok(Phase::Active {
+                index,
+                attempt: payload.attempt,
+            })
         }
         (
             Phase::Active { index, attempt } | Phase::AwaitingCheckpoint { index, attempt, .. },
             JournalEventType::NodeStarted,
         ) => {
             let payload = GraphNodeEvent::decode(event)?;
-            let next_attempt = attempt.checked_add(1).ok_or_else(invalid_value)?;
-            require_node(&payload, order, index, next_attempt)?;
+            require_node_identity(&payload, order, index)?;
+            if payload.attempt <= attempt {
+                return Err(invalid_transition());
+            }
             Ok(Phase::Active {
                 index,
-                attempt: next_attempt,
+                attempt: payload.attempt,
             })
         }
         (Phase::Active { index, attempt }, JournalEventType::NodeSucceeded) => {
@@ -384,6 +389,17 @@ fn require_node(
     attempt: u32,
 ) -> Result<(), RuntimeError> {
     if order.get(index) != Some(&payload.node_id) || payload.attempt != attempt {
+        return Err(invalid_transition());
+    }
+    Ok(())
+}
+
+fn require_node_identity(
+    payload: &GraphNodeEvent,
+    order: &[Ulid],
+    index: usize,
+) -> Result<(), RuntimeError> {
+    if order.get(index) != Some(&payload.node_id) {
         return Err(invalid_transition());
     }
     Ok(())

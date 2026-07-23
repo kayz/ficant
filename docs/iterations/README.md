@@ -4,4 +4,4 @@
 
 每份 brief 只使用以下七个部分：目标、验收、非目标、公共契约变化、需 Human 决策、最终真实测试证据、残余风险。最终证据必须来自最终本地候选上的实际命令，包含 exit code 和可得的 test count；未执行的计划不得写成通过。候选身份由 Git commit 与 Pull Request 事实源绑定，不在 tracked brief 中复制自身 Commit SHA。
 
-当前迭代：[`2026-07-phase4de-native-execution-closure.md`](2026-07-phase4de-native-execution-closure.md)
+当前迭代：[`2026-07-phase0-phase4-execution-closure.md`](2026-07-phase0-phase4-execution-closure.md)
