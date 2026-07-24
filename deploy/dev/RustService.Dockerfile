@@ -12,7 +12,9 @@ COPY binaries ./binaries
 COPY crates ./crates
 COPY cpp ./cpp
 COPY interface ./interface
-RUN cargo \
+RUN --mount=type=cache,id=ficant-cargo-registry-v1,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=ficant-release-target-v1,target=/workspace/target,sharing=locked \
+    cargo \
         --config 'source.crates-io.replace-with="github-index"' \
         --config 'source.github-index.registry="sparse+https://raw.githubusercontent.com/rust-lang/crates.io-index/master/"' \
         build --locked --release --bin "${BINARY}" \
