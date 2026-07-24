@@ -93,6 +93,16 @@ def main() -> None:
     if worker_dependencies.get("ceph-rgw", {}).get("condition") != "service_healthy":
         fail("ficant-worker must wait for healthy ceph-rgw")
 
+    expected_ui_healthcheck = [
+        "CMD",
+        "wget",
+        "--quiet",
+        "--spider",
+        "http://127.0.0.1:8080/health",
+    ]
+    if services["ficant-ui"].get("healthcheck", {}).get("test") != expected_ui_healthcheck:
+        fail("ficant-ui must use the executable BusyBox wget readiness probe")
+
     serialized = json.dumps(model, sort_keys=True).lower()
     if "minio" in serialized or "latest" in serialized or '"network_mode": "host"' in serialized:
         fail("forbidden MinIO, latest tag, or host network found")

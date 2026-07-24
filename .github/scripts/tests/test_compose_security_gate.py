@@ -702,6 +702,16 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
             "service_healthy",
         )
         self.assertIn("ceph-data", document["volumes"])
+        self.assertEqual(
+            document["services"]["ficant-ui"]["healthcheck"]["test"],
+            [
+                "CMD",
+                "wget",
+                "--quiet",
+                "--spider",
+                "http://127.0.0.1:8080/health",
+            ],
+        )
 
     def test_release_validator_rejects_missing_ceph_and_worker_credentials(self) -> None:
         without_ceph = self.resolved_release_document()

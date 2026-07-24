@@ -175,7 +175,7 @@ services:
     ports:
       - 127.0.0.1:${FICANT_UI_PORT:-28083}:8080
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/health"]
       interval: 5s
       timeout: 3s
       start_period: 3s
