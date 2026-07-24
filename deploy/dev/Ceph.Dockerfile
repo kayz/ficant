@@ -3,6 +3,9 @@ FROM ${CEPH_IMAGE}
 
 USER 0:0
 RUN rm -rf /etc/ceph \
+        /usr/lib/python3.9/site-packages/setuptools \
+        /usr/lib/python3.9/site-packages/setuptools-69.2.0.dist-info \
+        /usr/lib/python3.9/site-packages/pkg_resources \
     && mkdir -p /var/lib/ceph/etc /var/lib/ceph/mon /var/lib/ceph/osd /var/lib/ceph/radosgw \
     && ln -s /var/lib/ceph/etc /etc/ceph \
     && chown -R 167:167 /var/lib/ceph \
