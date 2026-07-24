@@ -84,6 +84,9 @@ def main() -> None:
         "FICANT_WORKER_S3_ACCESS_KEY",
         "FICANT_WORKER_S3_SECRET_KEY",
         "FICANT_WORKER_ID",
+        "FICANT_WORKER_RUNTIME_IMAGE_DIGEST",
+        "FICANT_WORKER_ENVIRONMENT_ATTESTATION",
+        "FICANT_WORKER_NATIVE_SOURCE_DIGEST",
     }
     if not required_worker_environment.issubset(worker_environment):
         fail("ficant-worker is missing its production database/S3/identity environment")
@@ -92,6 +95,34 @@ def main() -> None:
     worker_dependencies = worker.get("depends_on", {})
     if worker_dependencies.get("ceph-rgw", {}).get("condition") != "service_healthy":
         fail("ficant-worker must wait for healthy ceph-rgw")
+
+    server_environment = services["ficant-server"].get("environment", {})
+    required_server_environment = {
+        "FICANT_BOOTSTRAP_BEARER_TOKEN",
+        "FICANT_EXPERIMENT_DATABASE_URL",
+        "FICANT_EXPERIMENT_S3_ENDPOINT",
+        "FICANT_EXPERIMENT_S3_BUCKET",
+        "FICANT_EXPERIMENT_S3_ACCESS_KEY",
+        "FICANT_EXPERIMENT_S3_SECRET_KEY",
+        "FICANT_EXPERIMENT_CURSOR_KEY_HEX",
+        "FICANT_EXPERIMENT_TENANT_ID",
+        "FICANT_EXPERIMENT_OWNER_ID",
+        "FICANT_EXPERIMENT_ACTOR_ID",
+        "FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST",
+        "FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION",
+        "FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST",
+    }
+    if not required_server_environment.issubset(server_environment):
+        fail("ficant-server is missing its authenticated experiment environment")
+    if (
+        server_environment["FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST"]
+        != worker_environment["FICANT_WORKER_RUNTIME_IMAGE_DIGEST"]
+        or server_environment["FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST"]
+        != worker_environment["FICANT_WORKER_NATIVE_SOURCE_DIGEST"]
+        or server_environment["FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION"]
+        != worker_environment["FICANT_WORKER_ENVIRONMENT_ATTESTATION"]
+    ):
+        fail("server and worker execution identities must match exactly")
 
     expected_ui_healthcheck = [
         "CMD",

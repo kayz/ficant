@@ -8,16 +8,20 @@ use ficant_application::ports::{
 };
 use ficant_domain::primitives::{ContentHash, LineageRef, OwnerRef, Ulid, Version};
 use ficant_domain::research::{
-    Artifact, ArtifactKind, DeterminismClass, FilesystemPermission, GraphExternalInput,
-    GraphExternalInputBinding, NodePermissions, PortType, ResearchGraph, ResearchGraphInput,
-    ResearchNode, ResearchNodeContract, ResearchNodeContractInput, ResourceLimits, TypedValue,
+    Artifact, ArtifactKind, GraphExternalInput, GraphExternalInputBinding, ResearchGraph,
+    ResearchGraphInput, ResearchNode,
 };
-use ficant_runtime::{ExecutionInstanceIdentity, NativePortValue};
+use ficant_native_nodes::{
+    CgbBondAnalyticsNativeNode, analyze_bond_request_type, cgb_bond_analytics_contract,
+    native_node_source_digest, native_node_source_digest_attestation,
+};
+use ficant_runtime::{ExecutionInstanceIdentity, NativeNode, NativePortValue};
 use tokio::sync::watch;
 
 use super::{
     ClaimedTask, ExecutedNode, InputEvidence, InputSource, LoadedTask, NodeCompletion,
-    PreparedInputs, WorkerBackend, WorkerConfig, WorkerError, WorkerStep, run_claimed, run_worker,
+    PreparedInputs, WorkerBackend, WorkerConfig, WorkerError, WorkerStep,
+    canonical_environment_digest, run_claimed, run_worker,
 };
 
 struct FakeBackend {
@@ -181,8 +185,13 @@ impl WorkerBackend for FakeBackend {
         .unwrap();
         Ok(NodeCompletion {
             artifact,
+            verified_blob: ficant_application::ports::VerifiedBlobRef::new(
+                ContentHash::digest(&execution.output_envelope),
+                u64::try_from(execution.output_envelope.len()).unwrap(),
+            )
+            .unwrap(),
+            verified_payload: execution.output_envelope,
             output_manifest: b"manifest".to_vec(),
-            next_task: None,
         })
     }
 
@@ -328,6 +337,68 @@ fn renewal_must_be_shorter_than_lease_duration() {
     );
 }
 
+#[test]
+fn environment_attestation_is_exact_canonical_bytes() {
+    let canonical = environment_attestation();
+    assert_eq!(
+        canonical_environment_digest(canonical),
+        Ok(ContentHash::digest(canonical.as_bytes()))
+    );
+    for changed in [
+        "ficant.worker.environment.v1\nos=linux\narch=amd64\nprofile=unit-test",
+        "ficant.worker.environment.v1\narch=amd64\narch=amd64",
+        "ficant.worker.environment.v1\narch=amd64\nos=linux\nprofile=unit-test\n",
+        "ficant.worker.environment.v1\r\narch=amd64\nos=linux",
+        "ficant.worker.environment.v2\narch=amd64",
+        "ficant.worker.environment.v1",
+        "ficant.worker.environment.v1\narch=amd64\nos=linux",
+    ] {
+        assert_eq!(
+            canonical_environment_digest(changed),
+            Err(WorkerError::InvalidConfiguration(
+                "FICANT_WORKER_ENVIRONMENT_ATTESTATION"
+            ))
+        );
+    }
+}
+
+#[test]
+fn deployment_digests_require_exact_oci_sha256_encoding() {
+    assert_eq!(
+        super::parse_sha256_attestation(
+            "FICANT_WORKER_NATIVE_SOURCE_DIGEST",
+            &native_node_source_digest_attestation()
+        ),
+        Ok(native_node_source_digest())
+    );
+    for changed in [
+        native_node_source_digest_attestation().to_uppercase(),
+        native_node_source_digest_attestation().replace("sha256:", ""),
+        "sha256:00".to_owned(),
+    ] {
+        assert_eq!(
+            super::parse_sha256_attestation("FICANT_WORKER_NATIVE_SOURCE_DIGEST", &changed),
+            Err(WorkerError::InvalidConfiguration(
+                "FICANT_WORKER_NATIVE_SOURCE_DIGEST"
+            ))
+        );
+    }
+}
+
+#[tokio::test]
+async fn deployment_attestation_drift_fails_before_node_started() {
+    let backend = FakeBackend::new(None, Duration::ZERO);
+    let mut changed = config();
+    changed.runtime_image_digest = ContentHash::digest(b"changed-runtime");
+    assert_eq!(
+        run_claimed(&backend, &changed, &claim()).await,
+        Err(WorkerError::InvalidTask(
+            "persisted identity or deployment attestation mismatch"
+        ))
+    );
+    assert_eq!(backend.steps(), vec![WorkerStep::Load]);
+}
+
 fn config() -> WorkerConfig {
     WorkerConfig {
         database_url: "postgres://worker.invalid/ficant".to_owned(),
@@ -336,6 +407,9 @@ fn config() -> WorkerConfig {
         s3_access_key: "access".to_owned(),
         s3_secret_key: "secret".to_owned(),
         worker_id: id('W'),
+        runtime_image_digest: ContentHash::digest(b"runtime"),
+        environment_attestation: environment_attestation().to_owned(),
+        native_source_digest: native_node_source_digest(),
         lease_duration: Duration::from_secs(1),
         renew_interval: Duration::from_millis(100),
         idle_poll_interval: Duration::from_millis(1),
@@ -360,26 +434,10 @@ fn claim() -> ClaimedTask {
 
 fn loaded() -> LoadedTask {
     let owner = OwnerRef::new(id('N'), id('O'));
-    let request = typed("request");
-    let result = typed("result");
-    let contract = ResearchNodeContract::new(ResearchNodeContractInput {
-        contract_id: "ficant.test.node".to_owned(),
-        contract_version: Version::new(1).unwrap(),
-        input_types: vec![PortType::new("request", request.clone()).unwrap()],
-        output_types: vec![PortType::new("result", result).unwrap()],
-        state_schema: ContentHash::digest(b"state"),
-        parameter_schema: ContentHash::digest(b"parameters"),
-        determinism_class: DeterminismClass::Deterministic,
-        permissions: NodePermissions {
-            network: false,
-            database: false,
-            filesystem: FilesystemPermission::None,
-        },
-        resource_limits: ResourceLimits::new(1, 64, 1).unwrap(),
-        required_invariants: vec!["deterministic".to_owned()],
-    })
-    .unwrap();
+    let request = analyze_bond_request_type();
+    let contract = cgb_bond_analytics_contract().unwrap();
     let node = ResearchNode::new(id('D'), contract, ContentHash::digest(b"parameters"));
+    let executor = CgbBondAnalyticsNativeNode::new(node.node_id().clone()).unwrap();
     let graph = ResearchGraph::new_with_external_inputs(
         ResearchGraphInput {
             graph_id: id('G'),
@@ -404,12 +462,12 @@ fn loaded() -> LoadedTask {
             universe_snapshot_hash: ContentHash::digest(b"universe"),
             parameters_hash: ContentHash::digest(b"parameters"),
             runtime_image_digest: ContentHash::digest(b"runtime"),
-            environment_digest: ContentHash::digest(b"environment"),
+            environment_digest: canonical_environment_digest(environment_attestation()).unwrap(),
             seed: 7,
             rule_pack_bindings: vec![],
             node_implementations: vec![NodeImplementation {
                 node_id: node.node_id().clone(),
-                implementation_digest: ContentHash::digest(b"implementation"),
+                implementation_digest: executor.implementation_digest().clone(),
             }],
         },
     )
@@ -433,13 +491,8 @@ fn loaded() -> LoadedTask {
     }
 }
 
-fn typed(name: &str) -> TypedValue {
-    TypedValue::new(
-        format!("ficant.test.{name}"),
-        Version::new(1).unwrap(),
-        ContentHash::digest(name.as_bytes()),
-    )
-    .unwrap()
+fn environment_attestation() -> &'static str {
+    "ficant.worker.environment.v1\narch=amd64\nos=linux\nprofile=unit-test"
 }
 
 fn id(character: char) -> Ulid {

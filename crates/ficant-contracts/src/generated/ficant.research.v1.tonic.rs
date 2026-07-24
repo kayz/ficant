@@ -930,6 +930,156 @@ pub mod experiment_service_client {
                 );
             self.inner.unary(req, path, codec).await
         }
+        ///
+        pub async fn submit_graph_run(
+            &mut self,
+            request: impl tonic::IntoRequest<super::SubmitGraphRunRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::SubmitGraphRunResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/ficant.research.v1.ExperimentService/SubmitGraphRun",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "ficant.research.v1.ExperimentService",
+                        "SubmitGraphRun",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn get_graph_run(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetGraphRunRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetGraphRunResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/ficant.research.v1.ExperimentService/GetGraphRun",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "ficant.research.v1.ExperimentService",
+                        "GetGraphRun",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn list_node_output_manifests(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListNodeOutputManifestsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListNodeOutputManifestsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/ficant.research.v1.ExperimentService/ListNodeOutputManifests",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "ficant.research.v1.ExperimentService",
+                        "ListNodeOutputManifests",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn trace_graph_output(
+            &mut self,
+            request: impl tonic::IntoRequest<super::TraceGraphOutputRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::TraceGraphOutputResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/ficant.research.v1.ExperimentService/TraceGraphOutput",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "ficant.research.v1.ExperimentService",
+                        "TraceGraphOutput",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn compare_graph_runs(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CompareGraphRunsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::CompareGraphRunsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/ficant.research.v1.ExperimentService/CompareGraphRuns",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "ficant.research.v1.ExperimentService",
+                        "CompareGraphRuns",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -972,6 +1122,46 @@ pub mod experiment_service_server {
             request: tonic::Request<super::ReadRunJournalRequest>,
         ) -> std::result::Result<
             tonic::Response<super::ReadRunJournalResponse>,
+            tonic::Status,
+        >;
+        ///
+        async fn submit_graph_run(
+            &self,
+            request: tonic::Request<super::SubmitGraphRunRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::SubmitGraphRunResponse>,
+            tonic::Status,
+        >;
+        ///
+        async fn get_graph_run(
+            &self,
+            request: tonic::Request<super::GetGraphRunRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetGraphRunResponse>,
+            tonic::Status,
+        >;
+        ///
+        async fn list_node_output_manifests(
+            &self,
+            request: tonic::Request<super::ListNodeOutputManifestsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListNodeOutputManifestsResponse>,
+            tonic::Status,
+        >;
+        ///
+        async fn trace_graph_output(
+            &self,
+            request: tonic::Request<super::TraceGraphOutputRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::TraceGraphOutputResponse>,
+            tonic::Status,
+        >;
+        ///
+        async fn compare_graph_runs(
+            &self,
+            request: tonic::Request<super::CompareGraphRunsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::CompareGraphRunsResponse>,
             tonic::Status,
         >;
     }
@@ -1219,6 +1409,247 @@ pub mod experiment_service_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ReadRunJournalSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/ficant.research.v1.ExperimentService/SubmitGraphRun" => {
+                    #[allow(non_camel_case_types)]
+                    struct SubmitGraphRunSvc<T: ExperimentService>(pub Arc<T>);
+                    impl<
+                        T: ExperimentService,
+                    > tonic::server::UnaryService<super::SubmitGraphRunRequest>
+                    for SubmitGraphRunSvc<T> {
+                        type Response = super::SubmitGraphRunResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::SubmitGraphRunRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as ExperimentService>::submit_graph_run(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = SubmitGraphRunSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/ficant.research.v1.ExperimentService/GetGraphRun" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetGraphRunSvc<T: ExperimentService>(pub Arc<T>);
+                    impl<
+                        T: ExperimentService,
+                    > tonic::server::UnaryService<super::GetGraphRunRequest>
+                    for GetGraphRunSvc<T> {
+                        type Response = super::GetGraphRunResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetGraphRunRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as ExperimentService>::get_graph_run(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetGraphRunSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/ficant.research.v1.ExperimentService/ListNodeOutputManifests" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListNodeOutputManifestsSvc<T: ExperimentService>(pub Arc<T>);
+                    impl<
+                        T: ExperimentService,
+                    > tonic::server::UnaryService<super::ListNodeOutputManifestsRequest>
+                    for ListNodeOutputManifestsSvc<T> {
+                        type Response = super::ListNodeOutputManifestsResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::ListNodeOutputManifestsRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as ExperimentService>::list_node_output_manifests(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListNodeOutputManifestsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/ficant.research.v1.ExperimentService/TraceGraphOutput" => {
+                    #[allow(non_camel_case_types)]
+                    struct TraceGraphOutputSvc<T: ExperimentService>(pub Arc<T>);
+                    impl<
+                        T: ExperimentService,
+                    > tonic::server::UnaryService<super::TraceGraphOutputRequest>
+                    for TraceGraphOutputSvc<T> {
+                        type Response = super::TraceGraphOutputResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::TraceGraphOutputRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as ExperimentService>::trace_graph_output(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = TraceGraphOutputSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/ficant.research.v1.ExperimentService/CompareGraphRuns" => {
+                    #[allow(non_camel_case_types)]
+                    struct CompareGraphRunsSvc<T: ExperimentService>(pub Arc<T>);
+                    impl<
+                        T: ExperimentService,
+                    > tonic::server::UnaryService<super::CompareGraphRunsRequest>
+                    for CompareGraphRunsSvc<T> {
+                        type Response = super::CompareGraphRunsResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::CompareGraphRunsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as ExperimentService>::compare_graph_runs(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = CompareGraphRunsSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

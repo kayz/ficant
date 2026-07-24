@@ -105,6 +105,10 @@ try {
         FICANT_S3_BUCKET = 'ficant'
         FICANT_PLATFORM_SIGNING_KEY_HEX = ('00' * 32)
         FICANT_PLATFORM_TRACE_KEY_HEX = ('00' * 32)
+        FICANT_BOOTSTRAP_BEARER_TOKEN = 'validation-bootstrap-token-00000000'
+        FICANT_EXPERIMENT_CURSOR_KEY_HEX = ('11' * 32)
+        FICANT_WORKER_RUNTIME_IMAGE_DIGEST = "sha256:$('22' * 32)"
+        FICANT_WORKER_NATIVE_SOURCE_DIGEST = "sha256:$('33' * 32)"
         FICANT_GRPC_WEB_ALLOWED_ORIGINS = 'https://greatquant.com'
     }
     $savedEnvironment = @{}
@@ -145,6 +149,16 @@ try {
 
     $script:PreflightProject = "ficant-release-preflight-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
     $portBase = Get-Random -Minimum 31000 -Maximum 39000
+    $workerRuntimeDigest = (& docker image inspect --format '{{.Id}}' $images[1])
+    if ($LASTEXITCODE -ne 0 -or $workerRuntimeDigest -notmatch '^sha256:[0-9a-f]{64}$') {
+        throw 'Preflight Worker image has no canonical local digest.'
+    }
+    $workerSourceDigest = (& docker run --rm --read-only --cap-drop ALL `
+        --security-opt no-new-privileges:true --pids-limit 64 --memory 128m `
+        $images[1] --print-native-source-digest)
+    if ($LASTEXITCODE -ne 0 -or $workerSourceDigest -notmatch '^sha256:[0-9a-f]{64}$') {
+        throw 'Preflight Worker image has no canonical native source digest.'
+    }
     $runtimeEnvironment = @{
         FICANT_DEPLOY_SHA = $candidateSha
         FICANT_STORAGE_SHA = $candidateSha
@@ -156,6 +170,10 @@ try {
         FICANT_S3_BUCKET = 'ficant'
         FICANT_PLATFORM_SIGNING_KEY_HEX = ('11' * 32)
         FICANT_PLATFORM_TRACE_KEY_HEX = ('22' * 32)
+        FICANT_BOOTSTRAP_BEARER_TOKEN = 'preflight-bootstrap-token-00000000'
+        FICANT_EXPERIMENT_CURSOR_KEY_HEX = ('33' * 32)
+        FICANT_WORKER_RUNTIME_IMAGE_DIGEST = $workerRuntimeDigest.Trim()
+        FICANT_WORKER_NATIVE_SOURCE_DIGEST = $workerSourceDigest.Trim()
         FICANT_GRPC_WEB_ALLOWED_ORIGINS = 'http://127.0.0.1'
         FICANT_POSTGRES_PORT = [string]$portBase
         FICANT_S3_PORT = [string]($portBase + 1)

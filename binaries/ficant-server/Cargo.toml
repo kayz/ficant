@@ -11,7 +11,12 @@ async-trait = { workspace = true }
 ficant-application = { path = "../../crates/ficant-application" }
 ficant-api = { path = "../../crates/ficant-api" }
 ficant-fixed-income-native = { path = "../../crates/ficant-fixed-income-native" }
+ficant-native-nodes = { path = "../../crates/ficant-native-nodes" }
+ficant-runtime = { path = "../../crates/ficant-runtime" }
+ficant-storage = { path = "../../crates/ficant-storage" }
+ficant-domain = { path = "../../crates/ficant-domain" }
 serde_json = { workspace = true }
+sqlx = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]

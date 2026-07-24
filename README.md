@@ -1094,7 +1094,7 @@ PostgreSQL 16 schema
 - Protobuf 可生成 Rust、Python 和 TypeScript 类型；
 - PostgreSQL Migration 可从空库执行。
 
-**当前候选（2026-07-24）：** 开发 Compose 现在以 `deploy/dev/docker-compose.yml` 为唯一入口；在当前 PowerShell 进程提供本地一次性凭据后，`docker compose --file .\deploy\dev\docker-compose.yml --profile dev up --build --detach --wait` 启动 PostgreSQL、Ceph RGW 与开发服务。Rust、Python、C++、Web、Protobuf 生成及空库 migration 已取得本地可重放证据；正式 Rust 服务 Dockerfile 的精确锁定基础镜像冷构建和完整测试环境交付仍须由 Human 指定版本号后的 version Action 闭合，不能由源码声明或诊断镜像冒充。
+**当前候选（2026-07-24）：** `scripts/dev-up.ps1` 是完整开发环境的唯一一键入口。它生成或复用 ignored 的 `deploy/dev/.env.local`，以正式 Dockerfile 构建 PostgreSQL、Ceph RGW、migration、Server、Worker、Web 和 React Platform Shell，随后从实际 Worker 镜像派生 OCI runtime digest 与构建内嵌 source digest，再用这两项受信身份启动服务。脚本最终通过 UI 的 `/ficant-api` 精确代理调用真实 `GetCurrentSession` gRPC-Web，并要求响应同时包含已认证 Session 和 `grpc-status: 0`；`scripts/dev-down.ps1` 停止容器但默认保留 PostgreSQL/Ceph 数据卷。Rust、Python、C++、Web、Protobuf 生成及空库 migration 已取得本地可重放证据；正式镜像冷构建和测试环境交付仍须由 Human 指定版本号后的 version Action 闭合。
 
 ### Phase 1：领域内核
 
@@ -1213,7 +1213,7 @@ PostgreSQL 16 schema
 - 实验中断后可从安全点恢复；
 - 任意输出可追踪到每个节点。
 
-**当前候选（2026-07-24）：** Phase 4 的实现从进程内内核延伸到持久化执行闭环：ResearchGraph、外部输入声明/绑定、可复现身份与单次 ExperimentRun 身份可持久化；CGB 固收分析 NativeNode 通过与 API 共用的真实 Rust/C++ 计算路径执行；worker 按节点领取 PostgreSQL lease，以租约 fencing 和 Journal 重放恢复中断。输出先进入 Ceph RGW，再在一个 PostgreSQL 事务中提交 Artifact、Journal、checkpoint、节点状态和 lease 完成；后继节点按确定性图顺序继续。本地真实 PostgreSQL + Ceph RGW 已验证对象提升后/事务前中断、attempt 2 恢复、旧 fence 拒绝、两节点推进和最终 Journal 重放；强类型依赖边及篡改失败由 runtime 与 required-read 测试覆盖。
+**当前候选（2026-07-24）：** Phase 4 已形成生产入口到持久化 Worker 的闭环。加法式 `ExperimentService` 从认证后的 `experiment:read`/`experiment:write` scope 接受提交和查询；Server 对 Data/Universe Snapshot、RulePack、外部 Artifact 及其 Ceph payload 执行 required read，只使用部署注入的 OCI runtime、canonical environment 和构建 source digest，客户端不能自报这些受信身份。Repository 在一个 PostgreSQL transaction 内创建并启动 Run、写 Journal、冻结 graph/identity/bindings 并发布首节点；后续 enqueue/begin/complete 都从冻结 graph 和 Journal 自行派生合法恢复节点与唯一后继。Worker 以 lease/fencing 恢复中断，先提升输出到 Ceph RGW，再原子提交经过 envelope、端口、Artifact、manifest、checkpoint 和血缘逐项校验的结果。持久查询可读取 run/manifest/checkpoint、递归追踪任意输出并比较 11 个可复现维度。本地真实 PostgreSQL + Ceph RGW 已验证 `AnalyzeBondRequest -> AnalyzeBondResult -> RiskSummary` 两节点边、promote 后/事务前中断、attempt 2 恢复、旧 fence 与上游篡改拒绝、最终 `SUCCEEDED` 和完整血缘；Phase 4 不包含 GeneratedNode/gVisor 或 Phase 5 业务 UI。
 
 ### Phase 5：Rates Research Lab
 

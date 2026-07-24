@@ -13,8 +13,9 @@ RUN pnpm build
 
 FROM nginx@sha256:45b82ed5f285b90d63df07ba70430fdd8f25624b416617d9e6dc93412b2006dc
 
-COPY deploy/test/ui/nginx.conf /etc/nginx/nginx.conf
+COPY deploy/test/ui/nginx.conf /etc/nginx/nginx.conf.template
 COPY --from=build /workspace/web-dm/platform-shell/dist /usr/share/nginx/html/ficant
 USER 101:101
 EXPOSE 8080
+CMD ["/bin/sh", "-ec", "envsubst '$FICANT_UI_BEARER_TOKEN' < /etc/nginx/nginx.conf.template > /tmp/nginx.conf && exec nginx -c /tmp/nginx.conf -g 'daemon off;'"]
 

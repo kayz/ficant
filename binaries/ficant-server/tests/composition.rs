@@ -18,6 +18,54 @@ fn values(bind: &str) -> BTreeMap<String, String> {
         ("FICANT_PLATFORM_SIGNING_KEY_HEX".to_owned(), KEY.to_owned()),
         ("FICANT_PLATFORM_TRACE_KEY_HEX".to_owned(), KEY.to_owned()),
         (
+            "FICANT_EXPERIMENT_DATABASE_URL".to_owned(),
+            "postgres://ficant:secret@127.0.0.1:5432/ficant".to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_S3_ENDPOINT".to_owned(),
+            "http://127.0.0.1:9000".to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_S3_BUCKET".to_owned(),
+            "ficant".to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_S3_ACCESS_KEY".to_owned(),
+            "fixture-access".to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_S3_SECRET_KEY".to_owned(),
+            "fixture-secret".to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_CURSOR_KEY_HEX".to_owned(),
+            KEY.to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_TENANT_ID".to_owned(),
+            "0000000000000000000000000T".to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_OWNER_ID".to_owned(),
+            "0000000000000000000000000B".to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_ACTOR_ID".to_owned(),
+            "0000000000000000000000000A".to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST".to_owned(),
+            format!("sha256:{}", "01".repeat(32)),
+        ),
+        (
+            "FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION".to_owned(),
+            "ficant.worker.environment.v1\narch=amd64\nos=linux\nprofile=test".to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST".to_owned(),
+            format!("sha256:{}", "02".repeat(32)),
+        ),
+        (
             "FICANT_LOOPBACK_SUBJECT".to_owned(),
             "browser-user".to_owned(),
         ),

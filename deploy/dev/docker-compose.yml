@@ -126,12 +126,28 @@ services:
     environment:
       FICANT_CONFIG: /etc/ficant/ficant.toml
       FICANT_GRPC_BIND: "0.0.0.0:8080"
-      FICANT_GRPC_WEB_ALLOWED_ORIGINS: "http://127.0.0.1:${FICANT_WEB_PORT:-18082}"
+      FICANT_GRPC_WEB_ALLOWED_ORIGINS: "http://127.0.0.1:${FICANT_UI_PORT:-18083}"
       FICANT_PLATFORM_SIGNING_KEY_HEX: "${FICANT_PLATFORM_SIGNING_KEY_HEX:?FICANT_PLATFORM_SIGNING_KEY_HEX is required}"
       FICANT_PLATFORM_TRACE_KEY_HEX: "${FICANT_PLATFORM_TRACE_KEY_HEX:?FICANT_PLATFORM_TRACE_KEY_HEX is required}"
-      FICANT_BOOTSTRAP_SUBJECT:
-      FICANT_BOOTSTRAP_BEARER_TOKEN:
-      FICANT_BOOTSTRAP_SCOPES:
+      FICANT_BOOTSTRAP_SUBJECT: "${FICANT_BOOTSTRAP_SUBJECT:?FICANT_BOOTSTRAP_SUBJECT is required}"
+      FICANT_BOOTSTRAP_BEARER_TOKEN: "${FICANT_BOOTSTRAP_BEARER_TOKEN:?FICANT_BOOTSTRAP_BEARER_TOKEN is required}"
+      FICANT_BOOTSTRAP_SCOPES: "${FICANT_BOOTSTRAP_SCOPES:?FICANT_BOOTSTRAP_SCOPES is required}"
+      FICANT_EXPERIMENT_DATABASE_URL: "postgres://ficant:${FICANT_POSTGRES_PASSWORD:?FICANT_POSTGRES_PASSWORD is required}@postgres:5432/ficant"
+      FICANT_EXPERIMENT_S3_ENDPOINT: "http://ceph-rgw:9000"
+      FICANT_EXPERIMENT_S3_BUCKET: "${FICANT_S3_BUCKET:-ficant}"
+      FICANT_EXPERIMENT_S3_ACCESS_KEY: "${FICANT_S3_ACCESS_KEY:?FICANT_S3_ACCESS_KEY is required}"
+      FICANT_EXPERIMENT_S3_SECRET_KEY: "${FICANT_S3_SECRET_KEY:?FICANT_S3_SECRET_KEY is required}"
+      FICANT_EXPERIMENT_CURSOR_KEY_HEX: "${FICANT_EXPERIMENT_CURSOR_KEY_HEX:?FICANT_EXPERIMENT_CURSOR_KEY_HEX is required}"
+      FICANT_EXPERIMENT_TENANT_ID: "01J00000000000000000000010"
+      FICANT_EXPERIMENT_OWNER_ID: "01J00000000000000000000011"
+      FICANT_EXPERIMENT_ACTOR_ID: "01J00000000000000000000012"
+      FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST: "${FICANT_WORKER_RUNTIME_IMAGE_DIGEST:?FICANT_WORKER_RUNTIME_IMAGE_DIGEST is derived by scripts/dev-up.ps1}"
+      FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION: |-
+        ficant.worker.environment.v1
+        arch=amd64
+        os=linux
+        profile=development
+      FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST: "${FICANT_WORKER_NATIVE_SOURCE_DIGEST:?FICANT_WORKER_NATIVE_SOURCE_DIGEST is derived by scripts/dev-up.ps1}"
     ports:
       - "127.0.0.1:${FICANT_SERVER_PORT:-18080}:8080"
     depends_on:
@@ -142,6 +158,7 @@ services:
 
   ficant-worker:
     <<: *rust-service
+    image: ficant/worker:dev
     build:
       context: ../..
       dockerfile: deploy/dev/RustService.Dockerfile
@@ -159,6 +176,13 @@ services:
       FICANT_WORKER_RENEW_SECONDS: "20"
       FICANT_WORKER_IDLE_POLL_MS: "500"
       FICANT_WORKER_NODE_TIMEOUT_SECONDS: "30"
+      FICANT_WORKER_RUNTIME_IMAGE_DIGEST: "${FICANT_WORKER_RUNTIME_IMAGE_DIGEST:?FICANT_WORKER_RUNTIME_IMAGE_DIGEST is derived by scripts/dev-up.ps1}"
+      FICANT_WORKER_ENVIRONMENT_ATTESTATION: |-
+        ficant.worker.environment.v1
+        arch=amd64
+        os=linux
+        profile=development
+      FICANT_WORKER_NATIVE_SOURCE_DIGEST: "${FICANT_WORKER_NATIVE_SOURCE_DIGEST:?FICANT_WORKER_NATIVE_SOURCE_DIGEST is derived by scripts/dev-up.ps1}"
     ports:
       - "127.0.0.1:${FICANT_WORKER_PORT:-18081}:8080"
     depends_on:
@@ -183,6 +207,28 @@ services:
         condition: service_completed_successfully
       ceph-rgw:
         condition: service_healthy
+      ficant-server:
+        condition: service_healthy
+
+  ficant-ui:
+    <<: *secure-service
+    profiles: [ui]
+    build:
+      context: ../..
+      dockerfile: deploy/test/FicantUi.Dockerfile
+    user: "101:101"
+    restart: unless-stopped
+    environment:
+      FICANT_UI_BEARER_TOKEN: "${FICANT_BOOTSTRAP_BEARER_TOKEN:?FICANT_BOOTSTRAP_BEARER_TOKEN is required}"
+    ports:
+      - "127.0.0.1:${FICANT_UI_PORT:-18083}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      start_period: 3s
+      retries: 20
+    depends_on:
       ficant-server:
         condition: service_healthy
 

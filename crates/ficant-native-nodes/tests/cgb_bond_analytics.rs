@@ -6,20 +6,21 @@ use ficant_contracts::ficant::core::v1::{
 };
 use ficant_contracts::ficant::rates::v1::{
     AlgorithmBinding, AnalysisContext, AnalysisUnits, AnalyzeBondRequest, AnalyzeBondResult,
-    BondTerms, CalendarBinding, CalendarRequirement, CouponFrequency, ObjectBinding,
+    BondTerms, CalendarBinding, CalendarRequirement, CouponFrequency, ObjectBinding, RiskSummary,
     analyze_bond_request,
 };
 use ficant_domain::DomainErrorCode;
 use ficant_domain::analytics::{ALGORITHM_ID, CONVENTION_PROFILE};
 use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid, Version};
 use ficant_domain::research::{
-    GraphExternalInput, GraphExternalInputBinding, ResearchGraph, ResearchGraphInput, ResearchNode,
-    TypedValue,
+    GraphExternalInput, GraphExternalInputBinding, ResearchEdge, ResearchGraph, ResearchGraphInput,
+    ResearchNode, TypedValue,
 };
 use ficant_fixed_income_native::NativeBondAnalyticsEngine;
 use ficant_native_nodes::{
-    CgbBondAnalyticsNativeNode, REQUEST_PORT, analyze_bond_request_type,
-    cgb_bond_analytics_contract,
+    CgbBondAnalyticsNativeNode, CgbBondRiskSummaryNativeNode, REQUEST_PORT, RESULT_PORT,
+    RISK_INPUT_PORT, RISK_OUTPUT_PORT, analyze_bond_request_type, cgb_bond_analytics_contract,
+    cgb_bond_risk_summary_contract, trusted_native_node,
 };
 use ficant_runtime::{
     ExecutionExternalInput, ExecutionInstanceIdentity, NativeNode, NativePortValue,
@@ -421,4 +422,145 @@ fn snapshot_rule_and_algorithm_drift_fail_closed() {
         );
         assert!(outcome.is_err(), "mutation {mutation} must fail closed");
     }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn real_bond_analysis_flows_through_typed_risk_summary_dependency() {
+    let request = golden_request();
+    let analysis_id = id('A');
+    let risk_id = id('B');
+    let analysis = ResearchNode::new(
+        analysis_id.clone(),
+        cgb_bond_analytics_contract().unwrap(),
+        hash(b"no-parameters"),
+    );
+    let risk = ResearchNode::new(
+        risk_id.clone(),
+        cgb_bond_risk_summary_contract().unwrap(),
+        hash(b"no-parameters"),
+    );
+    let graph = ResearchGraph::new_with_external_inputs(
+        ResearchGraphInput {
+            graph_id: id('G'),
+            version: Version::new(1).unwrap(),
+            owner: OwnerRef::new(id('T'), id('W')),
+            nodes: vec![risk.clone(), analysis.clone()],
+            edges: vec![
+                ResearchEdge::new(
+                    analysis_id.clone(),
+                    RESULT_PORT,
+                    risk_id.clone(),
+                    RISK_INPUT_PORT,
+                )
+                .unwrap(),
+            ],
+        },
+        vec![GraphExternalInput::new("bond-request", analyze_bond_request_type()).unwrap()],
+        vec![
+            GraphExternalInputBinding::new("bond-request", analysis_id.clone(), REQUEST_PORT)
+                .unwrap(),
+        ],
+    )
+    .unwrap();
+    let analytics = CgbBondAnalyticsNativeNode::new(analysis_id.clone()).unwrap();
+    let risk_summary = CgbBondRiskSummaryNativeNode::new(risk_id.clone()).unwrap();
+    let payload = request.encode_to_vec();
+    let external =
+        ExecutionExternalInput::new("bond-request", analyze_bond_request_type(), payload).unwrap();
+    let context = request.context.as_ref().unwrap();
+    let rule = context.rule_pack.as_ref().unwrap();
+    let identity = ReproducibilityIdentity::new(
+        &graph,
+        ReproducibilityIdentityInput {
+            external_inputs: vec![external.clone()],
+            data_snapshot_hash: ContentHash::from_bytes(
+                &context
+                    .data_snapshot
+                    .as_ref()
+                    .unwrap()
+                    .content_hash
+                    .as_ref()
+                    .unwrap()
+                    .value,
+            )
+            .unwrap(),
+            universe_snapshot_hash: hash(b"universe"),
+            parameters_hash: hash(b"parameters"),
+            runtime_image_digest: hash(b"runtime"),
+            environment_digest: hash(b"environment"),
+            seed: 7,
+            rule_pack_bindings: vec![RulePackBinding {
+                rule_pack_id: rule
+                    .object
+                    .as_ref()
+                    .unwrap()
+                    .id
+                    .as_ref()
+                    .unwrap()
+                    .value
+                    .clone(),
+                version: Version::new(rule.object.as_ref().unwrap().version).unwrap(),
+                content_hash: ContentHash::from_bytes(&rule.content_hash.as_ref().unwrap().value)
+                    .unwrap(),
+            }],
+            node_implementations: vec![
+                NodeImplementation {
+                    node_id: analysis_id,
+                    implementation_digest: analytics.implementation_digest().clone(),
+                },
+                NodeImplementation {
+                    node_id: risk_id,
+                    implementation_digest: risk_summary.implementation_digest().clone(),
+                },
+            ],
+        },
+    )
+    .unwrap();
+
+    let first = execute_native_node(
+        &analysis,
+        &identity,
+        &analytics,
+        vec![
+            NativePortValue::new(
+                REQUEST_PORT,
+                analyze_bond_request_type(),
+                external.payload().to_vec(),
+            )
+            .unwrap(),
+        ],
+        vec![external.content_hash().clone()],
+    )
+    .unwrap();
+    let second = execute_native_node(
+        &risk,
+        &identity,
+        &risk_summary,
+        vec![
+            NativePortValue::new(
+                RISK_INPUT_PORT,
+                ficant_native_nodes::analyze_bond_result_type(),
+                first.outputs()[0].payload().to_vec(),
+            )
+            .unwrap(),
+        ],
+        vec![first.artifact().output_envelope_hash().clone()],
+    )
+    .unwrap();
+    let summary = RiskSummary::decode(second.outputs()[0].payload()).unwrap();
+    let source = AnalyzeBondResult::decode(first.outputs()[0].payload()).unwrap();
+    let measures = source.measures.unwrap();
+    assert_ne!(
+        first.outputs()[0].content_hash(),
+        first.artifact().output_envelope_hash(),
+        "the per-port payload hash is distinct from the canonical output-envelope Artifact hash"
+    );
+    assert_eq!(second.outputs()[0].port_name(), RISK_OUTPUT_PORT);
+    assert_eq!(summary.modified_duration, measures.modified_duration);
+    assert_eq!(summary.convexity, measures.convexity);
+    assert_eq!(summary.dv01, measures.dv01);
+    assert_eq!(summary.source_metadata, source.metadata);
+    assert!(trusted_native_node(&analysis).is_ok());
+    assert!(trusted_native_node(&risk).is_ok());
 }

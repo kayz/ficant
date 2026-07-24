@@ -79,40 +79,23 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 
 脚本不会创建、部署或清理服务器，也不会打印这些值。数据库必须可以安全地被测试 migration 重置；不得指向共享、测试发布或生产数据库。集成计划依次覆盖 migration、Phase 1 正向业务闭环、13 项负向不变量，以及 Phase 2B Carry/Roll-down、Phase 2C 国债期货交割价值链的真实发布重放与篡改检测。
 
-仓库内 `deploy/dev/docker-compose.yml` 是当前唯一的本地 Compose 入口，提供锁定基础镜像摘要的 PostgreSQL、单节点 Ceph RGW 和三个 Rust 服务；它不是生产 Ceph 部署模板。启动前，在当前 PowerShell 进程中注入以下变量。示例只在内存中生成本地一次性值，不把 secret 写入仓库、命令行参数或下面的文档：
+仓库内 `deploy/dev/docker-compose.yml` 是当前唯一的本地 Compose 拓扑，提供锁定基础镜像摘要的 PostgreSQL、单节点 Ceph RGW、migration、三个 Rust 服务和 React Platform Shell；它不是生产 Ceph 部署模板。日常开发只调用下面的包装脚本：
 
 ```powershell
-$env:FICANT_POSTGRES_PASSWORD = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
-$env:FICANT_S3_ACCESS_KEY = 'ficant-local'
-$env:FICANT_S3_SECRET_KEY = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
-$env:FICANT_S3_BUCKET = 'ficant'
-$env:FICANT_PLATFORM_SIGNING_KEY_HEX = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
-$env:FICANT_PLATFORM_TRACE_KEY_HEX = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
+.\scripts\dev-up.ps1 -ListOnly
+.\scripts\dev-up.ps1
 ```
 
-其中必须显式提供的非 secret 标识是 `FICANT_S3_ACCESS_KEY`；`FICANT_S3_BUCKET` 有安全默认值但建议显式提供。secret 变量是 `FICANT_POSTGRES_PASSWORD`、`FICANT_S3_SECRET_KEY`、`FICANT_PLATFORM_SIGNING_KEY_HEX` 和 `FICANT_PLATFORM_TRACE_KEY_HEX`。可选端口变量为 `FICANT_POSTGRES_PORT`、`FICANT_S3_PORT`、`FICANT_SERVER_PORT`、`FICANT_WORKER_PORT` 与 `FICANT_WEB_PORT`；未设置时使用 Compose 文件中的本机回环端口默认值。不要复用共享、测试发布或生产凭据。
-
-从仓库根目录启动当前完整 Ceph 开发栈的唯一命令是：
-
-```powershell
-docker compose --file .\deploy\dev\docker-compose.yml --profile dev up --build --detach --wait
-```
-
-这条命令可能为了冷构建或缺失的锁定基础镜像访问网络。它不会替代 `check.ps1 -IncludeIntegration` 所需的 `FICANT_TEST_*` 变量；测试调用者仍须把上述本地服务地址和本轮精确 runtime image digest 映射到测试变量。
+首次启动会生成 ignored 的 `deploy/dev/.env.local`；后续启动复用它。该文件包含一次性本地 PostgreSQL、S3、Platform、cursor 和 bootstrap 身份凭据，不进入 Git，也不应复用共享、测试发布或生产凭据。脚本先用正式 Dockerfile 构建完整拓扑，从实际 `ficant/worker:dev` 镜像取得 OCI image ID 和内嵌 native source digest，再以这些受信值启动服务；最后经 UI `/ficant-api` 调用真实 `GetCurrentSession` gRPC-Web，必须同时取得已认证 Session 和成功 trailer。可选端口仍可在启动前通过 `FICANT_POSTGRES_PORT`、`FICANT_S3_PORT`、`FICANT_SERVER_PORT`、`FICANT_WORKER_PORT`、`FICANT_WEB_PORT` 与 `FICANT_UI_PORT` 覆盖。
 
 停止容器和网络但保留 `postgres-data`、`ceph-data` 命名卷：
 
 ```powershell
-docker compose --file .\deploy\dev\docker-compose.yml --profile dev down
+.\scripts\dev-down.ps1 -ListOnly
+.\scripts\dev-down.ps1
 ```
 
-只有明确要丢弃全部本地 PostgreSQL/Ceph 数据时才运行下面的破坏性清理；`--volumes` 会删除两个命名卷，数据不可由 Compose 恢复：
-
-```powershell
-docker compose --file .\deploy\dev\docker-compose.yml --profile dev down --volumes --remove-orphans
-```
-
-检查脚本本身仍不自动启动、停止、清理或下载该夹具。
+`dev-up.ps1` 可能为了冷构建或缺失的锁定基础镜像访问网络。它不会替代 `check.ps1 -IncludeIntegration` 所需的 `FICANT_TEST_*` 变量；测试调用者仍须把本地服务地址和本轮精确 runtime image digest 映射到测试变量。包装脚本不提供删除数据卷的选项；如确需销毁本地数据，必须单独审查精确 Compose project 和卷目标。检查脚本本身仍不自动启动、停止、清理或下载该夹具。
 
 ## 本地依赖能力
 

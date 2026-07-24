@@ -12,8 +12,11 @@ arrow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 ficant-application = { path = "../ficant-application" }
+ficant-contracts = { path = "../ficant-contracts" }
 ficant-domain = { path = "../ficant-domain" }
+ficant-runtime = { path = "../ficant-runtime" }
 object_store = { workspace = true }
+prost = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 

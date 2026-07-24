@@ -186,6 +186,20 @@ pub struct AnalyzeBondResult {
     #[prost(message, optional, tag="3")]
     pub metadata: ::core::option::Option<ResultMetadata>,
 }
+/// RiskSummary is the deterministic risk-only projection consumed by
+/// downstream ResearchGraph nodes. Values retain the exact Unit bindings and
+/// source metadata from AnalyzeBondResult; the node must not recompute them.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RiskSummary {
+    #[prost(message, optional, tag="1")]
+    pub modified_duration: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="2")]
+    pub convexity: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="3")]
+    pub dv01: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="4")]
+    pub source_metadata: ::core::option::Option<ResultMetadata>,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AnalyzeBondResponse {
     #[prost(oneof="analyze_bond_response::Result", tags="1, 2")]

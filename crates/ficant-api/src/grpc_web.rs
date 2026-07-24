@@ -351,6 +351,95 @@ pub async fn serve_grpc_web_with_rates(
     Ok(())
 }
 
+/// Serves Platform, Rates and authenticated Experiment APIs on one exact gRPC-Web listener.
+///
+/// # Errors
+///
+/// Returns an error for an invalid exact CORS origin or a transport failure.
+pub async fn serve_grpc_web_with_rates_and_experiment(
+    config: GrpcWebServerConfig,
+    platform: PlatformGrpcService,
+    rates: crate::rates::RatesGrpcService,
+    experiment: crate::experiment::ExperimentGrpcService,
+) -> Result<(), GrpcWebServeError> {
+    use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsServiceServer;
+    use ficant_contracts::ficant::research::v1::experiment_service_server::ExperimentServiceServer;
+
+    let cors = ExactCorsLayer::try_new(&config.allowed_origins)?;
+    let service = PlatformRatesExperimentService {
+        platform: PlatformServiceServer::new(platform),
+        rates: RatesAnalyticsServiceServer::new(rates),
+        experiment: ExperimentServiceServer::new(experiment),
+    };
+    let service = GrpcWebLayer::new().layer(service);
+    let service = cors.layer(service);
+    Server::builder()
+        .accept_http1(true)
+        .serve(config.bind, service)
+        .await?;
+    Ok(())
+}
+
+#[derive(Clone, Debug)]
+struct PlatformRatesExperimentService<P, R, E> {
+    platform: P,
+    rates: R,
+    experiment: E,
+}
+
+impl<P, R, E, RequestBody> Service<HttpRequest<RequestBody>>
+    for PlatformRatesExperimentService<P, R, E>
+where
+    P: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>> + Send + 'static,
+    R: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
+        + Send
+        + 'static,
+    E: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
+        + Send
+        + 'static,
+    P::Future: Send + 'static,
+    R::Future: Send + 'static,
+    E::Future: Send + 'static,
+    P::Error: Send + 'static,
+    RequestBody: Send + 'static,
+{
+    type Response = HttpResponse<Body>;
+    type Error = P::Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, context: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        match self.platform.poll_ready(context) {
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+            Poll::Pending => return Poll::Pending,
+        }
+        match self.rates.poll_ready(context) {
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+            Poll::Pending => return Poll::Pending,
+        }
+        self.experiment.poll_ready(context)
+    }
+
+    fn call(&mut self, request: HttpRequest<RequestBody>) -> Self::Future {
+        if request
+            .uri()
+            .path()
+            .starts_with("/ficant.rates.v1.RatesAnalyticsService/")
+        {
+            Box::pin(self.rates.call(request))
+        } else if request
+            .uri()
+            .path()
+            .starts_with("/ficant.research.v1.ExperimentService/")
+        {
+            Box::pin(self.experiment.call(request))
+        } else {
+            Box::pin(self.platform.call(request))
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct PlatformRatesService<P, R> {
     platform: P,

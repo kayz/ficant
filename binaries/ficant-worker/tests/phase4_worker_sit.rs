@@ -18,22 +18,27 @@ use ficant_contracts::ficant::core::v1::{
 };
 use ficant_contracts::ficant::rates::v1::{
     AlgorithmBinding, AnalysisContext, AnalysisUnits, AnalyzeBondRequest, BondTerms,
-    CalendarBinding, CalendarRequirement, CouponFrequency, ObjectBinding, analyze_bond_request,
+    CalendarBinding, CalendarRequirement, CouponFrequency, ObjectBinding, RiskSummary,
+    analyze_bond_request,
 };
 use ficant_domain::analytics::{ALGORITHM_ID, CONVENTION_PROFILE};
 use ficant_domain::primitives::{ContentHash, LineageRef, OwnerRef, Ulid, Version};
 use ficant_domain::research::{
     Artifact, ArtifactKind, GraphExternalInput, GraphExternalInputBinding, JournalEventType,
-    ResearchGraph, ResearchGraphInput, ResearchNode, RunJournal, RunJournalInput, RunState,
+    ResearchEdge, ResearchGraph, ResearchGraphInput, ResearchNode, RunJournal, RunJournalInput,
+    RunState,
 };
 use ficant_domain::{ContentAddressed, Lineaged};
 use ficant_native_nodes::{
-    CgbBondAnalyticsNativeNode, REQUEST_PORT, analyze_bond_request_type,
-    cgb_bond_analytics_contract,
+    CgbBondAnalyticsNativeNode, CgbBondRiskSummaryNativeNode, REQUEST_PORT, RESULT_PORT,
+    RISK_INPUT_PORT, RISK_OUTPUT_PORT, analyze_bond_request_type, cgb_bond_analytics_contract,
+    cgb_bond_risk_summary_contract, native_node_source_digest,
 };
 use ficant_runtime::{NativeNode, decode_canonical_output_bytes, replay_graph_execution};
 use ficant_storage::s3::S3BlobStore;
-use ficant_worker::{ProductionWorkerBackend, WorkerBackend, WorkerConfig, run_claimed};
+use ficant_worker::{
+    ProductionWorkerBackend, WorkerBackend, WorkerConfig, canonical_environment_digest, run_claimed,
+};
 use prost::Message;
 
 const PREFIX: &str = "01ARZ3NDEKTSV4RRFFQ69G5FA";
@@ -153,7 +158,7 @@ fn golden_request() -> AnalyzeBondRequest {
 
 #[tokio::test]
 #[allow(clippy::too_many_lines)]
-async fn production_worker_executes_and_persists_real_cgb_node() {
+async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
     let pool = support::postgres_pool().await;
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
@@ -215,17 +220,23 @@ async fn production_worker_executes_and_persists_real_cgb_node() {
                 ),
                 ResearchNode::new(
                     second_node_id.clone(),
-                    cgb_bond_analytics_contract().unwrap(),
+                    cgb_bond_risk_summary_contract().unwrap(),
                     hash(b"no-parameters"),
                 ),
             ],
-            edges: vec![],
+            edges: vec![
+                ResearchEdge::new(
+                    node_id.clone(),
+                    RESULT_PORT,
+                    second_node_id.clone(),
+                    RISK_INPUT_PORT,
+                )
+                .unwrap(),
+            ],
         },
         vec![GraphExternalInput::new("bond-request", analyze_bond_request_type()).unwrap()],
         vec![
             GraphExternalInputBinding::new("bond-request", node_id.clone(), REQUEST_PORT).unwrap(),
-            GraphExternalInputBinding::new("bond-request", second_node_id.clone(), REQUEST_PORT)
-                .unwrap(),
         ],
     )
     .unwrap();
@@ -249,7 +260,10 @@ async fn production_worker_executes_and_persists_real_cgb_node() {
     seed_run_events(&repository, &scope, &run_id).await;
 
     let executor = CgbBondAnalyticsNativeNode::new(node_id.clone()).unwrap();
-    let second_executor = CgbBondAnalyticsNativeNode::new(second_node_id.clone()).unwrap();
+    let second_executor = CgbBondRiskSummaryNativeNode::new(second_node_id.clone()).unwrap();
+    let environment_attestation =
+        "ficant.worker.environment.v1\narch=amd64\nos=linux\nprofile=integration-test";
+    let environment_digest = canonical_environment_digest(environment_attestation).unwrap();
     let external =
         ExecutionExternalInput::new("bond-request", analyze_bond_request_type(), request_bytes)
             .unwrap();
@@ -260,8 +274,8 @@ async fn production_worker_executes_and_persists_real_cgb_node() {
             data_snapshot_hash: data_hash,
             universe_snapshot_hash: universe_hash,
             parameters_hash,
-            runtime_image_digest: runtime_hash,
-            environment_digest: hash(b"worker-sit-environment"),
+            runtime_image_digest: runtime_hash.clone(),
+            environment_digest,
             seed: 7,
             rule_pack_bindings: vec![RulePackBinding {
                 rule_pack_id: id('K').to_string(),
@@ -323,6 +337,9 @@ async fn production_worker_executes_and_persists_real_cgb_node() {
         s3_access_key: access_key,
         s3_secret_key: secret_key,
         worker_id: id('W'),
+        runtime_image_digest: runtime_hash,
+        environment_attestation: environment_attestation.to_owned(),
+        native_source_digest: native_node_source_digest(),
         lease_duration: Duration::from_secs(60),
         renew_interval: Duration::from_secs(20),
         idle_poll_interval: Duration::from_millis(10),
@@ -374,6 +391,11 @@ async fn production_worker_executes_and_persists_real_cgb_node() {
     run_claimed(&recovered_backend, &recovered_config, &claimed)
         .await
         .unwrap();
+    let artifact = repository
+        .get_metadata(&scope, planned)
+        .await
+        .unwrap()
+        .unwrap();
     let second = recovered_backend
         .claim(&recovered_config.worker_id, &id('V'), 60)
         .await
@@ -381,6 +403,36 @@ async fn production_worker_executes_and_persists_real_cgb_node() {
         .expect("the first completion must enqueue the second graph node");
     assert_eq!(second.node_id, second_node_id);
     assert_eq!(second.attempt, 1);
+    let second_loaded = recovered_backend
+        .load(&second, &recovered_config.worker_id)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE storage.blobs SET blob_size=blob_size+1
+         WHERE tenant_id=$1 AND content_hash=$2",
+    )
+    .bind(owner().tenant_id().as_str())
+    .bind(hex(artifact.content_hash()))
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(
+        recovered_backend
+            .read_inputs(&second, &second_loaded)
+            .await
+            .is_err(),
+        "tampered upstream blob metadata must fail before downstream execution"
+    );
+    sqlx::query(
+        "UPDATE storage.blobs SET blob_size=$3
+         WHERE tenant_id=$1 AND content_hash=$2",
+    )
+    .bind(owner().tenant_id().as_str())
+    .bind(hex(artifact.content_hash()))
+    .bind(i64::try_from(artifact.blob_size()).unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
     run_claimed(&recovered_backend, &recovered_config, &second)
         .await
         .unwrap();
@@ -399,11 +451,6 @@ async fn production_worker_executes_and_persists_real_cgb_node() {
     .unwrap();
     assert_eq!(states, ("COMPLETED".to_owned(), "SUCCEEDED".to_owned()));
 
-    let artifact = repository
-        .get_metadata(&scope, planned)
-        .await
-        .unwrap()
-        .unwrap();
     assert_eq!(artifact.lineage().len(), 1);
     assert_eq!(artifact.lineage()[0].object_id(), &request_artifact_id);
     let output_bytes = blobs
@@ -429,10 +476,25 @@ async fn production_worker_executes_and_persists_real_cgb_node() {
         .unwrap()
         .expect("the second graph node must persist its planned Artifact");
     assert_eq!(second_artifact.lineage().len(), 1);
+    assert_eq!(second_artifact.lineage()[0].object_id(), artifact.id());
     assert_eq!(
-        second_artifact.lineage()[0].object_id(),
-        &request_artifact_id
+        second_artifact.lineage()[0].content_hash(),
+        Some(artifact.content_hash())
     );
+    let risk_bytes = blobs
+        .probe_verified(second_artifact.content_hash())
+        .await
+        .unwrap()
+        .expect("downstream RiskSummary Artifact must have verified Ceph content");
+    let risk_outputs =
+        decode_canonical_output_bytes(&risk_bytes, Some(second_artifact.content_hash())).unwrap();
+    assert_eq!(risk_outputs.len(), 1);
+    assert_eq!(risk_outputs[0].port_name(), RISK_OUTPUT_PORT);
+    let summary = RiskSummary::decode(risk_outputs[0].payload()).unwrap();
+    assert!(summary.modified_duration.is_some());
+    assert!(summary.convexity.is_some());
+    assert!(summary.dv01.is_some());
+    assert!(summary.source_metadata.is_some());
 
     let events = read_journal(&repository, &scope, run_id).await;
     let replay = replay_graph_execution(&graph, &events).unwrap();

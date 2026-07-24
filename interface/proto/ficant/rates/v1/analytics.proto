@@ -142,6 +142,16 @@ message AnalyzeBondResult {
   ResultMetadata metadata = 3;
 }
 
+// RiskSummary is the deterministic risk-only projection consumed by
+// downstream ResearchGraph nodes. Values retain the exact Unit bindings and
+// source metadata from AnalyzeBondResult; the node must not recompute them.
+message RiskSummary {
+  ficant.core.v1.DecimalValue modified_duration = 1;
+  ficant.core.v1.DecimalValue convexity = 2;
+  ficant.core.v1.DecimalValue dv01 = 3;
+  ResultMetadata source_metadata = 4;
+}
+
 message AnalyzeBondResponse {
   oneof result {
     AnalyzeBondResult analysis = 1;

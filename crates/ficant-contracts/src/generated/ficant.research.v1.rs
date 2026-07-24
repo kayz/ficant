@@ -626,6 +626,110 @@ pub struct ReadRunJournalResponse {
     #[prost(message, optional, tag="2")]
     pub page: ::core::option::Option<super::super::core::v1::PageResponse>,
 }
+/// Submits one fully frozen graph run. Tenant, owner and deployment attestation are
+/// derived from the authenticated server boundary and therefore are deliberately
+/// absent from this request.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SubmitGraphRunRequest {
+    #[prost(string, tag="1")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="3")]
+    pub graph: ::core::option::Option<ResearchGraph>,
+    #[prost(message, optional, tag="4")]
+    pub data_snapshot: ::core::option::Option<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="5")]
+    pub data_snapshot_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="6")]
+    pub universe_snapshot: ::core::option::Option<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="7")]
+    pub universe_snapshot_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="8")]
+    pub parameters_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(uint64, tag="9")]
+    pub seed: u64,
+    #[prost(message, repeated, tag="10")]
+    pub rule_packs: ::prost::alloc::vec::Vec<RulePackBinding>,
+    #[prost(message, repeated, tag="11")]
+    pub external_inputs: ::prost::alloc::vec::Vec<ExecutionExternalInput>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SubmitGraphRunResponse {
+    #[prost(message, optional, tag="1")]
+    pub run: ::core::option::Option<ExperimentRun>,
+    #[prost(message, optional, tag="2")]
+    pub execution: ::core::option::Option<ExecutionInstanceIdentity>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetGraphRunRequest {
+    #[prost(message, optional, tag="1")]
+    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GraphRun {
+    #[prost(message, optional, tag="1")]
+    pub run: ::core::option::Option<ExperimentRun>,
+    #[prost(message, optional, tag="2")]
+    pub graph: ::core::option::Option<ResearchGraph>,
+    #[prost(message, optional, tag="3")]
+    pub execution: ::core::option::Option<ExecutionInstanceIdentity>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetGraphRunResponse {
+    #[prost(message, optional, tag="1")]
+    pub graph_run: ::core::option::Option<GraphRun>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListNodeOutputManifestsRequest {
+    #[prost(message, optional, tag="1")]
+    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StoredNodeOutputManifest {
+    #[prost(message, optional, tag="1")]
+    pub manifest: ::core::option::Option<NodeOutputManifest>,
+    #[prost(message, optional, tag="2")]
+    pub checkpoint: ::core::option::Option<NodeCheckpoint>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListNodeOutputManifestsResponse {
+    #[prost(message, repeated, tag="1")]
+    pub manifests: ::prost::alloc::vec::Vec<StoredNodeOutputManifest>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TraceGraphOutputRequest {
+    #[prost(message, optional, tag="1")]
+    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GraphOutputTrace {
+    #[prost(message, optional, tag="1")]
+    pub graph_run: ::core::option::Option<GraphRun>,
+    #[prost(message, repeated, tag="2")]
+    pub manifests: ::prost::alloc::vec::Vec<StoredNodeOutputManifest>,
+    #[prost(message, repeated, tag="3")]
+    pub external_inputs: ::prost::alloc::vec::Vec<ExecutionExternalInput>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TraceGraphOutputResponse {
+    #[prost(message, optional, tag="1")]
+    pub trace: ::core::option::Option<GraphOutputTrace>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CompareGraphRunsRequest {
+    #[prost(message, optional, tag="1")]
+    pub left_run_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub right_run_id: ::core::option::Option<super::super::core::v1::Ulid>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CompareGraphRunsResponse {
+    #[prost(enumeration="GraphRunComparisonDimension", repeated, tag="1")]
+    pub differing_dimensions: ::prost::alloc::vec::Vec<i32>,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum RunState {
@@ -660,6 +764,62 @@ impl RunState {
             "RUN_STATE_SUCCEEDED" => Some(Self::Succeeded),
             "RUN_STATE_FAILED" => Some(Self::Failed),
             "RUN_STATE_CANCELLED" => Some(Self::Cancelled),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum GraphRunComparisonDimension {
+    Unspecified = 0,
+    Data = 1,
+    Universe = 2,
+    Graph = 3,
+    Parameters = 4,
+    Runtime = 5,
+    Environment = 6,
+    Seed = 7,
+    RulePack = 8,
+    Implementation = 9,
+    ExternalInput = 10,
+    Result = 11,
+}
+impl GraphRunComparisonDimension {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "GRAPH_RUN_COMPARISON_DIMENSION_UNSPECIFIED",
+            Self::Data => "GRAPH_RUN_COMPARISON_DIMENSION_DATA",
+            Self::Universe => "GRAPH_RUN_COMPARISON_DIMENSION_UNIVERSE",
+            Self::Graph => "GRAPH_RUN_COMPARISON_DIMENSION_GRAPH",
+            Self::Parameters => "GRAPH_RUN_COMPARISON_DIMENSION_PARAMETERS",
+            Self::Runtime => "GRAPH_RUN_COMPARISON_DIMENSION_RUNTIME",
+            Self::Environment => "GRAPH_RUN_COMPARISON_DIMENSION_ENVIRONMENT",
+            Self::Seed => "GRAPH_RUN_COMPARISON_DIMENSION_SEED",
+            Self::RulePack => "GRAPH_RUN_COMPARISON_DIMENSION_RULE_PACK",
+            Self::Implementation => "GRAPH_RUN_COMPARISON_DIMENSION_IMPLEMENTATION",
+            Self::ExternalInput => "GRAPH_RUN_COMPARISON_DIMENSION_EXTERNAL_INPUT",
+            Self::Result => "GRAPH_RUN_COMPARISON_DIMENSION_RESULT",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "GRAPH_RUN_COMPARISON_DIMENSION_UNSPECIFIED" => Some(Self::Unspecified),
+            "GRAPH_RUN_COMPARISON_DIMENSION_DATA" => Some(Self::Data),
+            "GRAPH_RUN_COMPARISON_DIMENSION_UNIVERSE" => Some(Self::Universe),
+            "GRAPH_RUN_COMPARISON_DIMENSION_GRAPH" => Some(Self::Graph),
+            "GRAPH_RUN_COMPARISON_DIMENSION_PARAMETERS" => Some(Self::Parameters),
+            "GRAPH_RUN_COMPARISON_DIMENSION_RUNTIME" => Some(Self::Runtime),
+            "GRAPH_RUN_COMPARISON_DIMENSION_ENVIRONMENT" => Some(Self::Environment),
+            "GRAPH_RUN_COMPARISON_DIMENSION_SEED" => Some(Self::Seed),
+            "GRAPH_RUN_COMPARISON_DIMENSION_RULE_PACK" => Some(Self::RulePack),
+            "GRAPH_RUN_COMPARISON_DIMENSION_IMPLEMENTATION" => Some(Self::Implementation),
+            "GRAPH_RUN_COMPARISON_DIMENSION_EXTERNAL_INPUT" => Some(Self::ExternalInput),
+            "GRAPH_RUN_COMPARISON_DIMENSION_RESULT" => Some(Self::Result),
             _ => None,
         }
     }

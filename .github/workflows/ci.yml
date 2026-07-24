@@ -138,6 +138,14 @@ jobs:
           set -euo pipefail
           signing_key=$(printf '01%.0s' {1..32})
           trace_key=$(printf '02%.0s' {1..32})
+          cursor_key=$(printf '03%.0s' {1..32})
+          environment_attestation=$'ficant.worker.environment.v1\narch=amd64\nos=linux\nprofile=ci'
+          native_source_digest=$(docker run --rm --network host \
+            --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu \
+            --volume "${{ github.workspace }}:/workspace" --workdir /workspace \
+            rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 \
+            sh -ec 'cargo run --quiet --locked -p ficant-worker -- --print-native-source-digest')
+          [[ "$native_source_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
           docker run --detach --rm --name ficant-ci-grpc --network host \
             --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu \
             --env FICANT_GRPC_BIND=127.0.0.1:50051 \
@@ -146,7 +154,19 @@ jobs:
             --env FICANT_PLATFORM_TRACE_KEY_HEX="$trace_key" \
             --env FICANT_BOOTSTRAP_SUBJECT=ci-browser \
             --env FICANT_BOOTSTRAP_BEARER_TOKEN=ci-grpc-test-token \
-            --env FICANT_BOOTSTRAP_SCOPES=apps:read \
+            --env FICANT_BOOTSTRAP_SCOPES=apps:read,experiment:read,experiment:write \
+            --env FICANT_EXPERIMENT_DATABASE_URL=postgres://ficant:ci@127.0.0.1:5432/ficant \
+            --env FICANT_EXPERIMENT_S3_ENDPOINT=http://127.0.0.1:9000 \
+            --env FICANT_EXPERIMENT_S3_BUCKET=ficant-ci \
+            --env FICANT_EXPERIMENT_S3_ACCESS_KEY=ficant-ci \
+            --env FICANT_EXPERIMENT_S3_SECRET_KEY=ficant-ci-secret \
+            --env FICANT_EXPERIMENT_CURSOR_KEY_HEX="$cursor_key" \
+            --env FICANT_EXPERIMENT_TENANT_ID=01J00000000000000000000010 \
+            --env FICANT_EXPERIMENT_OWNER_ID=01J00000000000000000000011 \
+            --env FICANT_EXPERIMENT_ACTOR_ID=01J00000000000000000000012 \
+            --env FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+            --env FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION="$environment_attestation" \
+            --env FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST="$native_source_digest" \
             --volume "${{ github.workspace }}:/workspace" --workdir /workspace \
             rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 \
             sh -ec 'cargo run --locked -p ficant-server'
@@ -220,7 +240,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
-      - name: Real serial business and immutable snapshot stage
+      - name: Real serial business, Phase 4 execution, and immutable snapshot stage
         shell: bash
         run: |
           set -euo pipefail
@@ -265,7 +285,12 @@ jobs:
             --env FICANT_TEST_RUNTIME_IMAGE_DIGEST \
             --volume "${{ github.workspace }}:/workspace" --workdir /workspace \
             rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 \
-            sh -ec 'cargo test --locked -p ficant-acceptance --test phase1_business_loop -- --test-threads=1 && cargo test --locked -p ficant-acceptance --test negative_invariants -- --test-threads=1 && cargo test --locked -p ficant-data --test snapshot_publication_sit -- --test-threads=1'
+            sh -ec 'cargo test --locked -p ficant-storage --test lease_queue_sit -- --test-threads=1 &&
+              cargo test --locked -p ficant-storage --test phase4_execution_sit -- --test-threads=1 &&
+              cargo test --locked -p ficant-worker --features integration-tests --test phase4_worker_sit -- --test-threads=1 &&
+              cargo test --locked -p ficant-acceptance --test phase1_business_loop -- --test-threads=1 &&
+              cargo test --locked -p ficant-acceptance --test negative_invariants -- --test-threads=1 &&
+              cargo test --locked -p ficant-data --test snapshot_publication_sit -- --test-threads=1'
 
   supply-chain:
     needs: authorize-version
