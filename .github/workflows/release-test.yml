@@ -47,8 +47,8 @@ jobs:
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
           git fetch origin main --tags --force
           [[ "$sha" == $(git rev-parse "refs/tags/$version^{commit}") ]]
-          [[ "$sha" == $(git rev-parse origin/main) ]]
           if [[ "${{ github.event_name }}" == workflow_run ]]; then
+            [[ "$sha" == $(git rev-parse origin/main) ]]
             [[ "$version" == "${{ github.event.workflow_run.head_branch }}" ]]
             [[ "$sha" == "${{ github.event.workflow_run.head_sha }}" ]]
           fi
@@ -298,6 +298,24 @@ jobs:
             -i "$HOME/.ssh/ficant-test" -p "$PORT" \
             -o BatchMode=yes -o StrictHostKeyChecking=yes \
             "$USER@$HOST" "FICANT_ROOT='$ROOT' '$ROOT/bin/configure-object-store.sh'"
+      - name: Preload exact Ceph SHA image through the runner
+        shell: bash
+        env:
+          HOST: ${{ vars.FICANT_TEST_HOST }}
+          PORT: ${{ vars.FICANT_TEST_PORT }}
+          USER: ${{ vars.FICANT_TEST_USER }}
+          SHA: ${{ needs.authorize.outputs.sha }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${{ github.repository_owner }}/ficant-ceph-rgw:sha-$SHA"
+          printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin >/dev/null
+          trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+          docker pull "$image"
+          docker save "$image" | gzip -1 | ssh \
+            -i "$HOME/.ssh/ficant-test" -p "$PORT" \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$USER@$HOST" "gzip -d | docker load"
       - name: Deploy exact image SHA
         shell: bash
         env:

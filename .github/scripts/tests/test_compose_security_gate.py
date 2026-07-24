@@ -760,10 +760,19 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
             "package: [ficant-server, ficant-worker, ficant-web, ficant-ui, ficant-ceph-rgw]",
             "for package in ficant-server ficant-worker ficant-web ficant-ui ficant-ceph-rgw",
             "Configure test object-store credentials",
+            "Preload exact Ceph SHA image through the runner",
+            'docker save "$image" | gzip -1 | ssh',
+            '"$USER@$HOST" "gzip -d | docker load"',
             "FICANT_TEST_S3_ACCESS_KEY",
             "FICANT_TEST_S3_SECRET_KEY",
         ):
             self.assertIn(marker, workflow)
+
+        self.assertIn(
+            'if [[ "${{ github.event_name }}" == workflow_run ]]; then\n'
+            '            [[ "$sha" == $(git rev-parse origin/main) ]]',
+            workflow,
+        )
 
     def test_release_rust_build_reuses_locked_cargo_and_target_caches(self) -> None:
         dockerfile = Path("deploy/dev/RustService.Dockerfile").read_text(
