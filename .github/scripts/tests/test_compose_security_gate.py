@@ -637,5 +637,118 @@ class ComposeSecurityGateTests(unittest.TestCase):
         self.assertNotIn("do-not-leak", "\n".join(failures))
 
 
+class ReleaseDeploymentContractTests(unittest.TestCase):
+    @staticmethod
+    def resolved_release_document() -> dict[str, object]:
+        environment = {
+            **os.environ,
+            "FICANT_DEPLOY_SHA": "0" * 40,
+            "FICANT_STORAGE_SHA": "0" * 40,
+            "FICANT_IMAGE_PREFIX": "ghcr.io/kayz/ficant",
+            "FICANT_ROOT": "/srv/ficant-test",
+            "FICANT_POSTGRES_PASSWORD": "validation-only",
+            "FICANT_S3_ACCESS_KEY": "validation-access",
+            "FICANT_S3_SECRET_KEY": "validation-only-secret-key-00000000",
+            "FICANT_S3_BUCKET": "ficant",
+            "FICANT_PLATFORM_SIGNING_KEY_HEX": "00" * 32,
+            "FICANT_PLATFORM_TRACE_KEY_HEX": "00" * 32,
+            "FICANT_GRPC_WEB_ALLOWED_ORIGINS": "https://greatquant.com",
+        }
+        output = subprocess.run(
+            [
+                "docker",
+                "compose",
+                "--file",
+                "deploy/test/compose.test.yml",
+                "config",
+                "--format",
+                "json",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=environment,
+        ).stdout
+        return json.loads(output)
+
+    @staticmethod
+    def validate_release(document: dict[str, object]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "deploy/test/validate_release.py"],
+            input=json.dumps(document),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_release_topology_includes_real_worker_and_ceph_contract(self) -> None:
+        document = self.resolved_release_document()
+        result = self.validate_release(document)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        worker = document["services"]["ficant-worker"]
+        self.assertEqual(
+            worker["environment"]["FICANT_WORKER_S3_ENDPOINT"],
+            "http://ceph-rgw:9000",
+        )
+        self.assertEqual(
+            worker["depends_on"]["ceph-rgw"]["condition"],
+            "service_healthy",
+        )
+        self.assertIn("ceph-data", document["volumes"])
+
+    def test_release_validator_rejects_missing_ceph_and_worker_credentials(self) -> None:
+        without_ceph = self.resolved_release_document()
+        without_ceph["services"].pop("ceph-rgw")
+        result = self.validate_release(without_ceph)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unexpected services", result.stderr)
+
+        without_worker_secret = self.resolved_release_document()
+        without_worker_secret["services"]["ficant-worker"]["environment"].pop(
+            "FICANT_WORKER_S3_SECRET_KEY"
+        )
+        result = self.validate_release(without_worker_secret)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing its production database/S3/identity environment", result.stderr)
+
+    def test_rollback_smoke_accepts_forward_only_migration_supersets(self) -> None:
+        smoke = Path("deploy/test/bin/smoke-test.sh").read_text(encoding="utf-8")
+
+        self.assertIn('missing=$(comm -23 "$expected_file" "$applied_file")', smoke)
+        self.assertIn("required_migrations=$required applied_migrations=$applied", smoke)
+        self.assertNotIn('"$applied" -eq "$expected"', smoke)
+
+    def test_rollback_keeps_a_available_storage_runtime_across_legacy_app_shas(
+        self,
+    ) -> None:
+        compose = Path("deploy/test/compose.test.yml").read_text(encoding="utf-8")
+        deploy = Path("deploy/test/bin/deploy.sh").read_text(encoding="utf-8")
+        rollback = Path("deploy/test/bin/rollback.sh").read_text(encoding="utf-8")
+
+        self.assertIn("-ceph-rgw:sha-${FICANT_STORAGE_SHA:", compose)
+        self.assertIn("storage_sha=${FICANT_STORAGE_SHA:-$sha}", deploy)
+        self.assertIn(
+            "FICANT_DEPLOY_SHA=%s\\nFICANT_STORAGE_SHA=%s\\n",
+            deploy,
+        )
+        self.assertIn("storage_sha=$current_storage", rollback)
+        self.assertIn("FICANT_STORAGE_SHA=$storage_sha", rollback)
+
+    def test_release_workflow_builds_scans_promotes_and_configures_ceph(self) -> None:
+        workflow = Path(".github/workflows/release-test.yml").read_text(encoding="utf-8")
+
+        for marker in (
+            "build-ceph:",
+            "file: deploy/dev/Ceph.Dockerfile",
+            "package: [ficant-server, ficant-worker, ficant-web, ficant-ui, ficant-ceph-rgw]",
+            "for package in ficant-server ficant-worker ficant-web ficant-ui ficant-ceph-rgw",
+            "Configure test object-store credentials",
+            "FICANT_TEST_S3_ACCESS_KEY",
+            "FICANT_TEST_S3_SECRET_KEY",
+        ):
+            self.assertIn(marker, workflow)
+
+
 if __name__ == "__main__":
     unittest.main()

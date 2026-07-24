@@ -14,7 +14,7 @@ fi
 export FICANT_DEPLOY_SHA
 
 compose=(docker compose --env-file "$root/.env" --file "$root/compose.test.yml")
-for service in postgres ficant-server ficant-worker ficant-web ficant-ui; do
+for service in postgres ceph-rgw ficant-server ficant-worker ficant-web ficant-ui; do
   container_id=$("${compose[@]}" ps --quiet "$service")
   [[ -n "$container_id" ]] || { echo "$service has no container." >&2; exit 1; }
   status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")
