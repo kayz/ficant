@@ -439,6 +439,8 @@ if workflow.count(image) != 4:
     raise SystemExit("Rust CI image must match the toolchain lock in all four jobs")
 if f"ARG RUST_IMAGE={image}" not in dockerfile:
     raise SystemExit("Rust service build image must match the toolchain lock")
+if "COPY interface ./interface" not in dockerfile:
+    raise SystemExit("Rust service build context must include embedded interface contracts")
 PY
 
 printf '%s\n' Cargo.toml web-dm/package.json pnpm-lock.yaml >"$tmp/wrong-lock"
