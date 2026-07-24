@@ -1,13 +1,13 @@
 use async_trait::async_trait;
 use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid, Version};
-use ficant_domain::research::{Artifact, ResearchGraph};
+use ficant_domain::research::{Artifact, ExperimentRun, ResearchGraph};
 pub use ficant_runtime::{
     ExecutionExternalInput, ExecutionInstanceIdentity, GraphNodeEvent, GraphReplayResult,
     NodeImplementation, ReproducibilityIdentity, ReproducibilityIdentityInput, RulePackBinding,
     replay_graph_execution,
 };
 
-use super::{AccessScope, ApplicationResult};
+use super::{AccessScope, ApplicationResult, IdempotencyKey, VerifiedBlobRef};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExternalInputArtifactBinding {
@@ -60,10 +60,15 @@ pub struct BeginNode {
 pub struct CompleteNode {
     pub fence: NodeLeaseFence,
     pub artifact: Artifact,
+    /// Capability returned by the object store after hashing the promoted immutable object.
+    ///
+    /// The repository, rather than the worker, binds this proof to the planned Artifact.
+    pub verified_blob: VerifiedBlobRef,
+    /// Canonical output envelope bytes whose size and hash are bound to `verified_blob`.
+    pub verified_payload: Vec<u8>,
     pub output_manifest: Vec<u8>,
     pub succeeded_event_id: Ulid,
     pub checkpoint_event_id: Ulid,
-    pub next_task: Option<EnqueueNode>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -99,6 +104,67 @@ pub struct NodeFailureResult {
     pub replayed: bool,
 }
 
+/// All frozen material required to start a graph run atomically.
+///
+/// Authentication, tenant/owner scope and trusted runtime attestation are constructed by the
+/// application/API boundary. The repository never accepts a partially-created run.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubmitGraphRun {
+    pub scope: AccessScope,
+    pub idempotency_key: IdempotencyKey,
+    pub run: ExperimentRun,
+    pub graph: ResearchGraph,
+    pub identity: StoredExecutionIdentity,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GraphRunRecord {
+    pub run: ExperimentRun,
+    pub graph: ResearchGraph,
+    pub identity: StoredExecutionIdentity,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredNodeManifest {
+    pub run_id: Ulid,
+    pub node_id: Ulid,
+    pub attempt: u64,
+    pub artifact: Artifact,
+    pub manifest_hash: ContentHash,
+    pub manifest: Vec<u8>,
+    pub checkpoint: NodeJournalEvidence,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutputTrace {
+    pub run: GraphRunRecord,
+    /// Upstream-first manifests needed to reproduce and explain the selected output.
+    pub manifests: Vec<StoredNodeManifest>,
+    pub external_inputs: Vec<ExternalInputArtifactBinding>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ComparisonDimension {
+    Data,
+    Universe,
+    Graph,
+    Parameters,
+    Runtime,
+    Environment,
+    Seed,
+    RulePack,
+    Implementation,
+    ExternalInput,
+    Result,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GraphRunComparison {
+    pub left_run_id: Ulid,
+    pub right_run_id: Ulid,
+    pub differing_dimensions: Vec<ComparisonDimension>,
+}
+
 /// Derives the immutable Artifact identity from result-affecting identity plus logical node.
 ///
 /// The first 128 bits of the domain-separated SHA-256 digest are encoded as canonical Crockford
@@ -131,6 +197,9 @@ pub fn stable_node_artifact_id(reproducibility_digest: &ContentHash, node_id: &U
 
 #[async_trait]
 pub trait Phase4ExecutionRepository: Send + Sync {
+    /// Publishes graph, run, journal, identity, bindings and the first task in one transaction.
+    async fn submit_graph_run(&self, command: SubmitGraphRun) -> ApplicationResult<GraphRunRecord>;
+
     async fn publish_graph(
         &self,
         scope: &AccessScope,
@@ -155,6 +224,32 @@ pub trait Phase4ExecutionRepository: Send + Sync {
         scope: &AccessScope,
         run_id: &Ulid,
     ) -> ApplicationResult<Option<StoredExecutionIdentity>>;
+
+    async fn get_graph_run(
+        &self,
+        scope: &AccessScope,
+        run_id: &Ulid,
+    ) -> ApplicationResult<Option<GraphRunRecord>>;
+
+    async fn list_node_manifests(
+        &self,
+        scope: &AccessScope,
+        run_id: &Ulid,
+    ) -> ApplicationResult<Vec<StoredNodeManifest>>;
+
+    async fn trace_output(
+        &self,
+        scope: &AccessScope,
+        run_id: &Ulid,
+        node_id: &Ulid,
+    ) -> ApplicationResult<Option<OutputTrace>>;
+
+    async fn compare_graph_runs(
+        &self,
+        scope: &AccessScope,
+        left_run_id: &Ulid,
+        right_run_id: &Ulid,
+    ) -> ApplicationResult<Option<GraphRunComparison>>;
 
     async fn enqueue_node(&self, command: EnqueueNode) -> ApplicationResult<()>;
 

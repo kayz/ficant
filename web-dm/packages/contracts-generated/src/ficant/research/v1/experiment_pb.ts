@@ -6,6 +6,10 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { LineageRef, OwnerRef, PageRequest, PageResponse, Sha256, Ulid, VersionRef } from "../../core/v1/common_pb";
 import { file_ficant_core_v1_common } from "../../core/v1/common_pb";
+import type { ExecutionExternalInput, ExecutionInstanceIdentity, NodeCheckpoint, NodeOutputManifest, RulePackBinding } from "./execution_pb";
+import { file_ficant_research_v1_execution } from "./execution_pb";
+import type { ResearchGraph } from "./graph_pb";
+import { file_ficant_research_v1_graph } from "./graph_pb";
 import type { RunJournal } from "./journal_pb";
 import { file_ficant_research_v1_journal } from "./journal_pb";
 import type { Message } from "@bufbuild/protobuf";
@@ -14,7 +18,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ficant/research/v1/experiment.proto.
  */
 export const file_ficant_research_v1_experiment: GenFile = /*@__PURE__*/
-  fileDesc("CiNmaWNhbnQvcmVzZWFyY2gvdjEvZXhwZXJpbWVudC5wcm90bxISZmljYW50LnJlc2VhcmNoLnYxIrcDCg1FeHBlcmltZW50UnVuEi8KEWV4cGVyaW1lbnRfcnVuX2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBInCgVvd25lchgCIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEjEKDWRhdGFfc25hcHNob3QYAyABKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmEjUKEXVuaXZlcnNlX3NuYXBzaG90GAQgASgLMhouZmljYW50LmNvcmUudjEuTGluZWFnZVJlZhIuCgpydWxlX3BhY2tzGAUgAygLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhI0ChRydW50aW1lX2ltYWdlX2RpZ2VzdBgGIAEoCzIWLmZpY2FudC5jb3JlLnYxLlNoYTI1NhIvCg9wYXJhbWV0ZXJzX2hhc2gYByABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSDAoEc2VlZBgIIAEoBBIrCgVzdGF0ZRgJIAEoDjIcLmZpY2FudC5yZXNlYXJjaC52MS5SdW5TdGF0ZRIQCghyZXZpc2lvbhgKIAEoBCJbChBDcmVhdGVSdW5SZXF1ZXN0EhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoCRIuCgNydW4YAiABKAsyIS5maWNhbnQucmVzZWFyY2gudjEuRXhwZXJpbWVudFJ1biJDChFDcmVhdGVSdW5SZXNwb25zZRIuCgNydW4YASABKAsyIS5maWNhbnQucmVzZWFyY2gudjEuRXhwZXJpbWVudFJ1biKJAQoUVHJhbnNpdGlvblJ1blJlcXVlc3QSJAoGcnVuX2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIZChFleHBlY3RlZF9yZXZpc2lvbhgCIAEoBBIwCgpuZXh0X3N0YXRlGAMgASgOMhwuZmljYW50LnJlc2VhcmNoLnYxLlJ1blN0YXRlIkcKFVRyYW5zaXRpb25SdW5SZXNwb25zZRIuCgNydW4YASABKAsyIS5maWNhbnQucmVzZWFyY2gudjEuRXhwZXJpbWVudFJ1biI1Cg1HZXRSdW5SZXF1ZXN0EiQKBnJ1bl9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQiQAoOR2V0UnVuUmVzcG9uc2USLgoDcnVuGAEgASgLMiEuZmljYW50LnJlc2VhcmNoLnYxLkV4cGVyaW1lbnRSdW4ifwoVUmVhZFJ1bkpvdXJuYWxSZXF1ZXN0EiQKBnJ1bl9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSFQoNZnJvbV9zZXF1ZW5jZRgCIAEoBBIpCgRwYWdlGAMgASgLMhsuZmljYW50LmNvcmUudjEuUGFnZVJlcXVlc3QidAoWUmVhZFJ1bkpvdXJuYWxSZXNwb25zZRIuCgZldmVudHMYASADKAsyHi5maWNhbnQucmVzZWFyY2gudjEuUnVuSm91cm5hbBIqCgRwYWdlGAIgASgLMhwuZmljYW50LmNvcmUudjEuUGFnZVJlc3BvbnNlKpsBCghSdW5TdGF0ZRIZChVSVU5fU1RBVEVfVU5TUEVDSUZJRUQQABIVChFSVU5fU1RBVEVfQ1JFQVRFRBABEhUKEVJVTl9TVEFURV9SVU5OSU5HEAISFwoTUlVOX1NUQVRFX1NVQ0NFRURFRBADEhQKEFJVTl9TVEFURV9GQUlMRUQQBBIXChNSVU5fU1RBVEVfQ0FOQ0VMTEVEEAUyjQMKEUV4cGVyaW1lbnRTZXJ2aWNlElgKCUNyZWF0ZVJ1bhIkLmZpY2FudC5yZXNlYXJjaC52MS5DcmVhdGVSdW5SZXF1ZXN0GiUuZmljYW50LnJlc2VhcmNoLnYxLkNyZWF0ZVJ1blJlc3BvbnNlEmQKDVRyYW5zaXRpb25SdW4SKC5maWNhbnQucmVzZWFyY2gudjEuVHJhbnNpdGlvblJ1blJlcXVlc3QaKS5maWNhbnQucmVzZWFyY2gudjEuVHJhbnNpdGlvblJ1blJlc3BvbnNlEk8KBkdldFJ1bhIhLmZpY2FudC5yZXNlYXJjaC52MS5HZXRSdW5SZXF1ZXN0GiIuZmljYW50LnJlc2VhcmNoLnYxLkdldFJ1blJlc3BvbnNlEmcKDlJlYWRSdW5Kb3VybmFsEikuZmljYW50LnJlc2VhcmNoLnYxLlJlYWRSdW5Kb3VybmFsUmVxdWVzdBoqLmZpY2FudC5yZXNlYXJjaC52MS5SZWFkUnVuSm91cm5hbFJlc3BvbnNlYgZwcm90bzM", [file_ficant_core_v1_common, file_ficant_research_v1_journal]);
+  fileDesc("CiNmaWNhbnQvcmVzZWFyY2gvdjEvZXhwZXJpbWVudC5wcm90bxISZmljYW50LnJlc2VhcmNoLnYxIrcDCg1FeHBlcmltZW50UnVuEi8KEWV4cGVyaW1lbnRfcnVuX2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBInCgVvd25lchgCIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEjEKDWRhdGFfc25hcHNob3QYAyABKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmEjUKEXVuaXZlcnNlX3NuYXBzaG90GAQgASgLMhouZmljYW50LmNvcmUudjEuTGluZWFnZVJlZhIuCgpydWxlX3BhY2tzGAUgAygLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhI0ChRydW50aW1lX2ltYWdlX2RpZ2VzdBgGIAEoCzIWLmZpY2FudC5jb3JlLnYxLlNoYTI1NhIvCg9wYXJhbWV0ZXJzX2hhc2gYByABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSDAoEc2VlZBgIIAEoBBIrCgVzdGF0ZRgJIAEoDjIcLmZpY2FudC5yZXNlYXJjaC52MS5SdW5TdGF0ZRIQCghyZXZpc2lvbhgKIAEoBCJbChBDcmVhdGVSdW5SZXF1ZXN0EhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoCRIuCgNydW4YAiABKAsyIS5maWNhbnQucmVzZWFyY2gudjEuRXhwZXJpbWVudFJ1biJDChFDcmVhdGVSdW5SZXNwb25zZRIuCgNydW4YASABKAsyIS5maWNhbnQucmVzZWFyY2gudjEuRXhwZXJpbWVudFJ1biKJAQoUVHJhbnNpdGlvblJ1blJlcXVlc3QSJAoGcnVuX2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIZChFleHBlY3RlZF9yZXZpc2lvbhgCIAEoBBIwCgpuZXh0X3N0YXRlGAMgASgOMhwuZmljYW50LnJlc2VhcmNoLnYxLlJ1blN0YXRlIkcKFVRyYW5zaXRpb25SdW5SZXNwb25zZRIuCgNydW4YASABKAsyIS5maWNhbnQucmVzZWFyY2gudjEuRXhwZXJpbWVudFJ1biI1Cg1HZXRSdW5SZXF1ZXN0EiQKBnJ1bl9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQiQAoOR2V0UnVuUmVzcG9uc2USLgoDcnVuGAEgASgLMiEuZmljYW50LnJlc2VhcmNoLnYxLkV4cGVyaW1lbnRSdW4ifwoVUmVhZFJ1bkpvdXJuYWxSZXF1ZXN0EiQKBnJ1bl9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSFQoNZnJvbV9zZXF1ZW5jZRgCIAEoBBIpCgRwYWdlGAMgASgLMhsuZmljYW50LmNvcmUudjEuUGFnZVJlcXVlc3QidAoWUmVhZFJ1bkpvdXJuYWxSZXNwb25zZRIuCgZldmVudHMYASADKAsyHi5maWNhbnQucmVzZWFyY2gudjEuUnVuSm91cm5hbBIqCgRwYWdlGAIgASgLMhwuZmljYW50LmNvcmUudjEuUGFnZVJlc3BvbnNlIpsEChVTdWJtaXRHcmFwaFJ1blJlcXVlc3QSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgJEiQKBnJ1bl9pZBgCIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSMAoFZ3JhcGgYAyABKAsyIS5maWNhbnQucmVzZWFyY2gudjEuUmVzZWFyY2hHcmFwaBIxCg1kYXRhX3NuYXBzaG90GAQgASgLMhouZmljYW50LmNvcmUudjEuTGluZWFnZVJlZhIyChJkYXRhX3NuYXBzaG90X2hhc2gYBSABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSNQoRdW5pdmVyc2Vfc25hcHNob3QYBiABKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmEjYKFnVuaXZlcnNlX3NuYXBzaG90X2hhc2gYByABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSLwoPcGFyYW1ldGVyc19oYXNoGAggASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EgwKBHNlZWQYCSABKAQSNwoKcnVsZV9wYWNrcxgKIAMoCzIjLmZpY2FudC5yZXNlYXJjaC52MS5SdWxlUGFja0JpbmRpbmcSQwoPZXh0ZXJuYWxfaW5wdXRzGAsgAygLMiouZmljYW50LnJlc2VhcmNoLnYxLkV4ZWN1dGlvbkV4dGVybmFsSW5wdXQiigEKFlN1Ym1pdEdyYXBoUnVuUmVzcG9uc2USLgoDcnVuGAEgASgLMiEuZmljYW50LnJlc2VhcmNoLnYxLkV4cGVyaW1lbnRSdW4SQAoJZXhlY3V0aW9uGAIgASgLMi0uZmljYW50LnJlc2VhcmNoLnYxLkV4ZWN1dGlvbkluc3RhbmNlSWRlbnRpdHkiOgoSR2V0R3JhcGhSdW5SZXF1ZXN0EiQKBnJ1bl9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQirgEKCEdyYXBoUnVuEi4KA3J1bhgBIAEoCzIhLmZpY2FudC5yZXNlYXJjaC52MS5FeHBlcmltZW50UnVuEjAKBWdyYXBoGAIgASgLMiEuZmljYW50LnJlc2VhcmNoLnYxLlJlc2VhcmNoR3JhcGgSQAoJZXhlY3V0aW9uGAMgASgLMi0uZmljYW50LnJlc2VhcmNoLnYxLkV4ZWN1dGlvbkluc3RhbmNlSWRlbnRpdHkiRgoTR2V0R3JhcGhSdW5SZXNwb25zZRIvCglncmFwaF9ydW4YASABKAsyHC5maWNhbnQucmVzZWFyY2gudjEuR3JhcGhSdW4iRgoeTGlzdE5vZGVPdXRwdXRNYW5pZmVzdHNSZXF1ZXN0EiQKBnJ1bl9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQijAEKGFN0b3JlZE5vZGVPdXRwdXRNYW5pZmVzdBI4CghtYW5pZmVzdBgBIAEoCzImLmZpY2FudC5yZXNlYXJjaC52MS5Ob2RlT3V0cHV0TWFuaWZlc3QSNgoKY2hlY2twb2ludBgCIAEoCzIiLmZpY2FudC5yZXNlYXJjaC52MS5Ob2RlQ2hlY2twb2ludCJiCh9MaXN0Tm9kZU91dHB1dE1hbmlmZXN0c1Jlc3BvbnNlEj8KCW1hbmlmZXN0cxgBIAMoCzIsLmZpY2FudC5yZXNlYXJjaC52MS5TdG9yZWROb2RlT3V0cHV0TWFuaWZlc3QiZgoXVHJhY2VHcmFwaE91dHB1dFJlcXVlc3QSJAoGcnVuX2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIlCgdub2RlX2lkGAIgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZCLJAQoQR3JhcGhPdXRwdXRUcmFjZRIvCglncmFwaF9ydW4YASABKAsyHC5maWNhbnQucmVzZWFyY2gudjEuR3JhcGhSdW4SPwoJbWFuaWZlc3RzGAIgAygLMiwuZmljYW50LnJlc2VhcmNoLnYxLlN0b3JlZE5vZGVPdXRwdXRNYW5pZmVzdBJDCg9leHRlcm5hbF9pbnB1dHMYAyADKAsyKi5maWNhbnQucmVzZWFyY2gudjEuRXhlY3V0aW9uRXh0ZXJuYWxJbnB1dCJPChhUcmFjZUdyYXBoT3V0cHV0UmVzcG9uc2USMwoFdHJhY2UYASABKAsyJC5maWNhbnQucmVzZWFyY2gudjEuR3JhcGhPdXRwdXRUcmFjZSJwChdDb21wYXJlR3JhcGhSdW5zUmVxdWVzdBIpCgtsZWZ0X3J1bl9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSKgoMcmlnaHRfcnVuX2lkGAIgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZCJpChhDb21wYXJlR3JhcGhSdW5zUmVzcG9uc2USTQoUZGlmZmVyaW5nX2RpbWVuc2lvbnMYASADKA4yLy5maWNhbnQucmVzZWFyY2gudjEuR3JhcGhSdW5Db21wYXJpc29uRGltZW5zaW9uKpsBCghSdW5TdGF0ZRIZChVSVU5fU1RBVEVfVU5TUEVDSUZJRUQQABIVChFSVU5fU1RBVEVfQ1JFQVRFRBABEhUKEVJVTl9TVEFURV9SVU5OSU5HEAISFwoTUlVOX1NUQVRFX1NVQ0NFRURFRBADEhQKEFJVTl9TVEFURV9GQUlMRUQQBBIXChNSVU5fU1RBVEVfQ0FOQ0VMTEVEEAUqwAQKG0dyYXBoUnVuQ29tcGFyaXNvbkRpbWVuc2lvbhIuCipHUkFQSF9SVU5fQ09NUEFSSVNPTl9ESU1FTlNJT05fVU5TUEVDSUZJRUQQABInCiNHUkFQSF9SVU5fQ09NUEFSSVNPTl9ESU1FTlNJT05fREFUQRABEisKJ0dSQVBIX1JVTl9DT01QQVJJU09OX0RJTUVOU0lPTl9VTklWRVJTRRACEigKJEdSQVBIX1JVTl9DT01QQVJJU09OX0RJTUVOU0lPTl9HUkFQSBADEi0KKUdSQVBIX1JVTl9DT01QQVJJU09OX0RJTUVOU0lPTl9QQVJBTUVURVJTEAQSKgomR1JBUEhfUlVOX0NPTVBBUklTT05fRElNRU5TSU9OX1JVTlRJTUUQBRIuCipHUkFQSF9SVU5fQ09NUEFSSVNPTl9ESU1FTlNJT05fRU5WSVJPTk1FTlQQBhInCiNHUkFQSF9SVU5fQ09NUEFSSVNPTl9ESU1FTlNJT05fU0VFRBAHEiwKKEdSQVBIX1JVTl9DT01QQVJJU09OX0RJTUVOU0lPTl9SVUxFX1BBQ0sQCBIxCi1HUkFQSF9SVU5fQ09NUEFSSVNPTl9ESU1FTlNJT05fSU1QTEVNRU5UQVRJT04QCRIxCi1HUkFQSF9SVU5fQ09NUEFSSVNPTl9ESU1FTlNJT05fRVhURVJOQUxfSU5QVVQQChIpCiVHUkFQSF9SVU5fQ09NUEFSSVNPTl9ESU1FTlNJT05fUkVTVUxUEAsyuQcKEUV4cGVyaW1lbnRTZXJ2aWNlElgKCUNyZWF0ZVJ1bhIkLmZpY2FudC5yZXNlYXJjaC52MS5DcmVhdGVSdW5SZXF1ZXN0GiUuZmljYW50LnJlc2VhcmNoLnYxLkNyZWF0ZVJ1blJlc3BvbnNlEmQKDVRyYW5zaXRpb25SdW4SKC5maWNhbnQucmVzZWFyY2gudjEuVHJhbnNpdGlvblJ1blJlcXVlc3QaKS5maWNhbnQucmVzZWFyY2gudjEuVHJhbnNpdGlvblJ1blJlc3BvbnNlEk8KBkdldFJ1bhIhLmZpY2FudC5yZXNlYXJjaC52MS5HZXRSdW5SZXF1ZXN0GiIuZmljYW50LnJlc2VhcmNoLnYxLkdldFJ1blJlc3BvbnNlEmcKDlJlYWRSdW5Kb3VybmFsEikuZmljYW50LnJlc2VhcmNoLnYxLlJlYWRSdW5Kb3VybmFsUmVxdWVzdBoqLmZpY2FudC5yZXNlYXJjaC52MS5SZWFkUnVuSm91cm5hbFJlc3BvbnNlEmcKDlN1Ym1pdEdyYXBoUnVuEikuZmljYW50LnJlc2VhcmNoLnYxLlN1Ym1pdEdyYXBoUnVuUmVxdWVzdBoqLmZpY2FudC5yZXNlYXJjaC52MS5TdWJtaXRHcmFwaFJ1blJlc3BvbnNlEl4KC0dldEdyYXBoUnVuEiYuZmljYW50LnJlc2VhcmNoLnYxLkdldEdyYXBoUnVuUmVxdWVzdBonLmZpY2FudC5yZXNlYXJjaC52MS5HZXRHcmFwaFJ1blJlc3BvbnNlEoIBChdMaXN0Tm9kZU91dHB1dE1hbmlmZXN0cxIyLmZpY2FudC5yZXNlYXJjaC52MS5MaXN0Tm9kZU91dHB1dE1hbmlmZXN0c1JlcXVlc3QaMy5maWNhbnQucmVzZWFyY2gudjEuTGlzdE5vZGVPdXRwdXRNYW5pZmVzdHNSZXNwb25zZRJtChBUcmFjZUdyYXBoT3V0cHV0EisuZmljYW50LnJlc2VhcmNoLnYxLlRyYWNlR3JhcGhPdXRwdXRSZXF1ZXN0GiwuZmljYW50LnJlc2VhcmNoLnYxLlRyYWNlR3JhcGhPdXRwdXRSZXNwb25zZRJtChBDb21wYXJlR3JhcGhSdW5zEisuZmljYW50LnJlc2VhcmNoLnYxLkNvbXBhcmVHcmFwaFJ1bnNSZXF1ZXN0GiwuZmljYW50LnJlc2VhcmNoLnYxLkNvbXBhcmVHcmFwaFJ1bnNSZXNwb25zZWIGcHJvdG8z", [file_ficant_core_v1_common, file_ficant_research_v1_execution, file_ficant_research_v1_graph, file_ficant_research_v1_journal]);
 
 /**
  * @generated from message ficant.research.v1.ExperimentRun
@@ -245,6 +249,321 @@ export const ReadRunJournalResponseSchema: GenMessage<ReadRunJournalResponse> = 
   messageDesc(file_ficant_research_v1_experiment, 8);
 
 /**
+ * Submits one fully frozen graph run. Tenant, owner and deployment attestation are
+ * derived from the authenticated server boundary and therefore are deliberately
+ * absent from this request.
+ *
+ * @generated from message ficant.research.v1.SubmitGraphRunRequest
+ */
+export type SubmitGraphRunRequest = Message<"ficant.research.v1.SubmitGraphRunRequest"> & {
+  /**
+   * @generated from field: string idempotency_key = 1;
+   */
+  idempotencyKey: string;
+
+  /**
+   * @generated from field: ficant.core.v1.Ulid run_id = 2;
+   */
+  runId?: Ulid;
+
+  /**
+   * @generated from field: ficant.research.v1.ResearchGraph graph = 3;
+   */
+  graph?: ResearchGraph;
+
+  /**
+   * @generated from field: ficant.core.v1.LineageRef data_snapshot = 4;
+   */
+  dataSnapshot?: LineageRef;
+
+  /**
+   * @generated from field: ficant.core.v1.Sha256 data_snapshot_hash = 5;
+   */
+  dataSnapshotHash?: Sha256;
+
+  /**
+   * @generated from field: ficant.core.v1.LineageRef universe_snapshot = 6;
+   */
+  universeSnapshot?: LineageRef;
+
+  /**
+   * @generated from field: ficant.core.v1.Sha256 universe_snapshot_hash = 7;
+   */
+  universeSnapshotHash?: Sha256;
+
+  /**
+   * @generated from field: ficant.core.v1.Sha256 parameters_hash = 8;
+   */
+  parametersHash?: Sha256;
+
+  /**
+   * @generated from field: uint64 seed = 9;
+   */
+  seed: bigint;
+
+  /**
+   * @generated from field: repeated ficant.research.v1.RulePackBinding rule_packs = 10;
+   */
+  rulePacks: RulePackBinding[];
+
+  /**
+   * @generated from field: repeated ficant.research.v1.ExecutionExternalInput external_inputs = 11;
+   */
+  externalInputs: ExecutionExternalInput[];
+};
+
+/**
+ * Describes the message ficant.research.v1.SubmitGraphRunRequest.
+ * Use `create(SubmitGraphRunRequestSchema)` to create a new message.
+ */
+export const SubmitGraphRunRequestSchema: GenMessage<SubmitGraphRunRequest> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_experiment, 9);
+
+/**
+ * @generated from message ficant.research.v1.SubmitGraphRunResponse
+ */
+export type SubmitGraphRunResponse = Message<"ficant.research.v1.SubmitGraphRunResponse"> & {
+  /**
+   * @generated from field: ficant.research.v1.ExperimentRun run = 1;
+   */
+  run?: ExperimentRun;
+
+  /**
+   * @generated from field: ficant.research.v1.ExecutionInstanceIdentity execution = 2;
+   */
+  execution?: ExecutionInstanceIdentity;
+};
+
+/**
+ * Describes the message ficant.research.v1.SubmitGraphRunResponse.
+ * Use `create(SubmitGraphRunResponseSchema)` to create a new message.
+ */
+export const SubmitGraphRunResponseSchema: GenMessage<SubmitGraphRunResponse> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_experiment, 10);
+
+/**
+ * @generated from message ficant.research.v1.GetGraphRunRequest
+ */
+export type GetGraphRunRequest = Message<"ficant.research.v1.GetGraphRunRequest"> & {
+  /**
+   * @generated from field: ficant.core.v1.Ulid run_id = 1;
+   */
+  runId?: Ulid;
+};
+
+/**
+ * Describes the message ficant.research.v1.GetGraphRunRequest.
+ * Use `create(GetGraphRunRequestSchema)` to create a new message.
+ */
+export const GetGraphRunRequestSchema: GenMessage<GetGraphRunRequest> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_experiment, 11);
+
+/**
+ * @generated from message ficant.research.v1.GraphRun
+ */
+export type GraphRun = Message<"ficant.research.v1.GraphRun"> & {
+  /**
+   * @generated from field: ficant.research.v1.ExperimentRun run = 1;
+   */
+  run?: ExperimentRun;
+
+  /**
+   * @generated from field: ficant.research.v1.ResearchGraph graph = 2;
+   */
+  graph?: ResearchGraph;
+
+  /**
+   * @generated from field: ficant.research.v1.ExecutionInstanceIdentity execution = 3;
+   */
+  execution?: ExecutionInstanceIdentity;
+};
+
+/**
+ * Describes the message ficant.research.v1.GraphRun.
+ * Use `create(GraphRunSchema)` to create a new message.
+ */
+export const GraphRunSchema: GenMessage<GraphRun> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_experiment, 12);
+
+/**
+ * @generated from message ficant.research.v1.GetGraphRunResponse
+ */
+export type GetGraphRunResponse = Message<"ficant.research.v1.GetGraphRunResponse"> & {
+  /**
+   * @generated from field: ficant.research.v1.GraphRun graph_run = 1;
+   */
+  graphRun?: GraphRun;
+};
+
+/**
+ * Describes the message ficant.research.v1.GetGraphRunResponse.
+ * Use `create(GetGraphRunResponseSchema)` to create a new message.
+ */
+export const GetGraphRunResponseSchema: GenMessage<GetGraphRunResponse> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_experiment, 13);
+
+/**
+ * @generated from message ficant.research.v1.ListNodeOutputManifestsRequest
+ */
+export type ListNodeOutputManifestsRequest = Message<"ficant.research.v1.ListNodeOutputManifestsRequest"> & {
+  /**
+   * @generated from field: ficant.core.v1.Ulid run_id = 1;
+   */
+  runId?: Ulid;
+};
+
+/**
+ * Describes the message ficant.research.v1.ListNodeOutputManifestsRequest.
+ * Use `create(ListNodeOutputManifestsRequestSchema)` to create a new message.
+ */
+export const ListNodeOutputManifestsRequestSchema: GenMessage<ListNodeOutputManifestsRequest> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_experiment, 14);
+
+/**
+ * @generated from message ficant.research.v1.StoredNodeOutputManifest
+ */
+export type StoredNodeOutputManifest = Message<"ficant.research.v1.StoredNodeOutputManifest"> & {
+  /**
+   * @generated from field: ficant.research.v1.NodeOutputManifest manifest = 1;
+   */
+  manifest?: NodeOutputManifest;
+
+  /**
+   * @generated from field: ficant.research.v1.NodeCheckpoint checkpoint = 2;
+   */
+  checkpoint?: NodeCheckpoint;
+};
+
+/**
+ * Describes the message ficant.research.v1.StoredNodeOutputManifest.
+ * Use `create(StoredNodeOutputManifestSchema)` to create a new message.
+ */
+export const StoredNodeOutputManifestSchema: GenMessage<StoredNodeOutputManifest> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_experiment, 15);
+
+/**
+ * @generated from message ficant.research.v1.ListNodeOutputManifestsResponse
+ */
+export type ListNodeOutputManifestsResponse = Message<"ficant.research.v1.ListNodeOutputManifestsResponse"> & {
+  /**
+   * @generated from field: repeated ficant.research.v1.StoredNodeOutputManifest manifests = 1;
+   */
+  manifests: StoredNodeOutputManifest[];
+};
+
+/**
+ * Describes the message ficant.research.v1.ListNodeOutputManifestsResponse.
+ * Use `create(ListNodeOutputManifestsResponseSchema)` to create a new message.
+ */
+export const ListNodeOutputManifestsResponseSchema: GenMessage<ListNodeOutputManifestsResponse> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_experiment, 16);
+
+/**
+ * @generated from message ficant.research.v1.TraceGraphOutputRequest
+ */
+export type TraceGraphOutputRequest = Message<"ficant.research.v1.TraceGraphOutputRequest"> & {
+  /**
+   * @generated from field: ficant.core.v1.Ulid run_id = 1;
+   */
+  runId?: Ulid;
+
+  /**
+   * @generated from field: ficant.core.v1.Ulid node_id = 2;
+   */
+  nodeId?: Ulid;
+};
+
+/**
+ * Describes the message ficant.research.v1.TraceGraphOutputRequest.
+ * Use `create(TraceGraphOutputRequestSchema)` to create a new message.
+ */
+export const TraceGraphOutputRequestSchema: GenMessage<TraceGraphOutputRequest> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_experiment, 17);
+
+/**
+ * @generated from message ficant.research.v1.GraphOutputTrace
+ */
+export type GraphOutputTrace = Message<"ficant.research.v1.GraphOutputTrace"> & {
+  /**
+   * @generated from field: ficant.research.v1.GraphRun graph_run = 1;
+   */
+  graphRun?: GraphRun;
+
+  /**
+   * @generated from field: repeated ficant.research.v1.StoredNodeOutputManifest manifests = 2;
+   */
+  manifests: StoredNodeOutputManifest[];
+
+  /**
+   * @generated from field: repeated ficant.research.v1.ExecutionExternalInput external_inputs = 3;
+   */
+  externalInputs: ExecutionExternalInput[];
+};
+
+/**
+ * Describes the message ficant.research.v1.GraphOutputTrace.
+ * Use `create(GraphOutputTraceSchema)` to create a new message.
+ */
+export const GraphOutputTraceSchema: GenMessage<GraphOutputTrace> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_experiment, 18);
+
+/**
+ * @generated from message ficant.research.v1.TraceGraphOutputResponse
+ */
+export type TraceGraphOutputResponse = Message<"ficant.research.v1.TraceGraphOutputResponse"> & {
+  /**
+   * @generated from field: ficant.research.v1.GraphOutputTrace trace = 1;
+   */
+  trace?: GraphOutputTrace;
+};
+
+/**
+ * Describes the message ficant.research.v1.TraceGraphOutputResponse.
+ * Use `create(TraceGraphOutputResponseSchema)` to create a new message.
+ */
+export const TraceGraphOutputResponseSchema: GenMessage<TraceGraphOutputResponse> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_experiment, 19);
+
+/**
+ * @generated from message ficant.research.v1.CompareGraphRunsRequest
+ */
+export type CompareGraphRunsRequest = Message<"ficant.research.v1.CompareGraphRunsRequest"> & {
+  /**
+   * @generated from field: ficant.core.v1.Ulid left_run_id = 1;
+   */
+  leftRunId?: Ulid;
+
+  /**
+   * @generated from field: ficant.core.v1.Ulid right_run_id = 2;
+   */
+  rightRunId?: Ulid;
+};
+
+/**
+ * Describes the message ficant.research.v1.CompareGraphRunsRequest.
+ * Use `create(CompareGraphRunsRequestSchema)` to create a new message.
+ */
+export const CompareGraphRunsRequestSchema: GenMessage<CompareGraphRunsRequest> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_experiment, 20);
+
+/**
+ * @generated from message ficant.research.v1.CompareGraphRunsResponse
+ */
+export type CompareGraphRunsResponse = Message<"ficant.research.v1.CompareGraphRunsResponse"> & {
+  /**
+   * @generated from field: repeated ficant.research.v1.GraphRunComparisonDimension differing_dimensions = 1;
+   */
+  differingDimensions: GraphRunComparisonDimension[];
+};
+
+/**
+ * Describes the message ficant.research.v1.CompareGraphRunsResponse.
+ * Use `create(CompareGraphRunsResponseSchema)` to create a new message.
+ */
+export const CompareGraphRunsResponseSchema: GenMessage<CompareGraphRunsResponse> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_experiment, 21);
+
+/**
  * @generated from enum ficant.research.v1.RunState
  */
 export enum RunState {
@@ -286,6 +605,77 @@ export const RunStateSchema: GenEnum<RunState> = /*@__PURE__*/
   enumDesc(file_ficant_research_v1_experiment, 0);
 
 /**
+ * @generated from enum ficant.research.v1.GraphRunComparisonDimension
+ */
+export enum GraphRunComparisonDimension {
+  /**
+   * @generated from enum value: GRAPH_RUN_COMPARISON_DIMENSION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: GRAPH_RUN_COMPARISON_DIMENSION_DATA = 1;
+   */
+  DATA = 1,
+
+  /**
+   * @generated from enum value: GRAPH_RUN_COMPARISON_DIMENSION_UNIVERSE = 2;
+   */
+  UNIVERSE = 2,
+
+  /**
+   * @generated from enum value: GRAPH_RUN_COMPARISON_DIMENSION_GRAPH = 3;
+   */
+  GRAPH = 3,
+
+  /**
+   * @generated from enum value: GRAPH_RUN_COMPARISON_DIMENSION_PARAMETERS = 4;
+   */
+  PARAMETERS = 4,
+
+  /**
+   * @generated from enum value: GRAPH_RUN_COMPARISON_DIMENSION_RUNTIME = 5;
+   */
+  RUNTIME = 5,
+
+  /**
+   * @generated from enum value: GRAPH_RUN_COMPARISON_DIMENSION_ENVIRONMENT = 6;
+   */
+  ENVIRONMENT = 6,
+
+  /**
+   * @generated from enum value: GRAPH_RUN_COMPARISON_DIMENSION_SEED = 7;
+   */
+  SEED = 7,
+
+  /**
+   * @generated from enum value: GRAPH_RUN_COMPARISON_DIMENSION_RULE_PACK = 8;
+   */
+  RULE_PACK = 8,
+
+  /**
+   * @generated from enum value: GRAPH_RUN_COMPARISON_DIMENSION_IMPLEMENTATION = 9;
+   */
+  IMPLEMENTATION = 9,
+
+  /**
+   * @generated from enum value: GRAPH_RUN_COMPARISON_DIMENSION_EXTERNAL_INPUT = 10;
+   */
+  EXTERNAL_INPUT = 10,
+
+  /**
+   * @generated from enum value: GRAPH_RUN_COMPARISON_DIMENSION_RESULT = 11;
+   */
+  RESULT = 11,
+}
+
+/**
+ * Describes the enum ficant.research.v1.GraphRunComparisonDimension.
+ */
+export const GraphRunComparisonDimensionSchema: GenEnum<GraphRunComparisonDimension> = /*@__PURE__*/
+  enumDesc(file_ficant_research_v1_experiment, 1);
+
+/**
  * @generated from service ficant.research.v1.ExperimentService
  */
 export const ExperimentService: GenService<{
@@ -320,6 +710,46 @@ export const ExperimentService: GenService<{
     methodKind: "unary";
     input: typeof ReadRunJournalRequestSchema;
     output: typeof ReadRunJournalResponseSchema;
+  },
+  /**
+   * @generated from rpc ficant.research.v1.ExperimentService.SubmitGraphRun
+   */
+  submitGraphRun: {
+    methodKind: "unary";
+    input: typeof SubmitGraphRunRequestSchema;
+    output: typeof SubmitGraphRunResponseSchema;
+  },
+  /**
+   * @generated from rpc ficant.research.v1.ExperimentService.GetGraphRun
+   */
+  getGraphRun: {
+    methodKind: "unary";
+    input: typeof GetGraphRunRequestSchema;
+    output: typeof GetGraphRunResponseSchema;
+  },
+  /**
+   * @generated from rpc ficant.research.v1.ExperimentService.ListNodeOutputManifests
+   */
+  listNodeOutputManifests: {
+    methodKind: "unary";
+    input: typeof ListNodeOutputManifestsRequestSchema;
+    output: typeof ListNodeOutputManifestsResponseSchema;
+  },
+  /**
+   * @generated from rpc ficant.research.v1.ExperimentService.TraceGraphOutput
+   */
+  traceGraphOutput: {
+    methodKind: "unary";
+    input: typeof TraceGraphOutputRequestSchema;
+    output: typeof TraceGraphOutputResponseSchema;
+  },
+  /**
+   * @generated from rpc ficant.research.v1.ExperimentService.CompareGraphRuns
+   */
+  compareGraphRuns: {
+    methodKind: "unary";
+    input: typeof CompareGraphRunsRequestSchema;
+    output: typeof CompareGraphRunsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_ficant_research_v1_experiment, 0);

@@ -1,28 +1,177 @@
 use async_trait::async_trait;
 use ficant_application::ports::{
-    AccessScope, BeginNode, CompleteNode, EnqueueNode, ExternalInputArtifactBinding, FailNode,
-    GraphNodeEvent, NodeBeginResult, NodeFailureResult, NodeJournalEvidence, NodeSuccessResult,
-    Phase4ExecutionRepository, StoredExecutionIdentity, stable_node_artifact_id,
+    AccessScope, BeginNode, ComparisonDimension, CompleteNode, EnqueueNode,
+    ExecutionInstanceIdentity, ExternalInputArtifactBinding, FailNode, GraphNodeEvent,
+    GraphRunComparison, GraphRunRecord, NodeBeginResult, NodeFailureResult, NodeJournalEvidence,
+    NodeSuccessResult, OutputTrace, Phase4ExecutionRepository, StoredExecutionIdentity,
+    StoredNodeManifest, SubmitGraphRun, replay_graph_execution, stable_node_artifact_id,
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
+use ficant_contracts::ficant::research::v1 as research_pb;
 use ficant_domain::primitives::{ContentHash, MarketTime, OwnerRef, Ulid, Version};
 use ficant_domain::research::{
     Artifact, ArtifactKind, JournalEventType, ResearchGraph, RunJournal, RunJournalInput, RunState,
 };
 use ficant_domain::{ContentAddressed, Lineaged};
+use ficant_runtime::decode_canonical_output_bytes;
+use prost::Message;
 use sqlx::types::chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
 
 use super::PostgresRepository;
 use super::codec::{
-    decode_artifact, decode_execution_identity, decode_research_graph, decode_run, encode_artifact,
-    encode_execution_identity, encode_journal, encode_research_graph, encode_run,
+    decode_artifact, decode_execution_identity, decode_journal, decode_research_graph, decode_run,
+    encode_artifact, encode_execution_identity, encode_journal, encode_research_graph, encode_run,
 };
 use super::common::{application_error, insert_lineage, map_sqlx_error, publish_blob_reference};
 
 #[allow(clippy::too_many_lines)]
 #[async_trait]
 impl Phase4ExecutionRepository for PostgresRepository {
+    async fn submit_graph_run(
+        &self,
+        command: SubmitGraphRun,
+    ) -> Result<GraphRunRecord, ApplicationError> {
+        validate_submit_command(&command)?;
+        let first_task = derive_first_task(&command);
+        let request_fingerprint = submit_fingerprint(&command);
+        let mut transaction = self.pool().begin().await.map_err(map_sqlx_error)?;
+        let key_run: Option<String> = sqlx::query_scalar(
+            "SELECT experiment_run_id::text FROM research.experiment_runs
+             WHERE tenant_id=$1 AND idempotency_key=$2 FOR UPDATE",
+        )
+        .bind(command.scope.tenant_id().as_str())
+        .bind(command.idempotency_key.as_str())
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+        if key_run
+            .as_deref()
+            .is_some_and(|value| value != command.run.id().as_str())
+        {
+            return Err(immutable());
+        }
+        let existing: Option<Vec<u8>> = sqlx::query_scalar(
+            "SELECT payload FROM research.experiment_runs
+             WHERE tenant_id=$1 AND experiment_run_id=$2 FOR UPDATE",
+        )
+        .bind(command.scope.tenant_id().as_str())
+        .bind(command.run.id().as_str())
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+        if let Some(payload) = existing {
+            let run = decode_run(&payload)?;
+            validate_submit_replay(&mut transaction, &command, &run, &request_fingerprint).await?;
+            transaction.commit().await.map_err(map_sqlx_error)?;
+            return Ok(GraphRunRecord {
+                run,
+                graph: command.graph,
+                identity: command.identity,
+            });
+        }
+
+        let tenant = command.run.owner().tenant_id().as_str();
+        let owner = command.run.owner().owner_id().as_str();
+        let run_id = command.run.id().as_str();
+        let running = command
+            .run
+            .transition(RunState::Running, command.run.revision())
+            .map_err(ficant_application::map_domain_error)?;
+        sqlx::query(
+            "INSERT INTO research.experiment_runs
+             (tenant_id,experiment_run_id,owner_id,state,revision,idempotency_key,fingerprint,payload)
+             VALUES ($1,$2,$3,'RUNNING',$4,$5,$6,$7)",
+        )
+        .bind(tenant)
+        .bind(run_id)
+        .bind(owner)
+        .bind(version_i64(running.revision())?)
+        .bind(command.idempotency_key.as_str())
+        .bind(request_fingerprint.as_bytes().as_slice())
+        .bind(encode_run(&running))
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+        for run in [&command.run, &running] {
+            sqlx::query(
+                "INSERT INTO research.experiment_run_revisions
+                 (tenant_id,experiment_run_id,revision,state,payload)
+                 VALUES ($1,$2,$3,$4,$5)",
+            )
+            .bind(tenant)
+            .bind(run_id)
+            .bind(version_i64(run.revision())?)
+            .bind(run_state_sql(run.state()))
+            .bind(encode_run(run))
+            .execute(&mut *transaction)
+            .await
+            .map_err(map_sqlx_error)?;
+        }
+        insert_lineage(&mut transaction, tenant, run_id, command.run.lineage()).await?;
+
+        let graph_payload = encode_research_graph(&command.graph);
+        sqlx::query(
+            "INSERT INTO research.research_graphs
+             (tenant_id,graph_id,version,owner_id,graph_digest,payload)
+             VALUES ($1,$2,$3,$4,$5,$6)",
+        )
+        .bind(tenant)
+        .bind(command.graph.graph_id().as_str())
+        .bind(version_i64(command.graph.version().get())?)
+        .bind(owner)
+        .bind(hash_hex(command.graph.digest()))
+        .bind(&graph_payload)
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+        persist_identity_rows(&mut transaction, &command.identity, &command.graph).await?;
+
+        let database_now: DateTime<Utc> = sqlx::query_scalar("SELECT CURRENT_TIMESTAMP")
+            .fetch_one(&mut *transaction)
+            .await
+            .map_err(map_sqlx_error)?;
+        let lifecycle_events = submit_lifecycle_events(&command, database_now)?;
+        for event in [&lifecycle_events.0, &lifecycle_events.1] {
+            sqlx::query(
+                "INSERT INTO research.run_journal
+                 (tenant_id,run_id,sequence,journal_event_id,event_type,occurred_at,
+                  prev_hash,event_hash,idempotency_key,fingerprint,payload)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+            )
+            .bind(tenant)
+            .bind(run_id)
+            .bind(version_i64(event.sequence())?)
+            .bind(event.id().as_str())
+            .bind(event_type_sql(event.event_type()))
+            .bind(event.occurred_at().instant())
+            .bind(event.prev_hash().map(hash_hex))
+            .bind(hash_hex(event.content_hash()))
+            .bind(format!("phase4-submit/{run_id}/{}", event.sequence()))
+            .bind(ContentHash::digest(event.payload()).as_bytes().as_slice())
+            .bind(encode_journal(event))
+            .execute(&mut *transaction)
+            .await
+            .map_err(map_sqlx_error)?;
+        }
+        sqlx::query(
+            "INSERT INTO research.run_journal_sequences (tenant_id,run_id,next_sequence)
+             VALUES ($1,$2,3)",
+        )
+        .bind(tenant)
+        .bind(run_id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+        persist_enqueue(&mut transaction, &first_task).await?;
+        transaction.commit().await.map_err(map_sqlx_error)?;
+        Ok(GraphRunRecord {
+            run: running,
+            graph: command.graph,
+            identity: command.identity,
+        })
+    }
+
     async fn publish_graph(
         &self,
         scope: &AccessScope,
@@ -333,6 +482,232 @@ impl Phase4ExecutionRepository for PostgresRepository {
         }))
     }
 
+    async fn get_graph_run(
+        &self,
+        scope: &AccessScope,
+        run_id: &Ulid,
+    ) -> Result<Option<GraphRunRecord>, ApplicationError> {
+        let owners = allowed_owners(scope);
+        let row: Option<(Vec<u8>, Vec<u8>, Vec<u8>, String, i64)> = sqlx::query_as(
+            "SELECT r.payload,g.payload,i.payload,i.owner_id::text,i.graph_version
+             FROM research.experiment_runs r
+             JOIN research.execution_identities i
+               ON i.tenant_id=r.tenant_id AND i.run_id=r.experiment_run_id
+             JOIN research.research_graphs g
+               ON g.tenant_id=i.tenant_id AND g.graph_id=i.graph_id AND g.version=i.graph_version
+             WHERE r.tenant_id=$1 AND r.experiment_run_id=$2
+               AND r.owner_id::text=ANY($3::text[])",
+        )
+        .bind(scope.tenant_id().as_str())
+        .bind(run_id.as_str())
+        .bind(owners)
+        .fetch_optional(self.pool())
+        .await
+        .map_err(map_sqlx_error)?;
+        let Some((run_payload, graph_payload, identity_payload, owner_id, graph_version)) = row
+        else {
+            return Ok(None);
+        };
+        let run = decode_run(&run_payload)?;
+        let graph = decode_research_graph(&graph_payload)?;
+        let identity = decode_execution_identity(&identity_payload, &graph)?;
+        let external_input_artifacts =
+            load_external_bindings(self.pool(), scope.tenant_id(), run_id).await?;
+        Ok(Some(GraphRunRecord {
+            run,
+            graph: graph.clone(),
+            identity: StoredExecutionIdentity {
+                owner: OwnerRef::new(scope.tenant_id().clone(), parse_id(&owner_id)?),
+                graph_id: graph.graph_id().clone(),
+                graph_version: Version::new(u64::try_from(graph_version).map_err(|_| invalid())?)
+                    .map_err(ficant_application::map_domain_error)?,
+                identity,
+                external_input_artifacts,
+            },
+        }))
+    }
+
+    async fn list_node_manifests(
+        &self,
+        scope: &AccessScope,
+        run_id: &Ulid,
+    ) -> Result<Vec<StoredNodeManifest>, ApplicationError> {
+        type ManifestRow = (String, i64, String, Vec<u8>, String, i64, String, Vec<u8>);
+        let owners = allowed_owners(scope);
+        let rows: Vec<ManifestRow> = sqlx::query_as(
+            "SELECT n.node_id::text,n.attempt,n.output_manifest_hash::text,n.output_manifest,
+                    n.artifact_id::text,n.checkpoint_journal_sequence,
+                    n.checkpoint_journal_hash::text,a.payload
+             FROM research.node_executions n
+             JOIN research.experiment_runs r
+               ON r.tenant_id=n.tenant_id AND r.experiment_run_id=n.run_id
+             JOIN research.artifacts a
+               ON a.tenant_id=n.tenant_id AND a.artifact_id=n.artifact_id
+             WHERE n.tenant_id=$1 AND n.run_id=$2 AND n.state='SUCCEEDED'
+               AND r.owner_id::text=ANY($3::text[])
+             ORDER BY n.checkpoint_journal_sequence",
+        )
+        .bind(scope.tenant_id().as_str())
+        .bind(run_id.as_str())
+        .bind(owners)
+        .fetch_all(self.pool())
+        .await
+        .map_err(map_sqlx_error)?;
+        rows.into_iter()
+            .map(
+                |(
+                    node_id,
+                    attempt,
+                    manifest_hash,
+                    manifest,
+                    artifact_id,
+                    sequence,
+                    hash,
+                    payload,
+                )| {
+                    let artifact = decode_artifact(&payload)?;
+                    if artifact.id().as_str() != artifact_id {
+                        return Err(storage());
+                    }
+                    Ok(StoredNodeManifest {
+                        run_id: run_id.clone(),
+                        node_id: parse_id(&node_id)?,
+                        attempt: u64::try_from(attempt).map_err(|_| storage())?,
+                        artifact,
+                        manifest_hash: parse_hash(&manifest_hash)?,
+                        manifest,
+                        checkpoint: evidence(sequence, &hash)?,
+                    })
+                },
+            )
+            .collect()
+    }
+
+    async fn trace_output(
+        &self,
+        scope: &AccessScope,
+        run_id: &Ulid,
+        node_id: &Ulid,
+    ) -> Result<Option<OutputTrace>, ApplicationError> {
+        let Some(run) = self.get_graph_run(scope, run_id).await? else {
+            return Ok(None);
+        };
+        if !run
+            .graph
+            .nodes()
+            .iter()
+            .any(|node| node.node_id() == node_id)
+        {
+            return Ok(None);
+        }
+        let all = self.list_node_manifests(scope, run_id).await?;
+        if !all.iter().any(|manifest| &manifest.node_id == node_id) {
+            return Ok(None);
+        }
+        let mut required = std::collections::BTreeSet::from([node_id.clone()]);
+        loop {
+            let before = required.len();
+            for edge in run.graph.edges() {
+                if required.contains(edge.to_node()) {
+                    required.insert(edge.from_node().clone());
+                }
+            }
+            if required.len() == before {
+                break;
+            }
+        }
+        let manifests = all
+            .into_iter()
+            .filter(|manifest| required.contains(&manifest.node_id))
+            .collect();
+        let external_inputs = run.identity.external_input_artifacts.clone();
+        Ok(Some(OutputTrace {
+            run,
+            manifests,
+            external_inputs,
+        }))
+    }
+
+    async fn compare_graph_runs(
+        &self,
+        scope: &AccessScope,
+        left_run_id: &Ulid,
+        right_run_id: &Ulid,
+    ) -> Result<Option<GraphRunComparison>, ApplicationError> {
+        let Some(left) = self.get_graph_run(scope, left_run_id).await? else {
+            return Ok(None);
+        };
+        let Some(right) = self.get_graph_run(scope, right_run_id).await? else {
+            return Ok(None);
+        };
+        let left_r = left.identity.identity.reproducibility();
+        let right_r = right.identity.identity.reproducibility();
+        let mut differences = Vec::new();
+        push_difference(
+            &mut differences,
+            ComparisonDimension::Data,
+            left_r.data_snapshot_hash() != right_r.data_snapshot_hash(),
+        );
+        push_difference(
+            &mut differences,
+            ComparisonDimension::Universe,
+            left_r.universe_snapshot_hash() != right_r.universe_snapshot_hash(),
+        );
+        push_difference(
+            &mut differences,
+            ComparisonDimension::Graph,
+            left_r.graph_digest() != right_r.graph_digest(),
+        );
+        push_difference(
+            &mut differences,
+            ComparisonDimension::Parameters,
+            left_r.parameters_hash() != right_r.parameters_hash(),
+        );
+        push_difference(
+            &mut differences,
+            ComparisonDimension::Runtime,
+            left_r.runtime_image_digest() != right_r.runtime_image_digest(),
+        );
+        push_difference(
+            &mut differences,
+            ComparisonDimension::Environment,
+            left_r.environment_digest() != right_r.environment_digest(),
+        );
+        push_difference(
+            &mut differences,
+            ComparisonDimension::Seed,
+            left_r.seed() != right_r.seed(),
+        );
+        push_difference(
+            &mut differences,
+            ComparisonDimension::RulePack,
+            left_r.rule_pack_bindings() != right_r.rule_pack_bindings(),
+        );
+        push_difference(
+            &mut differences,
+            ComparisonDimension::Implementation,
+            left_r.node_implementations() != right_r.node_implementations(),
+        );
+        push_difference(
+            &mut differences,
+            ComparisonDimension::ExternalInput,
+            left_r.external_inputs() != right_r.external_inputs(),
+        );
+        let left_results = self.list_node_manifests(scope, left_run_id).await?;
+        let right_results = self.list_node_manifests(scope, right_run_id).await?;
+        push_difference(
+            &mut differences,
+            ComparisonDimension::Result,
+            terminal_result(&left.graph, &left_results)
+                != terminal_result(&right.graph, &right_results),
+        );
+        Ok(Some(GraphRunComparison {
+            left_run_id: left_run_id.clone(),
+            right_run_id: right_run_id.clone(),
+            differing_dimensions: differences,
+        }))
+    }
+
     async fn enqueue_node(&self, command: EnqueueNode) -> Result<(), ApplicationError> {
         let mut transaction = self.pool().begin().await.map_err(map_sqlx_error)?;
         persist_enqueue(&mut transaction, &command).await?;
@@ -356,6 +731,13 @@ impl Phase4ExecutionRepository for PostgresRepository {
         if let Some((state, sequence, hash)) = existing {
             if state == "STARTED" {
                 validate_active_fence(&mut transaction, &command.fence).await?;
+                validate_resume_node(
+                    &mut transaction,
+                    &command.fence.tenant_id,
+                    &command.fence.run_id,
+                    &command.fence.node_id,
+                )
+                .await?;
                 transaction.commit().await.map_err(map_sqlx_error)?;
                 return Ok(NodeBeginResult {
                     evidence: evidence(sequence, &hash)?,
@@ -365,6 +747,13 @@ impl Phase4ExecutionRepository for PostgresRepository {
             return Err(state_conflict());
         }
         validate_active_fence(&mut transaction, &command.fence).await?;
+        validate_resume_node(
+            &mut transaction,
+            &command.fence.tenant_id,
+            &command.fence.run_id,
+            &command.fence.node_id,
+        )
+        .await?;
         let started = append_node_event(
             &mut transaction,
             &command.fence,
@@ -402,15 +791,30 @@ impl Phase4ExecutionRepository for PostgresRepository {
         command: CompleteNode,
     ) -> Result<NodeSuccessResult, ApplicationError> {
         let manifest_hash = ContentHash::digest(&command.output_manifest);
-        if command.output_manifest.is_empty() {
+        if command.output_manifest.is_empty()
+            || command.verified_blob.content_hash() != command.artifact.content_hash()
+            || command.verified_blob.size() != command.artifact.blob_size()
+            || u64::try_from(command.verified_payload.len()).ok()
+                != Some(command.verified_blob.size())
+            || ContentHash::digest(&command.verified_payload)
+                != *command.verified_blob.content_hash()
+        {
             return Err(invalid());
         }
         let mut transaction = self.pool().begin().await.map_err(map_sqlx_error)?;
+        validate_output_manifest(&mut transaction, &command).await?;
         if let Some(replayed) = replay_success(&mut transaction, &command, &manifest_hash).await? {
             transaction.commit().await.map_err(map_sqlx_error)?;
             return Ok(replayed);
         }
         validate_active_fence(&mut transaction, &command.fence).await?;
+        validate_resume_node(
+            &mut transaction,
+            &command.fence.tenant_id,
+            &command.fence.run_id,
+            &command.fence.node_id,
+        )
+        .await?;
         let planned_id: String = sqlx::query_scalar(
             "SELECT planned_artifact_id::text FROM research.execution_tasks
              WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE",
@@ -493,8 +897,8 @@ impl Phase4ExecutionRepository for PostgresRepository {
         if completed.rows_affected() != 1 {
             return Err(concurrency());
         }
-        if let Some(next) = command.next_task.as_ref() {
-            persist_enqueue(&mut transaction, next).await?;
+        if let Some(next) = derive_next_task(&mut transaction, &command.fence).await? {
+            persist_enqueue(&mut transaction, &next).await?;
         } else {
             append_run_terminal_event(
                 &mut transaction,
@@ -556,6 +960,13 @@ impl Phase4ExecutionRepository for PostgresRepository {
             return Err(state_conflict());
         }
         validate_active_fence(&mut transaction, &command.fence).await?;
+        validate_resume_node(
+            &mut transaction,
+            &command.fence.tenant_id,
+            &command.fence.run_id,
+            &command.fence.node_id,
+        )
+        .await?;
         let failed = append_node_event(
             &mut transaction,
             &command.fence,
@@ -668,6 +1079,399 @@ async fn validate_run_identity(
     Ok(())
 }
 
+fn validate_submit_command(command: &SubmitGraphRun) -> Result<(), ApplicationError> {
+    command.scope.authorize(command.run.owner())?;
+    let identity = &command.identity.identity;
+    if command.run.state() != RunState::Created
+        || command.run.revision() != 1
+        || command.graph.owner() != command.run.owner()
+        || command.identity.owner != *command.run.owner()
+        || command.identity.graph_id != *command.graph.graph_id()
+        || command.identity.graph_version != command.graph.version()
+        || identity.run_id() != command.run.id()
+        || identity.reproducibility().graph_digest() != command.graph.digest()
+    {
+        return Err(lineage());
+    }
+    Ok(())
+}
+
+fn submit_fingerprint(command: &SubmitGraphRun) -> ContentHash {
+    fn field(bytes: &mut Vec<u8>, value: &[u8]) {
+        bytes.extend_from_slice(&(value.len() as u64).to_be_bytes());
+        bytes.extend_from_slice(value);
+    }
+    let mut bytes = b"ficant/submit-graph-run-fingerprint/v1".to_vec();
+    field(&mut bytes, command.scope.tenant_id().as_str().as_bytes());
+    field(
+        &mut bytes,
+        command.run.owner().owner_id().as_str().as_bytes(),
+    );
+    field(&mut bytes, &encode_run(&command.run));
+    field(&mut bytes, &encode_research_graph(&command.graph));
+    field(
+        &mut bytes,
+        &encode_execution_identity(&command.identity.identity),
+    );
+    let mut bindings = command.identity.external_input_artifacts.clone();
+    bindings.sort_by(|left, right| left.input_id.cmp(&right.input_id));
+    for binding in bindings {
+        field(&mut bytes, binding.input_id.as_bytes());
+        field(&mut bytes, binding.artifact_id.as_str().as_bytes());
+        field(&mut bytes, binding.content_hash.as_bytes());
+    }
+    ContentHash::digest(&bytes)
+}
+
+fn submit_lifecycle_events(
+    command: &SubmitGraphRun,
+    occurred: DateTime<Utc>,
+) -> Result<(RunJournal, RunJournal), ApplicationError> {
+    let occurred_at = MarketTime::new(occurred, "UTC", occurred.date_naive())
+        .map_err(ficant_application::map_domain_error)?;
+    let event = |sequence: u64,
+                 event_type: JournalEventType,
+                 previous: Option<ContentHash>|
+     -> Result<RunJournal, ApplicationError> {
+        let mut domain = b"ficant/submit-graph-run-event/v1".to_vec();
+        domain.extend_from_slice(command.scope.tenant_id().as_str().as_bytes());
+        domain.extend_from_slice(command.run.id().as_str().as_bytes());
+        domain.extend_from_slice(command.idempotency_key.as_str().as_bytes());
+        domain.extend_from_slice(&sequence.to_be_bytes());
+        let input = RunJournalInput {
+            journal_event_id: stable_node_artifact_id(
+                &ContentHash::digest(&domain),
+                command.run.id(),
+            ),
+            run_id: command.run.id().clone(),
+            sequence,
+            event_type,
+            occurred_at: occurred_at.clone(),
+            payload_type: "ficant.graph-run-submission".to_owned(),
+            payload_schema: "ficant.graph-run-submission.v1".to_owned(),
+            payload: submit_fingerprint(command).as_bytes().to_vec(),
+            prev_hash: previous,
+        };
+        let hash = input
+            .canonical_hash()
+            .map_err(ficant_application::map_domain_error)?;
+        RunJournal::new(input, &hash).map_err(ficant_application::map_domain_error)
+    };
+    let created = event(1, JournalEventType::RunCreated, None)?;
+    let started = event(
+        2,
+        JournalEventType::RunStarted,
+        Some(created.content_hash().clone()),
+    )?;
+    Ok((created, started))
+}
+
+fn derive_first_task(command: &SubmitGraphRun) -> EnqueueNode {
+    let node_id = command.graph.topological_order()[0].clone();
+    let mut task_domain = b"ficant/repository-node-task/v1".to_vec();
+    task_domain.extend_from_slice(command.run.id().as_str().as_bytes());
+    EnqueueNode {
+        tenant_id: command.run.owner().tenant_id().clone(),
+        task_id: stable_node_artifact_id(&ContentHash::digest(&task_domain), &node_id),
+        run_id: command.run.id().clone(),
+        node_id: node_id.clone(),
+        graph_digest: command.graph.digest().clone(),
+        execution_identity_digest: command.identity.identity.digest().clone(),
+        planned_artifact_id: stable_node_artifact_id(
+            command.identity.identity.reproducibility_digest(),
+            &node_id,
+        ),
+        task_key: format!("phase4-node/{}/{}", command.run.id(), node_id),
+    }
+}
+
+// Replay validation intentionally compares every row written by the original atomic submission.
+#[allow(clippy::too_many_lines)]
+async fn validate_submit_replay(
+    transaction: &mut Transaction<'_, Postgres>,
+    command: &SubmitGraphRun,
+    stored_run: &ficant_domain::research::ExperimentRun,
+    request_fingerprint: &ContentHash,
+) -> Result<(), ApplicationError> {
+    let expected_running = command
+        .run
+        .transition(RunState::Running, command.run.revision())
+        .map_err(ficant_application::map_domain_error)?;
+    if stored_run != &expected_running {
+        return Err(immutable());
+    }
+    let (stored_key, stored_fingerprint): (String, Vec<u8>) = sqlx::query_as(
+        "SELECT idempotency_key,fingerprint FROM research.experiment_runs
+         WHERE tenant_id=$1 AND experiment_run_id=$2 FOR SHARE",
+    )
+    .bind(command.scope.tenant_id().as_str())
+    .bind(command.run.id().as_str())
+    .fetch_one(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    if stored_key != command.idempotency_key.as_str()
+        || stored_fingerprint != request_fingerprint.as_bytes()
+    {
+        return Err(immutable());
+    }
+    let graph: Option<(String, Vec<u8>)> = sqlx::query_as(
+        "SELECT graph_digest::text,payload FROM research.research_graphs
+         WHERE tenant_id=$1 AND graph_id=$2 AND version=$3 FOR SHARE",
+    )
+    .bind(command.scope.tenant_id().as_str())
+    .bind(command.graph.graph_id().as_str())
+    .bind(version_i64(command.graph.version().get())?)
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    if graph
+        != Some((
+            hash_hex(command.graph.digest()),
+            encode_research_graph(&command.graph),
+        ))
+    {
+        return Err(immutable());
+    }
+    let identity: Option<Vec<u8>> = sqlx::query_scalar(
+        "SELECT payload FROM research.execution_identities
+         WHERE tenant_id=$1 AND run_id=$2 FOR SHARE",
+    )
+    .bind(command.scope.tenant_id().as_str())
+    .bind(command.run.id().as_str())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    if identity.as_deref() != Some(encode_execution_identity(&command.identity.identity).as_slice())
+    {
+        return Err(immutable());
+    }
+    let persisted_bindings: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT input_id,artifact_id::text,content_hash::text
+         FROM research.execution_external_inputs
+         WHERE tenant_id=$1 AND run_id=$2 ORDER BY input_id",
+    )
+    .bind(command.scope.tenant_id().as_str())
+    .bind(command.run.id().as_str())
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    let mut requested_bindings = command.identity.external_input_artifacts.clone();
+    requested_bindings.sort_by(|left, right| left.input_id.cmp(&right.input_id));
+    let requested_bindings = requested_bindings
+        .iter()
+        .map(|binding| {
+            (
+                binding.input_id.clone(),
+                binding.artifact_id.as_str().to_owned(),
+                hash_hex(&binding.content_hash),
+            )
+        })
+        .collect::<Vec<_>>();
+    if persisted_bindings != requested_bindings {
+        return Err(immutable());
+    }
+    let persisted_events: Vec<Vec<u8>> = sqlx::query_scalar(
+        "SELECT payload FROM research.run_journal
+         WHERE tenant_id=$1 AND run_id=$2 AND sequence IN (1,2) ORDER BY sequence",
+    )
+    .bind(command.scope.tenant_id().as_str())
+    .bind(command.run.id().as_str())
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    let events = persisted_events
+        .into_iter()
+        .map(|payload| decode_journal(&payload))
+        .collect::<Result<Vec<_>, _>>()?;
+    if events.len() != 2 {
+        return Err(immutable());
+    }
+    let expected_events = submit_lifecycle_events(command, events[0].occurred_at().instant())?;
+    if events != [expected_events.0, expected_events.1]
+        || replay_graph_execution(&command.graph, &events).is_err()
+    {
+        return Err(immutable());
+    }
+    let first_task = derive_first_task(command);
+    let exact_task: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+           SELECT 1 FROM research.execution_tasks
+           WHERE tenant_id=$1 AND task_id=$2 AND run_id=$3 AND node_id=$4
+             AND graph_digest=$5 AND execution_identity_digest=$6
+             AND planned_artifact_id=$7 AND task_key=$8)",
+    )
+    .bind(first_task.tenant_id.as_str())
+    .bind(first_task.task_id.as_str())
+    .bind(first_task.run_id.as_str())
+    .bind(first_task.node_id.as_str())
+    .bind(hash_hex(&first_task.graph_digest))
+    .bind(hash_hex(&first_task.execution_identity_digest))
+    .bind(first_task.planned_artifact_id.as_str())
+    .bind(&first_task.task_key)
+    .fetch_one(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    if !exact_task {
+        return Err(immutable());
+    }
+    Ok(())
+}
+
+// Keeping the identity aggregate in one transaction helper makes the all-or-nothing write set
+// auditable against the reproducibility contract.
+#[allow(clippy::too_many_lines)]
+async fn persist_identity_rows(
+    transaction: &mut Transaction<'_, Postgres>,
+    value: &StoredExecutionIdentity,
+    graph: &ResearchGraph,
+) -> Result<(), ApplicationError> {
+    validate_run_identity(transaction, value, graph).await?;
+    let identity = &value.identity;
+    let reproducibility = identity.reproducibility();
+    let mut artifacts = value.external_input_artifacts.clone();
+    artifacts.sort_by(|left, right| left.input_id.cmp(&right.input_id));
+    if artifacts.len() != reproducibility.external_inputs().len()
+        || !artifacts
+            .iter()
+            .zip(reproducibility.external_inputs())
+            .all(|(artifact, input)| {
+                artifact.input_id == input.input_id()
+                    && artifact.content_hash == *input.content_hash()
+            })
+    {
+        return Err(lineage());
+    }
+    sqlx::query(
+        "INSERT INTO research.execution_identities
+         (tenant_id,run_id,owner_id,graph_id,graph_version,graph_digest,
+          reproducibility_digest,execution_identity_digest,payload)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+    )
+    .bind(value.owner.tenant_id().as_str())
+    .bind(identity.run_id().as_str())
+    .bind(value.owner.owner_id().as_str())
+    .bind(value.graph_id.as_str())
+    .bind(version_i64(value.graph_version.get())?)
+    .bind(hash_hex(reproducibility.graph_digest()))
+    .bind(hash_hex(identity.reproducibility_digest()))
+    .bind(hash_hex(identity.digest()))
+    .bind(encode_execution_identity(identity))
+    .execute(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    for (artifact, input) in artifacts.iter().zip(reproducibility.external_inputs()) {
+        let persisted: Option<(String, String)> = sqlx::query_as(
+            "SELECT owner_id::text,content_hash::text FROM research.artifacts
+             WHERE tenant_id=$1 AND artifact_id=$2 FOR SHARE",
+        )
+        .bind(value.owner.tenant_id().as_str())
+        .bind(artifact.artifact_id.as_str())
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+        if persisted
+            != Some((
+                value.owner.owner_id().as_str().to_owned(),
+                hash_hex(input.content_hash()),
+            ))
+        {
+            return Err(lineage());
+        }
+        sqlx::query(
+            "INSERT INTO research.execution_external_inputs
+             (tenant_id,run_id,input_id,type_id,type_version,schema_hash,artifact_id,content_hash)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+        )
+        .bind(value.owner.tenant_id().as_str())
+        .bind(identity.run_id().as_str())
+        .bind(input.input_id())
+        .bind(input.value_type().type_id())
+        .bind(version_i64(input.value_type().type_version().get())?)
+        .bind(hash_hex(input.value_type().schema_hash()))
+        .bind(artifact.artifact_id.as_str())
+        .bind(hash_hex(input.content_hash()))
+        .execute(&mut **transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+    }
+    for binding in reproducibility.rule_pack_bindings() {
+        let rule_id =
+            Ulid::new(&binding.rule_pack_id).map_err(ficant_application::map_domain_error)?;
+        let persisted: Option<String> = sqlx::query_scalar(
+            "SELECT content_hash::text FROM market.market_rule_packs
+             WHERE tenant_id=$1 AND rule_pack_id=$2 AND version=$3 FOR SHARE",
+        )
+        .bind(value.owner.tenant_id().as_str())
+        .bind(rule_id.as_str())
+        .bind(version_i64(binding.version.get())?)
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+        if persisted.as_deref() != Some(hash_hex(&binding.content_hash).as_str()) {
+            return Err(lineage());
+        }
+        sqlx::query(
+            "INSERT INTO research.execution_rule_packs
+             (tenant_id,run_id,rule_pack_id,version,content_hash) VALUES ($1,$2,$3,$4,$5)",
+        )
+        .bind(value.owner.tenant_id().as_str())
+        .bind(identity.run_id().as_str())
+        .bind(rule_id.as_str())
+        .bind(version_i64(binding.version.get())?)
+        .bind(hash_hex(&binding.content_hash))
+        .execute(&mut **transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+    }
+    for binding in reproducibility.node_implementations() {
+        if !graph
+            .nodes()
+            .iter()
+            .any(|node| node.node_id() == &binding.node_id)
+        {
+            return Err(lineage());
+        }
+        sqlx::query(
+            "INSERT INTO research.execution_node_implementations
+             (tenant_id,run_id,node_id,implementation_digest) VALUES ($1,$2,$3,$4)",
+        )
+        .bind(value.owner.tenant_id().as_str())
+        .bind(identity.run_id().as_str())
+        .bind(binding.node_id.as_str())
+        .bind(hash_hex(&binding.implementation_digest))
+        .execute(&mut **transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+    }
+    Ok(())
+}
+
+async fn load_external_bindings(
+    pool: &sqlx::PgPool,
+    tenant_id: &Ulid,
+    run_id: &Ulid,
+) -> Result<Vec<ExternalInputArtifactBinding>, ApplicationError> {
+    let rows: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT input_id,artifact_id::text,content_hash::text
+         FROM research.execution_external_inputs
+         WHERE tenant_id=$1 AND run_id=$2 ORDER BY input_id",
+    )
+    .bind(tenant_id.as_str())
+    .bind(run_id.as_str())
+    .fetch_all(pool)
+    .await
+    .map_err(map_sqlx_error)?;
+    rows.into_iter()
+        .map(|(input_id, artifact_id, content_hash)| {
+            Ok(ExternalInputArtifactBinding {
+                input_id,
+                artifact_id: parse_id(&artifact_id)?,
+                content_hash: parse_hash(&content_hash)?,
+            })
+        })
+        .collect()
+}
+
 async fn persist_enqueue(
     transaction: &mut Transaction<'_, Postgres>,
     command: &EnqueueNode,
@@ -678,6 +1482,13 @@ async fn persist_enqueue(
     {
         return Err(invalid());
     }
+    validate_resume_node(
+        transaction,
+        &command.tenant_id,
+        &command.run_id,
+        &command.node_id,
+    )
+    .await?;
     let identity: Option<(String, String)> = sqlx::query_as(
         "SELECT graph_digest::text,reproducibility_digest::text
          FROM research.execution_identities
@@ -739,6 +1550,436 @@ async fn persist_enqueue(
         if !exact {
             return Err(immutable());
         }
+    }
+    Ok(())
+}
+
+async fn validate_resume_node(
+    transaction: &mut Transaction<'_, Postgres>,
+    tenant_id: &Ulid,
+    run_id: &Ulid,
+    node_id: &Ulid,
+) -> Result<(), ApplicationError> {
+    let graph_payload: Option<Vec<u8>> = sqlx::query_scalar(
+        "SELECT g.payload FROM research.execution_identities i
+         JOIN research.research_graphs g
+           ON g.tenant_id=i.tenant_id AND g.graph_id=i.graph_id AND g.version=i.graph_version
+         JOIN research.experiment_runs r
+           ON r.tenant_id=i.tenant_id AND r.experiment_run_id=i.run_id
+         WHERE i.tenant_id=$1 AND i.run_id=$2 AND r.state='RUNNING' FOR SHARE",
+    )
+    .bind(tenant_id.as_str())
+    .bind(run_id.as_str())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    let graph = graph_payload
+        .map(|payload| decode_research_graph(&payload))
+        .transpose()?
+        .ok_or_else(lineage)?;
+    let journal_payloads: Vec<Vec<u8>> = sqlx::query_scalar(
+        "SELECT payload FROM research.run_journal
+         WHERE tenant_id=$1 AND run_id=$2 ORDER BY sequence",
+    )
+    .bind(tenant_id.as_str())
+    .bind(run_id.as_str())
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    let journal = journal_payloads
+        .into_iter()
+        .map(|payload| decode_journal(&payload))
+        .collect::<Result<Vec<_>, _>>()?;
+    let replay = replay_graph_execution(&graph, &journal)
+        .map_err(|error| ficant_application::map_runtime_error(&error))?;
+    if replay.run_state() != RunState::Running || replay.resume_node() != Some(node_id) {
+        return Err(lineage());
+    }
+    let completed: Vec<String> = sqlx::query_scalar(
+        "SELECT node_id::text FROM research.execution_tasks
+         WHERE tenant_id=$1 AND run_id=$2 AND state='COMPLETED'",
+    )
+    .bind(tenant_id.as_str())
+    .bind(run_id.as_str())
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    let completed = completed
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    let replayed = replay
+        .completed_nodes()
+        .iter()
+        .map(ToString::to_string)
+        .collect::<std::collections::BTreeSet<_>>();
+    if completed != replayed {
+        return Err(lineage());
+    }
+    Ok(())
+}
+
+async fn derive_next_task(
+    transaction: &mut Transaction<'_, Postgres>,
+    fence: &ficant_application::ports::NodeLeaseFence,
+) -> Result<Option<EnqueueNode>, ApplicationError> {
+    let row: Option<(Vec<u8>, String, String)> = sqlx::query_as(
+        "SELECT g.payload,i.graph_digest::text,i.reproducibility_digest::text
+         FROM research.execution_identities i
+         JOIN research.research_graphs g
+           ON g.tenant_id=i.tenant_id AND g.graph_id=i.graph_id AND g.version=i.graph_version
+         WHERE i.tenant_id=$1 AND i.run_id=$2 AND i.execution_identity_digest=$3 FOR SHARE",
+    )
+    .bind(fence.tenant_id.as_str())
+    .bind(fence.run_id.as_str())
+    .bind(hash_hex(&fence.execution_identity_digest))
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    let Some((payload, graph_digest, reproducibility_digest)) = row else {
+        return Err(lineage());
+    };
+    let graph = decode_research_graph(&payload)?;
+    let index = graph
+        .topological_order()
+        .iter()
+        .position(|node| node == &fence.node_id)
+        .ok_or_else(lineage)?;
+    let Some(node_id) = graph.topological_order().get(index + 1) else {
+        return Ok(None);
+    };
+    let mut task_domain = b"ficant/repository-node-task/v1".to_vec();
+    task_domain.extend_from_slice(fence.run_id.as_str().as_bytes());
+    let task_id = stable_node_artifact_id(&ContentHash::digest(&task_domain), node_id);
+    Ok(Some(EnqueueNode {
+        tenant_id: fence.tenant_id.clone(),
+        task_id,
+        run_id: fence.run_id.clone(),
+        node_id: node_id.clone(),
+        graph_digest: parse_hash(&graph_digest)?,
+        execution_identity_digest: fence.execution_identity_digest.clone(),
+        planned_artifact_id: stable_node_artifact_id(
+            &parse_hash(&reproducibility_digest)?,
+            node_id,
+        ),
+        task_key: format!("phase4-node/{}/{}", fence.run_id, node_id),
+    }))
+}
+
+// Manifest validation is one fail-closed boundary: splitting it would risk accepting a partially
+// validated execution, port, artifact, or lineage dimension.
+#[allow(clippy::too_many_lines)]
+async fn validate_output_manifest(
+    transaction: &mut Transaction<'_, Postgres>,
+    command: &CompleteNode,
+) -> Result<(), ApplicationError> {
+    let manifest = research_pb::NodeOutputManifest::decode(command.output_manifest.as_slice())
+        .map_err(|_| invalid())?;
+    let verified_outputs = decode_canonical_output_bytes(
+        &command.verified_payload,
+        Some(command.artifact.content_hash()),
+    )
+    .map_err(|error| ficant_application::map_runtime_error(&error))?;
+    let execution = manifest.execution.as_ref().ok_or_else(lineage)?;
+    let content = manifest.content.as_ref().ok_or_else(lineage)?;
+    let stored: Option<(Vec<u8>, Vec<u8>)> = sqlx::query_as(
+        "SELECT i.payload,g.payload FROM research.execution_identities i
+         JOIN research.research_graphs g
+           ON g.tenant_id=i.tenant_id AND g.graph_id=i.graph_id AND g.version=i.graph_version
+         WHERE i.tenant_id=$1 AND i.run_id=$2 AND i.execution_identity_digest=$3 FOR SHARE",
+    )
+    .bind(command.fence.tenant_id.as_str())
+    .bind(command.fence.run_id.as_str())
+    .bind(hash_hex(&command.fence.execution_identity_digest))
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    let Some((identity_payload, graph_payload)) = stored else {
+        return Err(lineage());
+    };
+    let graph = decode_research_graph(&graph_payload)?;
+    let identity = decode_execution_identity(&identity_payload, &graph)?;
+    let external_bindings: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT input_id,artifact_id::text,content_hash::text
+         FROM research.execution_external_inputs
+         WHERE tenant_id=$1 AND run_id=$2 ORDER BY input_id",
+    )
+    .bind(command.fence.tenant_id.as_str())
+    .bind(command.fence.run_id.as_str())
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    validate_proto_execution(execution, &identity, &external_bindings)?;
+    let node = graph
+        .nodes()
+        .iter()
+        .find(|node| node.node_id() == &command.fence.node_id)
+        .ok_or_else(lineage)?;
+    let implementation = identity
+        .reproducibility()
+        .node_implementations()
+        .iter()
+        .find(|binding| binding.node_id == command.fence.node_id)
+        .ok_or_else(lineage)?;
+    if manifest.attempt != u32::try_from(command.fence.attempt).map_err(|_| invalid())?
+        || proto_id(execution.run_id.as_ref())? != *identity.run_id()
+        || proto_hash(execution.digest.as_ref())? != *identity.digest()
+        || proto_hash(
+            execution
+                .reproducibility
+                .as_ref()
+                .and_then(|value| value.digest.as_ref()),
+        )? != *identity.reproducibility_digest()
+        || proto_id(content.node_id.as_ref())? != command.fence.node_id
+        || proto_hash(content.reproducibility_digest.as_ref())?
+            != *identity.reproducibility_digest()
+        || proto_hash(content.node_contract_digest.as_ref())? != *node.contract().digest()
+        || proto_hash(content.implementation_digest.as_ref())?
+            != implementation.implementation_digest
+    {
+        return Err(lineage());
+    }
+    let mut unhashed = content.clone();
+    let claimed_manifest_hash = proto_hash(unhashed.manifest_hash.take().as_ref())?;
+    if claimed_manifest_hash != ContentHash::digest(&unhashed.encode_to_vec()) {
+        return Err(immutable());
+    }
+    if content.outputs.len() != node.contract().output_types().len()
+        || verified_outputs.len() != content.outputs.len()
+        || content.inputs.len() != node.contract().input_types().len()
+    {
+        return Err(lineage());
+    }
+    for expected in node.contract().output_types() {
+        let output = content
+            .outputs
+            .iter()
+            .find(|value| value.port_name == expected.port_name())
+            .ok_or_else(lineage)?;
+        validate_proto_type(output.value_type.as_ref(), expected.value_type())?;
+        let artifact = output.artifact.as_ref().ok_or_else(lineage)?;
+        // `output.content_hash` addresses the typed port payload inside the canonical output
+        // envelope. The Artifact lineage reference addresses the envelope blob itself. They are
+        // deliberately distinct hashes. The verified payload is first bound by hash and size to
+        // `VerifiedBlobRef`, then independently decoded as the canonical envelope; its decoded
+        // port hash must match this manifest. The Artifact row continues to address the envelope.
+        let port_payload_hash = proto_hash(output.content_hash.as_ref())?;
+        let verified_output = verified_outputs
+            .iter()
+            .find(|value| value.port_name() == expected.port_name())
+            .ok_or_else(lineage)?;
+        if proto_id(artifact.object_id.as_ref())? != *command.artifact.id()
+            || proto_hash(artifact.content_hash.as_ref())? != *command.artifact.content_hash()
+            || verified_output.value_type() != expected.value_type()
+            || verified_output.content_hash() != &port_payload_hash
+        {
+            return Err(lineage());
+        }
+    }
+    for expected in node.contract().input_types() {
+        let input = content
+            .inputs
+            .iter()
+            .find(|value| value.port_name == expected.port_name())
+            .ok_or_else(lineage)?;
+        if proto_id(input.node_id.as_ref())? != command.fence.node_id {
+            return Err(lineage());
+        }
+        validate_proto_type(input.value_type.as_ref(), expected.value_type())?;
+        let artifact = input.resolved_artifact.as_ref().ok_or_else(lineage)?;
+        if proto_hash(artifact.content_hash.as_ref())? != proto_hash(input.content_hash.as_ref())? {
+            return Err(lineage());
+        }
+        validate_manifest_input(transaction, command, &graph, input).await?;
+    }
+    if command.artifact.lineage().len() != content.inputs.len()
+        || content.inputs.iter().any(|input| {
+            let Some(resolved) = input.resolved_artifact.as_ref() else {
+                return true;
+            };
+            let (Ok(id), Ok(hash)) = (
+                proto_id(resolved.object_id.as_ref()),
+                proto_hash(resolved.content_hash.as_ref()),
+            ) else {
+                return true;
+            };
+            !command.artifact.lineage().iter().any(|reference| {
+                reference.object_id() == &id && reference.content_hash() == Some(&hash)
+            })
+        })
+    {
+        return Err(lineage());
+    }
+    Ok(())
+}
+
+async fn validate_manifest_input(
+    transaction: &mut Transaction<'_, Postgres>,
+    command: &CompleteNode,
+    graph: &ResearchGraph,
+    input: &research_pb::NodeInputBinding,
+) -> Result<(), ApplicationError> {
+    let artifact = input.resolved_artifact.as_ref().ok_or_else(lineage)?;
+    let artifact_id = proto_id(artifact.object_id.as_ref())?;
+    let hash = proto_hash(input.content_hash.as_ref())?;
+    match input.declared_source.as_ref().ok_or_else(lineage)? {
+        research_pb::node_input_binding::DeclaredSource::ExternalInputId(input_id) => {
+            let binding = graph
+                .external_input_bindings()
+                .iter()
+                .find(|binding| {
+                    binding.input_id() == input_id
+                        && binding.to_node() == &command.fence.node_id
+                        && binding.to_port() == input.port_name
+                })
+                .ok_or_else(lineage)?;
+            let _ = binding;
+            let exact: bool = sqlx::query_scalar(
+                "SELECT EXISTS(
+                  SELECT 1 FROM research.execution_external_inputs
+                  WHERE tenant_id=$1 AND run_id=$2 AND input_id=$3
+                    AND artifact_id=$4 AND content_hash=$5)",
+            )
+            .bind(command.fence.tenant_id.as_str())
+            .bind(command.fence.run_id.as_str())
+            .bind(input_id)
+            .bind(artifact_id.as_str())
+            .bind(hash_hex(&hash))
+            .fetch_one(&mut **transaction)
+            .await
+            .map_err(map_sqlx_error)?;
+            if !exact {
+                return Err(lineage());
+            }
+        }
+        research_pb::node_input_binding::DeclaredSource::UpstreamOutput(upstream) => {
+            let upstream_id = proto_id(upstream.node_id.as_ref())?;
+            if !graph.edges().iter().any(|edge| {
+                edge.from_node() == &upstream_id
+                    && edge.from_port() == upstream.port_name
+                    && edge.to_node() == &command.fence.node_id
+                    && edge.to_port() == input.port_name
+            }) {
+                return Err(lineage());
+            }
+            let exact: bool = sqlx::query_scalar(
+                "SELECT EXISTS(
+                  SELECT 1 FROM research.node_executions n
+                  JOIN research.artifacts a
+                    ON a.tenant_id=n.tenant_id AND a.artifact_id=n.artifact_id
+                  WHERE n.tenant_id=$1 AND n.run_id=$2 AND n.node_id=$3
+                    AND n.state='SUCCEEDED' AND a.artifact_id=$4 AND a.content_hash=$5)",
+            )
+            .bind(command.fence.tenant_id.as_str())
+            .bind(command.fence.run_id.as_str())
+            .bind(upstream_id.as_str())
+            .bind(artifact_id.as_str())
+            .bind(hash_hex(&hash))
+            .fetch_one(&mut **transaction)
+            .await
+            .map_err(map_sqlx_error)?;
+            if !exact {
+                return Err(lineage());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn proto_id(
+    value: Option<&ficant_contracts::ficant::core::v1::Ulid>,
+) -> Result<Ulid, ApplicationError> {
+    value
+        .ok_or_else(lineage)
+        .and_then(|value| parse_id(&value.value))
+}
+
+fn proto_hash(
+    value: Option<&ficant_contracts::ficant::core::v1::Sha256>,
+) -> Result<ContentHash, ApplicationError> {
+    value.ok_or_else(lineage).and_then(|value| {
+        ContentHash::from_bytes(&value.value).map_err(ficant_application::map_domain_error)
+    })
+}
+
+fn validate_proto_execution(
+    actual: &research_pb::ExecutionInstanceIdentity,
+    expected: &ExecutionInstanceIdentity,
+    external_bindings: &[(String, String, String)],
+) -> Result<(), ApplicationError> {
+    let expected_r = expected.reproducibility();
+    let actual_r = actual.reproducibility.as_ref().ok_or_else(lineage)?;
+    if proto_id(actual.run_id.as_ref())? != *expected.run_id()
+        || proto_hash(actual.digest.as_ref())? != *expected.digest()
+        || proto_hash(actual_r.digest.as_ref())? != *expected.reproducibility_digest()
+        || proto_hash(actual_r.graph_digest.as_ref())? != *expected_r.graph_digest()
+        || proto_hash(actual_r.data_snapshot_hash.as_ref())? != *expected_r.data_snapshot_hash()
+        || proto_hash(actual_r.universe_snapshot_hash.as_ref())?
+            != *expected_r.universe_snapshot_hash()
+        || proto_hash(actual_r.parameters_hash.as_ref())? != *expected_r.parameters_hash()
+        || proto_hash(actual_r.runtime_image_digest.as_ref())? != *expected_r.runtime_image_digest()
+        || proto_hash(actual_r.environment_digest.as_ref())? != *expected_r.environment_digest()
+        || actual_r.seed != expected_r.seed()
+        || actual_r.rule_packs.len() != expected_r.rule_pack_bindings().len()
+        || actual_r.node_implementations.len() != expected_r.node_implementations().len()
+        || actual_r.external_inputs.len() != expected_r.external_inputs().len()
+        || external_bindings.len() != expected_r.external_inputs().len()
+    {
+        return Err(lineage());
+    }
+    for (actual, expected) in actual_r
+        .rule_packs
+        .iter()
+        .zip(expected_r.rule_pack_bindings())
+    {
+        if proto_id(actual.rule_pack_id.as_ref())?.as_str() != expected.rule_pack_id
+            || actual.version != expected.version.get()
+            || proto_hash(actual.content_hash.as_ref())? != expected.content_hash
+        {
+            return Err(lineage());
+        }
+    }
+    for (actual, expected) in actual_r
+        .node_implementations
+        .iter()
+        .zip(expected_r.node_implementations())
+    {
+        if proto_id(actual.node_id.as_ref())? != expected.node_id
+            || proto_hash(actual.implementation_digest.as_ref())? != expected.implementation_digest
+        {
+            return Err(lineage());
+        }
+    }
+    for ((actual, expected), binding) in actual_r
+        .external_inputs
+        .iter()
+        .zip(expected_r.external_inputs())
+        .zip(external_bindings)
+    {
+        let resolved = actual.resolved_artifact.as_ref().ok_or_else(lineage)?;
+        if actual.input_id != expected.input_id()
+            || binding.0 != expected.input_id()
+            || binding.2 != hash_hex(expected.content_hash())
+            || proto_id(resolved.object_id.as_ref())?.as_str() != binding.1
+            || proto_hash(resolved.content_hash.as_ref())? != *expected.content_hash()
+            || proto_hash(actual.content_hash.as_ref())? != *expected.content_hash()
+        {
+            return Err(lineage());
+        }
+        validate_proto_type(actual.value_type.as_ref(), expected.value_type())?;
+    }
+    Ok(())
+}
+
+fn validate_proto_type(
+    value: Option<&research_pb::TypedValue>,
+    expected: &ficant_domain::research::TypedValue,
+) -> Result<(), ApplicationError> {
+    let value = value.ok_or_else(lineage)?;
+    if value.type_id != expected.type_id()
+        || value.type_version != expected.type_version().get()
+        || proto_hash(value.schema_hash.as_ref())? != *expected.schema_hash()
+    {
+        return Err(lineage());
     }
     Ok(())
 }
@@ -914,8 +2155,19 @@ async fn validate_planned_artifact(
     transaction: &mut Transaction<'_, Postgres>,
     command: &CompleteNode,
 ) -> Result<(), ApplicationError> {
+    let expected_owner: String = sqlx::query_scalar(
+        "SELECT owner_id::text FROM research.execution_identities
+         WHERE tenant_id=$1 AND run_id=$2 AND execution_identity_digest=$3 FOR SHARE",
+    )
+    .bind(command.fence.tenant_id.as_str())
+    .bind(command.fence.run_id.as_str())
+    .bind(hash_hex(&command.fence.execution_identity_digest))
+    .fetch_one(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
     if command.artifact.kind() != ArtifactKind::Generic
         || command.artifact.owner().tenant_id() != &command.fence.tenant_id
+        || command.artifact.owner().owner_id().as_str() != expected_owner
         || command
             .artifact
             .lineage()
@@ -1145,6 +2397,32 @@ fn allowed_owners(scope: &AccessScope) -> Vec<String> {
         .collect()
 }
 
+fn push_difference(
+    values: &mut Vec<ComparisonDimension>,
+    dimension: ComparisonDimension,
+    differs: bool,
+) {
+    if differs {
+        values.push(dimension);
+    }
+}
+
+fn terminal_result(
+    graph: &ResearchGraph,
+    manifests: &[StoredNodeManifest],
+) -> Option<(ContentHash, ContentHash)> {
+    let terminal = graph.topological_order().last()?;
+    manifests
+        .iter()
+        .find(|manifest| &manifest.node_id == terminal)
+        .map(|manifest| {
+            (
+                manifest.artifact.content_hash().clone(),
+                manifest.manifest_hash.clone(),
+            )
+        })
+}
+
 fn parse_id(value: &str) -> Result<Ulid, ApplicationError> {
     Ulid::new(value).map_err(ficant_application::map_domain_error)
 }
@@ -1175,6 +2453,8 @@ fn hash_hex(value: &ContentHash) -> String {
 
 const fn event_type_sql(value: JournalEventType) -> &'static str {
     match value {
+        JournalEventType::RunCreated => "RUN_CREATED",
+        JournalEventType::RunStarted => "RUN_STARTED",
         JournalEventType::RunSucceeded => "RUN_SUCCEEDED",
         JournalEventType::RunFailed => "RUN_FAILED",
         JournalEventType::NodeStarted => "NODE_STARTED",

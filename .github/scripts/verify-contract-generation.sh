@@ -3,7 +3,7 @@
 set -euo pipefail
 
 CONTRACT_BASE_SHA=737807302351fe8feee425a89d666caf3d611f96
-DESCRIPTOR_SHA256=63fc764251cc7a8c079aad681547501a3ae9b29b471e04b617761187151b3bf8
+DESCRIPTOR_SHA256=81cede8c016bea5278d13fda68dd96ed8ba84dede1d83caf25e30367d854f6bf
 
 die() {
   printf 'contract-generation: %s\n' "$1" >&2
@@ -100,7 +100,8 @@ for command in git tar python3 sha256sum awk mktemp mkdir rm cp buf cargo uv cor
 done
 [[ $(buf --version) == '1.56.0' ]] || die 'Buf must be 1.56.0'
 [[ $(cargo --version) == cargo\ 1.96.1* ]] || die 'Cargo must be 1.96.1'
-[[ $(uv --version) == 'uv 0.7.13' ]] || die 'uv must be 0.7.13'
+read -r uv_name uv_version _ < <(uv --version)
+[[ $uv_name == uv && $uv_version == 0.7.13 ]] || die 'uv must be 0.7.13'
 [[ $(corepack pnpm@10.12.4 --version) == '10.12.4' ]] || die 'pnpm must be 10.12.4'
 git cat-file -e "${CONTRACT_BASE_SHA}^{commit}" || die 'missing exact contract baseline commit'
 

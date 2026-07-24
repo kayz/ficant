@@ -1,11 +1,25 @@
 use ficant_api::{
-    GrpcWebServeError, GrpcWebServerConfig, PlatformApplication, PlatformGrpcService, PlatformPort,
-    RatesGrpcService, SessionPolicy, SystemClock, TrustedIdentity, serve_grpc_web_with_rates,
+    ExperimentGrpcService, GrpcWebServeError, GrpcWebServerConfig, PlatformApplication,
+    PlatformGrpcService, PlatformPort, RatesGrpcService, SessionPolicy, SystemClock,
+    TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
+    serve_grpc_web_with_rates_and_experiment,
 };
+use ficant_application::ports::{
+    AeadCursorCodec, ArtifactRepository, CursorKey, DefinitionRepository, ExperimentRepository,
+    Phase4ExecutionRepository, RunJournalRepository, SnapshotRepository,
+    SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader,
+};
+use ficant_application::{ApplicationError, map_runtime_error};
+use ficant_domain::primitives::{ContentHash, Ulid};
 use ficant_fixed_income_native::{
     NativeBondAnalyticsEngine, NativeCarryRollEngine, NativeFuturesDeliveryEngine,
     NativeFuturesHedgeEngine, NativeYieldCurveEngine,
 };
+use ficant_native_nodes::{native_node_source_digest, trusted_native_node};
+use ficant_runtime::NativeNode;
+use ficant_storage::postgres::PostgresRepository;
+use ficant_storage::s3::S3BlobStore;
+use sqlx::postgres::PgPoolOptions;
 use std::collections::BTreeMap;
 use std::env;
 use std::error::Error;
@@ -32,6 +46,18 @@ const ENV_KEYS: &[&str] = &[
     "FICANT_BOOTSTRAP_SCOPES",
     "FICANT_LOOPBACK_SUBJECT",
     "FICANT_LOOPBACK_SCOPES",
+    "FICANT_EXPERIMENT_DATABASE_URL",
+    "FICANT_EXPERIMENT_S3_ENDPOINT",
+    "FICANT_EXPERIMENT_S3_BUCKET",
+    "FICANT_EXPERIMENT_S3_ACCESS_KEY",
+    "FICANT_EXPERIMENT_S3_SECRET_KEY",
+    "FICANT_EXPERIMENT_CURSOR_KEY_HEX",
+    "FICANT_EXPERIMENT_TENANT_ID",
+    "FICANT_EXPERIMENT_OWNER_ID",
+    "FICANT_EXPERIMENT_ACTOR_ID",
+    "FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST",
+    "FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION",
+    "FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST",
 ];
 
 pub struct ServerSettings {
@@ -41,6 +67,18 @@ pub struct ServerSettings {
     trace_key: Vec<u8>,
     bearer_identity: Option<TrustedIdentity>,
     implicit_identity: Option<TrustedIdentity>,
+    experiment_database_url: String,
+    experiment_s3_endpoint: String,
+    experiment_s3_bucket: String,
+    experiment_s3_access_key: String,
+    experiment_s3_secret_key: String,
+    experiment_cursor_key: [u8; 32],
+    experiment_tenant_id: Ulid,
+    experiment_owner_id: Ulid,
+    experiment_actor_id: Ulid,
+    experiment_runtime_image_digest: ContentHash,
+    experiment_environment_attestation: String,
+    experiment_native_source_digest: ContentHash,
 }
 
 impl fmt::Debug for ServerSettings {
@@ -53,6 +91,18 @@ impl fmt::Debug for ServerSettings {
             .field("trace_key", &"[REDACTED]")
             .field("bearer_identity", &self.bearer_identity.is_some())
             .field("implicit_identity", &self.implicit_identity.is_some())
+            .field("experiment_database_url", &"[REDACTED]")
+            .field("experiment_s3_endpoint", &"[REDACTED]")
+            .field("experiment_s3_bucket", &"[REDACTED]")
+            .field("experiment_s3_access_key", &"[REDACTED]")
+            .field("experiment_s3_secret_key", &"[REDACTED]")
+            .field("experiment_cursor_key", &"[REDACTED]")
+            .field("experiment_tenant_id", &"[REDACTED]")
+            .field("experiment_owner_id", &"[REDACTED]")
+            .field("experiment_actor_id", &"[REDACTED]")
+            .field("experiment_runtime_image_digest", &"[REDACTED]")
+            .field("experiment_environment_attestation", &"[REDACTED]")
+            .field("experiment_native_source_digest", &"[REDACTED]")
             .finish()
     }
 }
@@ -88,6 +138,18 @@ impl ServerSettings {
                 "implicit identity is allowed only on a loopback listener",
             ));
         }
+        let experiment_cursor_key =
+            decode_exact_key(required(values, "FICANT_EXPERIMENT_CURSOR_KEY_HEX")?)?;
+        let experiment_tenant_id =
+            parse_ulid_setting(required(values, "FICANT_EXPERIMENT_TENANT_ID")?)?;
+        let experiment_owner_id =
+            parse_ulid_setting(required(values, "FICANT_EXPERIMENT_OWNER_ID")?)?;
+        let experiment_actor_id =
+            parse_ulid_setting(required(values, "FICANT_EXPERIMENT_ACTOR_ID")?)?;
+        let experiment_runtime_image_digest =
+            parse_digest_setting(required(values, "FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST")?)?;
+        let experiment_native_source_digest =
+            parse_digest_setting(required(values, "FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST")?)?;
 
         Ok(Self {
             bind,
@@ -96,6 +158,24 @@ impl ServerSettings {
             trace_key,
             bearer_identity,
             implicit_identity,
+            experiment_database_url: required(values, "FICANT_EXPERIMENT_DATABASE_URL")?.to_owned(),
+            experiment_s3_endpoint: required(values, "FICANT_EXPERIMENT_S3_ENDPOINT")?.to_owned(),
+            experiment_s3_bucket: required(values, "FICANT_EXPERIMENT_S3_BUCKET")?.to_owned(),
+            experiment_s3_access_key: required(values, "FICANT_EXPERIMENT_S3_ACCESS_KEY")?
+                .to_owned(),
+            experiment_s3_secret_key: required(values, "FICANT_EXPERIMENT_S3_SECRET_KEY")?
+                .to_owned(),
+            experiment_cursor_key,
+            experiment_tenant_id,
+            experiment_owner_id,
+            experiment_actor_id,
+            experiment_runtime_image_digest,
+            experiment_environment_attestation: required(
+                values,
+                "FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION",
+            )?
+            .to_owned(),
+            experiment_native_source_digest,
         })
     }
 }
@@ -193,6 +273,93 @@ pub fn build_grpc_services(
     Ok((platform, rates))
 }
 
+/// Composes all production services, including the PostgreSQL/S3-backed Experiment boundary.
+///
+/// # Errors
+///
+/// Returns a redacted composition error when trusted configuration or adapters cannot be built.
+pub fn build_grpc_services_with_experiment(
+    settings: &ServerSettings,
+) -> Result<(PlatformGrpcService, RatesGrpcService, ExperimentGrpcService), ServerError> {
+    let (platform, rates) = build_grpc_services(settings)?;
+    let application = build_platform_application(settings)?;
+    let pool = PgPoolOptions::new()
+        .max_connections(10)
+        .connect_lazy(&settings.experiment_database_url)
+        .map_err(|_| config("FICANT_EXPERIMENT_DATABASE_URL is invalid"))?;
+    let cursor = Arc::new(
+        AeadCursorCodec::new(
+            CursorKey::new("server-active", settings.experiment_cursor_key)
+                .map_err(|_| config("experiment cursor key is invalid"))?,
+            Vec::new(),
+        )
+        .map_err(|_| config("experiment cursor configuration is invalid"))?,
+    );
+    let repository = Arc::new(PostgresRepository::new(pool.clone(), cursor.clone()));
+    let blob_store = Arc::new(
+        S3BlobStore::new(
+            &settings.experiment_s3_endpoint,
+            settings.experiment_s3_bucket.clone(),
+            &settings.experiment_s3_access_key,
+            &settings.experiment_s3_secret_key,
+            pool,
+        )
+        .map_err(|_| config("experiment S3 configuration is invalid"))?,
+    );
+    let trusted = TrustedExperimentScope::new(
+        settings.experiment_tenant_id.clone(),
+        settings.experiment_owner_id.clone(),
+        settings.experiment_actor_id.clone(),
+        settings.experiment_runtime_image_digest.clone(),
+        settings.experiment_environment_attestation.clone(),
+        settings.experiment_native_source_digest.clone(),
+    )
+    .map_err(|_| config("trusted experiment scope is invalid"))?;
+    let phase4: Arc<dyn Phase4ExecutionRepository> = repository.clone();
+    let experiments: Arc<dyn ExperimentRepository> = repository.clone();
+    let journals: Arc<dyn RunJournalRepository> = repository.clone();
+    let snapshot_repository: Arc<dyn SnapshotRepository> = repository.clone();
+    let artifacts: Arc<dyn ArtifactRepository> = repository.clone();
+    let definitions: Arc<dyn DefinitionRepository> = repository.clone();
+    let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository;
+    let blobs: Arc<dyn VerifiedBlobReader> = blob_store;
+    let experiment = ExperimentGrpcService::new(
+        application,
+        experiments,
+        journals,
+        snapshot_repository,
+        cursor,
+        phase4,
+        artifacts,
+        definitions,
+        snapshots,
+        blobs,
+        build_integrity_event_sink(),
+        Arc::new(ProductionNativeCatalog),
+        trusted,
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+    Ok((platform, rates, experiment))
+}
+
+struct ProductionNativeCatalog;
+
+impl TrustedNodeCatalog for ProductionNativeCatalog {
+    fn native_source_digest(&self) -> ContentHash {
+        native_node_source_digest()
+    }
+
+    fn implementation_digest(
+        &self,
+        node: &ficant_domain::research::ResearchNode,
+    ) -> Result<ContentHash, ApplicationError> {
+        trusted_native_node(node)
+            .map(|native| native.implementation_digest().clone())
+            .map_err(|error| map_runtime_error(&error))
+    }
+}
+
 fn build_platform_application(
     settings: &ServerSettings,
 ) -> Result<Arc<dyn PlatformPort>, ServerError> {
@@ -220,14 +387,15 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         .filter_map(|key| env::var(key).ok().map(|value| ((*key).to_owned(), value)))
         .collect();
     let settings = ServerSettings::try_from_values(&values)?;
-    let (platform, rates) = build_grpc_services(&settings)?;
-    serve_grpc_web_with_rates(
+    let (platform, rates, experiment) = build_grpc_services_with_experiment(&settings)?;
+    serve_grpc_web_with_rates_and_experiment(
         GrpcWebServerConfig {
             bind: settings.bind,
             allowed_origins: settings.allowed_origins.clone(),
         },
         platform,
         rates,
+        experiment,
     )
     .await?;
     Ok(())
@@ -326,6 +494,36 @@ fn decode_key(value: &str) -> Result<Vec<u8>, ServerError> {
             Ok((high << 4) | low)
         })
         .collect()
+}
+
+fn decode_exact_key(value: &str) -> Result<[u8; 32], ServerError> {
+    let key = decode_key(value)?;
+    key.try_into()
+        .map_err(|_| config("cursor key must contain exactly 32 hex bytes"))
+}
+
+fn parse_ulid_setting(value: &str) -> Result<Ulid, ServerError> {
+    Ulid::new(value).map_err(|_| config("experiment identity must be a canonical ULID"))
+}
+
+fn parse_digest_setting(value: &str) -> Result<ContentHash, ServerError> {
+    let hex = value
+        .strip_prefix("sha256:")
+        .ok_or_else(|| config("experiment digest must use sha256:<lowercase-hex>"))?;
+    if hex.len() != 64
+        || !hex
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    {
+        return Err(config("experiment digest must use sha256:<lowercase-hex>"));
+    }
+    let bytes = hex
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| Ok((hex_nibble(pair[0])? << 4) | hex_nibble(pair[1])?))
+        .collect::<Result<Vec<_>, ServerError>>()?;
+    ContentHash::from_bytes(&bytes)
+        .map_err(|_| config("experiment digest must contain exactly 32 bytes"))
 }
 
 fn hex_nibble(value: u8) -> Result<u8, ServerError> {

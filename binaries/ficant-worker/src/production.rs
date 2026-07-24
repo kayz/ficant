@@ -3,16 +3,16 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ficant_application::ports::{
     AccessScope, AeadCursorCodec, ArtifactRepository, BeginBlobStage, BeginNode, BlobStore,
-    CompleteNode, CursorKey, EnqueueNode, FailNode, IdempotencyKey, IntegrityEvent,
-    IntegrityEventSink, NodeLeaseFence, PageRequest, Phase4ExecutionRepository,
-    RequiredVerifiedBlobRead, RunJournalRepository, SafeTraceContext, VerifiedBlobReader,
-    VerifiedBlobRole, VerifiedReadResourceKind, VerifyBlobStage, stable_node_artifact_id,
+    CompleteNode, CursorKey, FailNode, IdempotencyKey, IntegrityEvent, IntegrityEventSink,
+    NodeLeaseFence, PageRequest, Phase4ExecutionRepository, RequiredVerifiedBlobRead,
+    RunJournalRepository, SafeTraceContext, VerifiedBlobReader, VerifiedBlobRole,
+    VerifiedReadResourceKind, VerifyBlobStage, stable_node_artifact_id,
 };
 use ficant_contracts::ficant::{core::v1 as core_pb, research::v1 as research_pb};
 use ficant_domain::ContentAddressed;
 use ficant_domain::primitives::{ContentHash, LineageRef, Ulid};
 use ficant_domain::research::{Artifact, ArtifactKind, RunJournal, RunState};
-use ficant_native_nodes::CgbBondAnalyticsNativeNode;
+use ficant_native_nodes::trusted_native_node;
 use ficant_runtime::{
     NativePortValue, decode_canonical_output_bytes, execute_native_node, replay_graph_execution,
 };
@@ -430,8 +430,11 @@ impl WorkerBackend for ProductionWorkerBackend {
         let input_evidence = inputs.evidence;
         let values = inputs.values;
         let execution = tokio::task::spawn_blocking(move || {
-            let executor = CgbBondAnalyticsNativeNode::new(node_id)
-                .map_err(|_| invalid("native node registry mismatch"))?;
+            if node.node_id() != &node_id {
+                return Err(invalid("native node registry mismatch"));
+            }
+            let executor =
+                trusted_native_node(&node).map_err(|_| invalid("native node registry mismatch"))?;
             execute_native_node(&node, &identity, &executor, values, input_artifacts)
                 .map_err(|_| backend(WorkerStep::Execute, false))
         })
@@ -474,10 +477,11 @@ impl WorkerBackend for ProductionWorkerBackend {
             .await
             .map_err(|error| application_error(WorkerStep::Promote, &error))?;
         self.blobs
-            .append_chunk(&scope, &staged, bytes)
+            .append_chunk(&scope, &staged, bytes.clone())
             .await
             .map_err(|error| application_error(WorkerStep::Promote, &error))?;
-        self.blobs
+        let verified_blob = self
+            .blobs
             .verify_and_promote(
                 VerifyBlobStage::new(scope, staged, content_hash.clone(), size)
                     .map_err(|_| invalid("output verification"))?,
@@ -502,11 +506,11 @@ impl WorkerBackend for ProductionWorkerBackend {
         )
         .map_err(|_| invalid("output artifact"))?;
         let output_manifest = output_manifest(task, loaded, &execution, &artifact)?;
-        let next_task = next_task(task, loaded)?;
         Ok(NodeCompletion {
             artifact,
+            verified_blob,
+            verified_payload: bytes,
             output_manifest,
-            next_task,
         })
     }
 
@@ -520,10 +524,11 @@ impl WorkerBackend for ProductionWorkerBackend {
             .complete_node(CompleteNode {
                 fence: Self::fence(task, worker_id),
                 artifact: completion.artifact,
+                verified_blob: completion.verified_blob,
+                verified_payload: completion.verified_payload,
                 output_manifest: completion.output_manifest,
                 succeeded_event_id: Self::event_id(task, b"succeeded"),
                 checkpoint_event_id: Self::event_id(task, b"checkpointed"),
-                next_task: completion.next_task,
             })
             .await
             .map(|_| ())
@@ -621,31 +626,6 @@ fn output_manifest(
         content: Some(content),
     };
     Ok(manifest.encode_to_vec())
-}
-
-fn next_task(task: &ClaimedTask, loaded: &LoadedTask) -> Result<Option<EnqueueNode>, WorkerError> {
-    let order = loaded.graph.topological_order();
-    let index = order
-        .iter()
-        .position(|node_id| node_id == &task.node_id)
-        .ok_or_else(|| invalid("claimed node absent from topological order"))?;
-    let Some(node_id) = order.get(index + 1) else {
-        return Ok(None);
-    };
-    let reproducibility = loaded.stored_identity.identity.reproducibility();
-    Ok(Some(EnqueueNode {
-        tenant_id: task.tenant_id.clone(),
-        task_id: derived_id(
-            b"ficant/worker-node-task/v1",
-            &[task.run_id.as_str().as_bytes(), node_id.as_str().as_bytes()],
-        ),
-        run_id: task.run_id.clone(),
-        node_id: node_id.clone(),
-        graph_digest: task.graph_digest.clone(),
-        execution_identity_digest: task.execution_identity_digest.clone(),
-        planned_artifact_id: stable_node_artifact_id(reproducibility.digest(), node_id),
-        task_key: format!("phase4-node/{}/{}", task.run_id, node_id),
-    }))
 }
 
 fn trace_id(task: &ClaimedTask, discriminator: &[u8]) -> Result<SafeTraceContext, WorkerError> {

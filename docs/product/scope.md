@@ -18,7 +18,7 @@ ficant 是面向专业投资研究团队的 AI 原生量化研究平台。平台
 
 - Rust Workspace 是唯一后台实现；Python 只承担生成节点运行时/合同消费，C++20 只保留稳定 C ABI 数值库边界。
 - `interface/` 是后台 Protobuf 唯一来源，并生成 Rust、Python、TypeScript consumer；不建立平行 REST/OpenAPI DTO。
-- PostgreSQL Migration、Ceph RGW 内容寻址对象、开发 Compose、固定工具链和多语言构建有冻结合同；开发夹具用一条 Compose 命令启动，正式 Rust 服务 Dockerfile 冷构建和空库 migration 是本轮候选必须保留的真实证据。
+- PostgreSQL Migration、Ceph RGW 内容寻址对象、开发 Compose、固定工具链和多语言构建有冻结合同；`scripts/dev-up.ps1` 构建并启动七个服务，从真实 Worker 镜像派生 runtime/source identity，并通过 React UI 反代验证已认证的 gRPC-Web Session。
 - React Platform Shell 已实现真实 Rust gRPC-Web 路径、会话、应用目录和短期应用启动授权。
 - 多 WebApp 的页面设计、代码和测试统一位于 `web-dm/`；后台接口设计保留在根 `interface/`，避免未来 WebApp 各自复制后台合同。
 
@@ -101,9 +101,9 @@ ResearchNodeContract 与 ResearchGraph 是版本化 Definition：节点合同绑
 
 首个生产 NativeNode 是 CGB 固收分析节点：它消费既有 `ficant.rates.v1.AnalyzeBondRequest`，经与 gRPC API 共用的 Rust/C++ 生产计算路径生成确定性 `AnalyzeBondResult`；不是测试桩、模拟定价或第二套算法。节点输出采用确定性多端口 envelope，Artifact 和结果 digest 绑定可复现身份、合同、实现、上游 Artifact 和输出 hash，因此同一冻结身份的不同 Run 必须得到同一结果，任何漂移均失败关闭。
 
-当前 worker 将 graph、identity、RulePack、外部输入、节点实现、任务和 Journal 持久化在 PostgreSQL。每个节点任务在入队时冻结计划 Artifact ID；worker 用数据库时钟和 `FOR UPDATE SKIP LOCKED` 领取 lease，只有当前 lease/fencing epoch 才能开始、续租或完成。它重放 Journal 后从安全 checkpoint 恢复，先把输出提升到 Ceph RGW，随后在同一 PostgreSQL 事务中写 Artifact、Journal、checkpoint、节点状态、后继任务或 Run 完成并释放 lease。租约过期的旧 worker 不能覆盖新尝试；多节点图在已验证上游 Artifact 的基础上按确定性顺序推进。
+生产 `ExperimentService` 从认证 scope 接收 graph run 提交；Server required-read 并交叉校验 Data/Universe Snapshot、RulePack、外部 Artifact 和 Ceph payload，只使用部署注入的 runtime、environment 与 source identity。Repository 在一个 PostgreSQL transaction 内创建并启动 Run、写 Journal、冻结 graph/identity/bindings 并发布拓扑首节点；相同幂等请求精确重放，任一字段漂移冲突。每个节点任务冻结计划 Artifact ID；worker 用数据库时钟和 `FOR UPDATE SKIP LOCKED` 领取 lease，只有当前 lease/fencing epoch 才能开始、续租或完成。enqueue/begin/complete 都从冻结 graph 与 Journal 校验 resume node，后继节点由 Repository 唯一派生。输出先提升到 Ceph RGW，随后在同一 PostgreSQL 事务中校验并写 Artifact、canonical output manifest、Journal、checkpoint、节点状态、后继任务或 Run 完成并释放 lease。持久查询支持 run、manifest/checkpoint、递归输出追踪和 11 个可复现维度比较。
 
-真实 PostgreSQL 16 + Ceph RGW 已验证对象提升后/事务前 worker 中断、attempt 2 重新领取、旧 fencing epoch 拒绝、两节点推进、Artifact/Journal/checkpoint/Run 原子收口与最终重放；强类型依赖边和输入篡改失败由 runtime 及 required-read 测试覆盖。Phase 4 的退出范围仍限于 Rust NativeNode 执行闭环，不包含 GeneratedNode/gVisor、业务 UI 或 Phase 5 Lab。
+真实 PostgreSQL 16 + Ceph RGW 已验证正式 application 提交与持久查询、对象提升后/事务前 worker 中断、attempt 2 重新领取、旧 fencing epoch 拒绝、`AnalyzeBondResult -> RiskSummary` 强类型两节点推进、上游篡改失败、Artifact/Journal/checkpoint/Run 原子收口与最终重放。Phase 4 的退出范围仍限于 Rust NativeNode 执行闭环，不包含 GeneratedNode/gVisor、业务 UI 或 Phase 5 Lab。
 
 ## WebApp 产品边界
 

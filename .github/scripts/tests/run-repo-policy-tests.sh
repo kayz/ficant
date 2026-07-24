@@ -171,6 +171,22 @@ if node_section is None or any(marker not in node_section.group(0) for marker in
 PY
 }
 
+check_phase4_surface_coverage() {
+  local candidate=$1
+  local required=(
+    interface/proto/ficant/research/v1/graph.proto
+    interface/proto/ficant/research/v1/execution.proto
+    migrations/postgresql/0010_graph_journal_events.sql
+    migrations/postgresql/0011_execution_lease_queue.sql
+    migrations/postgresql/0012_phase4_execution_closure.sql
+    migrations/postgresql/0013_generic_artifact_blob_deduplication.sql
+  )
+  local path
+  for path in "${required[@]}"; do
+    grep -Fq -- "$path" "$candidate" || return 1
+  done
+}
+
 printf '中文证据\n' >"$tmp/chinese.md"
 printf 'English only\n' >"$tmp/english.md"
 : >"$tmp/empty.md"
@@ -197,6 +213,15 @@ check_contract_node_toolchain "$workflow" "$toolchain_lock" reproducibility || {
   printf 'repo-policy-tests: reproducibility Node toolchain is not frozen to the verified 22.17.0 artifact\n' >&2
   exit 1
 }
+check_phase4_surface_coverage "$gate" || {
+  printf 'repo-policy-tests: Phase 4 proto/migration surface is not required by the final repository gate\n' >&2
+  exit 1
+}
+cp "$gate" "$tmp/repo-policy-without-phase4"
+sed -i '/interface\/proto\/ficant\/research\/v1\/execution\.proto/d' "$tmp/repo-policy-without-phase4"
+expect_fail \
+  "Phase 4 surface omitted from final gate" \
+  check_phase4_surface_coverage "$tmp/repo-policy-without-phase4"
 "$python" - "$workflow" "$tmp/ci-recovery" <<'PY'
 import pathlib
 import sys
@@ -435,8 +460,10 @@ lock_path, workflow_path, dockerfile_path = map(pathlib.Path, sys.argv[1:])
 image = tomllib.loads(lock_path.read_text(encoding="utf-8"))["rust"]["image"]
 workflow = workflow_path.read_text(encoding="utf-8")
 dockerfile = dockerfile_path.read_text(encoding="utf-8")
-if workflow.count(image) != 4:
-    raise SystemExit("Rust CI image must match the toolchain lock in all four jobs")
+if workflow.count(image) != 5:
+    raise SystemExit(
+        "Rust CI image must match the toolchain lock in all five invocations across four jobs"
+    )
 if f"ARG RUST_IMAGE={image}" not in dockerfile:
     raise SystemExit("Rust service build image must match the toolchain lock")
 if "COPY interface ./interface" not in dockerfile:

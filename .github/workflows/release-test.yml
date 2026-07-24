@@ -67,6 +67,10 @@ jobs:
           FICANT_S3_BUCKET: ficant
           FICANT_PLATFORM_SIGNING_KEY_HEX: "0000000000000000000000000000000000000000000000000000000000000000"
           FICANT_PLATFORM_TRACE_KEY_HEX: "0000000000000000000000000000000000000000000000000000000000000000"
+          FICANT_BOOTSTRAP_BEARER_TOKEN: validation-bootstrap-token-00000000
+          FICANT_EXPERIMENT_CURSOR_KEY_HEX: "1111111111111111111111111111111111111111111111111111111111111111"
+          FICANT_WORKER_RUNTIME_IMAGE_DIGEST: sha256:2222222222222222222222222222222222222222222222222222222222222222
+          FICANT_WORKER_NATIVE_SOURCE_DIGEST: sha256:3333333333333333333333333333333333333333333333333333333333333333
           FICANT_GRPC_WEB_ALLOWED_ORIGINS: https://greatquant.com
         run: >-
           docker compose --file deploy/test/compose.test.yml config --format json
@@ -291,10 +295,14 @@ jobs:
           ROOT: ${{ vars.FICANT_TEST_ROOT }}
           S3_ACCESS_KEY: ${{ secrets.FICANT_TEST_S3_ACCESS_KEY }}
           S3_SECRET_KEY: ${{ secrets.FICANT_TEST_S3_SECRET_KEY }}
+          EXPERIMENT_CURSOR_KEY: ${{ secrets.FICANT_TEST_EXPERIMENT_CURSOR_KEY_HEX }}
+          BOOTSTRAP_BEARER_TOKEN: ${{ secrets.FICANT_TEST_BOOTSTRAP_BEARER_TOKEN }}
           S3_BUCKET: ficant
         run: |
           set -euo pipefail
-          printf '%s\n%s\n%s\n' "$S3_ACCESS_KEY" "$S3_SECRET_KEY" "$S3_BUCKET" | ssh \
+          printf '%s\n%s\n%s\n%s\n%s\n' \
+            "$S3_ACCESS_KEY" "$S3_SECRET_KEY" "$S3_BUCKET" \
+            "$EXPERIMENT_CURSOR_KEY" "$BOOTSTRAP_BEARER_TOKEN" | ssh \
             -i "$HOME/.ssh/ficant-test" -p "$PORT" \
             -o BatchMode=yes -o StrictHostKeyChecking=yes \
             "$USER@$HOST" "FICANT_ROOT='$ROOT' '$ROOT/bin/configure-object-store.sh'"

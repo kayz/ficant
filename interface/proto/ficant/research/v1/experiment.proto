@@ -3,6 +3,8 @@ syntax = "proto3";
 package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
+import "ficant/research/v1/execution.proto";
+import "ficant/research/v1/graph.proto";
 import "ficant/research/v1/journal.proto";
 
 enum RunState {
@@ -65,9 +67,102 @@ message ReadRunJournalResponse {
   ficant.core.v1.PageResponse page = 2;
 }
 
+// Submits one fully frozen graph run. Tenant, owner and deployment attestation are
+// derived from the authenticated server boundary and therefore are deliberately
+// absent from this request.
+message SubmitGraphRunRequest {
+  string idempotency_key = 1;
+  ficant.core.v1.Ulid run_id = 2;
+  ResearchGraph graph = 3;
+  ficant.core.v1.LineageRef data_snapshot = 4;
+  ficant.core.v1.Sha256 data_snapshot_hash = 5;
+  ficant.core.v1.LineageRef universe_snapshot = 6;
+  ficant.core.v1.Sha256 universe_snapshot_hash = 7;
+  ficant.core.v1.Sha256 parameters_hash = 8;
+  uint64 seed = 9;
+  repeated RulePackBinding rule_packs = 10;
+  repeated ExecutionExternalInput external_inputs = 11;
+}
+
+message SubmitGraphRunResponse {
+  ExperimentRun run = 1;
+  ExecutionInstanceIdentity execution = 2;
+}
+
+message GetGraphRunRequest {
+  ficant.core.v1.Ulid run_id = 1;
+}
+
+message GraphRun {
+  ExperimentRun run = 1;
+  ResearchGraph graph = 2;
+  ExecutionInstanceIdentity execution = 3;
+}
+
+message GetGraphRunResponse {
+  GraphRun graph_run = 1;
+}
+
+message ListNodeOutputManifestsRequest {
+  ficant.core.v1.Ulid run_id = 1;
+}
+
+message StoredNodeOutputManifest {
+  NodeOutputManifest manifest = 1;
+  NodeCheckpoint checkpoint = 2;
+}
+
+message ListNodeOutputManifestsResponse {
+  repeated StoredNodeOutputManifest manifests = 1;
+}
+
+message TraceGraphOutputRequest {
+  ficant.core.v1.Ulid run_id = 1;
+  ficant.core.v1.Ulid node_id = 2;
+}
+
+message GraphOutputTrace {
+  GraphRun graph_run = 1;
+  repeated StoredNodeOutputManifest manifests = 2;
+  repeated ExecutionExternalInput external_inputs = 3;
+}
+
+message TraceGraphOutputResponse {
+  GraphOutputTrace trace = 1;
+}
+
+enum GraphRunComparisonDimension {
+  GRAPH_RUN_COMPARISON_DIMENSION_UNSPECIFIED = 0;
+  GRAPH_RUN_COMPARISON_DIMENSION_DATA = 1;
+  GRAPH_RUN_COMPARISON_DIMENSION_UNIVERSE = 2;
+  GRAPH_RUN_COMPARISON_DIMENSION_GRAPH = 3;
+  GRAPH_RUN_COMPARISON_DIMENSION_PARAMETERS = 4;
+  GRAPH_RUN_COMPARISON_DIMENSION_RUNTIME = 5;
+  GRAPH_RUN_COMPARISON_DIMENSION_ENVIRONMENT = 6;
+  GRAPH_RUN_COMPARISON_DIMENSION_SEED = 7;
+  GRAPH_RUN_COMPARISON_DIMENSION_RULE_PACK = 8;
+  GRAPH_RUN_COMPARISON_DIMENSION_IMPLEMENTATION = 9;
+  GRAPH_RUN_COMPARISON_DIMENSION_EXTERNAL_INPUT = 10;
+  GRAPH_RUN_COMPARISON_DIMENSION_RESULT = 11;
+}
+
+message CompareGraphRunsRequest {
+  ficant.core.v1.Ulid left_run_id = 1;
+  ficant.core.v1.Ulid right_run_id = 2;
+}
+
+message CompareGraphRunsResponse {
+  repeated GraphRunComparisonDimension differing_dimensions = 1;
+}
+
 service ExperimentService {
   rpc CreateRun(CreateRunRequest) returns (CreateRunResponse);
   rpc TransitionRun(TransitionRunRequest) returns (TransitionRunResponse);
   rpc GetRun(GetRunRequest) returns (GetRunResponse);
   rpc ReadRunJournal(ReadRunJournalRequest) returns (ReadRunJournalResponse);
+  rpc SubmitGraphRun(SubmitGraphRunRequest) returns (SubmitGraphRunResponse);
+  rpc GetGraphRun(GetGraphRunRequest) returns (GetGraphRunResponse);
+  rpc ListNodeOutputManifests(ListNodeOutputManifestsRequest) returns (ListNodeOutputManifestsResponse);
+  rpc TraceGraphOutput(TraceGraphOutputRequest) returns (TraceGraphOutputResponse);
+  rpc CompareGraphRuns(CompareGraphRunsRequest) returns (CompareGraphRunsResponse);
 }

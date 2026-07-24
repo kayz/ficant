@@ -398,6 +398,8 @@ class ComposeSecurityGateTests(unittest.TestCase):
             "FICANT_S3_SECRET_KEY",
             "FICANT_PLATFORM_SIGNING_KEY_HEX",
             "FICANT_PLATFORM_TRACE_KEY_HEX",
+            "FICANT_WORKER_RUNTIME_IMAGE_DIGEST",
+            "FICANT_WORKER_NATIVE_SOURCE_DIGEST",
         ):
             self.assertRegex(compose, rf"\$\{{{key}:\?[^}}]+\}}")
         self.assertNotIn("test-only", compose)
@@ -567,19 +569,67 @@ class ComposeSecurityGateTests(unittest.TestCase):
 
         self.assertIn('FICANT_GRPC_BIND: "0.0.0.0:8080"', compose)
         self.assertIn(
-            'FICANT_GRPC_WEB_ALLOWED_ORIGINS: "http://127.0.0.1:${FICANT_WEB_PORT:-18082}"',
+            'FICANT_GRPC_WEB_ALLOWED_ORIGINS: "http://127.0.0.1:${FICANT_UI_PORT:-18083}"',
             compose,
         )
         for key in ("FICANT_PLATFORM_SIGNING_KEY_HEX", "FICANT_PLATFORM_TRACE_KEY_HEX"):
             self.assertRegex(compose, rf"(?m)^[ \t]+{re.escape(key)}:[ \t]+\"\$\{{{key}:\?[^}}]+\}}\"$")
         for key in ("FICANT_BOOTSTRAP_SUBJECT", "FICANT_BOOTSTRAP_BEARER_TOKEN", "FICANT_BOOTSTRAP_SCOPES"):
-            self.assertRegex(compose, rf"(?m)^[ \t]+{re.escape(key)}:[ \t]*$")
+            self.assertRegex(compose, rf"(?m)^[ \t]+{re.escape(key)}:[ \t]+\"\$\{{{key}:\?[^}}]+\}}\"$")
         self.assertNotIn("FICANT_LOOPBACK_SUBJECT", compose)
         self.assertNotIn("FICANT_LOOPBACK_SCOPES", compose)
         self.assertIn(
             'CMD ["/usr/local/bin/ficant", "--health-check"]',
             dockerfile,
         )
+
+    def test_optional_ui_profile_proxies_real_grpc_web_without_baking_credentials(self) -> None:
+        compose = Path("deploy/dev/docker-compose.yml").read_text(encoding="utf-8")
+        nginx = Path("deploy/test/ui/nginx.conf").read_text(encoding="utf-8")
+        dockerfile = Path("deploy/test/FicantUi.Dockerfile").read_text(encoding="utf-8")
+
+        self.assertRegex(compose, r"(?m)^  ficant-ui:\s*$")
+        self.assertIn("profiles: [ui]", compose)
+        self.assertIn("dockerfile: deploy/test/FicantUi.Dockerfile", compose)
+        self.assertIn(
+            'FICANT_UI_BEARER_TOKEN: "${FICANT_BOOTSTRAP_BEARER_TOKEN:?FICANT_BOOTSTRAP_BEARER_TOKEN is required}"',
+            compose,
+        )
+        self.assertIn("location ^~ /ficant-api/", nginx)
+        self.assertIn("proxy_pass http://ficant-server:8080/;", nginx)
+        self.assertIn(
+            'proxy_set_header Authorization "Bearer ${FICANT_UI_BEARER_TOKEN}";',
+            nginx,
+        )
+        self.assertNotIn("local-platform-user", nginx)
+        self.assertIn(
+            "envsubst '$FICANT_UI_BEARER_TOKEN'",
+            dockerfile,
+        )
+        self.assertNotIn("ARG FICANT_UI_BEARER_TOKEN", dockerfile)
+
+    def test_dev_entrypoints_preserve_volumes_and_verify_grpc_status_zero(self) -> None:
+        up = Path("scripts/dev-up.ps1").read_text(encoding="utf-8")
+        down = Path("scripts/dev-down.ps1").read_text(encoding="utf-8")
+
+        self.assertIn("Join-Path $repoRoot 'deploy\\dev'", up)
+        self.assertIn("Join-Path $composeDirectory '.env.local'", up)
+        self.assertIn("[System.Security.Cryptography.RandomNumberGenerator]::Fill", up)
+        self.assertIn("'--env-file', $environmentFile", up)
+        self.assertNotIn("FICANT_BOOTSTRAP_BEARER_TOKEN=$(", up.split("$entries = @(", 1)[0])
+        self.assertIn("/ficant-api/ficant.app.v1.PlatformService/GetCurrentSession", up)
+        self.assertIn("grpc-status:\\s*0", up)
+        self.assertIn("'--profile', 'ui'", up)
+        self.assertIn("docker image inspect --format '{{.Id}}' $workerImage", up)
+        self.assertIn("'--print-native-source-digest'", up)
+        self.assertIn("RuntimeDigest = $runtimeDigest", up)
+        self.assertIn("SourceDigest = $sourceDigest", up)
+        entries = up.split("$entries = @(", 1)[1].split(")", 1)[0]
+        self.assertNotIn("FICANT_WORKER_RUNTIME_IMAGE_DIGEST", entries)
+        self.assertNotIn("FICANT_WORKER_NATIVE_SOURCE_DIGEST", entries)
+        self.assertIn("'down'", down)
+        self.assertNotIn("'--volumes'", down)
+        self.assertNotIn("Remove-Item", down)
 
     def test_root_equivalent_users_are_rejected(self) -> None:
         for uid in ("0", "00", "+0", "root"):
@@ -658,6 +708,10 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
             "FICANT_S3_BUCKET": "ficant",
             "FICANT_PLATFORM_SIGNING_KEY_HEX": "00" * 32,
             "FICANT_PLATFORM_TRACE_KEY_HEX": "00" * 32,
+            "FICANT_BOOTSTRAP_BEARER_TOKEN": "validation-bootstrap-token-00000000",
+            "FICANT_EXPERIMENT_CURSOR_KEY_HEX": "11" * 32,
+            "FICANT_WORKER_RUNTIME_IMAGE_DIGEST": "sha256:" + "22" * 32,
+            "FICANT_WORKER_NATIVE_SOURCE_DIGEST": "sha256:" + "33" * 32,
             "FICANT_GRPC_WEB_ALLOWED_ORIGINS": "https://greatquant.com",
         }
         output = subprocess.run(
@@ -700,6 +754,22 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         self.assertEqual(
             worker["depends_on"]["ceph-rgw"]["condition"],
             "service_healthy",
+        )
+        self.assertEqual(
+            worker["environment"]["FICANT_WORKER_RUNTIME_IMAGE_DIGEST"],
+            "sha256:" + "22" * 32,
+        )
+        self.assertEqual(
+            document["services"]["ficant-server"]["environment"][
+                "FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST"
+            ],
+            "sha256:" + "33" * 32,
+        )
+        self.assertEqual(
+            document["services"]["ficant-ui"]["environment"][
+                "FICANT_UI_BEARER_TOKEN"
+            ],
+            "validation-bootstrap-token-00000000",
         )
         self.assertIn("ceph-data", document["volumes"])
         self.assertEqual(
@@ -765,8 +835,14 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
             '"$USER@$HOST" "gzip -d | docker load"',
             "FICANT_TEST_S3_ACCESS_KEY",
             "FICANT_TEST_S3_SECRET_KEY",
+            "FICANT_TEST_EXPERIMENT_CURSOR_KEY_HEX",
+            "FICANT_TEST_BOOTSTRAP_BEARER_TOKEN",
         ):
             self.assertIn(marker, workflow)
+
+        deploy = Path("deploy/test/bin/deploy.sh").read_text(encoding="utf-8")
+        self.assertIn("--print-native-source-digest", deploy)
+        self.assertIn("FICANT_WORKER_RUNTIME_IMAGE_DIGEST", deploy)
 
         self.assertIn(
             'if [[ "${{ github.event_name }}" == workflow_run ]]; then\n'

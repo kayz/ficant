@@ -4,10 +4,10 @@ use std::fmt;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use ficant_application::ports::StoredExecutionIdentity;
+use ficant_application::ports::{StoredExecutionIdentity, VerifiedBlobRef};
 use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid};
 use ficant_domain::research::{Artifact, ResearchGraph};
-use ficant_runtime::NativePortValue;
+use ficant_runtime::{NativeNode, NativePortValue};
 use tokio::sync::watch;
 use tokio::time::{Instant, sleep, sleep_until};
 
@@ -21,6 +21,9 @@ pub struct WorkerConfig {
     pub s3_access_key: String,
     pub s3_secret_key: String,
     pub worker_id: Ulid,
+    pub runtime_image_digest: ContentHash,
+    pub environment_attestation: String,
+    pub native_source_digest: ContentHash,
     pub lease_duration: Duration,
     pub renew_interval: Duration,
     pub idle_poll_interval: Duration,
@@ -42,6 +45,9 @@ impl WorkerConfig {
             s3_secret_key: required_env("FICANT_WORKER_S3_SECRET_KEY")?,
             worker_id: Ulid::new(required_env("FICANT_WORKER_ID")?)
                 .map_err(|_| WorkerError::InvalidConfiguration("FICANT_WORKER_ID"))?,
+            runtime_image_digest: required_sha256_env("FICANT_WORKER_RUNTIME_IMAGE_DIGEST")?,
+            environment_attestation: required_env("FICANT_WORKER_ENVIRONMENT_ATTESTATION")?,
+            native_source_digest: required_sha256_env("FICANT_WORKER_NATIVE_SOURCE_DIGEST")?,
             lease_duration: seconds_env("FICANT_WORKER_LEASE_SECONDS", 60)?,
             renew_interval: seconds_env("FICANT_WORKER_RENEW_SECONDS", 20)?,
             idle_poll_interval: milliseconds_env("FICANT_WORKER_IDLE_POLL_MS", 500)?,
@@ -65,6 +71,12 @@ impl WorkerConfig {
         {
             return Err(WorkerError::InvalidConfiguration("worker endpoint"));
         }
+        canonical_environment_digest(&self.environment_attestation)?;
+        if self.native_source_digest != ficant_native_nodes::native_node_source_digest() {
+            return Err(WorkerError::InvalidConfiguration(
+                "FICANT_WORKER_NATIVE_SOURCE_DIGEST",
+            ));
+        }
         if self.lease_duration.is_zero()
             || self.renew_interval.is_zero()
             || self.idle_poll_interval.is_zero()
@@ -79,6 +91,10 @@ impl WorkerConfig {
     fn lease_seconds(&self) -> Result<u32, WorkerError> {
         u32::try_from(self.lease_duration.as_secs())
             .map_err(|_| WorkerError::InvalidConfiguration("FICANT_WORKER_LEASE_SECONDS"))
+    }
+
+    fn environment_digest(&self) -> Result<ContentHash, WorkerError> {
+        canonical_environment_digest(&self.environment_attestation)
     }
 }
 
@@ -105,8 +121,9 @@ pub struct LoadedTask {
 #[derive(Clone, Debug)]
 pub struct NodeCompletion {
     pub artifact: Artifact,
+    pub verified_blob: VerifiedBlobRef,
+    pub verified_payload: Vec<u8>,
     pub output_manifest: Vec<u8>,
-    pub next_task: Option<ficant_application::ports::EnqueueNode>,
 }
 
 #[derive(Clone, Debug)]
@@ -296,14 +313,10 @@ pub async fn run_claimed(
     config: &WorkerConfig,
     task: &ClaimedTask,
 ) -> Result<(), WorkerError> {
+    config.validate()?;
     let loaded = backend.load(task, &config.worker_id).await?;
+    validate_loaded(task, &loaded, config)?;
     backend.begin(task, &config.worker_id).await?;
-    if let Err(error) = validate_loaded(task, &loaded) {
-        backend
-            .fail(task, &config.worker_id, failure_hash(&error))
-            .await?;
-        return Err(error);
-    }
 
     let work = async {
         let inputs = backend.read_inputs(task, &loaded).await?;
@@ -342,18 +355,36 @@ pub async fn run_claimed(
     }
 }
 
-fn validate_loaded(task: &ClaimedTask, loaded: &LoadedTask) -> Result<(), WorkerError> {
+fn validate_loaded(
+    task: &ClaimedTask,
+    loaded: &LoadedTask,
+    config: &WorkerConfig,
+) -> Result<(), WorkerError> {
+    let persisted = loaded.stored_identity.identity.reproducibility();
+    let node = loaded
+        .graph
+        .nodes()
+        .iter()
+        .find(|node| node.node_id() == &task.node_id)
+        .ok_or(WorkerError::InvalidTask("persisted node missing"))?;
+    let executor = ficant_native_nodes::trusted_native_node(node)
+        .map_err(|_| WorkerError::InvalidTask("native node registry mismatch"))?;
     if loaded.owner.tenant_id() != &task.tenant_id
         || loaded.graph.digest() != &task.graph_digest
         || loaded.stored_identity.identity.run_id() != &task.run_id
         || loaded.stored_identity.identity.digest() != &task.execution_identity_digest
-        || !loaded
-            .graph
-            .nodes()
+        || persisted.runtime_image_digest() != &config.runtime_image_digest
+        || persisted.environment_digest() != &config.environment_digest()?
+        || persisted
+            .node_implementations()
             .iter()
-            .any(|node| node.node_id() == &task.node_id)
+            .find(|binding| binding.node_id == task.node_id)
+            .map(|binding| &binding.implementation_digest)
+            != Some(executor.implementation_digest())
     {
-        return Err(WorkerError::InvalidTask("persisted identity mismatch"));
+        return Err(WorkerError::InvalidTask(
+            "persisted identity or deployment attestation mismatch",
+        ));
     }
     Ok(())
 }
@@ -367,6 +398,95 @@ fn required_env(name: &'static str) -> Result<String, WorkerError> {
         .ok()
         .filter(|value| !value.trim().is_empty() && value.trim() == value)
         .ok_or(WorkerError::InvalidConfiguration(name))
+}
+
+fn required_sha256_env(name: &'static str) -> Result<ContentHash, WorkerError> {
+    parse_sha256_attestation(name, &required_env(name)?)
+}
+
+fn parse_sha256_attestation(name: &'static str, value: &str) -> Result<ContentHash, WorkerError> {
+    let encoded = value
+        .strip_prefix("sha256:")
+        .filter(|encoded| encoded.len() == 64)
+        .ok_or(WorkerError::InvalidConfiguration(name))?;
+    let mut bytes = [0_u8; 32];
+    for (index, pair) in encoded.as_bytes().chunks_exact(2).enumerate() {
+        let high =
+            attestation_hex_nibble(pair[0]).ok_or(WorkerError::InvalidConfiguration(name))?;
+        let low = attestation_hex_nibble(pair[1]).ok_or(WorkerError::InvalidConfiguration(name))?;
+        bytes[index] = (high << 4) | low;
+    }
+    ContentHash::from_bytes(&bytes).map_err(|_| WorkerError::InvalidConfiguration(name))
+}
+
+const fn attestation_hex_nibble(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        _ => None,
+    }
+}
+
+/// Validates and hashes the exact canonical deployment environment attestation.
+///
+/// The first line is the versioned grammar identifier. Remaining lowercase
+/// keys must be strictly increasing, with one non-empty printable value each.
+///
+/// # Errors
+///
+/// Rejects alternate whitespace, duplicate/out-of-order keys, controls,
+/// trailing newlines and unversioned input.
+pub fn canonical_environment_digest(value: &str) -> Result<ContentHash, WorkerError> {
+    if value.is_empty() || value.ends_with('\n') || value.contains('\r') || !value.is_ascii() {
+        return Err(WorkerError::InvalidConfiguration(
+            "FICANT_WORKER_ENVIRONMENT_ATTESTATION",
+        ));
+    }
+    let mut lines = value.split('\n');
+    if lines.next() != Some("ficant.worker.environment.v1") {
+        return Err(WorkerError::InvalidConfiguration(
+            "FICANT_WORKER_ENVIRONMENT_ATTESTATION",
+        ));
+    }
+    let mut previous = None;
+    let mut count = 0_usize;
+    let mut has_arch = false;
+    let mut has_os = false;
+    let mut has_profile = false;
+    for line in lines {
+        let (key, field_value) = line
+            .split_once('=')
+            .ok_or(WorkerError::InvalidConfiguration(
+                "FICANT_WORKER_ENVIRONMENT_ATTESTATION",
+            ))?;
+        if key.is_empty()
+            || !key.bytes().enumerate().all(|(index, byte)| match byte {
+                b'a'..=b'z' => true,
+                b'0'..=b'9' | b'_' | b'-' => index > 0,
+                _ => false,
+            })
+            || field_value.is_empty()
+            || field_value
+                .bytes()
+                .any(|byte| !(b'!'..=b'~').contains(&byte) || byte == b'=')
+            || previous.is_some_and(|previous_key| previous_key >= key)
+        {
+            return Err(WorkerError::InvalidConfiguration(
+                "FICANT_WORKER_ENVIRONMENT_ATTESTATION",
+            ));
+        }
+        has_arch |= key == "arch";
+        has_os |= key == "os";
+        has_profile |= key == "profile";
+        previous = Some(key);
+        count += 1;
+    }
+    if count == 0 || !has_arch || !has_os || !has_profile {
+        return Err(WorkerError::InvalidConfiguration(
+            "FICANT_WORKER_ENVIRONMENT_ATTESTATION",
+        ));
+    }
+    Ok(ContentHash::digest(value.as_bytes()))
 }
 
 fn seconds_env(name: &'static str, default: u64) -> Result<Duration, WorkerError> {

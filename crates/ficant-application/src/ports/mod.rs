@@ -51,11 +51,13 @@ pub use futures_hedge::{
 };
 pub use journal::{AppendJournalEvent, RunJournalRepository};
 pub use phase4_execution::{
-    BeginNode, CompleteNode, EnqueueNode, ExecutionExternalInput, ExecutionInstanceIdentity,
-    ExternalInputArtifactBinding, FailNode, GraphNodeEvent, GraphReplayResult, NodeBeginResult,
-    NodeFailureResult, NodeImplementation, NodeJournalEvidence, NodeLeaseFence, NodeSuccessResult,
+    BeginNode, ComparisonDimension, CompleteNode, EnqueueNode, ExecutionExternalInput,
+    ExecutionInstanceIdentity, ExternalInputArtifactBinding, FailNode, GraphNodeEvent,
+    GraphReplayResult, GraphRunComparison, GraphRunRecord, NodeBeginResult, NodeFailureResult,
+    NodeImplementation, NodeJournalEvidence, NodeLeaseFence, NodeSuccessResult, OutputTrace,
     Phase4ExecutionRepository, ReproducibilityIdentity, ReproducibilityIdentityInput,
-    RulePackBinding, StoredExecutionIdentity, replay_graph_execution, stable_node_artifact_id,
+    RulePackBinding, StoredExecutionIdentity, StoredNodeManifest, SubmitGraphRun,
+    replay_graph_execution, stable_node_artifact_id,
 };
 pub(crate) use required_reads::SnapshotVerifiedReadMetadataParts;
 pub use required_reads::{

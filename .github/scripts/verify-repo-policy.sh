@@ -286,7 +286,8 @@ final_paths=(
   interface/proto/ficant/market/v1/fact.proto interface/proto/ficant/market/v1/rule.proto
   interface/proto/ficant/research/v1/snapshot.proto interface/proto/ficant/research/v1/experiment.proto
   interface/proto/ficant/research/v1/artifact.proto interface/proto/ficant/research/v1/signal.proto
-  interface/proto/ficant/research/v1/journal.proto interface/proto/ficant/app/v1/registry.proto
+  interface/proto/ficant/research/v1/journal.proto interface/proto/ficant/research/v1/graph.proto
+  interface/proto/ficant/research/v1/execution.proto interface/proto/ficant/app/v1/registry.proto
   interface/proto/ficant/app/v1/session.proto interface/proto/ficant/rates/v1/analytics.proto
   crates/ficant-contracts/Cargo.toml
   crates/ficant-contract-tests/Cargo.toml crates/ficant-domain/Cargo.toml
@@ -297,6 +298,8 @@ final_paths=(
   migrations/postgresql/0005_run_journal.sql migrations/postgresql/0006_indexes.sql
   migrations/postgresql/0007_independent_signal_artifact.sql
   migrations/postgresql/0008_data_snapshot_manifest_blob.sql migrations/postgresql/0009_data_sources.sql
+  migrations/postgresql/0010_graph_journal_events.sql migrations/postgresql/0011_execution_lease_queue.sql
+  migrations/postgresql/0012_phase4_execution_closure.sql migrations/postgresql/0013_generic_artifact_blob_deduplication.sql
   tests/golden-cases/china-rates/phase1-business-loop.json
   web-dm/package.json web-dm/pnpm-lock.yaml web-dm/webapps/dmquant/design.md
 )

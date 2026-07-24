@@ -877,6 +877,7 @@ dependencies = [
  "prost",
  "prost-types",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -897,7 +898,11 @@ dependencies = [
  "ficant-contracts",
  "ficant-domain",
  "ficant-fixed-income-native",
+ "ficant-native-nodes",
+ "ficant-runtime",
+ "ficant-storage",
  "serde_json",
+ "sqlx",
  "tokio",
  "tonic",
 ]
@@ -910,9 +915,12 @@ dependencies = [
  "async-trait",
  "chrono",
  "ficant-application",
+ "ficant-contracts",
  "ficant-domain",
  "ficant-fixed-income-native",
+ "ficant-runtime",
  "object_store",
+ "prost",
  "sqlx",
  "tokio",
 ]

@@ -7,6 +7,13 @@ use tokio::sync::watch;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    if std::env::args().nth(1).as_deref() == Some("--print-native-source-digest") {
+        println!(
+            "{}",
+            ficant_native_nodes::native_node_source_digest_attestation()
+        );
+        return Ok(());
+    }
     if std::env::args().nth(1).as_deref() == Some("--health-check") {
         entry(ServiceRole::Worker)?;
         return Ok(());

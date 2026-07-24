@@ -17,21 +17,54 @@ release_root="$root/releases/$sha"
 
 current=''
 current_storage=''
+current_runtime=''
+current_source=''
 if [[ -f "$root/state/current.env" ]]; then
   # shellcheck disable=SC1090
   source "$root/state/current.env"
   current=${FICANT_DEPLOY_SHA:-}
   current_storage=${FICANT_STORAGE_SHA:-}
+  current_runtime=${FICANT_WORKER_RUNTIME_IMAGE_DIGEST:-}
+  current_source=${FICANT_WORKER_NATIVE_SOURCE_DIGEST:-}
 fi
 
 export FICANT_DEPLOY_SHA=$sha
 storage_sha=${FICANT_STORAGE_SHA:-$sha}
 [[ "$storage_sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'FICANT_STORAGE_SHA must be a 40-character commit SHA.' >&2; exit 2; }
 export FICANT_STORAGE_SHA=$storage_sha
+export FICANT_WORKER_RUNTIME_IMAGE_DIGEST="sha256:$(printf '00%.0s' {1..32})"
+export FICANT_WORKER_NATIVE_SOURCE_DIGEST="sha256:$(printf '00%.0s' {1..32})"
 compose=(docker compose --env-file "$root/.env" --file "$root/compose.test.yml")
 printf '%s' "$ghcr_token" | docker login ghcr.io --username "$GHCR_USER" --password-stdin >/dev/null
 unset ghcr_token
 trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+
+configure_execution_identity() {
+  local deploy_sha=$1
+  local allow_legacy=${2:-false}
+  local image="${FICANT_IMAGE_PREFIX:-ghcr.io/kayz/ficant}-worker:sha-$deploy_sha"
+  local runtime
+  local source
+  runtime=$(docker image inspect --format '{{.Id}}' "$image")
+  if [[ ! "$runtime" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo "Worker image has no canonical local digest: $image" >&2
+    return 1
+  fi
+  if ! source=$(docker run --rm --read-only --cap-drop ALL \
+    --security-opt no-new-privileges:true --pids-limit 64 --memory 128m \
+    "$image" --print-native-source-digest); then
+    if [[ "$allow_legacy" == true ]]; then
+      echo "Legacy Worker does not expose source identity; using compatibility placeholders." >&2
+      return 0
+    fi
+    return 1
+  fi
+  source=${source%%$'\n'*}
+  [[ "$source" =~ ^sha256:[0-9a-f]{64}$ ]] \
+    || { echo 'Worker native source digest is not canonical.' >&2; return 1; }
+  export FICANT_WORKER_RUNTIME_IMAGE_DIGEST=$runtime
+  export FICANT_WORKER_NATIVE_SOURCE_DIGEST=$source
+}
 
 record() {
   local status=$1
@@ -49,6 +82,7 @@ rollback_current() {
     export FICANT_DEPLOY_SHA=$current
     export FICANT_STORAGE_SHA=$storage_sha
     "${compose[@]}" pull ceph-rgw ficant-server ficant-worker ficant-web ficant-ui
+    configure_execution_identity "$current" true
     "${compose[@]}" up -d --remove-orphans --wait --wait-timeout 180 postgres ceph-rgw ficant-server ficant-worker ficant-web ficant-ui
     FICANT_DEPLOY_SHA=$current "$root/bin/healthcheck.sh"
     FICANT_DEPLOY_SHA=$current "$root/bin/smoke-test.sh"
@@ -63,6 +97,7 @@ rollback_current() {
 trap 'status=$?; if [[ $status -ne 0 ]]; then rollback_current || true; fi; exit $status' ERR
 
 "${compose[@]}" pull postgres ceph-rgw ficant-server ficant-worker ficant-web ficant-ui
+configure_execution_identity "$sha"
 "${compose[@]}" up -d --wait --wait-timeout 180 postgres ceph-rgw
 "${compose[@]}" run --rm migration
 "${compose[@]}" up -d --remove-orphans --wait --wait-timeout 180 ficant-server ficant-worker ficant-web ficant-ui
@@ -72,9 +107,12 @@ FICANT_DEPLOY_SHA=$sha "$root/bin/smoke-test.sh"
 if [[ "$current" =~ ^[0-9a-f]{40}$ && "$current" != "$sha" ]]; then
   previous_storage=$current_storage
   [[ "$previous_storage" =~ ^[0-9a-f]{40}$ ]] || previous_storage=$storage_sha
-  printf 'FICANT_DEPLOY_SHA=%s\nFICANT_STORAGE_SHA=%s\n' "$current" "$previous_storage" >"$root/state/previous.env"
+  printf 'FICANT_DEPLOY_SHA=%s\nFICANT_STORAGE_SHA=%s\nFICANT_WORKER_RUNTIME_IMAGE_DIGEST=%s\nFICANT_WORKER_NATIVE_SOURCE_DIGEST=%s\n' \
+    "$current" "$previous_storage" "$current_runtime" "$current_source" >"$root/state/previous.env"
 fi
-printf 'FICANT_DEPLOY_SHA=%s\nFICANT_STORAGE_SHA=%s\n' "$sha" "$storage_sha" >"$root/state/current.env"
+printf 'FICANT_DEPLOY_SHA=%s\nFICANT_STORAGE_SHA=%s\nFICANT_WORKER_RUNTIME_IMAGE_DIGEST=%s\nFICANT_WORKER_NATIVE_SOURCE_DIGEST=%s\n' \
+  "$sha" "$storage_sha" "$FICANT_WORKER_RUNTIME_IMAGE_DIGEST" "$FICANT_WORKER_NATIVE_SOURCE_DIGEST" \
+  >"$root/state/current.env"
 record success false
 trap - ERR
 echo "Deployment succeeded: $sha"

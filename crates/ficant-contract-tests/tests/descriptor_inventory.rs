@@ -1778,6 +1778,31 @@ fn experiment_methods() -> Vec<ExpectedMethod> {
             ".ficant.research.v1.ReadRunJournalRequest",
             ".ficant.research.v1.ReadRunJournalResponse",
         ),
+        ExpectedMethod::new(
+            "SubmitGraphRun",
+            ".ficant.research.v1.SubmitGraphRunRequest",
+            ".ficant.research.v1.SubmitGraphRunResponse",
+        ),
+        ExpectedMethod::new(
+            "GetGraphRun",
+            ".ficant.research.v1.GetGraphRunRequest",
+            ".ficant.research.v1.GetGraphRunResponse",
+        ),
+        ExpectedMethod::new(
+            "ListNodeOutputManifests",
+            ".ficant.research.v1.ListNodeOutputManifestsRequest",
+            ".ficant.research.v1.ListNodeOutputManifestsResponse",
+        ),
+        ExpectedMethod::new(
+            "TraceGraphOutput",
+            ".ficant.research.v1.TraceGraphOutputRequest",
+            ".ficant.research.v1.TraceGraphOutputResponse",
+        ),
+        ExpectedMethod::new(
+            "CompareGraphRuns",
+            ".ficant.research.v1.CompareGraphRunsRequest",
+            ".ficant.research.v1.CompareGraphRunsResponse",
+        ),
     ]
 }
 
