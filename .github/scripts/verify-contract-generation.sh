@@ -100,7 +100,8 @@ for command in git tar python3 sha256sum awk mktemp mkdir rm cp buf cargo uv cor
 done
 [[ $(buf --version) == '1.56.0' ]] || die 'Buf must be 1.56.0'
 [[ $(cargo --version) == cargo\ 1.96.1* ]] || die 'Cargo must be 1.96.1'
-[[ $(uv --version) == 'uv 0.7.13' ]] || die 'uv must be 0.7.13'
+read -r uv_name uv_version _ < <(uv --version)
+[[ $uv_name == uv && $uv_version == 0.7.13 ]] || die 'uv must be 0.7.13'
 [[ $(corepack pnpm@10.12.4 --version) == '10.12.4' ]] || die 'pnpm must be 10.12.4'
 git cat-file -e "${CONTRACT_BASE_SHA}^{commit}" || die 'missing exact contract baseline commit'
 
