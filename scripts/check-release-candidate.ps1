@@ -74,7 +74,7 @@ try {
         Assert-FicantCommand $command
     }
     $trivyVersion = Get-FicantCommandOutput -FilePath 'trivy' -ArgumentList @('--version')
-    if ($trivyVersion -notmatch '(?m)^Version:\s+0\.72\.0$') {
+    if ($trivyVersion -notmatch '^Version:\s+0\.72\.0(?:\s|$)') {
         throw "Required Trivy version is 0.72.0, but the active output is: $trivyVersion"
     }
 
