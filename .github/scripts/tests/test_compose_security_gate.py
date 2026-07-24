@@ -749,6 +749,20 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         ):
             self.assertIn(marker, workflow)
 
+    def test_release_rust_build_reuses_locked_cargo_and_target_caches(self) -> None:
+        dockerfile = Path("deploy/dev/RustService.Dockerfile").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            "id=ficant-cargo-registry-v1,target=/usr/local/cargo/registry,sharing=locked",
+            dockerfile,
+        )
+        self.assertIn(
+            "id=ficant-release-target-v1,target=/workspace/target,sharing=locked",
+            dockerfile,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
