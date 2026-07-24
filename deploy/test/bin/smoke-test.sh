@@ -27,8 +27,19 @@ ui_html=$(curl --fail --silent --show-error "http://127.0.0.1:$ui_port/ficant/")
 [[ "$ui_html" == *'<div id="root">'* ]] || { echo "FICANT UI root marker is missing." >&2; exit 1; }
 
 compose=(docker compose --env-file "$root/.env" --file "$root/compose.test.yml")
-expected=$(find "$root/releases/$FICANT_DEPLOY_SHA/migrations" -maxdepth 1 -type f -name '*.sql' | wc -l)
-applied=$("${compose[@]}" exec -T postgres psql -U ficant -d ficant -At -c 'SELECT count(*) FROM public.ficant_schema_migrations')
-[[ "$applied" -eq "$expected" ]] || { echo "Migration count mismatch: expected=$expected applied=$applied" >&2; exit 1; }
+expected_file=$(mktemp)
+applied_file=$(mktemp)
+trap 'rm -f "$expected_file" "$applied_file"' EXIT
+find "$root/releases/$FICANT_DEPLOY_SHA/migrations" -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | LC_ALL=C sort >"$expected_file"
+"${compose[@]}" exec -T postgres psql -U ficant -d ficant -At \
+  -c 'SELECT version FROM public.ficant_schema_migrations ORDER BY version' \
+  | LC_ALL=C sort >"$applied_file"
+missing=$(comm -23 "$expected_file" "$applied_file")
+[[ -z "$missing" ]] || {
+  printf 'Required migrations are missing for %s:\n%s\n' "$FICANT_DEPLOY_SHA" "$missing" >&2
+  exit 1
+}
+required=$(wc -l <"$expected_file")
+applied=$(wc -l <"$applied_file")
 
-echo "Smoke tests passed for $FICANT_DEPLOY_SHA (migrations=$applied)."
+echo "Smoke tests passed for $FICANT_DEPLOY_SHA (required_migrations=$required applied_migrations=$applied)."

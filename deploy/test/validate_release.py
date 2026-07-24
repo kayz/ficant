@@ -10,6 +10,7 @@ import sys
 
 EXPECTED_SERVICES = {
     "postgres",
+    "ceph-rgw",
     "migration",
     "ficant-server",
     "ficant-worker",
@@ -17,6 +18,7 @@ EXPECTED_SERVICES = {
     "ficant-ui",
 }
 APP_SERVICES = {"ficant-server", "ficant-worker", "ficant-web", "ficant-ui"}
+CEPH_SERVICE = "ceph-rgw"
 POSTGRES_IMAGE = (
     "postgres@sha256:"
     "38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74"
@@ -64,6 +66,32 @@ def main() -> None:
         suffix = f"-{name.removeprefix('ficant-')}:sha-" + "0" * 40
         if not image.startswith("ghcr.io/kayz/ficant") or not image.endswith(suffix):
             fail(f"{name} does not resolve to the expected immutable GHCR tag: {image}")
+
+    ceph_image = services[CEPH_SERVICE].get("image", "")
+    if not ceph_image.startswith("ghcr.io/kayz/ficant") or not ceph_image.endswith(
+        "-ceph-rgw:sha-" + "0" * 40
+    ):
+        fail(f"ceph-rgw does not resolve to the expected immutable GHCR tag: {ceph_image}")
+    if str(services[CEPH_SERVICE].get("user")) != "167:167":
+        fail("ceph-rgw must run as 167:167")
+
+    worker = services["ficant-worker"]
+    worker_environment = worker.get("environment", {})
+    required_worker_environment = {
+        "FICANT_WORKER_DATABASE_URL",
+        "FICANT_WORKER_S3_ENDPOINT",
+        "FICANT_WORKER_S3_BUCKET",
+        "FICANT_WORKER_S3_ACCESS_KEY",
+        "FICANT_WORKER_S3_SECRET_KEY",
+        "FICANT_WORKER_ID",
+    }
+    if not required_worker_environment.issubset(worker_environment):
+        fail("ficant-worker is missing its production database/S3/identity environment")
+    if worker_environment["FICANT_WORKER_S3_ENDPOINT"] != "http://ceph-rgw:9000":
+        fail("ficant-worker must use the managed ceph-rgw endpoint")
+    worker_dependencies = worker.get("depends_on", {})
+    if worker_dependencies.get("ceph-rgw", {}).get("condition") != "service_healthy":
+        fail("ficant-worker must wait for healthy ceph-rgw")
 
     serialized = json.dumps(model, sort_keys=True).lower()
     if "minio" in serialized or "latest" in serialized or '"network_mode": "host"' in serialized:

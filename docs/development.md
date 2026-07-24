@@ -141,6 +141,15 @@ OPAID 先把精确 Commit SHA 的本地自测候选和唯一 brief 交给 Human�
 
 两个选择都不启动 GitHub 完整 CI。普通 branch push、Pull Request 和 `main` 合并只维护远端源码历史；本地检查是普通迭代的正式证据，但不能冒充 Linux Runner、在线供应链、制品或目标环境证据。
 
+准备建立版本候选时，先更新本机 Trivy 0.72.0 漏洞数据库，然后在干净且与 `origin/main` 精确一致的 `main` 运行：
+
+```powershell
+trivy image --download-db-only
+.\scripts\check-release-candidate.ps1
+```
+
+该入口不创建 tag、不推送镜像、不连接测试服务器，也不安装工具。它使用正式 Dockerfile 和固定基础镜像 digest 构建五个最终运行镜像，以本地 Trivy 数据库执行 `HIGH,CRITICAL`、`ignore-unfixed` 扫描，再启动 PostgreSQL、Ceph RGW、真实 Worker、Server、Web 和 UI，验证 readiness、UI 与 forward-only migration 兼容。只有该入口通过且 Human 明确给出版本号后，才创建新的不可变版本 tag。
+
 数个迭代后，Human 确定版本号并创建符合版本格式、指向当前 `main` 精确提交的不可变 `v*` tag。创建 tag 即把版本候选交给 CICD，并授权完整 GitHub CI、SHA 镜像构建、扫描、不可变版本标签提升、Linux 测试环境部署、健康/冒烟检查和失败回滚。版本失败后不得移动原 tag；修复进入新的 OPAID 迭代，再建立 forward-only 版本候选。普通 OPAID 工作不得修改 `.github/**`、`cicd.yml` 或 `deploy/**` 来绕过这个交接边界。
 
 本地镜像验证必须使用仓库正式的 `deploy/dev/RustService.Dockerfile` 做冷构建，并保留其精确候选和构建结果。为了排查网络或环境问题而使用的临时 Dockerfile、复制宿主机构建产物后组装的 runtime 镜像，最多只能作为诊断证据，不能冒充正式镜像构建通过。版本制品的最终证据只能来自 Human 创建版本 tag 后触发的 GitHub version Action：它在 Linux Runner 上用正式 Dockerfile 构建并发布 Commit SHA 标识的不可变镜像。普通 branch、Pull Request、`main` 合并以及本地临时镜像均不得被描述为这项最终证据。
