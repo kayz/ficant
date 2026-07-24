@@ -485,6 +485,12 @@ class ComposeSecurityGateTests(unittest.TestCase):
             dockerfile,
         )
         self.assertRegex(dockerfile, r"(?m)^USER 167:167$")
+        for vulnerable_path in (
+            "/usr/lib/python3.9/site-packages/setuptools",
+            "/usr/lib/python3.9/site-packages/setuptools-69.2.0.dist-info",
+            "/usr/lib/python3.9/site-packages/pkg_resources",
+        ):
+            self.assertIn(vulnerable_path, dockerfile)
 
     def test_resolved_server_requires_exact_grpc_web_runtime_contract(self) -> None:
         mutations = {
