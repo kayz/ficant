@@ -337,11 +337,13 @@ jobs:
           set -euo pipefail
           image=$1
           config=$2
+          index=${image##*@}
           actual=$(docker image inspect --format '{{.Id}}' "$image")
-          [[ "$actual" == "$config" ]]
+          [[ "$actual" == "$config" || "$actual" == "$index" ]]
           docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" \
             | grep -Fqx "$image"
-          printf 'storage-runtime-ready image=%s config=%s\n' "$image" "$actual"
+          printf 'storage-runtime-ready image=%s local_identity=%s locked_config=%s\n' \
+            "$image" "$actual" "$config"
           REMOTE
       - name: Deploy exact image SHA
         shell: bash

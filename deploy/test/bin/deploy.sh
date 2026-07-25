@@ -48,10 +48,11 @@ trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
 
 verify_storage_runtime() {
   local actual
+  local index=${storage_image##*@}
   actual=$(docker image inspect --format '{{.Id}}' "$storage_image") \
     || { echo "Storage runtime is not prepared: $storage_image" >&2; return 1; }
-  [[ "$actual" == "$storage_config" ]] \
-    || { echo "Storage runtime config mismatch: expected $storage_config, got $actual" >&2; return 1; }
+  [[ "$actual" == "$storage_config" || "$actual" == "$index" ]] \
+    || { echo "Storage runtime identity mismatch: expected config $storage_config or index $index, got $actual" >&2; return 1; }
   docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$storage_image" \
     | grep -Fqx "$storage_image" \
     || { echo "Storage runtime RepoDigest is not exact: $storage_image" >&2; return 1; }

@@ -264,10 +264,12 @@ jobs:
           )
           ceph_container=ficant-ci-ceph-rgw
           ceph_volume=ficant-ci-ceph-data
+          ceph_index=${ceph_image##*@}
           printf '%s\n' "${{ github.token }}" | docker login ghcr.io \
             --username "${{ github.actor }}" --password-stdin >/dev/null
           docker pull "$ceph_image"
-          [[ $(docker image inspect --format '{{.Id}}' "$ceph_image") == "$ceph_config" ]]
+          ceph_local_identity=$(docker image inspect --format '{{.Id}}' "$ceph_image")
+          [[ "$ceph_local_identity" == "$ceph_config" || "$ceph_local_identity" == "$ceph_index" ]]
           docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ceph_image" \
             | grep -Fqx "$ceph_image"
           docker volume create "$ceph_volume" >/dev/null

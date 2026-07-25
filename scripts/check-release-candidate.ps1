@@ -124,8 +124,10 @@ try {
 
     Invoke-FicantCheckPlan -Steps $steps
     $actualStorageConfig = (& docker image inspect --format '{{.Id}}' $storageImage).Trim()
-    if ($LASTEXITCODE -ne 0 -or $actualStorageConfig -ne $storageConfigDigest) {
-        throw "Locked storage runtime config mismatch: expected $storageConfigDigest, got $actualStorageConfig"
+    $storageIndexDigest = [string]$storageLock.oci.index_digest
+    if ($LASTEXITCODE -ne 0 -or
+        ($actualStorageConfig -ne $storageConfigDigest -and $actualStorageConfig -ne $storageIndexDigest)) {
+        throw "Locked storage runtime identity mismatch: expected config $storageConfigDigest or index $storageIndexDigest, got $actualStorageConfig"
     }
     $repoDigests = @(& docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' $storageImage)
     if ($LASTEXITCODE -ne 0 -or $storageImage -notin $repoDigests) {
