@@ -12,6 +12,9 @@ fi
 
 [[ ${FICANT_DEPLOY_SHA:-} =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid deployment SHA." >&2; exit 1; }
 export FICANT_DEPLOY_SHA
+[[ ${FICANT_STORAGE_RUNTIME_IMAGE:-} =~ @sha256:[0-9a-f]{64}$ ]] \
+  || { echo "Invalid storage runtime image." >&2; exit 1; }
+export FICANT_STORAGE_RUNTIME_IMAGE
 
 # shellcheck disable=SC1091
 source "$root/.env"

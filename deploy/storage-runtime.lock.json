@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "image": "ghcr.io/kayz/ficant-ceph-rgw",
+  "source_commit": "6d486b6321d401ca1113a7ec5bd0b7dee6ada80d",
+  "platform": "linux/amd64",
+  "build": {
+    "inputs": [
+      {
+        "path": ".dockerignore",
+        "sha256": "7c4a218f799599e77530869d896d4c364d546688825086eed9d0166406feb629"
+      },
+      {
+        "path": "deploy/dev/Ceph.Dockerfile",
+        "sha256": "ddc785fe35925887dba38e53e0c1e9016fd177da97d6f5d83e2494f31cba169e"
+      },
+      {
+        "path": "deploy/dev/ceph-entrypoint.sh",
+        "sha256": "45203ed366c8c3304b75e8db5e880f43f660c1f84258812efcc8dc7a4babce28"
+      }
+    ],
+    "input_digest": "87bba705cc8b3e5e26d80d6de6435ce47da114e0fb68908b389317b6bfe377d5"
+  },
+  "oci": {
+    "index_digest": "sha256:6a86bed20c79fa1df4af6621f4dea0578f82e582a2b476c9f21b8bf555130243",
+    "platform_manifest_digest": "sha256:b4d6f58d26518fa87631cbbe2e94092c92a3b2e6c92b9bcb56dc30ad9dcc5fb5",
+    "config_digest": "sha256:3113ea1adb804e958630041c8afaca996e08d3c61d7f3c22cb81c1ddd8b323ab",
+    "compressed_layers_bytes": 553966971
+  }
+}

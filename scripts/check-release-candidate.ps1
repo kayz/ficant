@@ -9,12 +9,15 @@ $ErrorActionPreference = 'Stop'
 
 $candidateSha = '0000000000000000000000000000000000000000'
 $imagePrefix = 'ficant-preflight/ficant'
+$storageLock = Get-Content -LiteralPath (Join-Path $script:FicantRoot 'deploy\storage-runtime.lock.json') `
+    -Raw | ConvertFrom-Json
+$storageImage = "$($storageLock.image)@$($storageLock.oci.index_digest)"
+$storageConfigDigest = [string]$storageLock.oci.config_digest
 $images = @(
     "$imagePrefix-server:sha-$candidateSha"
     "$imagePrefix-worker:sha-$candidateSha"
     "$imagePrefix-web:sha-$candidateSha"
     "$imagePrefix-ui:sha-$candidateSha"
-    "$imagePrefix-ceph-rgw:sha-$candidateSha"
 )
 $bindingSteps = @(
     New-FicantCheckStep -Name 'License inventory binding regression tests' -FilePath 'python' -ArgumentList @(
@@ -29,6 +32,17 @@ $bindingSteps = @(
         '--supply-lock', '.github/scripts/supply-chain.lock.json',
         '--release-root', '.',
         '--require-first-party'
+    )
+    New-FicantCheckStep -Name 'Storage runtime lock regression tests' -FilePath 'python' -ArgumentList @(
+        '.github/scripts/tests/test_storage_runtime_lock.py'
+    )
+    New-FicantCheckStep -Name 'Verify storage runtime build-input bindings' -FilePath 'python' -ArgumentList @(
+        'deploy/verify-storage-runtime.py', 'verify-lock',
+        '--lock', 'deploy/storage-runtime.lock.json', '--root', '.'
+    )
+    New-FicantCheckStep -Name 'Verify remote storage runtime OCI bindings' -FilePath 'python' -ArgumentList @(
+        'deploy/verify-storage-runtime.py', 'verify-remote',
+        '--lock', 'deploy/storage-runtime.lock.json'
     )
 )
 $buildSteps = @(
@@ -48,13 +62,12 @@ $buildSteps = @(
         'build', '--pull=false', '--file', 'deploy/test/FicantUi.Dockerfile',
         '--tag', $images[3], '.'
     )
-    New-FicantCheckStep -Name 'Build release Ceph RGW image' -FilePath 'docker' -ArgumentList @(
-        'build', '--pull=false', '--file', 'deploy/dev/Ceph.Dockerfile',
-        '--tag', $images[4], '.'
+    New-FicantCheckStep -Name 'Pull locked Ceph RGW storage runtime' -FilePath 'docker' -ArgumentList @(
+        'pull', $storageImage
     )
 )
 $scanSteps = @(
-    $images | ForEach-Object {
+    @($images) + @($storageImage) | ForEach-Object {
         New-FicantCheckStep -Name "Scan release image $_" -FilePath 'trivy' -ArgumentList @(
             'image', '--scanners', 'vuln', '--severity', 'HIGH,CRITICAL',
             '--ignore-unfixed', '--skip-db-update', '--exit-code', '1', $_
@@ -80,9 +93,10 @@ try {
     if ($ListOnly) {
         Show-FicantCheckPlan -Steps $steps
         $nextStep = $steps.Count + 1
-        Write-Host "[$nextStep] Validate immutable release Compose model"
-        Write-Host "[$($nextStep + 1)] Start PostgreSQL and Ceph RGW, apply migrations, start all application services"
-        Write-Host "[$($nextStep + 2)] Verify health, readiness, UI, and forward-only migration compatibility"
+        Write-Host "[$nextStep] Verify exact locked storage-runtime config and RepoDigest"
+        Write-Host "[$($nextStep + 1)] Validate immutable release Compose model"
+        Write-Host "[$($nextStep + 2)] Start PostgreSQL and locked Ceph RGW, apply migrations, start all application services"
+        Write-Host "[$($nextStep + 3)] Verify health, readiness, UI, and forward-only migration compatibility"
         exit 0
     }
 
@@ -109,10 +123,18 @@ try {
     }
 
     Invoke-FicantCheckPlan -Steps $steps
+    $actualStorageConfig = (& docker image inspect --format '{{.Id}}' $storageImage).Trim()
+    if ($LASTEXITCODE -ne 0 -or $actualStorageConfig -ne $storageConfigDigest) {
+        throw "Locked storage runtime config mismatch: expected $storageConfigDigest, got $actualStorageConfig"
+    }
+    $repoDigests = @(& docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' $storageImage)
+    if ($LASTEXITCODE -ne 0 -or $storageImage -notin $repoDigests) {
+        throw "Locked storage runtime RepoDigest is missing: $storageImage"
+    }
 
     $validationEnvironment = @{
         FICANT_DEPLOY_SHA = $candidateSha
-        FICANT_STORAGE_SHA = $candidateSha
+        FICANT_STORAGE_RUNTIME_IMAGE = $storageImage
         FICANT_IMAGE_PREFIX = 'ghcr.io/kayz/ficant'
         FICANT_ROOT = '/srv/ficant-test'
         FICANT_POSTGRES_PASSWORD = 'validation-only'
@@ -177,7 +199,7 @@ try {
     }
     $runtimeEnvironment = @{
         FICANT_DEPLOY_SHA = $candidateSha
-        FICANT_STORAGE_SHA = $candidateSha
+        FICANT_STORAGE_RUNTIME_IMAGE = $storageImage
         FICANT_IMAGE_PREFIX = $imagePrefix
         FICANT_ROOT = $temporaryRoot
         FICANT_POSTGRES_PASSWORD = 'preflight-postgres-password'

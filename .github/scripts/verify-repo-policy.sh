@@ -120,7 +120,7 @@ validate_path_list() {
         ;;
       *.py)
         case "$path" in
-          python/*|tests/oracle/china-rates/*|tests/iteration-3/verify_acceptance_matrix.py|tests/phase[0-9]/verify_acceptance_matrix.py|tests/phase[0-9][a-z]/verify_acceptance_matrix.py|docs/history/hoqa/deploy-execution/execution-validator.py|deploy/test/validate_release.py|.github/scripts/compose_security_gate.py|.github/scripts/tests/test_compose_security_gate.py|.github/scripts/verify-cargo-reachability.py|.github/scripts/verify-license-inventory.py|.github/scripts/verify-risk-acceptance.py) ;;
+          python/*|tests/oracle/china-rates/*|tests/iteration-3/verify_acceptance_matrix.py|tests/phase[0-9]/verify_acceptance_matrix.py|tests/phase[0-9][a-z]/verify_acceptance_matrix.py|docs/history/hoqa/deploy-execution/execution-validator.py|deploy/test/validate_release.py|deploy/verify-storage-runtime.py|.github/scripts/compose_security_gate.py|.github/scripts/tests/test_compose_security_gate.py|.github/scripts/tests/test_license_inventory_bindings.py|.github/scripts/tests/test_storage_runtime_lock.py|.github/scripts/verify-cargo-reachability.py|.github/scripts/verify-license-inventory.py|.github/scripts/verify-risk-acceptance.py) ;;
           *) record_failure "Python is restricted to python/ or the exact CI gate tool allowlist: $path" ;;
         esac
         ;;
@@ -152,7 +152,9 @@ job_block() {
 
 require_job_marker() {
   local workflow=$1 job=$2 marker=$3
-  job_block "$workflow" "$job" | grep -Fq -- "$marker" || record_failure "CI job $job must contain: $marker"
+  local block
+  block=$(job_block "$workflow" "$job")
+  grep -Fq -- "$marker" <<<"$block" || record_failure "CI job $job must contain: $marker"
 }
 
 validate_ci() {
@@ -200,7 +202,9 @@ validate_ci() {
   require_job_marker "$workflow" cpp 'https://apt.llvm.org/noble/pool/main/l/llvm-toolchain-18/clang-18_18.1.8~++20240731025043+3b5b5c1ec4a3-1~exp1~20240731145144.92_amd64.deb'
   require_job_marker "$workflow" cpp '119448'
   require_job_marker "$workflow" cpp '6b23c30bd68a86e9485cafd0806d3aa46a812089fba74d8283befa611825b42b'
-  job_block "$workflow" cpp | grep -Eq 'llvm-snapshot\.gpg|apt-get install.*clang-18|apt\.llvm\.org/noble/[[:space:]]' && record_failure "CI job cpp must not trust a dynamic LLVM apt repository"
+  local cpp_block
+  cpp_block=$(job_block "$workflow" cpp)
+  grep -Eq 'llvm-snapshot\.gpg|apt-get install.*clang-18|apt\.llvm\.org/noble/[[:space:]]' <<<"$cpp_block" && record_failure "CI job cpp must not trust a dynamic LLVM apt repository"
   for marker in 'pnpm@10.12.4 install --frozen-lockfile' 'typecheck' 'build' 'test' 'playwright install' 'test:e2e' 'test:e2e:grpc' 'ficant-server' 'FICANT_GRPC_WEB_BEARER_TOKEN'; do
     require_job_marker "$workflow" web "$marker"
   done
@@ -208,8 +212,12 @@ validate_ci() {
     require_job_marker "$workflow" "$job" 'postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74'
     require_job_marker "$workflow" "$job" '--test-threads=1'
   done
-  require_job_marker "$workflow" business-loop 'quay.io/ceph/ceph@sha256:6b4b5ae33acd3d736eb26d2a19238bce71a22f9cfb99cca887ba6312d0957644'
-  require_job_marker "$workflow" business-loop 'deploy/dev/Ceph.Dockerfile'
+  require_job_marker "$workflow" business-loop 'deploy/verify-storage-runtime.py verify-lock'
+  require_job_marker "$workflow" business-loop 'deploy/storage-runtime.lock.json'
+  require_job_marker "$workflow" business-loop 'docker pull "$ceph_image"'
+  local business_loop_block
+  business_loop_block=$(job_block "$workflow" business-loop)
+  grep -Fq 'docker build' <<<"$business_loop_block" && record_failure "business-loop must reuse, not rebuild, the locked storage runtime"
   require_job_marker "$workflow" migration 'migration_acceptance'
   require_job_marker "$workflow" business-loop 'phase1_business_loop'
   require_job_marker "$workflow" business-loop 'negative_invariants'

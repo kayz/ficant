@@ -131,7 +131,7 @@ trivy image --download-db-only
 .\scripts\check-release-candidate.ps1
 ```
 
-该入口不创建 tag、不推送镜像、不连接测试服务器，也不安装工具。它使用正式 Dockerfile 和固定基础镜像 digest 构建五个最终运行镜像，以本地 Trivy 数据库执行 `HIGH,CRITICAL`、`ignore-unfixed` 扫描，再启动 PostgreSQL、Ceph RGW、真实 Worker、Server、Web 和 UI，验证 readiness、UI 与 forward-only migration 兼容。只有该入口通过且 Human 明确给出版本号后，才创建新的不可变版本 tag。
+该入口不创建 tag、不推送镜像、不连接测试服务器，也不安装工具。它使用正式 Dockerfile 和固定基础镜像 digest 构建 Server、Worker、Web、UI 四个应用镜像，验证 `deploy/storage-runtime.lock.json` 后复用并扫描锁定的 Ceph OCI digest；所有五个运行镜像都以本地 Trivy 数据库执行 `HIGH,CRITICAL`、`ignore-unfixed` 扫描。随后启动 PostgreSQL、锁定的 Ceph RGW、真实 Worker、Server、Web 和 UI，验证 readiness、UI 与 forward-only migration 兼容。只有该入口通过且 Human 明确给出版本号后，才创建新的不可变版本 tag。
 
 数个迭代后，Human 确定版本号并创建符合版本格式、指向当前 `main` 精确提交的不可变 `v*` tag。创建 tag 即把版本候选交给 CICD，并授权完整 GitHub CI、SHA 镜像构建、扫描、不可变版本标签提升、Linux 测试环境部署、健康/冒烟检查和失败回滚。版本失败后不得移动原 tag；修复进入新的 OPAID 迭代，再建立 forward-only 版本候选。普通 OPAID 工作不得修改 `.github/**`、`cicd.yml` 或 `deploy/**` 来绕过这个交接边界。
 

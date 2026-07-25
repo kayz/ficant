@@ -31,18 +31,21 @@
       "name": "ficant-ui",
       "dockerfile": "deploy/test/FicantUi.Dockerfile",
       "build_arg": null
-    },
-    {
-      "name": "ficant-ceph-rgw",
-      "dockerfile": "deploy/dev/Ceph.Dockerfile",
-      "build_arg": null
     }
   ],
+  "storage_runtime": {
+    "lock_file": "deploy/storage-runtime.lock.json",
+    "prepare_workflow": "prepare-storage-runtime.yml",
+    "application_release_build": false,
+    "application_release_scan": true
+  },
   "deploy": {
     "environment": "test",
     "trigger": "tag",
     "remote_root": "/srv/ficant-test",
     "compose_file": "deploy/test/compose.test.yml",
-    "automatic_rollback": true
+    "automatic_rollback": true,
+    "concurrency_group": "ficant-test-deploy",
+    "cancel_in_progress": false
   }
 }
