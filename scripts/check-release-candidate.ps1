@@ -16,6 +16,21 @@ $images = @(
     "$imagePrefix-ui:sha-$candidateSha"
     "$imagePrefix-ceph-rgw:sha-$candidateSha"
 )
+$bindingSteps = @(
+    New-FicantCheckStep -Name 'License inventory binding regression tests' -FilePath 'python' -ArgumentList @(
+        '.github/scripts/tests/test_license_inventory_bindings.py'
+    )
+    New-FicantCheckStep -Name 'Verify release license inventory input bindings' -FilePath 'python' -ArgumentList @(
+        '.github/scripts/verify-license-inventory.py', 'verify-bindings',
+        '--inventory', '.github/scripts/license-inventory.lock.json',
+        '--cargo-lock', 'Cargo.lock',
+        '--uv-lock', 'python/uv.lock',
+        '--pnpm-lock', 'web-dm/pnpm-lock.yaml',
+        '--supply-lock', '.github/scripts/supply-chain.lock.json',
+        '--release-root', '.',
+        '--require-first-party'
+    )
+)
 $buildSteps = @(
     New-FicantCheckStep -Name 'Build release server image' -FilePath 'docker' -ArgumentList @(
         'build', '--pull=false', '--file', 'deploy/dev/RustService.Dockerfile',
@@ -46,7 +61,7 @@ $scanSteps = @(
         )
     }
 )
-$steps = @($buildSteps) + @($scanSteps)
+$steps = @($bindingSteps) + @($buildSteps) + @($scanSteps)
 
 function Invoke-ReleaseCompose {
     param(
@@ -64,9 +79,10 @@ function Invoke-ReleaseCompose {
 try {
     if ($ListOnly) {
         Show-FicantCheckPlan -Steps $steps
-        Write-Host '[11] Validate immutable release Compose model'
-        Write-Host '[12] Start PostgreSQL and Ceph RGW, apply migrations, start all application services'
-        Write-Host '[13] Verify health, readiness, UI, and forward-only migration compatibility'
+        $nextStep = $steps.Count + 1
+        Write-Host "[$nextStep] Validate immutable release Compose model"
+        Write-Host "[$($nextStep + 1)] Start PostgreSQL and Ceph RGW, apply migrations, start all application services"
+        Write-Host "[$($nextStep + 2)] Verify health, readiness, UI, and forward-only migration compatibility"
         exit 0
     }
 
