@@ -39,7 +39,7 @@
 - `scripts/check.ps1`：exit 0；Rust 259 项、CTest 8 项、Python/Oracle 7 项、Web 29 项全部通过，四组 acceptance matrix 分别为 36/36、16/16、18/18、18/18。
 - `scripts/dev-up.ps1`：exit 0；本地 PostgreSQL、Ceph RGW、migration、Server、Worker、Web、UI 全部健康。
 - `scripts/check.ps1 -IncludeIntegration`：exit 0；包含完整本地回归，并额外通过 31 项真实 PostgreSQL/Ceph 集成测试，其中 Phase 4 lease queue 1 项、执行闭环 3 项、生产 Worker 1 项。
-- `scripts/check-release-candidate.ps1`：待本迭代 PR 合并到干净且与 `origin/main` 一致的 `main` 后执行；该入口按合同拒绝在 feature branch 上冒充发布候选。
+- `scripts/check-release-candidate.ps1` 在 PR #32 合并后的同步 `main` `c1be7e7a5f51b38d1d2c1ee46728921561c19660` 上 exit 0：8 项绑定回归先通过，五个正式镜像构建完成；Ubuntu 24.04、Alpine 3.24 和 Ceph 语言包 HIGH/CRITICAL 均为 0；真实 PostgreSQL、Ceph RGW、13 个迁移、Server、Worker、Web、UI 全部健康，临时容器、网络和卷已清理。
 
 ## 残余风险
 
