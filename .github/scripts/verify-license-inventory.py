@@ -10,6 +10,7 @@ import pathlib
 import re
 import sys
 import tarfile
+import tempfile
 import time
 import tomllib
 import urllib.parse
@@ -519,7 +520,7 @@ def finalize_first_party(args):
     pathlib.Path(args.output).write_text(json.dumps(final, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
 
 
-def verify(args):
+def verify_common(args, require_syft):
     if args.require_native_lf:
         for path in (args.cargo_lock, args.uv_lock, args.pnpm_lock):
             if pathlib.Path(path).read_bytes() != native_lf_bytes(path):
@@ -528,11 +529,12 @@ def verify(args):
     packages = document.get("packages")
     if not isinstance(packages, list):
         fail("inventory packages missing")
-    keys = syft_keys(args.syft)
     inventory_keys = [{name: item.get(name) for name in ("purl", "ecosystem", "name", "version")} for item in packages if isinstance(item, dict)]
     if len(inventory_keys) != len(packages) or len({canonical(item) for item in inventory_keys}) != len(inventory_keys):
         fail("duplicate or invalid inventory key")
-    if sorted(inventory_keys, key=lambda item: (item["ecosystem"], item["name"], item["version"], item["purl"])) != keys:
+    inventory_keys = sorted(inventory_keys, key=lambda item: (item["ecosystem"], item["name"], item["version"], item["purl"]))
+    keys = syft_keys(args.syft) if require_syft else inventory_keys
+    if inventory_keys != keys:
         fail("Syft and license inventory package keys differ")
     expected_header = header(keys, packages, args.cargo_lock, args.uv_lock, args.pnpm_lock, args.supply_lock)
     if {name: document.get(name) for name in expected_header} != expected_header:
@@ -545,6 +547,16 @@ def verify(args):
     if args.require_first_party:
         if document.get("status") != "complete" or document.get("first_party_packages") != supply.get("first_party_packages"):
             fail("first-party policy binding missing")
+        actual_first_party = {
+            package.get("purl")
+            for package in packages
+            if package.get("classification") == FIRST_PARTY_CLASSIFICATION
+        }
+        if actual_first_party != set(first_policy):
+            fail("first-party package set does not match frozen policy")
+        inventory_purls = {package.get("purl") for package in packages}
+        if not set(vendored_policy).issubset(inventory_purls):
+            fail("vendored third-party package set does not match frozen policy")
     for package in packages:
         if package.get("classification") == FIRST_PARTY_CLASSIFICATION:
             policy = first_policy.get(package.get("purl"))
@@ -574,6 +586,85 @@ def verify(args):
     print(document["inventory_digest"])
 
 
+def verify(args):
+    verify_common(args, True)
+
+
+def verify_bindings(args):
+    args.require_first_party = True
+    verify_common(args, False)
+
+
+def refresh_bindings(args):
+    document = read_json(args.inventory)
+    packages = document.get("packages")
+    if not isinstance(packages, list):
+        fail("inventory packages missing")
+    supply = read_json(args.supply_lock)
+    first_policy = {item["purl"]: item for item in supply.get("first_party_packages", [])}
+    vendored_policy = {item["purl"]: item for item in supply.get("vendored_third_party_packages", [])}
+    if (len(first_policy) != len(supply.get("first_party_packages", []))
+            or len(vendored_policy) != len(supply.get("vendored_third_party_packages", []))):
+        fail("duplicate release-tree package policy")
+    if document.get("status") != "complete" or document.get("first_party_packages") != supply.get("first_party_packages"):
+        fail("first-party policy binding missing")
+    for package in packages:
+        if not isinstance(package, dict):
+            fail("invalid inventory package")
+        purl = package.get("purl")
+        first = first_policy.get(purl)
+        vendored = vendored_policy.get(purl)
+        if first:
+            if (package.get("classification") != FIRST_PARTY_CLASSIFICATION
+                    or package.get("license_expression") != FIRST_PARTY_LICENSE
+                    or package.get("source_locator") != f"release-tree:{first['source']}"):
+                fail(f"first-party package policy drift: {purl}")
+            package["source_integrity"] = tree_integrity(args.release_root, first["source"])
+        elif vendored:
+            if (package.get("classification") != "third-party"
+                    or package.get("license_expression") != vendored["license_expression"]
+                    or package.get("source_locator") != f"release-tree:{vendored['source']}"):
+                fail(f"vendored third-party package policy drift: {purl}")
+            package["source_integrity"] = tree_integrity(args.release_root, vendored["source"])
+        elif str(package.get("source_locator", "")).startswith("release-tree:"):
+            fail(f"unbound release-tree package: {purl}")
+    keys = [{name: item.get(name) for name in ("purl", "ecosystem", "name", "version")} for item in packages]
+    if len({canonical(item) for item in keys}) != len(packages) or any(not all(item.values()) for item in keys):
+        fail("duplicate or invalid inventory key")
+    keys.sort(key=lambda item: (item["ecosystem"], item["name"], item["version"], item["purl"]))
+    document.update(header(keys, packages, args.cargo_lock, args.uv_lock, args.pnpm_lock, args.supply_lock))
+    output = pathlib.Path(args.output)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="\n",
+            prefix=f".{output.name}.",
+            suffix=".tmp",
+            dir=output.parent,
+            delete=False,
+        ) as stream:
+            temporary = pathlib.Path(stream.name)
+            stream.write(json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n")
+        validation = argparse.Namespace(
+            inventory=temporary,
+            cargo_lock=args.cargo_lock,
+            uv_lock=args.uv_lock,
+            pnpm_lock=args.pnpm_lock,
+            supply_lock=args.supply_lock,
+            release_root=args.release_root,
+            require_first_party=True,
+            require_native_lf=False,
+        )
+        verify_common(validation, False)
+        temporary.replace(output)
+    except BaseException:
+        if temporary and temporary.exists():
+            temporary.unlink()
+        raise
+
+
 def digest(args):
     document = read_json(args.inventory)
     packages = document.get("packages")
@@ -598,15 +689,24 @@ def verify_provenance(args):
 def parser():
     result = argparse.ArgumentParser()
     sub = result.add_subparsers(dest="command", required=True)
-    for name in ("generate", "verify"):
+    item = sub.add_parser("generate")
+    item.add_argument("--syft", required=True); item.add_argument("--cargo-lock", required=True)
+    item.add_argument("--uv-lock", required=True); item.add_argument("--pnpm-lock", required=True)
+    item.add_argument("--supply-lock", required=True)
+    item.add_argument("--metadata"); item.add_argument("--cache-dir"); item.add_argument("--unresolved-keys"); item.add_argument("--output", required=True)
+    for name in ("verify", "verify-bindings"):
         item = sub.add_parser(name)
-        item.add_argument("--syft", required=True); item.add_argument("--cargo-lock", required=True)
+        if name == "verify":
+            item.add_argument("--syft", required=True)
+        item.add_argument("--cargo-lock", required=True)
         item.add_argument("--uv-lock", required=True); item.add_argument("--pnpm-lock", required=True)
         item.add_argument("--supply-lock", required=True)
-        if name == "generate":
-            item.add_argument("--metadata"); item.add_argument("--cache-dir"); item.add_argument("--unresolved-keys"); item.add_argument("--output", required=True)
-        else:
-            item.add_argument("--inventory", required=True); item.add_argument("--release-root"); item.add_argument("--require-first-party", action="store_true"); item.add_argument("--require-native-lf", action="store_true")
+        item.add_argument("--inventory", required=True); item.add_argument("--release-root"); item.add_argument("--require-first-party", action="store_true"); item.add_argument("--require-native-lf", action="store_true")
+    item = sub.add_parser("refresh-bindings")
+    item.add_argument("--inventory", required=True); item.add_argument("--output", required=True)
+    item.add_argument("--release-root", required=True); item.add_argument("--cargo-lock", required=True)
+    item.add_argument("--uv-lock", required=True); item.add_argument("--pnpm-lock", required=True)
+    item.add_argument("--supply-lock", required=True)
     item = sub.add_parser("finalize-first-party")
     item.add_argument("--inventory", required=True); item.add_argument("--syft", required=True); item.add_argument("--release-root", required=True)
     item.add_argument("--cargo-lock", required=True); item.add_argument("--uv-lock", required=True); item.add_argument("--pnpm-lock", required=True); item.add_argument("--supply-lock", required=True); item.add_argument("--output", required=True)
@@ -621,7 +721,10 @@ def parser():
 
 def main():
     args = parser().parse_args()
-    {"generate": generate, "finalize-first-party": finalize_first_party, "verify": verify, "digest": digest, "verify-provenance": verify_provenance, "notices": notices, "verify-notices": verify_notices}[args.command](args)
+    {"generate": generate, "finalize-first-party": finalize_first_party, "verify": verify,
+     "verify-bindings": verify_bindings, "refresh-bindings": refresh_bindings,
+     "digest": digest, "verify-provenance": verify_provenance, "notices": notices,
+     "verify-notices": verify_notices}[args.command](args)
 
 
 if __name__ == "__main__":
