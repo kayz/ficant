@@ -36,6 +36,7 @@
 - `bash .github/scripts/tests/run-repo-policy-tests.sh`、`bash .github/scripts/verify-repo-policy.sh --stage final`、YAML 解析、全部测试部署 Bash `-n` 与 `git diff --check`：exit 0。
 - 中央 `kayz/cicd`：`scripts/test-templates.ps1`、`scripts/validate-config.ps1 -Path ficant/cicd.yml`、YAML/Bash 语法：exit 0；受管副本与业务仓库对应文件规范化后逐字一致。
 - 首次手工准备 run `30148673521`：在连接测试机前失败关闭；浅克隆无法解析 lock 的来源提交 `6d486b6321d401ca1113a7ec5bd0b7dee6ada80d`，因此没有检查或改变测试机。工作流与中央模板已 forward-only 修复为 `fetch-depth: 0`，并由合同测试锁定。
+- 第二次手工准备 run `30148837450`：来源校验和 SSH 配置通过；测试机可解析锁定 index，但准确 config 校验以 exit 4 失败，传输和加载步骤均跳过。工作流继续失败关闭，并增加 expected/actual 非秘密诊断以区分测试机陈旧状态与运行时表示差异。
 - `scripts/check-fast.ps1`：exit 0。
 - `scripts/check.ps1`：第一次在测试前因本机 PowerShell 启动 Buf 输出重定向异常 exit 1；锁定 Buf 1.56.0 独立执行正常，同一候选重跑 exit 0。
 - `scripts/check.ps1 -IncludeIntegration`：exit 0；PostgreSQL migration 4/4、Phase 4 lease 1/1、execution 3/3、真实 Worker 1/1、Phase 1 1/1、负向不变量 13/13、Phase 2B/2C/2D 各 1/1、Phase 3A 2/2、Phase 3B codec 2/2 + publication 1/1。

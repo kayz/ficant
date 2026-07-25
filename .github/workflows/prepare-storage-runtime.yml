@@ -64,7 +64,11 @@ jobs:
           image=$1
           config=$2
           actual=$(docker image inspect --format '{{.Id}}' "$image") || exit 3
-          [[ "$actual" == "$config" ]] || exit 4
+          if [[ "$actual" != "$config" ]]; then
+            printf 'storage-runtime-config-mismatch image=%s expected=%s actual=%s\n' \
+              "$image" "$config" "$actual" >&2
+            exit 4
+          fi
           docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" \
             | grep -Fqx "$image" || exit 5
           printf 'storage-runtime-present image=%s config=%s\n' "$image" "$actual"
