@@ -839,6 +839,7 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
             "for package in ficant-server ficant-worker ficant-web ficant-ui",
             "Configure test object-store credentials",
             "Verify locked storage runtime is already prepared",
+            '"$actual" == "$config" || "$actual" == "$index"',
             "group: ficant-test-deploy",
             "cancel-in-progress: false",
             "FICANT_TEST_S3_ACCESS_KEY",
@@ -855,6 +856,9 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         deploy = Path("deploy/test/bin/deploy.sh").read_text(encoding="utf-8")
         self.assertIn("--print-native-source-digest", deploy)
         self.assertIn("FICANT_WORKER_RUNTIME_IMAGE_DIGEST", deploy)
+        self.assertIn(
+            '"$actual" == "$storage_config" || "$actual" == "$index"', deploy
+        )
 
         self.assertIn(
             'if [[ "${{ github.event_name }}" == workflow_run ]]; then\n'
@@ -870,7 +874,9 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         self.assertNotIn("push:", workflow)
         self.assertIn("fetch-depth: 0", workflow)
         self.assertIn("Read-only check exact remote storage identity", workflow)
-        self.assertIn("storage-runtime-config-mismatch", workflow)
+        self.assertIn("storage-runtime-identity-mismatch", workflow)
+        self.assertIn('"$actual" != "$config" && "$actual" != "$index"', workflow)
+        self.assertIn('"$actual" == "$config" || "$actual" == "$index"', workflow)
         self.assertIn("if: steps.remote.outputs.present != 'true'", workflow)
         self.assertIn('docker save "$transfer_tag" | gzip -1 | ssh', workflow)
         self.assertIn('"$USER@$HOST" "gzip -d | docker load"', workflow)

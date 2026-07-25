@@ -18,7 +18,7 @@
 
 - 新增 `deploy/storage-runtime.lock.json` 与校验器，绑定 `.dockerignore`、Ceph Dockerfile、entrypoint、来源提交、镜像名、OCI index、linux/amd64 manifest、config digest 和压缩层总量；本地 checkout 换行被规范化，但真实内容漂移失败关闭。
 - `cicd.yml` 和中央 `kayz/cicd` 模板只声明四个应用构建；version CI、release preflight 和 release-test 复用锁定 Ceph digest。每个候选仍用最新 Trivy 数据库扫描该 digest。
-- Compose、部署状态和回滚分别记录应用 `FICANT_DEPLOY_SHA`、完整 `FICANT_STORAGE_RUNTIME_IMAGE` 与 config digest；部署不再 pull Ceph，只读校验准确 RepoDigest/Id 后才允许 migration。
+- Compose、部署状态和回滚分别记录应用 `FICANT_DEPLOY_SHA`、完整 `FICANT_STORAGE_RUNTIME_IMAGE` 与 config digest；部署不再 pull Ceph。Runner 先验证 registry 中 index → amd64 manifest → config 的锁定链，测试机再校验完整 RepoDigest，且本地 image-store identity 只能是锁定 config 或 index，之后才允许 migration。
 - 新增独立 `prepare-storage-runtime` 手工任务。它与 deploy 共享 `ficant-test-deploy` 串行锁且不取消在途任务；checkout 获取完整历史以复验 lock 中的来源提交；准确 runtime 已存在时退出，缺失时才经 Runner 流式传输，随后注册并复验准确 digest。
 - 正式 version 供应链和漏洞证据明确保留 90 天；非版本候选证据建议 14 天。
 
@@ -37,6 +37,7 @@
 - 中央 `kayz/cicd`：`scripts/test-templates.ps1`、`scripts/validate-config.ps1 -Path ficant/cicd.yml`、YAML/Bash 语法：exit 0；受管副本与业务仓库对应文件规范化后逐字一致。
 - 首次手工准备 run `30148673521`：在连接测试机前失败关闭；浅克隆无法解析 lock 的来源提交 `6d486b6321d401ca1113a7ec5bd0b7dee6ada80d`，因此没有检查或改变测试机。工作流与中央模板已 forward-only 修复为 `fetch-depth: 0`，并由合同测试锁定。
 - 第二次手工准备 run `30148837450`：来源校验和 SSH 配置通过；测试机可解析锁定 index，但准确 config 校验以 exit 4 失败，传输和加载步骤均跳过。工作流继续失败关闭，并增加 expected/actual 非秘密诊断以区分测试机陈旧状态与运行时表示差异。
+- 第三次只读诊断 run `30149062521`：确认测试机 `.Id` 为锁定 OCI index `sha256:6a86…243`，不是第三方未知值；完整 RepoDigest 检查尚未执行即按旧 config-only 规则退出，传输和加载仍跳过。合同已改为兼容 Docker image store 的两种受锁定 `.Id` 表示，同时继续强制完整 RepoDigest 与 registry 端 config 链。
 - `scripts/check-fast.ps1`：exit 0。
 - `scripts/check.ps1`：第一次在测试前因本机 PowerShell 启动 Buf 输出重定向异常 exit 1；锁定 Buf 1.56.0 独立执行正常，同一候选重跑 exit 0。
 - `scripts/check.ps1 -IncludeIntegration`：exit 0；PostgreSQL migration 4/4、Phase 4 lease 1/1、execution 3/3、真实 Worker 1/1、Phase 1 1/1、负向不变量 13/13、Phase 2B/2C/2D 各 1/1、Phase 3A 2/2、Phase 3B codec 2/2 + publication 1/1。
