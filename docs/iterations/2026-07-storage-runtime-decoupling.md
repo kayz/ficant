@@ -41,7 +41,10 @@
 - `scripts/check-fast.ps1`：exit 0。
 - `scripts/check.ps1`：第一次在测试前因本机 PowerShell 启动 Buf 输出重定向异常 exit 1；锁定 Buf 1.56.0 独立执行正常，同一候选重跑 exit 0。
 - `scripts/check.ps1 -IncludeIntegration`：exit 0；PostgreSQL migration 4/4、Phase 4 lease 1/1、execution 3/3、真实 Worker 1/1、Phase 1 1/1、负向不变量 13/13、Phase 2B/2C/2D 各 1/1、Phase 3A 2/2、Phase 3B codec 2/2 + publication 1/1。
-- 合并后 release-candidate preflight、测试机准备证据和最终 SHA 待补。
+- 最终代码候选 `ce8afd2ce7efa2b22bf306ed07435107741733e6` 上 `scripts/check-release-candidate.ps1`：exit 0。Trivy 0.72.0 使用当日数据库；四个应用镜像完成正式 Dockerfile 构建；Server/Worker/Web 的 Ubuntu 24.04 与 UI 的 Alpine 3.24 扫描均为 HIGH/CRITICAL 0；锁定 Ceph 的 Node/Python 包扫描为 HIGH/CRITICAL 0。release Compose 校验通过，PostgreSQL/Ceph 健康，13 个 migration 应用，Server/Worker/Web/UI 全部健康，最终清理完成。
+- 最终 preflight 前四次完整入口因本机 registry 网络 EOF 分别在 Docker Hub Rust base metadata、GHCR manifest（两次）和锁定 Ceph pull 处 exit 1；均未改变候选或门禁。固定 Rust base 与 Ceph digest 分别在重试后准确拉取；第五次从头执行完整入口 exit 0。
+- 手工准备 run `30154850075`（代码候选 `ce8afd2ce7efa2b22bf306ed07435107741733e6`）：exit 0；lock 与 registry OCI 链通过；测试机返回准确完整 index RepoDigest，本地 image-store identity 为锁定 index，锁定 config 为 `sha256:3113ea1adb804e958630041c8afaca996e08d3c61d7f3c22cb81c1ddd8b323ab`；`Stream missing storage runtime through the runner` 明确 skipped，准备后再次复验准确 index、amd64 manifest 与 config 绑定。
+- 中央 `kayz/cicd` 对应模板最终代码 SHA `ed37492e3ac6884ab9a2ccfe2291282b04b0ae67`；项目 PR `#34`、`#35`、`#36`、`#37` 与中央 PR `#23`、`#24`、`#25`、`#26` 均已合并。未创建、移动或复用版本 tag。
 
 ## Actions artifact 只读盘点
 
