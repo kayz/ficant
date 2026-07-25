@@ -23,6 +23,7 @@ POSTGRES_IMAGE = (
     "postgres@sha256:"
     "38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74"
 )
+STORAGE_LOCK = pathlib.Path(__file__).resolve().parents[1] / "storage-runtime.lock.json"
 
 
 def fail(message: str) -> None:
@@ -67,11 +68,11 @@ def main() -> None:
         if not image.startswith("ghcr.io/kayz/ficant") or not image.endswith(suffix):
             fail(f"{name} does not resolve to the expected immutable GHCR tag: {image}")
 
+    storage_lock = json.loads(STORAGE_LOCK.read_text(encoding="utf-8"))
+    expected_ceph_image = storage_lock["image"] + "@" + storage_lock["oci"]["index_digest"]
     ceph_image = services[CEPH_SERVICE].get("image", "")
-    if not ceph_image.startswith("ghcr.io/kayz/ficant") or not ceph_image.endswith(
-        "-ceph-rgw:sha-" + "0" * 40
-    ):
-        fail(f"ceph-rgw does not resolve to the expected immutable GHCR tag: {ceph_image}")
+    if ceph_image != expected_ceph_image:
+        fail(f"ceph-rgw does not resolve to the locked immutable OCI index: {ceph_image}")
     if str(services[CEPH_SERVICE].get("user")) != "167:167":
         fail("ceph-rgw must run as 167:167")
 

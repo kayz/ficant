@@ -1,0 +1,60 @@
+# Storage runtime decoupling
+
+## 目标与验收
+
+- 将 Ceph RGW 从应用版本构建、晋升和传输链路中移除，应用版本仅包含 Server、Worker、Web、UI。
+- 用受校验的 lock 绑定 Ceph 构建输入、来源提交、镜像名称、OCI index、linux/amd64 manifest、config digest 和压缩层大小。
+- Compose、部署状态和回滚使用完整 immutable storage-runtime identity；应用部署只读确认运行时已准备。
+- 提供独立 Human 手工触发、幂等、缺失时才流式传输的测试环境准备任务。
+- 构建/扫描允许并行，测试部署串行且 `cancel-in-progress: false`。
+
+## 非目标
+
+- 不重建 Ceph，不把 Ceph tar 上传为 Actions artifact，不删除 Actions cache/artifact。
+- 不降低漏洞、许可证、供应链、迁移、回滚或健康检查门禁。
+- 不创建、移动或复用版本 tag；存储预热不代表应用发布成功。
+
+## 公共契约变化
+
+- 新增 `deploy/storage-runtime.lock.json` 与校验器，绑定 `.dockerignore`、Ceph Dockerfile、entrypoint、来源提交、镜像名、OCI index、linux/amd64 manifest、config digest 和压缩层总量；本地 checkout 换行被规范化，但真实内容漂移失败关闭。
+- `cicd.yml` 和中央 `kayz/cicd` 模板只声明四个应用构建；version CI、release preflight 和 release-test 复用锁定 Ceph digest。每个候选仍用最新 Trivy 数据库扫描该 digest。
+- Compose、部署状态和回滚分别记录应用 `FICANT_DEPLOY_SHA`、完整 `FICANT_STORAGE_RUNTIME_IMAGE` 与 config digest；部署不再 pull Ceph，只读校验准确 RepoDigest/Id 后才允许 migration。
+- 新增独立 `prepare-storage-runtime` 手工任务。它与 deploy 共享 `ficant-test-deploy` 串行锁且不取消在途任务；准确 runtime 已存在时退出，缺失时才经 Runner 流式传输，随后注册并复验准确 digest。
+- 正式 version 供应链和漏洞证据明确保留 90 天；非版本候选证据建议 14 天。
+
+## Human 决策
+
+- 已批准复用 `ghcr.io/kayz/ficant-ceph-rgw@sha256:6a86bed20c79fa1df4af6621f4dea0578f82e582a2b476c9f21b8bf555130243`。
+- 旧 Actions artifacts 仅盘点，删除需另行批准。
+
+## 最终测试证据
+
+- `python deploy/verify-storage-runtime.py verify-lock ...`：exit 0；当前构建输入与来源提交一致。
+- `python deploy/verify-storage-runtime.py verify-remote ...`：exit 0；OCI index、amd64 manifest、config 与压缩层总量 `553966971` 字节一致。
+- `python .github/scripts/tests/test_storage_runtime_lock.py`：4/4，覆盖有效 lock、源码漂移、LF/CRLF 和 OCI config 漂移。
+- `python .github/scripts/tests/test_compose_security_gate.py`：34 项通过，2 项仅在显式 live 标志下运行而跳过。
+- `bash .github/scripts/tests/run-repo-policy-tests.sh`、`bash .github/scripts/verify-repo-policy.sh --stage final`、YAML 解析、全部测试部署 Bash `-n` 与 `git diff --check`：exit 0。
+- 中央 `kayz/cicd`：`scripts/test-templates.ps1`、`scripts/validate-config.ps1 -Path ficant/cicd.yml`、YAML/Bash 语法：exit 0；受管副本与业务仓库对应文件规范化后逐字一致。
+- `scripts/check-fast.ps1`：exit 0。
+- `scripts/check.ps1`：第一次在测试前因本机 PowerShell 启动 Buf 输出重定向异常 exit 1；锁定 Buf 1.56.0 独立执行正常，同一候选重跑 exit 0。
+- `scripts/check.ps1 -IncludeIntegration`：exit 0；PostgreSQL migration 4/4、Phase 4 lease 1/1、execution 3/3、真实 Worker 1/1、Phase 1 1/1、负向不变量 13/13、Phase 2B/2C/2D 各 1/1、Phase 3A 2/2、Phase 3B codec 2/2 + publication 1/1。
+- 合并后 release-candidate preflight、测试机准备证据和最终 SHA 待补。
+
+## Actions artifact 只读盘点
+
+当前 234 个 artifacts 合计 `752537258` 字节。四个异常大的旧非版本 supply evidence 均未删除：
+
+| artifact ID | run ID | branch / SHA | size |
+|---|---:|---|---:|
+| `8441887648` | `29685337397` | `codex/cicd-candidate-topology` / `60ffadbe49d291488a6c6d13d15920ce2ec895eb` | `182323786` |
+| `8441888017` | `29685338816` | `codex/cicd-candidate-topology` / `60ffadbe49d291488a6c6d13d15920ce2ec895eb` | `182323786` |
+| `8441952078` | `29685558914` | `codex/cicd-candidate-topology` / `37e4ba72a47b62e38a2de6f05095b8c512666d1c` | `182323786` |
+| `8441953197` | `29685557741` | `codex/cicd-candidate-topology` / `37e4ba72a47b62e38a2de6f05095b8c512666d1c` | `182323786` |
+
+单独批准删除上述四项预计释放 `729295144` 字节（729.295 MB，695.510 MiB）。
+
+## 残余风险
+
+- Trivy 0.72.0 仍不支持 Ceph 基础镜像的 CentOS Stream 9 OS family；语言包扫描保持执行，但不能冒充完整 OS 包覆盖。
+- 测试机首次从旧 SHA tag 迁移到完整 OCI index identity 时可能需要一次约 554 MB 压缩层的流式准备；之后准确 digest 命中即不重复传输。
+- `docker load` 本身不保留纯 digest archive 的 RepoDigest，因此任务用独立 storage-runtime tag 承载流，再用短期 GHCR 凭据注册准确 digest 并复验；若测试机连 GHCR 连 manifest 请求也不可达，准备会失败关闭。

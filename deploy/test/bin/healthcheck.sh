@@ -12,6 +12,9 @@ fi
 
 [[ ${FICANT_DEPLOY_SHA:-} =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid deployment SHA." >&2; exit 1; }
 export FICANT_DEPLOY_SHA
+[[ ${FICANT_STORAGE_RUNTIME_IMAGE:-} =~ @sha256:[0-9a-f]{64}$ ]] \
+  || { echo "Invalid storage runtime image." >&2; exit 1; }
+export FICANT_STORAGE_RUNTIME_IMAGE
 
 compose=(docker compose --env-file "$root/.env" --file "$root/compose.test.yml")
 for service in postgres ceph-rgw ficant-server ficant-worker ficant-web ficant-ui; do

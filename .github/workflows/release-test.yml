@@ -14,10 +14,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ficant-test
-  cancel-in-progress: true
-
 env:
   DEPLOY_VERSION: ${{ github.event.workflow_run.head_branch || inputs.version }}
 
@@ -32,6 +28,8 @@ jobs:
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
       version: ${{ steps.candidate.outputs.version }}
+      storage_image: ${{ steps.storage.outputs.image }}
+      storage_config: ${{ steps.storage.outputs.config }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -54,11 +52,26 @@ jobs:
           fi
           printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
           printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+      - id: storage
+        name: Verify and expose locked storage runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 deploy/verify-storage-runtime.py verify-lock \
+            --lock deploy/storage-runtime.lock.json --root .
+          python3 deploy/verify-storage-runtime.py verify-remote \
+            --lock deploy/storage-runtime.lock.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          lock = json.load(open("deploy/storage-runtime.lock.json", encoding="utf-8"))
+          print(f"image={lock['image']}@{lock['oci']['index_digest']}")
+          print(f"config={lock['oci']['config_digest']}")
+          PY
       - name: Validate resolved release topology
         shell: bash
         env:
           FICANT_DEPLOY_SHA: "0000000000000000000000000000000000000000"
-          FICANT_STORAGE_SHA: "0000000000000000000000000000000000000000"
+          FICANT_STORAGE_RUNTIME_IMAGE: ${{ steps.storage.outputs.image }}
           FICANT_IMAGE_PREFIX: ghcr.io/kayz/ficant
           FICANT_ROOT: /srv/ficant-test
           FICANT_POSTGRES_PASSWORD: validation-only
@@ -153,41 +166,8 @@ jobs:
           provenance: mode=max
           sbom: true
 
-  build-ceph:
-    needs: authorize
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          ref: ${{ needs.authorize.outputs.sha }}
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
-        with:
-          context: .
-          file: deploy/dev/Ceph.Dockerfile
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/ficant-ceph-rgw:sha-${{ needs.authorize.outputs.sha }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ needs.authorize.outputs.sha }}
-            org.opencontainers.image.version=${{ needs.authorize.outputs.version }}
-            org.opencontainers.image.licenses=LGPL-2.1-only OR LGPL-3.0-only
-          cache-from: type=gha,scope=ficant-ceph-rgw
-          cache-to: type=gha,mode=max,scope=ficant-ceph-rgw
-          provenance: mode=max
-          sbom: true
-
   scan:
-    needs: [authorize, build, build-ui, build-ceph]
+    needs: [authorize, build, build-ui]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -195,7 +175,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [ficant-server, ficant-worker, ficant-web, ficant-ui, ficant-ceph-rgw]
+        package: [ficant-server, ficant-worker, ficant-web, ficant-ui]
     steps:
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
@@ -218,9 +198,40 @@ jobs:
           name: trivy-${{ matrix.package }}-${{ needs.authorize.outputs.sha }}
           path: trivy-${{ matrix.package }}.sarif
           if-no-files-found: error
+          retention-days: 90
+
+  scan-storage-runtime:
+    needs: authorize
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: ${{ needs.authorize.outputs.storage_image }}
+          format: sarif
+          output: trivy-ficant-ceph-rgw.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          limit-severities-for-sarif: true
+          scanners: vuln
+          exit-code: "1"
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: trivy-ficant-ceph-rgw-${{ needs.authorize.outputs.sha }}
+          path: trivy-ficant-ceph-rgw.sarif
+          if-no-files-found: error
+          retention-days: 90
 
   promote:
-    needs: [authorize, scan]
+    needs: [authorize, scan, scan-storage-runtime]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -239,7 +250,7 @@ jobs:
           VERSION: ${{ needs.authorize.outputs.version }}
         run: |
           set -euo pipefail
-          for package in ficant-server ficant-worker ficant-web ficant-ui ficant-ceph-rgw; do
+          for package in ficant-server ficant-worker ficant-web ficant-ui; do
             image="ghcr.io/${{ github.repository_owner }}/$package"
             docker buildx imagetools create \
               --tag "$image:$VERSION" \
@@ -250,6 +261,9 @@ jobs:
     needs: [authorize, promote]
     runs-on: ubuntu-24.04
     environment: test
+    concurrency:
+      group: ficant-test-deploy
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: read
@@ -306,24 +320,29 @@ jobs:
             -i "$HOME/.ssh/ficant-test" -p "$PORT" \
             -o BatchMode=yes -o StrictHostKeyChecking=yes \
             "$USER@$HOST" "FICANT_ROOT='$ROOT' '$ROOT/bin/configure-object-store.sh'"
-      - name: Preload exact Ceph SHA image through the runner
+      - name: Verify locked storage runtime is already prepared
         shell: bash
         env:
           HOST: ${{ vars.FICANT_TEST_HOST }}
           PORT: ${{ vars.FICANT_TEST_PORT }}
           USER: ${{ vars.FICANT_TEST_USER }}
-          SHA: ${{ needs.authorize.outputs.sha }}
-          GHCR_TOKEN: ${{ github.token }}
+          STORAGE_IMAGE: ${{ needs.authorize.outputs.storage_image }}
+          STORAGE_CONFIG: ${{ needs.authorize.outputs.storage_config }}
         run: |
           set -euo pipefail
-          image="ghcr.io/${{ github.repository_owner }}/ficant-ceph-rgw:sha-$SHA"
-          printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin >/dev/null
-          trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
-          docker pull "$image"
-          docker save "$image" | gzip -1 | ssh \
+          ssh \
             -i "$HOME/.ssh/ficant-test" -p "$PORT" \
             -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            "$USER@$HOST" "gzip -d | docker load"
+            "$USER@$HOST" bash -s -- "$STORAGE_IMAGE" "$STORAGE_CONFIG" <<'REMOTE'
+          set -euo pipefail
+          image=$1
+          config=$2
+          actual=$(docker image inspect --format '{{.Id}}' "$image")
+          [[ "$actual" == "$config" ]]
+          docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" \
+            | grep -Fqx "$image"
+          printf 'storage-runtime-ready image=%s config=%s\n' "$image" "$actual"
+          REMOTE
       - name: Deploy exact image SHA
         shell: bash
         env:
@@ -333,9 +352,11 @@ jobs:
           ROOT: ${{ vars.FICANT_TEST_ROOT }}
           SHA: ${{ needs.authorize.outputs.sha }}
           GHCR_TOKEN: ${{ github.token }}
+          STORAGE_IMAGE: ${{ needs.authorize.outputs.storage_image }}
+          STORAGE_CONFIG: ${{ needs.authorize.outputs.storage_config }}
         run: |
           set -euo pipefail
           printf '%s\n' "$GHCR_TOKEN" | ssh \
             -i "$HOME/.ssh/ficant-test" -p "$PORT" \
             -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            "$USER@$HOST" "GHCR_USER='${{ github.actor }}' FICANT_ROOT='$ROOT' '$ROOT/bin/deploy.sh' '$SHA'"
+            "$USER@$HOST" "GHCR_USER='${{ github.actor }}' FICANT_ROOT='$ROOT' FICANT_STORAGE_RUNTIME_IMAGE='$STORAGE_IMAGE' FICANT_STORAGE_RUNTIME_CONFIG_DIGEST='$STORAGE_CONFIG' '$ROOT/bin/deploy.sh' '$SHA'"

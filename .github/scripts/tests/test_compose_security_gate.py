@@ -694,12 +694,19 @@ class ComposeSecurityGateTests(unittest.TestCase):
 
 
 class ReleaseDeploymentContractTests(unittest.TestCase):
+    STORAGE_LOCK = json.loads(
+        Path("deploy/storage-runtime.lock.json").read_text(encoding="utf-8")
+    )
+    STORAGE_IMAGE = (
+        STORAGE_LOCK["image"] + "@" + STORAGE_LOCK["oci"]["index_digest"]
+    )
+
     @staticmethod
     def resolved_release_document() -> dict[str, object]:
         environment = {
             **os.environ,
             "FICANT_DEPLOY_SHA": "0" * 40,
-            "FICANT_STORAGE_SHA": "0" * 40,
+            "FICANT_STORAGE_RUNTIME_IMAGE": ReleaseDeploymentContractTests.STORAGE_IMAGE,
             "FICANT_IMAGE_PREFIX": "ghcr.io/kayz/ficant",
             "FICANT_ROOT": "/srv/ficant-test",
             "FICANT_POSTGRES_PASSWORD": "validation-only",
@@ -805,40 +812,45 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         self.assertIn("required_migrations=$required applied_migrations=$applied", smoke)
         self.assertNotIn('"$applied" -eq "$expected"', smoke)
 
-    def test_rollback_keeps_a_available_storage_runtime_across_legacy_app_shas(
+    def test_rollback_keeps_the_locked_storage_identity_across_app_shas(
         self,
     ) -> None:
         compose = Path("deploy/test/compose.test.yml").read_text(encoding="utf-8")
         deploy = Path("deploy/test/bin/deploy.sh").read_text(encoding="utf-8")
         rollback = Path("deploy/test/bin/rollback.sh").read_text(encoding="utf-8")
 
-        self.assertIn("-ceph-rgw:sha-${FICANT_STORAGE_SHA:", compose)
-        self.assertIn("storage_sha=${FICANT_STORAGE_SHA:-$sha}", deploy)
+        self.assertIn("${FICANT_STORAGE_RUNTIME_IMAGE:", compose)
+        self.assertNotIn("FICANT_STORAGE_SHA", compose + deploy + rollback)
         self.assertIn(
-            "FICANT_DEPLOY_SHA=%s\\nFICANT_STORAGE_SHA=%s\\n",
+            "FICANT_DEPLOY_SHA=%s\\nFICANT_STORAGE_RUNTIME_IMAGE=%s\\n"
+            "FICANT_STORAGE_RUNTIME_CONFIG_DIGEST=%s\\n",
             deploy,
         )
-        self.assertIn("storage_sha=$current_storage", rollback)
-        self.assertIn("FICANT_STORAGE_SHA=$storage_sha", rollback)
+        self.assertIn("FICANT_STORAGE_RUNTIME_IMAGE=$previous_storage_image", rollback)
+        self.assertIn("verify_storage_runtime", deploy)
 
-    def test_release_workflow_builds_scans_promotes_and_configures_ceph(self) -> None:
+    def test_release_workflow_scans_but_does_not_rebuild_or_transfer_ceph(self) -> None:
         workflow = Path(".github/workflows/release-test.yml").read_text(encoding="utf-8")
 
         for marker in (
-            "build-ceph:",
-            "file: deploy/dev/Ceph.Dockerfile",
-            "package: [ficant-server, ficant-worker, ficant-web, ficant-ui, ficant-ceph-rgw]",
-            "for package in ficant-server ficant-worker ficant-web ficant-ui ficant-ceph-rgw",
+            "scan-storage-runtime:",
+            "image-ref: ${{ needs.authorize.outputs.storage_image }}",
+            "package: [ficant-server, ficant-worker, ficant-web, ficant-ui]",
+            "for package in ficant-server ficant-worker ficant-web ficant-ui",
             "Configure test object-store credentials",
-            "Preload exact Ceph SHA image through the runner",
-            'docker save "$image" | gzip -1 | ssh',
-            '"$USER@$HOST" "gzip -d | docker load"',
+            "Verify locked storage runtime is already prepared",
+            "group: ficant-test-deploy",
+            "cancel-in-progress: false",
             "FICANT_TEST_S3_ACCESS_KEY",
             "FICANT_TEST_S3_SECRET_KEY",
             "FICANT_TEST_EXPERIMENT_CURSOR_KEY_HEX",
             "FICANT_TEST_BOOTSTRAP_BEARER_TOKEN",
         ):
             self.assertIn(marker, workflow)
+        self.assertNotIn("build-ceph:", workflow)
+        self.assertNotIn("file: deploy/dev/Ceph.Dockerfile", workflow)
+        self.assertNotIn('docker save "$image"', workflow)
+        self.assertNotIn("ficant-ceph-rgw:sha-${{ needs.authorize.outputs.sha }}", workflow)
 
         deploy = Path("deploy/test/bin/deploy.sh").read_text(encoding="utf-8")
         self.assertIn("--print-native-source-digest", deploy)
@@ -849,6 +861,21 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
             '            [[ "$sha" == $(git rev-parse origin/main) ]]',
             workflow,
         )
+
+    def test_storage_prepare_is_manual_idempotent_and_streaming(self) -> None:
+        workflow = Path(
+            ".github/workflows/prepare-storage-runtime.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("push:", workflow)
+        self.assertIn("Read-only check exact remote storage identity", workflow)
+        self.assertIn("if: steps.remote.outputs.present != 'true'", workflow)
+        self.assertIn('docker save "$transfer_tag" | gzip -1 | ssh', workflow)
+        self.assertIn('"$USER@$HOST" "gzip -d | docker load"', workflow)
+        self.assertIn('docker pull "$image"', workflow)
+        self.assertIn("Verify exact remote identity after preparation", workflow)
+        self.assertNotIn("upload-artifact", workflow)
+        self.assertNotIn("cache-to:", workflow)
 
     def test_release_rust_build_reuses_locked_cargo_and_target_caches(self) -> None:
         dockerfile = Path("deploy/dev/RustService.Dockerfile").read_text(

@@ -224,6 +224,9 @@ jobs:
   business-loop:
     needs: authorize-version
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
     services:
       postgres:
         image: postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74
@@ -244,14 +247,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ceph_image=ficant/ceph-rgw-runtime:ci
+          python3 deploy/verify-storage-runtime.py verify-lock \
+            --lock deploy/storage-runtime.lock.json --root .
+          python3 deploy/verify-storage-runtime.py verify-remote \
+            --lock deploy/storage-runtime.lock.json
+          ceph_image=$(python3 - <<'PY'
+          import json
+          lock = json.load(open("deploy/storage-runtime.lock.json", encoding="utf-8"))
+          print(f"{lock['image']}@{lock['oci']['index_digest']}")
+          PY
+          )
+          ceph_config=$(python3 - <<'PY'
+          import json
+          print(json.load(open("deploy/storage-runtime.lock.json", encoding="utf-8"))["oci"]["config_digest"])
+          PY
+          )
           ceph_container=ficant-ci-ceph-rgw
           ceph_volume=ficant-ci-ceph-data
-          docker build --pull=false --file deploy/dev/Ceph.Dockerfile \
-            --build-arg CEPH_IMAGE=quay.io/ceph/ceph@sha256:6b4b5ae33acd3d736eb26d2a19238bce71a22f9cfb99cca887ba6312d0957644 \
-            --tag "$ceph_image" .
+          printf '%s\n' "${{ github.token }}" | docker login ghcr.io \
+            --username "${{ github.actor }}" --password-stdin >/dev/null
+          docker pull "$ceph_image"
+          [[ $(docker image inspect --format '{{.Id}}' "$ceph_image") == "$ceph_config" ]]
+          docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ceph_image" \
+            | grep -Fqx "$ceph_image"
           docker volume create "$ceph_volume" >/dev/null
-          trap 'docker rm -f "$ceph_container" >/dev/null 2>&1 || true; docker volume rm -f "$ceph_volume" >/dev/null 2>&1 || true; docker image rm -f "$ceph_image" >/dev/null 2>&1 || true' EXIT
+          trap 'docker rm -f "$ceph_container" >/dev/null 2>&1 || true; docker volume rm -f "$ceph_volume" >/dev/null 2>&1 || true; docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
           docker run --detach --name "$ceph_container" --network host \
             --user 167:167 --read-only --cap-drop ALL --security-opt no-new-privileges:true \
             --cpus 1 --memory 1536m --pids-limit 512 \

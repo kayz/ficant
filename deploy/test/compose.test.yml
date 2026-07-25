@@ -61,7 +61,7 @@ services:
 
   ceph-rgw:
     <<: *secure-service
-    image: ${FICANT_IMAGE_PREFIX:?FICANT_IMAGE_PREFIX is required}-ceph-rgw:sha-${FICANT_STORAGE_SHA:?FICANT_STORAGE_SHA is required}
+    image: ${FICANT_STORAGE_RUNTIME_IMAGE:?FICANT_STORAGE_RUNTIME_IMAGE is required}
     user: "167:167"
     restart: unless-stopped
     cpus: 1.00

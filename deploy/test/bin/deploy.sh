@@ -16,28 +16,46 @@ release_root="$root/releases/$sha"
 [[ -f "$root/.env" && -f "$root/compose.test.yml" ]] || { echo 'Server deployment configuration is incomplete.' >&2; exit 1; }
 
 current=''
-current_storage=''
+current_storage_image=''
+current_storage_config=''
 current_runtime=''
 current_source=''
 if [[ -f "$root/state/current.env" ]]; then
   # shellcheck disable=SC1090
   source "$root/state/current.env"
   current=${FICANT_DEPLOY_SHA:-}
-  current_storage=${FICANT_STORAGE_SHA:-}
+  current_storage_image=${FICANT_STORAGE_RUNTIME_IMAGE:-}
+  current_storage_config=${FICANT_STORAGE_RUNTIME_CONFIG_DIGEST:-}
   current_runtime=${FICANT_WORKER_RUNTIME_IMAGE_DIGEST:-}
   current_source=${FICANT_WORKER_NATIVE_SOURCE_DIGEST:-}
 fi
 
 export FICANT_DEPLOY_SHA=$sha
-storage_sha=${FICANT_STORAGE_SHA:-$sha}
-[[ "$storage_sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'FICANT_STORAGE_SHA must be a 40-character commit SHA.' >&2; exit 2; }
-export FICANT_STORAGE_SHA=$storage_sha
+storage_image=${FICANT_STORAGE_RUNTIME_IMAGE:-}
+storage_config=${FICANT_STORAGE_RUNTIME_CONFIG_DIGEST:-}
+[[ "$storage_image" =~ ^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[0-9a-f]{64}$ ]] \
+  || { echo 'FICANT_STORAGE_RUNTIME_IMAGE must be a full immutable GHCR digest reference.' >&2; exit 2; }
+[[ "$storage_config" =~ ^sha256:[0-9a-f]{64}$ ]] \
+  || { echo 'FICANT_STORAGE_RUNTIME_CONFIG_DIGEST must be canonical.' >&2; exit 2; }
+export FICANT_STORAGE_RUNTIME_IMAGE=$storage_image
+export FICANT_STORAGE_RUNTIME_CONFIG_DIGEST=$storage_config
 export FICANT_WORKER_RUNTIME_IMAGE_DIGEST="sha256:$(printf '00%.0s' {1..32})"
 export FICANT_WORKER_NATIVE_SOURCE_DIGEST="sha256:$(printf '00%.0s' {1..32})"
 compose=(docker compose --env-file "$root/.env" --file "$root/compose.test.yml")
 printf '%s' "$ghcr_token" | docker login ghcr.io --username "$GHCR_USER" --password-stdin >/dev/null
 unset ghcr_token
 trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+
+verify_storage_runtime() {
+  local actual
+  actual=$(docker image inspect --format '{{.Id}}' "$storage_image") \
+    || { echo "Storage runtime is not prepared: $storage_image" >&2; return 1; }
+  [[ "$actual" == "$storage_config" ]] \
+    || { echo "Storage runtime config mismatch: expected $storage_config, got $actual" >&2; return 1; }
+  docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$storage_image" \
+    | grep -Fqx "$storage_image" \
+    || { echo "Storage runtime RepoDigest is not exact: $storage_image" >&2; return 1; }
+}
 
 configure_execution_identity() {
   local deploy_sha=$1
@@ -71,8 +89,8 @@ record() {
   local rollback=$2
   local timestamp
   timestamp=$(date --utc +%Y-%m-%dT%H:%M:%SZ)
-  printf '{"commit_sha":"%s","storage_sha":"%s","image_prefix":"%s","deployed_at":"%s","status":"%s","automatic_rollback":%s}\n' \
-    "$sha" "$storage_sha" "${FICANT_IMAGE_PREFIX:-ghcr.io/kayz/ficant}" "$timestamp" "$status" "$rollback" \
+  printf '{"commit_sha":"%s","storage_runtime_image":"%s","storage_runtime_config_digest":"%s","image_prefix":"%s","deployed_at":"%s","status":"%s","automatic_rollback":%s}\n' \
+    "$sha" "$storage_image" "$storage_config" "${FICANT_IMAGE_PREFIX:-ghcr.io/kayz/ficant}" "$timestamp" "$status" "$rollback" \
     >"$root/state/deployments/$sha.json"
 }
 
@@ -80,8 +98,8 @@ rollback_current() {
   if [[ "$current" =~ ^[0-9a-f]{40}$ ]]; then
     echo "Deployment failed; restoring $current." >&2
     export FICANT_DEPLOY_SHA=$current
-    export FICANT_STORAGE_SHA=$storage_sha
-    "${compose[@]}" pull ceph-rgw ficant-server ficant-worker ficant-web ficant-ui
+    verify_storage_runtime
+    "${compose[@]}" pull ficant-server ficant-worker ficant-web ficant-ui
     configure_execution_identity "$current" true
     "${compose[@]}" up -d --remove-orphans --wait --wait-timeout 180 postgres ceph-rgw ficant-server ficant-worker ficant-web ficant-ui
     FICANT_DEPLOY_SHA=$current "$root/bin/healthcheck.sh"
@@ -96,7 +114,8 @@ rollback_current() {
 
 trap 'status=$?; if [[ $status -ne 0 ]]; then rollback_current || true; fi; exit $status' ERR
 
-"${compose[@]}" pull postgres ceph-rgw ficant-server ficant-worker ficant-web ficant-ui
+verify_storage_runtime
+"${compose[@]}" pull postgres ficant-server ficant-worker ficant-web ficant-ui
 configure_execution_identity "$sha"
 "${compose[@]}" up -d --wait --wait-timeout 180 postgres ceph-rgw
 "${compose[@]}" run --rm migration
@@ -105,13 +124,15 @@ FICANT_DEPLOY_SHA=$sha "$root/bin/healthcheck.sh"
 FICANT_DEPLOY_SHA=$sha "$root/bin/smoke-test.sh"
 
 if [[ "$current" =~ ^[0-9a-f]{40}$ && "$current" != "$sha" ]]; then
-  previous_storage=$current_storage
-  [[ "$previous_storage" =~ ^[0-9a-f]{40}$ ]] || previous_storage=$storage_sha
-  printf 'FICANT_DEPLOY_SHA=%s\nFICANT_STORAGE_SHA=%s\nFICANT_WORKER_RUNTIME_IMAGE_DIGEST=%s\nFICANT_WORKER_NATIVE_SOURCE_DIGEST=%s\n' \
-    "$current" "$previous_storage" "$current_runtime" "$current_source" >"$root/state/previous.env"
+  previous_storage_image=$current_storage_image
+  [[ "$previous_storage_image" =~ @sha256:[0-9a-f]{64}$ ]] || previous_storage_image=$storage_image
+  previous_storage_config=$current_storage_config
+  [[ "$previous_storage_config" =~ ^sha256:[0-9a-f]{64}$ ]] || previous_storage_config=$storage_config
+  printf 'FICANT_DEPLOY_SHA=%s\nFICANT_STORAGE_RUNTIME_IMAGE=%s\nFICANT_STORAGE_RUNTIME_CONFIG_DIGEST=%s\nFICANT_WORKER_RUNTIME_IMAGE_DIGEST=%s\nFICANT_WORKER_NATIVE_SOURCE_DIGEST=%s\n' \
+    "$current" "$previous_storage_image" "$previous_storage_config" "$current_runtime" "$current_source" >"$root/state/previous.env"
 fi
-printf 'FICANT_DEPLOY_SHA=%s\nFICANT_STORAGE_SHA=%s\nFICANT_WORKER_RUNTIME_IMAGE_DIGEST=%s\nFICANT_WORKER_NATIVE_SOURCE_DIGEST=%s\n' \
-  "$sha" "$storage_sha" "$FICANT_WORKER_RUNTIME_IMAGE_DIGEST" "$FICANT_WORKER_NATIVE_SOURCE_DIGEST" \
+printf 'FICANT_DEPLOY_SHA=%s\nFICANT_STORAGE_RUNTIME_IMAGE=%s\nFICANT_STORAGE_RUNTIME_CONFIG_DIGEST=%s\nFICANT_WORKER_RUNTIME_IMAGE_DIGEST=%s\nFICANT_WORKER_NATIVE_SOURCE_DIGEST=%s\n' \
+  "$sha" "$storage_image" "$storage_config" "$FICANT_WORKER_RUNTIME_IMAGE_DIGEST" "$FICANT_WORKER_NATIVE_SOURCE_DIGEST" \
   >"$root/state/current.env"
 record success false
 trap - ERR

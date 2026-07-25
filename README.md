@@ -38,6 +38,7 @@ FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三�
 - GitHub `test` Environment 通过专用 SSH 身份连接测试机的 `ficant-deploy` 账号；测试机只拉镜像、执行版本化 PostgreSQL migration 和 Docker Compose，不现场编译源码。
 - 发布脚本记录 current、previous、镜像 SHA、部署时间、migration、健康检查和冒烟结果；失败时如存在 previous SHA，直接切回上一组镜像。回滚验证要求旧版本所需 migration 全部存在，允许数据库保留 forward-only 后续 migration。
 - 测试发布拓扑装配真实 Phase 4 Worker、PostgreSQL 和受管单节点 Ceph RGW；Worker 的数据库、S3 和身份合同 fail-closed，凭据只由 GitHub `test` Environment 注入。源码 Workspace 使用 Apache `object_store`，锁文件与可达依赖图不包含 `minio`/`async-std`，既有 `RUSTSEC-2025-0052` 风险接受已退出。
+- Ceph 测试存储运行时由 `deploy/storage-runtime.lock.json` 独立绑定构建输入、来源提交和 OCI index/platform/config identity。应用版本只构建、扫描和晋升 Server、Worker、Web、UI；锁定 Ceph digest 仍在每个候选使用最新漏洞库扫描，但只通过独立 Human 手工任务按需流式准备，不随应用版本重建或传输。
 - 该环境证明发布链路、真实 Worker 启动与对象存储连接，不等于完整业务 UAT、生产发布或生产 Ceph 集群拓扑验收。
 
 ---

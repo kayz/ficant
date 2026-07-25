@@ -1,0 +1,148 @@
+name: prepare-storage-runtime
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ficant-test-deploy
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    environment: test
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - id: storage
+        name: Verify and expose locked storage runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${{ github.ref }}" == refs/heads/main ]]
+          python3 deploy/verify-storage-runtime.py verify-lock \
+            --lock deploy/storage-runtime.lock.json --root .
+          python3 deploy/verify-storage-runtime.py verify-remote \
+            --lock deploy/storage-runtime.lock.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          lock = json.load(open("deploy/storage-runtime.lock.json", encoding="utf-8"))
+          print(f"image={lock['image']}@{lock['oci']['index_digest']}")
+          print(f"config={lock['oci']['config_digest']}")
+          print(f"manifest={lock['oci']['platform_manifest_digest']}")
+          PY
+      - name: Configure pinned SSH identity
+        shell: bash
+        env:
+          SSH_KEY: ${{ secrets.FICANT_TEST_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.FICANT_TEST_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 0700 -d "$HOME/.ssh"
+          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/ficant-test"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/ficant-test" "$HOME/.ssh/known_hosts"
+      - id: remote
+        name: Read-only check exact remote storage identity
+        shell: bash
+        env:
+          HOST: ${{ vars.FICANT_TEST_HOST }}
+          PORT: ${{ vars.FICANT_TEST_PORT }}
+          USER: ${{ vars.FICANT_TEST_USER }}
+          IMAGE: ${{ steps.storage.outputs.image }}
+          CONFIG: ${{ steps.storage.outputs.config }}
+        run: |
+          set -euo pipefail
+          ssh_args=(-i "$HOME/.ssh/ficant-test" -p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          if output=$(ssh "${ssh_args[@]}" "$USER@$HOST" bash -s -- "$IMAGE" "$CONFIG" <<'REMOTE'
+          set -euo pipefail
+          image=$1
+          config=$2
+          actual=$(docker image inspect --format '{{.Id}}' "$image") || exit 3
+          [[ "$actual" == "$config" ]] || exit 4
+          docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" \
+            | grep -Fqx "$image" || exit 5
+          printf 'storage-runtime-present image=%s config=%s\n' "$image" "$actual"
+          REMOTE
+          ); then
+            printf '%s\n' "$output"
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            status=$?
+            if [[ $status -eq 3 || $status -eq 5 ]]; then
+              echo "storage-runtime-missing image=$IMAGE"
+              echo "present=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "Remote storage identity check failed with exit $status." >&2
+              exit "$status"
+            fi
+          fi
+      - if: steps.remote.outputs.present != 'true'
+        name: Stream missing storage runtime through the runner
+        shell: bash
+        env:
+          HOST: ${{ vars.FICANT_TEST_HOST }}
+          PORT: ${{ vars.FICANT_TEST_PORT }}
+          USER: ${{ vars.FICANT_TEST_USER }}
+          IMAGE: ${{ steps.storage.outputs.image }}
+          CONFIG: ${{ steps.storage.outputs.config }}
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "${{ github.actor }}" --password-stdin >/dev/null
+          trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+          docker pull "$IMAGE"
+          [[ $(docker image inspect --format '{{.Id}}' "$IMAGE") == "$CONFIG" ]]
+          docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$IMAGE" \
+            | grep -Fqx "$IMAGE"
+          repository=${IMAGE%@*}
+          index=${IMAGE##*@sha256:}
+          transfer_tag="$repository:storage-runtime-$index"
+          docker tag "$IMAGE" "$transfer_tag"
+          docker save "$transfer_tag" | gzip -1 | ssh \
+            -i "$HOME/.ssh/ficant-test" -p "$PORT" \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$USER@$HOST" "gzip -d | docker load"
+          printf '%s\n' "$GHCR_TOKEN" | ssh \
+            -i "$HOME/.ssh/ficant-test" -p "$PORT" \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$USER@$HOST" bash -s -- "$GHCR_ACTOR" "$IMAGE" <<'REMOTE'
+          set -euo pipefail
+          actor=$1
+          image=$2
+          IFS= read -r token
+          printf '%s\n' "$token" | docker login ghcr.io --username "$actor" --password-stdin >/dev/null
+          trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+          docker pull "$image"
+          REMOTE
+      - name: Verify exact remote identity after preparation
+        shell: bash
+        env:
+          HOST: ${{ vars.FICANT_TEST_HOST }}
+          PORT: ${{ vars.FICANT_TEST_PORT }}
+          USER: ${{ vars.FICANT_TEST_USER }}
+          IMAGE: ${{ steps.storage.outputs.image }}
+          CONFIG: ${{ steps.storage.outputs.config }}
+          MANIFEST: ${{ steps.storage.outputs.manifest }}
+        run: |
+          set -euo pipefail
+          ssh \
+            -i "$HOME/.ssh/ficant-test" -p "$PORT" \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$USER@$HOST" bash -s -- "$IMAGE" "$CONFIG" "$MANIFEST" <<'REMOTE'
+          set -euo pipefail
+          image=$1
+          config=$2
+          manifest=$3
+          actual=$(docker image inspect --format '{{.Id}}' "$image")
+          [[ "$actual" == "$config" ]]
+          docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" \
+            | grep -Fqx "$image"
+          printf 'storage-runtime-ready image=%s platform_manifest=%s config=%s\n' \
+            "$image" "$manifest" "$actual"
+          REMOTE
