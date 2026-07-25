@@ -868,6 +868,7 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("workflow_dispatch:", workflow)
         self.assertNotIn("push:", workflow)
+        self.assertIn("fetch-depth: 0", workflow)
         self.assertIn("Read-only check exact remote storage identity", workflow)
         self.assertIn("if: steps.remote.outputs.present != 'true'", workflow)
         self.assertIn('docker save "$transfer_tag" | gzip -1 | ssh', workflow)
