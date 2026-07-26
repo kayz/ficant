@@ -1051,6 +1051,36 @@ pub mod experiment_service_client {
             self.inner.unary(req, path, codec).await
         }
         ///
+        pub async fn read_node_output(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ReadNodeOutputRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ReadNodeOutputResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/ficant.research.v1.ExperimentService/ReadNodeOutput",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "ficant.research.v1.ExperimentService",
+                        "ReadNodeOutput",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        ///
         pub async fn compare_graph_runs(
             &mut self,
             request: impl tonic::IntoRequest<super::CompareGraphRunsRequest>,
@@ -1154,6 +1184,14 @@ pub mod experiment_service_server {
             request: tonic::Request<super::TraceGraphOutputRequest>,
         ) -> std::result::Result<
             tonic::Response<super::TraceGraphOutputResponse>,
+            tonic::Status,
+        >;
+        ///
+        async fn read_node_output(
+            &self,
+            request: tonic::Request<super::ReadNodeOutputRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ReadNodeOutputResponse>,
             tonic::Status,
         >;
         ///
@@ -1601,6 +1639,52 @@ pub mod experiment_service_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = TraceGraphOutputSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/ficant.research.v1.ExperimentService/ReadNodeOutput" => {
+                    #[allow(non_camel_case_types)]
+                    struct ReadNodeOutputSvc<T: ExperimentService>(pub Arc<T>);
+                    impl<
+                        T: ExperimentService,
+                    > tonic::server::UnaryService<super::ReadNodeOutputRequest>
+                    for ReadNodeOutputSvc<T> {
+                        type Response = super::ReadNodeOutputResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ReadNodeOutputRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as ExperimentService>::read_node_output(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ReadNodeOutputSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

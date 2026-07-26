@@ -21,7 +21,10 @@ tokio = { workspace = true, features = ["signal"] }
 
 [dev-dependencies]
 chrono = { workspace = true }
+ficant-api = { path = "../../crates/ficant-api" }
+ficant-server = { path = "../ficant-server" }
 prost-types = { workspace = true }
+tonic = { workspace = true }
 
 [features]
 integration-tests = []

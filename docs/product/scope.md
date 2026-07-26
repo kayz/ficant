@@ -113,6 +113,7 @@ ResearchNodeContract 与 ResearchGraph 是版本化 Definition：节点合同绑
 - 通过短期授权加载 iframe 应用，校验精确 origin、entrypoint、capability、CSP、sandbox 和有效期；
 - 区分会话、目录、授权、不可用、拒绝、加载失败等状态，并展示安全错误码、`trace_id` 与允许的恢复动作；
 - token 不进入 URL 或 `localStorage`，应用退出、过期和边界失败会触发撤权。
+- Phase 5A 在会话与目录边界之后内嵌一块临时只读观测面板：按 Human 提供的 Run ID 读取 Data/Universe Snapshot、RulePack、外部 Artifact、manifest/checkpoint、输出血缘和经 Artifact/Ceph required-read 校验的固定收益节点 payload。它显式不具备搜索、推荐、交易或正式研究语义，也不冒充短期授权 iframe WebApp。
 
 `web-dm/webapps/dmquant/design.md` 仍描述首个业务 WebApp 的后续目标。AI 草稿、策略版本、异步回测、指标/产物浏览和编辑重跑尚未实现，不得用 Platform Shell 或静态原型冒充该业务闭环。
 
@@ -132,10 +133,10 @@ WebApp 可以定义独立研究体验，但不能自建身份权限、直连外�
 ## 明确尚未实现与后续范围
 
 - 关键期限/多合约曲线风险对冲和组合层优化；Phase 2E 的 Python SDK 首版只提供同步一元调用，不承诺批量、流式或长任务调度。
-- 完整 DMQuant 业务 WebApp，包括策略生成、回测、Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell。
+- 完整 DMQuant 业务 WebApp，包括策略生成、回测、通用 Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell 与内嵌的 Phase 5A 临时运行观测面板。
 - openGauss 迁移、GeneratedNode/gVisor 业务运行、OMS/EMS 和任何外部交易执行。
 - 信用债、ABS、可转债、完整利率互换生命周期、真实询价通讯与清算交割。
-- README Phase 5–9 的研究 Lab、仿真、AI 基础设施、GeneratedNode 和后续发布流程仍为规划能力，不得描述为当前已完成。当前 worker 只装配 CGB 固收 NativeNode 与 Phase 4 证据化执行路径；扩充业务节点 catalog 或提供可用研究 UI 属于后续纵向切片。
+- README Phase 5 的正式研究 Lab以及 Phase 6–9 的仿真、AI 基础设施、GeneratedNode 和后续发布流程仍为规划能力，不得把 Phase 5A 临时观测面板描述为当前已完成的业务体验。当前 worker 只装配 CGB 固收 NativeNode 与 Phase 4 证据化执行路径；扩充业务节点 catalog 或提供可用研究 UI 属于后续纵向切片。
 
 ## Validity
 

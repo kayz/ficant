@@ -1274,6 +1274,32 @@ fn assert_phase4_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
                 ExpectedField::message("checkpoint_hash", hash),
             ],
         ),
+        (
+            "ficant.research.v1.ReadNodeOutputRequest",
+            &[
+                ExpectedField::message("run_id", id),
+                ExpectedField::message("node_id", id),
+            ],
+        ),
+        (
+            "ficant.research.v1.ObservedNodeOutput",
+            &[
+                ExpectedField::scalar("port_name", Type::String),
+                ExpectedField::message("value_type", typed_value),
+                ExpectedField::message("content_hash", hash),
+                ExpectedField::scalar("payload", Type::Bytes),
+            ],
+        ),
+        (
+            "ficant.research.v1.ReadNodeOutputResponse",
+            &[
+                ExpectedField::message("manifest", ".ficant.research.v1.NodeOutputManifest"),
+                ExpectedField::repeated_message(
+                    "outputs",
+                    ".ficant.research.v1.ObservedNodeOutput",
+                ),
+            ],
+        ),
     ];
 
     for (message, fields) in specs {
@@ -1797,6 +1823,11 @@ fn experiment_methods() -> Vec<ExpectedMethod> {
             "TraceGraphOutput",
             ".ficant.research.v1.TraceGraphOutputRequest",
             ".ficant.research.v1.TraceGraphOutputResponse",
+        ),
+        ExpectedMethod::new(
+            "ReadNodeOutput",
+            ".ficant.research.v1.ReadNodeOutputRequest",
+            ".ficant.research.v1.ReadNodeOutputResponse",
         ),
         ExpectedMethod::new(
             "CompareGraphRuns",

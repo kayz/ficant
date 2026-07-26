@@ -1239,6 +1239,8 @@ PostgreSQL 16 schema
 - 不直接访问数据库和对象存储；
 - 所有分析绑定 DataSnapshot 和 MarketRulePack。
 
+**Phase 5A 当前候选（2026-07-26）：** 在不宣称完成 Rates Research Lab 的前提下，Platform Shell 内嵌一块临时只读观测面板。Human 输入既有 Run ID 后，页面仅通过真实 gRPC-Web 读取运行、执行身份、Data/Universe Snapshot、RulePack、外部输入 Artifact、节点 manifest/checkpoint、递归血缘及经过完整性校验的 `AnalyzeBondResult`/`RiskSummary` payload，并展示现金流、净全价、YTM、久期、凸性和 DV01。新增的 `ReadNodeOutput` 仍走 Artifact/Ceph required-read，限制 envelope 为 1 MiB，并逐端口交叉校验 manifest 名称、类型与 hash；任何缺失、漂移或已知 Protobuf 解码失败均失败关闭。该面板显式标记“非业务界面”，不提供搜索、筛选、推荐、交易、目标仓位、曲线构建、相对价值、对比或报告，因此 Phase 5 尚未退出。
+
 ### Phase 6：国债期货与市场仿真
 
 **目标：** 完成现券与期货的统一研究闭环。

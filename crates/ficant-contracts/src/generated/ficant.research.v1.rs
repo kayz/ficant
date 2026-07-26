@@ -718,6 +718,34 @@ pub struct TraceGraphOutputResponse {
     #[prost(message, optional, tag="1")]
     pub trace: ::core::option::Option<GraphOutputTrace>,
 }
+/// Reads one persisted node's canonical output envelope through the same required
+/// Artifact/Ceph integrity boundary used by execution. This is a bounded
+/// observability surface; it does not publish, mutate, or reinterpret results.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ReadNodeOutputRequest {
+    #[prost(message, optional, tag="1")]
+    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ObservedNodeOutput {
+    #[prost(string, tag="1")]
+    pub port_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub value_type: ::core::option::Option<TypedValue>,
+    #[prost(message, optional, tag="3")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(bytes="vec", tag="4")]
+    pub payload: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReadNodeOutputResponse {
+    #[prost(message, optional, tag="1")]
+    pub manifest: ::core::option::Option<NodeOutputManifest>,
+    #[prost(message, repeated, tag="2")]
+    pub outputs: ::prost::alloc::vec::Vec<ObservedNodeOutput>,
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CompareGraphRunsRequest {
     #[prost(message, optional, tag="1")]
