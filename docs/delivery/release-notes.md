@@ -4,44 +4,44 @@
 
 - 新增确定性 Canonical Quote Parquet codec 与 `ficant.data.snapshot-manifest.v1` canonical JSON；固定 Arrow/Parquet `59.1.0`、单 row group、无压缩、无 dictionary、writer/data page v2，并把 schema、hash/size/rows、点时窗口、DataSource/映射/Calendar/Unit/Instrument 血缘、质量与 writer 参数完整绑定。
 - 新增 application 双 payload 发布用例，复用 Phase 1 `BlobStore`、`VerifiedSnapshotProof::data`、`SnapshotRepository` 和 required read，不增加第二套 metadata、object key 或完整性语义。缺失、篡改、非 canonical Manifest、Parquet 元数据或血缘漂移全部失败关闭。
-- 真实 PostgreSQL 16 + Ceph RGW 验收证明外源只调用一次；销毁 `RawQuoteSource`、重建 storage adapters 后，只按 `DataSnapshot` ID 仍得到相同 Canonical RecordBatch。Phase 3 因而正式退出；最终命令、测试数量和残余风险以 [`docs/iterations/2026-07-phase3b-immutable-parquet-snapshot.md`](../iterations/2026-07-phase3b-immutable-parquet-snapshot.md) 为准。
+- 真实 PostgreSQL 16 + Ceph RGW 验收证明外源只调用一次；销毁 `RawQuoteSource`、重建 storage adapters 后，只按 `DataSnapshot` ID 仍得到相同 Canonical RecordBatch。Phase 3 因而正式退出；最终命令、测试数量和残余风险以 [`docs/history/iterations/2026-07-phase3b-immutable-parquet-snapshot.md`](../history/iterations/2026-07-phase3b-immutable-parquet-snapshot.md) 为准。
 - 供应链一方包集合新增 `ficant-data`，同步修正 Phase 2E 的 `ficant-sdk` 包身份，并由冻结 Syft 1.46.0 重建 640 包许可证清单。`parquet 59.1.0` 的可达 `paste 1.0.15` 无维护 advisory 通过官方 crates.io 源码加 Apache 已合并提交 `bc4e672` 的最小 vendoring 消除；上游制品、补丁 blob、最终发布树和退出条件均被门禁锁定，不新增风险忽略或 Git 运行时依赖。
 
 ## Phase 3A 双源 Canonical Quote 接入候选（2026-07-19）
 
 - 新增版本化 DataSource 注册、文件 NDJSON 与 PostgreSQL 两种 adapter，并将同一中国国债双边净价输入转换为固定 16 列 Canonical Arrow Schema；路径、数据库 URL 与凭据不进入领域对象或错误文本。
 - 接入边界对 Instrument/Calendar/Unit 精确版本、observed/visible 双时间点时选择、交易会话、Decimal 和双边报价质量失败关闭；任一坏行使整批失败。真实 PostgreSQL 双源验收证明 schema hash、metadata、稳定排序和业务列一致。
-- 本候选不写 Parquet、不发布 Snapshot/Manifest，也不宣称实验已脱离外部数据源；Phase 3B 将单独交付该退出条件。最终命令、测试数量和残余风险以 [`docs/iterations/2026-07-phase3a-canonical-data-ingestion.md`](../iterations/2026-07-phase3a-canonical-data-ingestion.md) 为准。
+- 本候选不写 Parquet、不发布 Snapshot/Manifest，也不宣称实验已脱离外部数据源；Phase 3B 将单独交付该退出条件。最终命令、测试数量和残余风险以 [`docs/history/iterations/2026-07-phase3a-canonical-data-ingestion.md`](../history/iterations/2026-07-phase3a-canonical-data-ingestion.md) 为准。
 
 ## Phase 2E Python SDK 一致性候选（2026-07-19）
 
 - 新增 `ficant.rates.v1.RatesAnalyticsService` 与可安装 `ficant-sdk`，通过五个认证后一元 RPC 调用 Phase 2A–2D 的真实 Rust/C++ 生产路径；Python 不重写数值算法，不直连 PostgreSQL、Ceph RGW 或 C ABI。
-- 真实服务进程上的跨语言 Golden Case 覆盖现券、曲线/Carry-Roll-down、交割篮子/CTD 与套保，结果与冻结参考一致，Phase 2 正式退出。完整证据以 [`docs/iterations/2026-07-phase2e-python-sdk.md`](../iterations/2026-07-phase2e-python-sdk.md) 为准。
+- 真实服务进程上的跨语言 Golden Case 覆盖现券、曲线/Carry-Roll-down、交割篮子/CTD 与套保，结果与冻结参考一致，Phase 2 正式退出。完整证据以 [`docs/history/iterations/2026-07-phase2e-python-sdk.md`](../history/iterations/2026-07-phase2e-python-sdk.md) 为准。
 
 ## Phase 2D 国债期货 DV01 套保比例候选（2026-07-19）
 
 - 新增基于带符号目标 DV01、CTD 每百元 DV01 与转换因子的单合约套保参考实现，输出连续合约数、推荐整数手数、剩余 DV01 与套保有效性；固定中金所 `TS`、`TF`、`T`、`TL` 100 万元合约面值和稳定整数平局规则。
 - C++20 内核通过加法式 C ABI 与安全 Rust adapter 提供结果，并与独立 50 位 Decimal Oracle 的四品种冻结案例一致；非有限值、ABI 漂移、reserved 漂移和整数边界失败关闭。
-- 确定性 Arrow Artifact 绑定目标风险、Phase 2C 交割结果、CTD 分析、合约、债券、RulePack 与 DataSnapshot 七段血缘，并通过真实 PostgreSQL 16 + Ceph RGW 发布、adapter 重建后重放、篡改检测和临时状态清零。Phase 2 的参考算法优先清单已完成，但 Python SDK 一致性退出条件仍未交付；完整验收与残余风险以 [`docs/iterations/2026-07-phase2d-futures-hedge.md`](../iterations/2026-07-phase2d-futures-hedge.md) 为准。
+- 确定性 Arrow Artifact 绑定目标风险、Phase 2C 交割结果、CTD 分析、合约、债券、RulePack 与 DataSnapshot 七段血缘，并通过真实 PostgreSQL 16 + Ceph RGW 发布、adapter 重建后重放、篡改检测和临时状态清零。Phase 2 的参考算法优先清单已完成，但 Python SDK 一致性退出条件仍未交付；完整验收与残余风险以 [`docs/history/iterations/2026-07-phase2d-futures-hedge.md`](../history/iterations/2026-07-phase2d-futures-hedge.md) 为准。
 
 ## Phase 2C 国债期货交割价值链候选（2026-07-19）
 
 - 新增中金所 `TS`、`TF`、`T`、`TL` 合约参数和可交割券资格，并交付 CF、交割发票价、基差、含融资成本净基差、未再投资 IRR 与 CTD；公共 Protobuf、数据库 migration 和既有 Phase 2A/2B expected、Oracle、容差不变。
 - C++20 内核从冻结债券日程推导 `x`、`n`、购入/交割应计利息和持有期票息；生产 Rust/C++ 结果通过独立 Decimal Golden Case，对中金所规则事实绑定官方来源与内容摘要。
-- 结果以确定性 Arrow Artifact 绑定完整输入和血缘，并通过真实 PostgreSQL 16 + Ceph RGW 发布、adapter 重建后重放和篡改 fail-closed。期现套保比例、外部数据适配、保证金、交易所交割流程和 UI 不在本候选；完整验收与残余风险以 [`docs/iterations/2026-07-phase2c-futures-delivery.md`](../iterations/2026-07-phase2c-futures-delivery.md) 为准。
+- 结果以确定性 Arrow Artifact 绑定完整输入和血缘，并通过真实 PostgreSQL 16 + Ceph RGW 发布、adapter 重建后重放和篡改 fail-closed。期现套保比例、外部数据适配、保证金、交易所交割流程和 UI 不在本候选；完整验收与残余风险以 [`docs/history/iterations/2026-07-phase2c-futures-delivery.md`](../history/iterations/2026-07-phase2c-futures-delivery.md) 为准。
 
 ## Phase 2B 收益率曲线与 Carry/Roll-down 候选（2026-07-19）
 
 - 新增 CFETS 风格区间内线性 YTM 曲线，以及固定利率/贴现国债的未融资 Carry/Roll-down 分解；公共 Protobuf、数据库 migration 和既有 Phase 2A expected/Oracle/容差不变。
 - 生产 Rust/C++ 结果通过独立 Decimal Oracle 与官方 QuantLib 1.42.1 对照；结果以确定性 Arrow Artifact 绑定完整输入和血缘，并通过真实 PostgreSQL 16 + Ceph RGW 发布、重启重放和篡改 fail-closed。
-- 国债期货、可交割券、CF、基差、IRR、CTD、套保、外部数据适配和 UI 均不在本候选；完整验收与残余风险以 [`docs/iterations/2026-07-phase2b-curve-carry-roll.md`](../iterations/2026-07-phase2b-curve-carry-roll.md) 为准。
+- 国债期货、可交割券、CF、基差、IRR、CTD、套保、外部数据适配和 UI 均不在本候选；完整验收与残余风险以 [`docs/history/iterations/2026-07-phase2b-curve-carry-roll.md`](../history/iterations/2026-07-phase2b-curve-carry-roll.md) 为准。
 
 ## Ceph RGW 对象存储迁移候选（2026-07-19）
 
 - 新增独立迭代，把对象存储服务端从 MinIO 更换为 Ceph RGW 20.2.2，把 Rust client 从 `minio 0.4.0` 更换为 Apache `object_store 0.14.1`；公共 Protobuf、数据库 migration 和业务数值语义不变。
 - 活动 Cargo 锁文件与可达依赖图不再包含 `minio` 或 `async-std`，供应链 `risk_acceptances` 收敛为空；`RUSTSEC-2025-0052` 的历史接受记录仍保留在旧迭代证据中，但不再适用于当前候选。
 - 开发 Compose 和 Linux business-loop CI 统一使用锁定摘要、非 root、只读根文件系统的单节点 Ceph RGW 夹具。它用于真实 S3/业务回归，不授权生产 Ceph 集群、数据迁移或发布。
-- 本节的最终命令、测试数量、候选 commit 和残余风险以 [`docs/iterations/2026-07-ceph-object-store-migration.md`](../iterations/2026-07-ceph-object-store-migration.md) 与对应 Pull Request 为准；以下旧发布说明保持其发生时的历史事实。
+- 本节的最终命令、测试数量、候选 commit 和残余风险以 [`docs/history/iterations/2026-07-ceph-object-store-migration.md`](../history/iterations/2026-07-ceph-object-store-migration.md) 与对应 Pull Request 为准；以下旧发布说明保持其发生时的历史事实。
 
 ## v0.1.0-test.1 GitHub 测试环境（2026-07-17）
 

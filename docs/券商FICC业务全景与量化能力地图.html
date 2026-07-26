@@ -1,0 +1,1961 @@
+<meta charset="utf-8">
+<title>券商 FICC 业务全景与量化能力地图</title>
+<style>
+:root{
+  --bg:#F6F7F8; --paper:#FFFFFF;
+  --ink:#15181C; --ink2:#454C55; --ink3:#7B838C; --ink4:#A6ADB4;
+  --rule:#DFE3E7; --rule2:#EDF0F2;
+  --anchor:#1B5B58;
+  --f-risk:#6B4FA8; --f-data:#1C7488; --f-cash:#A5741A; --f-comp:#A63232;
+  --tint-risk:#F0ECF8; --tint-data:#E7F2F5; --tint-cash:#FAF2E0; --tint-comp:#FAEDED;
+  --tint-anchor:#E6F0EF;
+  --w:1180px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Source Han Sans SC","Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:15.5px; line-height:1.78; font-weight:400;
+}
+.wrap{max-width:var(--w); margin:0 auto; padding:0 28px 120px}
+
+/* ---- masthead ---- */
+.mast{padding:64px 0 34px; border-bottom:2px solid var(--ink)}
+.mast .kicker{font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--anchor); font-weight:600; margin:0 0 16px}
+.mast h1{font-size:38px; line-height:1.24; margin:0 0 14px; font-weight:600; letter-spacing:-.01em}
+.mast .sub{font-size:16px; color:var(--ink2); margin:0; max-width:66ch}
+.meta{display:flex; flex-wrap:wrap; gap:0 32px; margin-top:26px; font-size:13px; color:var(--ink3)}
+.meta b{color:var(--ink2); font-weight:500}
+
+/* ---- structure ---- */
+.part{margin-top:76px; scroll-margin-top:20px}
+.part-head{display:flex; align-items:baseline; gap:14px; padding-bottom:10px; border-bottom:1px solid var(--ink); margin-bottom:30px}
+.part-head .tag{font-size:11.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--anchor); font-weight:600; white-space:nowrap}
+.part-head h2{font-size:26px; margin:0; font-weight:600; letter-spacing:-.005em}
+h3{font-size:18.5px; margin:42px 0 14px; font-weight:600}
+h4{font-size:15.5px; margin:28px 0 10px; font-weight:600; color:var(--ink)}
+p{margin:0 0 15px}
+ul,ol{margin:0 0 16px; padding-left:22px}
+li{margin-bottom:7px}
+strong{font-weight:600}
+a{color:var(--anchor)}
+
+/* ---- toc ---- */
+.toc{background:var(--paper); border:1px solid var(--rule); border-radius:3px; padding:26px 30px; margin-top:38px}
+.toc h2{font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink3); margin:0 0 16px; font-weight:600}
+.toc ol{list-style:none; padding:0; margin:0; columns:2; column-gap:44px}
+.toc li{margin-bottom:9px; break-inside:avoid; font-size:14px}
+.toc a{text-decoration:none; color:var(--ink2); display:flex; gap:10px}
+.toc a:hover{color:var(--anchor)}
+.toc .n{color:var(--ink4); font-variant-numeric:tabular-nums; min-width:22px; font-size:12.5px}
+
+/* ---- figures ---- */
+figure{margin:34px 0; background:var(--paper); border:1px solid var(--rule); border-radius:3px; padding:26px 26px 20px; overflow-x:auto}
+figure svg{display:block; margin:0 auto; max-width:100%; height:auto}
+figcaption{margin-top:18px; padding-top:14px; border-top:1px solid var(--rule2); font-size:13px; color:var(--ink2); line-height:1.66}
+figcaption b{color:var(--ink); font-weight:600}
+
+/* ---- svg text ---- */
+svg text{font-family:inherit}
+.s-t{font-size:13px; font-weight:600; fill:var(--ink)}
+.s-b{font-size:11.5px; font-weight:400; fill:var(--ink2)}
+.s-m{font-size:10.5px; font-weight:400; fill:var(--ink3)}
+.s-lbl{font-size:11px; font-weight:600; letter-spacing:.1em; fill:var(--ink3)}
+
+/* ---- tables ---- */
+table{width:100%; border-collapse:collapse; margin:22px 0; font-size:13.5px; background:var(--paper)}
+th{text-align:left; font-weight:600; font-size:12px; letter-spacing:.05em; color:var(--ink2); border-bottom:1.5px solid var(--ink); padding:10px 12px; vertical-align:bottom}
+td{border-bottom:1px solid var(--rule2); padding:10px 12px; vertical-align:top; line-height:1.6}
+tbody tr:last-child td{border-bottom:1px solid var(--rule)}
+td.num{font-variant-numeric:tabular-nums; white-space:nowrap}
+
+/* ---- callouts ---- */
+.note{border-left:3px solid var(--anchor); background:var(--tint-anchor); padding:16px 20px; margin:24px 0; font-size:14.5px}
+.note.warn{border-left-color:var(--f-comp); background:var(--tint-comp)}
+.note.risk{border-left-color:var(--f-risk); background:var(--tint-risk)}
+.note p:last-child{margin-bottom:0}
+.note .h{font-size:11.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:600; color:var(--ink2); margin-bottom:7px; display:block}
+
+/* ---- legend chips ---- */
+.legend{display:flex; flex-wrap:wrap; gap:8px 20px; margin:18px 0 4px; font-size:12.5px; color:var(--ink2)}
+.chip{display:inline-flex; align-items:center; gap:7px}
+.chip i{width:22px; height:0; border-top-width:2.5px; border-top-style:solid; display:inline-block}
+.chip.box i{height:11px; width:14px; border:1.5px solid; border-radius:2px}
+
+/* ---- verify list ---- */
+.vlist{counter-reset:v; list-style:none; padding:0}
+.vlist li{counter-increment:v; padding-left:34px; position:relative; margin-bottom:11px; font-size:14px}
+.vlist li::before{content:counter(v); position:absolute; left:0; top:2px; font-size:11px; color:var(--ink3);
+  border:1px solid var(--rule); border-radius:2px; width:22px; height:20px; display:flex; align-items:center; justify-content:center; font-variant-numeric:tabular-nums}
+
+@media (max-width:820px){
+  .wrap{padding:0 18px 80px}
+  .mast h1{font-size:28px}
+  .toc ol{columns:1}
+  figure{padding:16px 14px 14px}
+  .part-head{flex-direction:column; gap:4px}
+}
+@media print{
+  body{background:#fff; font-size:10.5pt}
+  .part{break-before:page}
+  figure{break-inside:avoid}
+}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">内部研究 · 讨论稿</p>
+  <h1>券商 FICC 业务全景与量化能力地图</h1>
+  <p class="sub">以券商自营为主体，自有资金加杠杆约 500 亿元、配置盘为主，具备银行间、交易所、中金所全市场准入。本文把业务、数据、风险、资金、合规五条线索放在同一张地图上，作为后续技术选型的依据。</p>
+  <div class="meta">
+    <span><b>版本</b> 第二稿（覆盖全部讨论）</span>
+    <span><b>时点</b> 2026 年 7 月</span>
+    <span><b>用途</b> 业务地图 → 技术选型</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#p0"><span class="n">00</span><span>导读与图形语法</span></a></li>
+    <li><a href="#p1"><span class="n">01</span><span>市场版图与研究边界</span></a></li>
+    <li><a href="#p2"><span class="n">02</span><span>机构身份与三条断层</span></a></li>
+    <li><a href="#p3"><span class="n">03</span><span>一级与一级半市场</span></a></li>
+    <li><a href="#p4"><span class="n">04</span><span>规模、约束与容量</span></a></li>
+    <li><a href="#p5"><span class="n">05</span><span>资产分类与风险因子</span></a></li>
+    <li><a href="#p6"><span class="n">06</span><span>数据层</span></a></li>
+    <li><a href="#p7"><span class="n">07</span><span>估值体系</span></a></li>
+    <li><a href="#p8"><span class="n">08</span><span>交易成本与执行渠道</span></a></li>
+    <li><a href="#p9"><span class="n">09</span><span>跨市场品种关联</span></a></li>
+    <li><a href="#p10"><span class="n">10</span><span>做市业务</span></a></li>
+    <li><a href="#p11"><span class="n">11</span><span>客户业务与衍生品</span></a></li>
+    <li><a href="#p12"><span class="n">12</span><span>六个业务台详图</span></a></li>
+    <li><a href="#p13"><span class="n">13</span><span>四条流与四个断点</span></a></li>
+    <li><a href="#p14"><span class="n">14</span><span>业务大图</span></a></li>
+    <li><a href="#p15"><span class="n">15</span><span>研究组件与频率分层</span></a></li>
+    <li><a href="#p16"><span class="n">16</span><span>核心判断与待核实清单</span></a></li>
+  </ol>
+</nav>
+
+<!-- ============ PART 0 ============ -->
+<section class="part" id="p0">
+  <div class="part-head"><span class="tag">00</span><h2>导读与图形语法</h2></div>
+
+  <p>这份文档有两个读法。按顺序读，是一次从市场结构到能力建设的完整推演；只看图，是一张可以直接用于技术选型的业务地图。</p>
+
+  <p>全文的图形使用同一套语法，<strong>小图之间可以拼接，最终合成第 14 部分的业务大图</strong>。语法只有五个元素：</p>
+
+  <figure>
+    <svg width="100%" viewBox="0 0 900 250" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>图形语法说明</title><desc>五种图元：业务台、共享能力、外部主体、四类流向、合规边界。</desc>
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+      </defs>
+
+      <text class="s-lbl" x="0" y="16">图元</text>
+
+      <rect x="0" y="32" width="150" height="46" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.5"/>
+      <text class="s-t" x="75" y="52" text-anchor="middle">业务台</text>
+      <text class="s-b" x="75" y="68" text-anchor="middle">六个，各有 P&amp;L</text>
+
+      <rect x="176" y="32" width="150" height="46" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+      <text class="s-t" x="251" y="52" text-anchor="middle" fill="#123F3D">共享能力</text>
+      <text class="s-b" x="251" y="68" text-anchor="middle" fill="#1B5B58">全台共用，不分摊</text>
+
+      <rect x="352" y="32" width="150" height="46" rx="3" fill="#F6F7F8" stroke="#A6ADB4" stroke-width="1" stroke-dasharray="4 3"/>
+      <text class="s-t" x="427" y="52" text-anchor="middle" fill="#454C55">外部主体</text>
+      <text class="s-b" x="427" y="68" text-anchor="middle">市场、客户、监管</text>
+
+      <rect x="528" y="32" width="150" height="46" rx="3" fill="#FAEDED" stroke="#A63232" stroke-width="1.2" stroke-dasharray="5 3"/>
+      <text class="s-t" x="603" y="52" text-anchor="middle" fill="#7A2424">合规边界</text>
+      <text class="s-b" x="603" y="68" text-anchor="middle" fill="#A63232">信息不得穿越</text>
+
+      <text class="s-lbl" x="0" y="126">四类流向</text>
+
+      <line x1="0" y1="152" x2="86" y2="152" stroke="#6B4FA8" stroke-width="2.5" marker-end="url(#ah)"/>
+      <text class="s-t" x="96" y="150" fill="#4A3577">风险流</text>
+      <text class="s-b" x="96" y="166">头寸与库存的移动</text>
+
+      <line x1="236" y1="152" x2="322" y2="152" stroke="#1C7488" stroke-width="2.5" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+      <text class="s-t" x="332" y="150" fill="#14515F">数据流</text>
+      <text class="s-b" x="332" y="166">观测与回流</text>
+
+      <line x1="472" y1="152" x2="558" y2="152" stroke="#A5741A" stroke-width="2.5" stroke-dasharray="2 3" marker-end="url(#ah)"/>
+      <text class="s-t" x="568" y="150" fill="#6F4E11">资金流</text>
+      <text class="s-b" x="568" y="166">融资、抵押、成本</text>
+
+      <line x1="708" y1="152" x2="794" y2="152" stroke="#A63232" stroke-width="2" stroke-dasharray="1 4" stroke-linecap="round"/>
+      <text class="s-t" x="804" y="150" fill="#7A2424">阻断</text>
+      <text class="s-b" x="804" y="166">受限或禁止</text>
+
+      <line x1="0" y1="198" x2="900" y2="198" stroke="#DFE3E7" stroke-width="1"/>
+      <text class="s-b" x="0" y="222">读法：纵向看层级（业务台在上、共享能力在下），横向看闭环（风险与资金在台之间循环）。</text>
+      <text class="s-b" x="0" y="240">每张小图都标注了它在业务大图中的位置。</text>
+    </svg>
+    <figcaption><b>图形语法。</b>四类流向的颜色在全文一致：紫为风险、蓝为数据、金为资金、红为合规。这套语法的目的是让第 12 部分的六张台面详图能够无缝拼进第 14 部分的大图。</figcaption>
+  </figure>
+
+  <div class="note">
+    <span class="h">这一版新增了什么</span>
+    <p>相对第一稿，本版补入：券商债券系统的行业现状、国债期货期权的真实状态、能力共建框架、九类资产的定价原语、八组风险因子与五条数据模型规则、六个业务台的依赖剖面、四条流与四个断点、研究组件清单与频率分层，以及全部图形。</p>
+  </div>
+</section>
+
+<!-- ============ PART 1 ============ -->
+<section class="part" id="p1">
+  <div class="part-head"><span class="tag">01</span><h2>市场版图与研究边界</h2></div>
+
+  <h3>三个场所、五类工具</h3>
+  <table>
+    <thead><tr><th style="width:16%">场所</th><th>工具</th></tr></thead>
+    <tbody>
+      <tr><td><b>银行间</b><br><span style="color:var(--ink3);font-size:12px">CFETS</span></td><td>现券（国债 / 政金债 / 地方债 / 信用债 / 同业存单）；利率互换（FR007、Shibor3M、LPR）；标准债券远期；回购（质押式 / 买断式）；债券借贷；信用衍生品（CRMA、CRMW、CDS、CLN）</td></tr>
+      <tr><td><b>交易所</b><br><span style="color:var(--ink3);font-size:12px">沪深</span></td><td>现券（集中竞价 + 固定收益平台 + 综合协议交易平台）；债券 ETF（利率、政金债、基准做市信用债、科创债）；可转债；回购（GC / R 系列，标准券折算率体系）</td></tr>
+      <tr><td><b>中金所</b></td><td>2 / 5 / 10 / 30 年国债期货；国债期货期权<span style="color:var(--f-comp)">（未上市，见下）</span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note warn">
+    <span class="h">对第一稿研究边界的修正</span>
+    <p><b>国债期货期权尚未上市。</b>中金所官网产品导航中，利率类仅有 2 年期、5 年期、10 年期、30 年期国债期货四个品种；而权益类下明确列有沪深 300、中证 1000、上证 50 三个股指期权。旁证是中金所 2026 年减半收取手续费的通知，写的是「股指期货和国债期货交割手续费、股指期权行权（履约）手续费」——若国债期权已上市，此处会列出其行权手续费。</p>
+    <p>但产品研发在推进：中金所为开展国债期权产品研发工作，设计了 2 年期、5 年期、10 年期和 30 年期国债期权仿真合约，自 2024 年 9 月 13 日起开展仿真交易，仿真合约交易手续费每手 1.5 元、行权手续费每手 1.5 元、最低保障系数 0.5。</p>
+    <p><b>时间参考：</b>5 年期国债期货 2012 年 2 月启动仿真、2013 年 9 月上市，相隔约 1 年 7 个月；30 年期国债期货 2018 年 12 月启动仿真、2023 年 4 月上市，间隔超过 4 年。仿真至今已近两年，已超过最快先例。</p>
+  </div>
+
+  <h3>市场规模底数</h3>
+  <table>
+    <thead><tr><th>指标</th><th class="num">数值</th><th style="width:22%">时点</th></tr></thead>
+    <tbody>
+      <tr><td>债券市场存量</td><td class="num">196.7 万亿元</td><td>2025 年末</td></tr>
+      <tr><td>银行间占比</td><td class="num">88.3%（173.7 万亿）</td><td>2025 年末</td></tr>
+      <tr><td>银行间现券交易额</td><td class="num">381.1 万亿元</td><td>2025 年全年</td></tr>
+      <tr><td>债券发行量</td><td class="num">55.26 万亿元</td><td>2025 年全年</td></tr>
+      <tr><td>银行持债规模</td><td class="num">突破 100 万亿元</td><td>2025 年</td></tr>
+      <tr><td>境外机构持有银行间债券</td><td class="num">3.19 万亿元（约 1.8%）</td><td>2026 年 3 月末</td></tr>
+      <tr><td>债券 ETF 规模</td><td class="num">8840.63 亿元（53 只）</td><td>2026 年 6 月 28 日</td></tr>
+      <tr><td>可转债存量</td><td class="num">5004.57 亿元</td><td>2026 年 6 月 30 日</td></tr>
+    </tbody>
+  </table>
+
+  <p><b>存续债券只数估算</b>（推算，非官方口径）：信用债年发行约 1.5 万期、平均期限 3 年，存续 4–5 万只；地方债累计存续 1.5–2 万只；同业存单存续 2–3 万只；国债加政金债约 1000–1500 只。合计存续约 <b>8–12 万只</b>，含历史已到期的累计约 40–60 万只。</p>
+
+  <h3>行业参照：券商自研债券系统</h3>
+  <p>几家券商已在这条路上跑了数年，架构选择有参考价值。</p>
+  <table>
+    <thead><tr><th style="width:20%">系统</th><th>定位与特点</th></tr></thead>
+    <tbody>
+      <tr><td><b>大象 FICC</b><br><span style="color:var(--ink3);font-size:12px">华泰证券</span></td><td>历时三年自研的「多资产实时定价、做市和风险对冲平台」，2024 年 2 月获央行金融科技发展奖。建设了交易员工作站、风险与投资管理中心、策略研发工作室三大终端，支持现券、IRS、国债期货、债券通做市。生态分四块：CAMS 信用研究平台（研究与定价）、大象策略研发平台、大象统一交易平台、大象对客服务平台。</td></tr>
+      <tr><td><b>CAMS</b><br><span style="color:var(--ink3);font-size:12px">华泰证券</span></td><td>信用分析平台，<b>定价覆盖约 30000 只信用债，每日可对全市场 95% 以上信用债定价</b>；是投行、投资、资管多业务的基础能力平台，也是大象平台信用类产品的功能引擎。</td></tr>
+      <tr><td><b>eBOND</b><br><span style="color:var(--ink3);font-size:12px">第一创业</span></td><td>业内首个固定收益业务一站式管理系统，业务场景全面线上化、债券全生命周期管理，目标是提升做市服务效率。</td></tr>
+      <tr><td><b>八爪鱼</b><br><span style="color:var(--ink3);font-size:12px">中信建投</span></td><td>深耕固收业务全流程，积累固收领域专业数据。</td></tr>
+      <tr><td><b>山证报价板</b><br><span style="color:var(--ink3);font-size:12px">山西证券</span></td><td>为 FICC 机构及同业个人提供活跃券实时做市报价服务，差异化在于强调「意向达成」属性——标准化数据、标准化意向、标准化流程。另有 AI 优化债券交易喊单场景，响应时间从 30 秒压缩至 3 秒。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="h">两个观察</span>
+    <p><b>这波自研潮与 QB 停业直接相关。</b>报道第一创业与山西证券系统的文章标题即为《货币经纪报价系统暂停风波启示：债券做市路在何方？》——2023 年 3 月 QB 被叫停后，券商发现报价数据的外部依赖不可靠，转向自建。</p>
+    <p><b>要区分对内与对外两类产品。</b>对内的（统一交易平台、管理系统）解决交易、风控、组合管理；对外的（报价板、对客服务平台）表面是给客户提供报价，真实目的至少三层：获客粘性、报价分发、以及<b>客户询价流的采集</b>。第三层是外部买不到的数据管道。</p>
+  </div>
+</section>
+
+<!-- ============ PART 2 ============ -->
+<section class="part" id="p2">
+  <div class="part-head"><span class="tag">02</span><h2>机构身份与三条断层</h2></div>
+
+  <p class="note" style="border-left-color:var(--ink);background:var(--rule2)"><b>核心命题：</b>准入是二元的，议价能力是连续的。后者才决定策略能否落地。</p>
+
+  <figure>
+    <svg width="100%" viewBox="0 0 900 340" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>机构准入矩阵</title><desc>各类机构在银行间、交易所、中金所、衍生品四个维度的准入差异。</desc>
+      <text class="s-lbl" x="0" y="14">机构</text>
+      <text class="s-lbl" x="196" y="14" text-anchor="middle">银行间现券</text>
+      <text class="s-lbl" x="336" y="14" text-anchor="middle">交易所</text>
+      <text class="s-lbl" x="476" y="14" text-anchor="middle">国债期货</text>
+      <text class="s-lbl" x="616" y="14" text-anchor="middle">IRS</text>
+      <text class="s-lbl" x="756" y="14" text-anchor="middle">位置</text>
+
+      <g>
+        <rect x="0" y="26" width="900" height="44" fill="#E6F0EF"/>
+        <text class="s-t" x="12" y="45">券商自营</text><text class="s-m" x="12" y="61">唯一完整身份</text>
+        <text class="s-t" x="196" y="52" text-anchor="middle" fill="#1B5B58">全通</text>
+        <text class="s-t" x="336" y="52" text-anchor="middle" fill="#1B5B58">全通</text>
+        <text class="s-t" x="476" y="52" text-anchor="middle" fill="#1B5B58">全通</text>
+        <text class="s-t" x="616" y="52" text-anchor="middle" fill="#1B5B58">全通</text>
+        <text class="s-b" x="756" y="52" text-anchor="middle">跨市场表达完整</text>
+      </g>
+
+      <g><rect x="0" y="74" width="900" height="40" fill="#FFFFFF"/>
+        <text class="s-t" x="12" y="98">银行自营</text>
+        <text class="s-t" x="196" y="99" text-anchor="middle" fill="#1B5B58">全通</text>
+        <text class="s-b" x="336" y="99" text-anchor="middle" fill="#A5741A">仅上市行协议</text>
+        <text class="s-b" x="476" y="99" text-anchor="middle" fill="#A63232">仅试点行</text>
+        <text class="s-t" x="616" y="99" text-anchor="middle" fill="#1B5B58">全通</text>
+        <text class="s-b" x="756" y="99" text-anchor="middle">持债最多、工具最窄</text>
+      </g>
+
+      <g><rect x="0" y="118" width="900" height="40" fill="#FBFCFC"/>
+        <text class="s-t" x="12" y="142">公募基金</text>
+        <text class="s-t" x="196" y="143" text-anchor="middle" fill="#1B5B58">全通</text>
+        <text class="s-t" x="336" y="143" text-anchor="middle" fill="#1B5B58">全通</text>
+        <text class="s-b" x="476" y="143" text-anchor="middle" fill="#A5741A">有比例上限</text>
+        <text class="s-b" x="616" y="143" text-anchor="middle" fill="#A5741A">专户可、公募罕见</text>
+        <text class="s-b" x="756" y="143" text-anchor="middle">杠杆 140%/200%</text>
+      </g>
+
+      <g><rect x="0" y="162" width="900" height="40" fill="#FFFFFF"/>
+        <text class="s-t" x="12" y="186">保险</text>
+        <text class="s-t" x="196" y="187" text-anchor="middle" fill="#1B5B58">全通</text>
+        <text class="s-t" x="336" y="187" text-anchor="middle" fill="#1B5B58">全通</text>
+        <text class="s-t" x="476" y="187" text-anchor="middle" fill="#1B5B58">2020 起</text>
+        <text class="s-t" x="616" y="187" text-anchor="middle" fill="#1B5B58">可</text>
+        <text class="s-b" x="756" y="187" text-anchor="middle">偿付能力约束</text>
+      </g>
+
+      <g><rect x="0" y="206" width="900" height="40" fill="#FBFCFC"/>
+        <text class="s-t" x="12" y="230">私募</text>
+        <text class="s-b" x="196" y="231" text-anchor="middle" fill="#A63232">名义可、实际难</text>
+        <text class="s-t" x="336" y="231" text-anchor="middle" fill="#1B5B58">全通</text>
+        <text class="s-t" x="476" y="231" text-anchor="middle" fill="#1B5B58">可</text>
+        <text class="s-b" x="616" y="231" text-anchor="middle" fill="#A63232">基本进不去</text>
+        <text class="s-b" x="756" y="231" text-anchor="middle">量化主流身份</text>
+      </g>
+
+      <g><rect x="0" y="250" width="900" height="40" fill="#FFFFFF"/>
+        <text class="s-t" x="12" y="274">境外机构</text>
+        <text class="s-t" x="196" y="275" text-anchor="middle" fill="#1B5B58">债券通/直投</text>
+        <text class="s-b" x="336" y="275" text-anchor="middle" fill="#A5741A">需 QFII 通道</text>
+        <text class="s-b" x="476" y="275" text-anchor="middle" fill="#A5741A">2026.4 起限套保</text>
+        <text class="s-b" x="616" y="275" text-anchor="middle" fill="#A5741A">北向互换通</text>
+        <text class="s-b" x="756" y="275" text-anchor="middle">工具箱快速补全</text>
+      </g>
+
+      <line x1="0" y1="290" x2="900" y2="290" stroke="#DFE3E7" stroke-width="1"/>
+      <text class="s-b" x="0" y="314">私募的银行间限制：须与做市商或尝试做市机构以双边报价、请求报价方式成交，拿不到匿名点击一侧的流动性。</text>
+      <text class="s-b" x="0" y="332">商业银行国债期货仍为试点：五大行为首批，第二批扩至在华外资行（渣打中国 2023 年 1 月首家），股份行与中小行仍在等待。</text>
+    </svg>
+    <figcaption><b>准入矩阵。</b>这张表在第 11 部分会反过来读——它同时是一张客户需求清单：客户不能做的，正是券商可以卖的服务。</figcaption>
+  </figure>
+
+  <h3>三条结构性断层</h3>
+
+  <h4>断层一：资金成本</h4>
+  <p>DR 系列只有存款类机构能做，非银只能在 R 系列拿钱，交易所回购又是另一套标准券折算率体系。三个池子的价格平时接近、紧张时急剧撕裂。</p>
+  <p><b>任何 carry 策略的真实收益取决于身份能拿到哪一档资金，而不是资产端收益率。</b>这是回测最容易自欺的地方——用 DR007 回测一个非银身份跑不了的策略。对券商自营还要加一句：<b>资金成本不是市场定的，是关系定的</b>，紧张时大行优先满足内部和核心客户，因此策略假设必须用压力情形下的值。</p>
+
+  <h4>断层二：会计与考核</h4>
+  <p>银行大量债券放在摊余成本（AC）科目，不做 MTM，考核净息差而非交易盈亏。<b>市场上最大的持有者在价格发现中是缺席的</b>，持仓量与价格影响力严重不成比例。</p>
+
+  <h4>断层三：对冲工具的错配</h4>
+  <p>持有国债最多的机构基本不能做国债期货，能做期货的机构现券持仓小。结果是基差不由「最优套利者」定价，而由受限套利者定价。<b>这正是国内 IRR / 基差策略至今仍有结构性超额收益的制度性原因——不是市场不聪明，是套利资本被制度性隔开了。</b></p>
+
+  <div class="note risk">
+    <span class="h">由断层推出的核心悖论</span>
+    <p>最有能力做量化的机构（私募）接触不到最有 alpha 的市场（银行间）；最能接触那个市场的机构（银行）最没有动力做量化（考核不是 MTM）。<b>这个错配就是券商自营身份价值的来源。</b></p>
+  </div>
+</section>
+
+<!-- ============ PART 3 ============ -->
+<section class="part" id="p3">
+  <div class="part-head"><span class="tag">03</span><h2>一级与一级半市场</h2></div>
+
+  <p class="note" style="border-left-color:var(--ink);background:var(--rule2)"><b>核心判断：</b>一级市场本身的量化空间很窄，但它沉淀的数据是二级量化最有价值的输入之一。多数团队研究一级的正确姿势，是为了二级。</p>
+
+  <h3>四层可量化程度</h3>
+  <table>
+    <thead><tr><th style="width:22%">层级</th><th>内容与判断</th></tr></thead>
+    <tbody>
+      <tr><td><b>利率债招标</b><br><span style="color:var(--ink3);font-size:12px">高度可量化</span></td><td>流程标准化、时点明确、结果客观。可建模：中标利率、边际利率、全场倍数、边际倍数。<b>但投标需承销团资格</b>；无资格则建模目的是预测结果去交易二级。</td></tr>
+      <tr><td><b>可转债打新</b><br><span style="color:var(--ink3);font-size:12px">量化程度最高</span></td><td>信用申购降低资金门槛。alpha 在首日定价模型（转股价值 + 溢价率预测）、卖出择时、老股东抢权配售择时。</td></tr>
+      <tr><td><b>信用债簿记</b><br><span style="color:var(--ink3);font-size:12px">半量化</span></td><td>有票面利率和认购倍数，但披露质量参差，非市场化因素多（返费、结构化发行、承销关系）。能做的是定价偏离度监控，作为<b>风险信号</b>而非收益信号。</td></tr>
+      <tr><td><b>一级半分销</b><br><span style="color:var(--ink3);font-size:12px">基本不可量化</span></td><td>走 CFETS 分销系统，但真实价格发现在 iDeal 聊天里。非结构化、依赖关系、无标准接口。但这里的价格是理解真实供需最诚实的信号。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>四类策略族</h3>
+
+  <h4>招标结果预测 → 事件驱动二级（性价比最高）</h4>
+  <p>国开债招标是日内为数不多的、有确定时点的公开信息事件。结果一出，现券立即 repricing，国债期货同步反应。</p>
+  <p><b>特征集：</b>招标前同期限老券收益率与动量、DR007 / R007、上期同品种倍数、当日期货盘口、本期供给量与年内发行进度、季节性（月末 / 季末 / 缴税 / OMO 到期）、招标前 30 分钟现券成交方向。<b>输出：</b>中标利率相对二级估值的偏离、全场倍数。<b>交易表达：</b>招标前建仓、结果后平仓，或直接用期货表达。</p>
+
+  <h4>供给日历驱动的期限结构策略</h4>
+  <p>财政部季度国债发行计划、地方债提前公告、政金债计划构成可提前知晓的供给冲击日历。地方债集中放量对 10Y 的挤出、超长债供给对 30Y 的压力，都可回测。</p>
+
+  <h4>新老券轮换与流动性溢价衰减</h4>
+  <p>中国国债是续发制度，同一期券多次增发直到规模足够，这决定活跃券的产生与衰退节奏。量化价值两块：新老券利差的均值回复；<b>CTD 预测</b>——新券进入交割篮子会改变最便宜可交割券，直接影响基差策略。</p>
+
+  <h4>一级定价偏离作为信用预警</h4>
+  <p>发行利率显著偏离同评级同期限曲线、或认购倍数异常（过高往往是自融迹象），是有效的负面信号。<b>后续升级：</b>见第 5 部分，一级市场数据是信用 PD 模型中「再融资能力」的核心输入。</p>
+
+  <h3>数据类型与获取</h3>
+  <table>
+    <thead><tr><th style="width:16%">类别</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td>招标类</td><td>中标 / 边际利率与价格、投标量、计划量、实际发行量、全场倍数、边际倍数、追加发行</td></tr>
+      <tr><td>计划类</td><td>发行计划与待发日历</td></tr>
+      <tr><td>簿记类</td><td>票面利率、最终规模、认购倍数、主承销商</td></tr>
+      <tr><td>存量类</td><td>续发进度（单只券累计发行量）</td></tr>
+      <tr><td>托管类</td><td>中债登 / 上清所月度托管数据按投资者类型分</td></tr>
+      <tr><td>分销类</td><td>分销报价（非标准化）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="h">两个被明显低估的字段</span>
+    <p><b>全场倍数 / 边际倍数</b>——二级市场没有委托簿深度数据，一级的倍数是稀缺的公开情绪代理。</p>
+    <p><b>续发进度</b>——直接影响活跃券判定和 CTD；2025 年 8 月税制变化后，它同时成为税收属性的判定键（税收属性锚定首发日，而续发部分继承免税）。</p>
+  </div>
+
+  <p><b>获取路径。</b>公开源：中债登、上清所、财政部、中国货币网、沪深交易所债券信息平台、交易商协会。商业源：Wind、彭博、DM、YY——买的主要是清洗、结构化和历史序列完整性。机构渠道：CFETS 席位下的 iDeal。</p>
+  <p><b>工程现实：</b>公开源实时性不够。要做招标事件驱动需秒级拿到结果，实践中是自建轮询 / 爬虫加终端双路冗余。这是必须投入、也是很多团队卡住的地方。</p>
+
+  <h3>对二级交易的七个作用</h3>
+  <ol>
+    <li><b>事件驱动信号源</b>——中国债市高频宏观数据稀少，招标是为数不多的定时可交易事件</li>
+    <li><b>供给冲击的提前量</b>——日历化后可做系统性仓位管理</li>
+    <li><b>CTD 预测</b>——续发与新发直接改变基差策略的标的</li>
+    <li><b>活跃券切换</b>——影响流动性成本估计和策略容量测算</li>
+    <li><b>NCD 发行利率</b>——银行负债成本与资金面的高频代理，比 DR007 更有前瞻性，因为反映的是未来的资金需求而非当下的成交</li>
+    <li><b>估值锚校准</b>——一级定价可用来校正中债估值的滞后</li>
+    <li><b>信用预警</b>——见第 5 部分</li>
+  </ol>
+</section>
+
+<!-- ============ PART 4 ============ -->
+<section class="part" id="p4">
+  <div class="part-head"><span class="tag">04</span><h2>规模、约束与容量</h2></div>
+
+  <p class="note" style="border-left-color:var(--ink);background:var(--rule2)"><b>核心判断：</b>在 500 亿体量下，量化的主要价值不是产生 alpha，而是提高单位资本的收益率、以及降低 500 亿调仓的摩擦成本。纯 alpha 策略的容量加总只有百亿量级。</p>
+
+  <h3>三个硬约束</h3>
+
+  <h4>净资本额度，且对冲工具与现券共用一个池子</h4>
+  <p>自营非权益类证券及其衍生品合计不得超过净资本的 500%，500 亿意味着净资本至少 100 亿。关键在计算标准：「自营非权益类证券及其衍生品」包括债券、非权益类基金、<b>国债期货、债券远期、利率互换</b>、非权益类期权、外汇衍生品、大宗商品衍生品、信用衍生品、银行承兑汇票等；自营非权益类证券按市值计算，国债期货、债券远期、信用衍生品、利率互换按规定方式折算。</p>
+  <p><b>含义：基差策略的期货空头腿不是免费对冲，它和现券吃同一个额度。</b>很多容量测算在这里就错了。（原文关于折算系数部分为截断状态，实操建模前须核对现行版本。）</p>
+
+  <h4>期货持仓限额，必须走套保 / 套利额度</h4>
+  <p>一般月份投机客户持仓限额 1200 手，套保、套利客户额度需交易所审批。1200 手 T 合约约 12 亿名义——对 500 亿的盘子等于没有。两个后果：额度要与现券持仓建立对应关系，直接约束策略形态；额度审批有周期，<b>策略容量是提前锁定的，机会来了也放不大</b>。</p>
+
+  <h4>NSFR 往往比 500% 先触顶</h4>
+  <p>滚隔夜回购撑长久期资产在净稳定资金率上最贵。杠杆结构若为短钱长配，NSFR 会先于净资本额度成为约束，倒逼负债端往中长期走（次级债、公司债、收益凭证），而负债成本直接吃掉 carry 利润。</p>
+
+  <h3>按策略的容量估计</h3>
+  <table>
+    <thead><tr><th style="width:26%">策略</th><th style="width:20%">容量</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>底仓配置</td><td class="num">300–400 亿</td><td>量化角色是久期 / 曲线 / 择时叠加，非 alpha 来源；收益的 80% 来自方向判断</td></tr>
+      <tr><td>期现基差 / IRR</td><td class="num">50–150 亿名义</td><td>最有制度性优势的地方；约束是套保额度审批与期货流动性</td></tr>
+      <tr><td>银行间做市</td><td class="num">规模友好</td><td>做市不怕大，风控指标上有优待</td></tr>
+      <tr><td>债券 ETF</td><td class="num">20–50 亿</td><td>应站在做市商一侧而非套利者一侧</td></tr>
+      <tr><td>IRS / swap spread</td><td class="num">20–80 亿名义</td><td>参与者与期货不重叠，偏离持久；受对手方授信约束</td></tr>
+      <tr><td>可转债</td><td class="num">30–50 亿</td><td>卫星策略；市场萎缩，拥挤度上升</td></tr>
+    </tbody>
+  </table>
+  <p><b>主动量化敞口合计约 100–250 亿名义，真正高换手的部分更小。</b></p>
+
+  <h3>两个市场的结构变化</h3>
+
+  <h4>债券 ETF：快速扩张，但套利空间已压缩</h4>
+  <p>规模接近 9000 亿元（2026 年 6 月 28 日 8840.63 亿元、53 只）；2026 年 3 月月度成交额 53179 亿元，6 月前 5 个交易日日均成交近 2000 亿元。科创债 ETF 16 只 2421.81 亿元、基准做市信用债 ETF 8 只超 1900 亿元，两类合计超 5000 亿、占总规模超 55%。2026 年前五月整体月平均换手率 29.6%–34.2%；政金债 ETF 换手率多在 20% 以下，城投债、公司债 ETF 换手率始终较低。</p>
+  <p><b>上半年科创债、基准做市信用债 ETF 折溢价普遍收窄至接近 0bp</b>，做市商报价效率及现金申赎覆盖范围改善是支撑因素；三季度利率债供给季节性放量可能是折溢价扰动节点。</p>
+  <div class="note">
+    <p>纯折溢价套利空间已被压缩。<b>但这对券商是正面信号</b>——折溢价收敛说明做市和申赎机制在成熟，应站在做市商一侧。同时，折溢价从「套利机会」退化，正好升级成「估值误差与流动性压力的高频预警指标」（见第 7、9 部分）。</p>
+  </div>
+
+  <h4>可转债：结构性萎缩</h4>
+  <p>2026 年 6 月 30 日存量 5004.57 亿元，较 2025 年末减少 573.77 亿元、降幅 10.29%，存续券中 56 只年内触发强赎；与 2023 年末 8758 亿元相比大幅缩水，有机构预计 2026 年末进一步降至 4500 亿附近。</p>
+  <p><b>盘子在缩，但里面的量化资金没少，拥挤度在上升。</b>三年前 8758 亿的市场和现在 5000 亿的市场，同样的策略容量已经不是一回事。</p>
+
+  <h3>量化在这个身份下最值钱的三件事</h3>
+  <ol>
+    <li><b>资本效率优化。</b>真正的目标函数是「收益 / 风险资本准备占用」。在 500 亿盘子上把资本占用优化 1%，等于凭空释放几亿元的额外投放能力，且不承担任何新增市场风险。</li>
+    <li><b>执行成本。</b>500 亿组合 1bp 即 5000 万。报价商选择与轮换、大单拆分、时点选择、跨市场路由，收益可测量、可复现。</li>
+    <li><b>风险的实时计量。</b>不产生收益，但决定能否在波动放大时守住仓位不被迫平。</li>
+  </ol>
+
+  <div class="note warn">
+    <span class="h">别指望的事</span>
+    <p>别指望把 500 亿做成高换手量化盘——中国债市深度不支持，冲击成本会吃光模型收益。别指望信用债量化选券做出显著 alpha——数据质量、流动性、违约尾部三样都不够。别指望复制海外 RV 基金的杠杆倍数——风控指标刚性，且央行在 2026 年一季度货币政策执行报告中点名「非银机构过度加杠杆、期限错配」。</p>
+  </div>
+</section>
+
+<!-- ============ PART 5 ============ -->
+<section class="part" id="p5">
+  <div class="part-head"><span class="tag">05</span><h2>资产分类与风险因子</h2></div>
+
+  <p>这一部分是共享底座的内容定义。分类方式是关键：<b>按「定价所需要的机器」分类，不按品种名称分类</b>。名字不同但机器相同的是同一类，名字接近但机器不同的（如普通信用债与永续债）是两类。按品种名称列会得到几十行彼此重复的表；按定价原语列会收敛到九类。</p>
+
+  <figure>
+    <svg width="100%" viewBox="0 0 900 470" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>九类定价原语</title><desc>按定价所需机器划分的九类资产，标注底盘与可选模块。</desc>
+      <text class="s-lbl" x="0" y="14">底盘 · 任何形态的券商债券部门都要有</text>
+
+      <g><rect x="0" y="26" width="288" height="62" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+        <text class="s-t" x="14" y="46" fill="#123F3D">一 · 确定现金流 + 单一曲线贴现</text>
+        <text class="s-b" x="14" y="63" fill="#1B5B58">国债、地方债、政金债、固息信用债</text>
+        <text class="s-m" x="14" y="79" fill="#1B5B58">机器：现金流生成、贴现曲线、日算惯例、税收</text></g>
+
+      <g><rect x="306" y="26" width="288" height="62" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+        <text class="s-t" x="320" y="46" fill="#123F3D">二 · 浮动现金流</text>
+        <text class="s-b" x="320" y="63" fill="#1B5B58">浮息债、挂钩 LPR 品种</text>
+        <text class="s-m" x="320" y="79" fill="#1B5B58">机器：远期利率推导、基准定义、重定价规则</text></g>
+
+      <g><rect x="612" y="26" width="288" height="62" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+        <text class="s-t" x="626" y="46" fill="#123F3D">三 · 含行权权</text>
+        <text class="s-b" x="626" y="63" fill="#1B5B58">含赎回/回售、永续债、二级资本债</text>
+        <text class="s-m" x="626" y="79" fill="#1B5B58">机器：利率模型 + 发行人行为模型</text></g>
+
+      <g><rect x="0" y="98" width="288" height="62" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+        <text class="s-t" x="14" y="118" fill="#123F3D">五 · 含信用风险的估值</text>
+        <text class="s-b" x="14" y="135" fill="#1B5B58">叠加于所有信用债</text>
+        <text class="s-m" x="14" y="151" fill="#1B5B58">机器：PD × LGD + 风险溢价（已定：结构化版）</text></g>
+
+      <g><rect x="306" y="98" width="288" height="62" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+        <text class="s-t" x="320" y="118" fill="#123F3D">六 · 线性衍生品</text>
+        <text class="s-b" x="320" y="135" fill="#1B5B58">国债期货、IRS、标准债券远期</text>
+        <text class="s-m" x="320" y="151" fill="#1B5B58">机器：曲线、转换因子、CTD 判定</text></g>
+
+      <g><rect x="612" y="98" width="288" height="62" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+        <text class="s-t" x="626" y="118" fill="#123F3D">九 · 融资与借贷</text>
+        <text class="s-b" x="626" y="135" fill="#1B5B58">质押式/买断式回购、债券借贷</text>
+        <text class="s-m" x="626" y="151" fill="#1B5B58">机器：资金曲线、抵押品估值、折算率</text></g>
+
+      <text class="s-lbl" x="0" y="196">建议纳入 · 即使不做该业务</text>
+      <g><rect x="0" y="208" width="288" height="62" rx="3" fill="#F0ECF8" stroke="#6B4FA8" stroke-width="1"/>
+        <text class="s-t" x="14" y="228" fill="#4A3577">八 · 组合型</text>
+        <text class="s-b" x="14" y="245" fill="#6B4FA8">债券 ETF、场外债基</text>
+        <text class="s-m" x="14" y="261" fill="#6B4FA8">机器：穿透到成分券 + 折溢价 + PCF 处理</text></g>
+
+      <text class="s-lbl" x="306" y="196">独立模块 · 已定：要做</text>
+      <g><rect x="306" y="208" width="288" height="62" rx="3" fill="#FAF2E0" stroke="#A5741A" stroke-width="1"/>
+        <text class="s-t" x="320" y="228" fill="#6F4E11">四 · 股债耦合</text>
+        <text class="s-b" x="320" y="245" fill="#A5741A">可转债、可交换债</text>
+        <text class="s-m" x="320" y="261" fill="#A5741A">机器：正股价格与波动率、条款期权、数值方法</text></g>
+
+      <g><rect x="612" y="208" width="288" height="62" rx="3" fill="#FAF2E0" stroke="#A5741A" stroke-width="1"/>
+        <text class="s-t" x="626" y="228" fill="#6F4E11">七 · 非线性衍生品</text>
+        <text class="s-b" x="626" y="245" fill="#A5741A">期货期权（仿真中）、Cap/Floor/Swaption</text>
+        <text class="s-m" x="626" y="261" fill="#A5741A">机器：波动率曲面、数值方法、Greeks</text></g>
+
+      <g><rect x="0" y="288" width="900" height="52" rx="3" fill="#F6F7F8" stroke="#A6ADB4" stroke-width="1" stroke-dasharray="4 3"/>
+        <text class="s-t" x="14" y="308" fill="#454C55">跨境 · 视业务而定（与第 11 部分的境外机构服务是同一件事的两面）</text>
+        <text class="s-b" x="14" y="326">中资美元债、点心债、债券通标的、互换通 — 机器：多币种曲线、汇率、跨货币基差</text></g>
+
+      <line x1="0" y1="362" x2="900" y2="362" stroke="#DFE3E7" stroke-width="1"/>
+      <text class="s-b" x="0" y="386"><tspan font-weight="600" fill="#15181C">第七类为何即使期权不上市也要建：</tspan>交割期权（质量、时点、月末）的定价用的是同一套波动率能力。</text>
+      <text class="s-b" x="0" y="406"><tspan font-weight="600" fill="#15181C">第八类为何不该当可选：</tspan>ETF 折溢价是观测信用债流动性和估值误差的高频窗口，穿透定价能力必须有。</text>
+      <text class="s-b" x="0" y="426"><tspan font-weight="600" fill="#15181C">第九类常被漏在定价库之外：</tspan>回购的抵押品估值必须与现券估值同源，否则质押券摆布优化算不出来。</text>
+      <text class="s-b" x="0" y="446"><tspan font-weight="600" fill="#15181C">独立投入 ≠ 独立架构：</tspan>可转债的正股因子、跨境的汇率因子必须进入统一因子体系，否则组合敞口加不起来。</text>
+    </svg>
+    <figcaption><b>九类定价原语。</b>第一类在中国比海外复杂——2025 年 8 月新老划断后，同样是国债，免税老券与应税新券需要两套税后现金流，因此<b>税收属性必须是资产对象的一等属性</b>，不是附加信息。</figcaption>
+  </figure>
+
+  <h3>结构化信用估值：为什么简化版没有价值</h3>
+  <p>目标分解式：<b>信用利差 = 预期损失（PD × LGD）+ 风险溢价 + 流动性溢价 + 税收调整 + 资本占用补偿</b>。</p>
+  <p><b>简化版（利差贴现法）没有业务价值，因为它复制的是一个已经免费拥有的东西</b>——算出来的结果本质上是中债估值的重新包装。而且它比没有更糟：会让人误以为自己有定价能力，实际只是给外部估值套了个壳。结构化的价值不在于数字更准，而在于<b>分解出来的每个成分都能被独立交易或独立管理</b>。</p>
+
+  <h4>中国版 PD 模型必须按主体类型分叉</h4>
+  <p>Merton 类结构化模型在中国主体上基本不成立——城投没有有意义的企业资产价值，它的违约不是「资产跌破债务」的经济事件，而是<b>政策决定</b>。</p>
+  <ul>
+    <li><b>城投</b>：区域财政能力（一般公共预算、政府性基金收入、债务率、综合财力）+ 政策支持意愿 + 平台在区域内的层级和重要性 + 债务结构与到期分布</li>
+    <li><b>产业主体</b>：主体财务 + 行业周期 + 股东背景与实际支持力度</li>
+  </ul>
+  <p><b>「政策支持度」在中国不是修正项，是主变量。</b>这是海外模型完全没有的维度，也是最难量化的一块。</p>
+
+  <h4>一级市场数据在这里第二次派上用场</h4>
+  <p>再融资能力是 PD 最有力的先行指标，观测窗口就在一级市场：新债发行是否顺利、发行利率相对曲线的偏离、认购倍数、有无取消发行。第 3 部分把这些定位成「信用预警信号」，<b>在这里升级成 PD 模型的核心输入</b>——一级市场数据管道的投入回报比原估计更高。</p>
+
+  <h4>LGD：数据最稀疏，且中国处置路径特殊</h4>
+  <p>违约在中国不是二元事件，是一个谱系：技术性违约、展期、债务置换、司法重整、实质性损失。真正走到清偿并有回收率数据的样本极少，大量案例是展期或置换，<b>会计上不算损失，经济上有损失</b>。</p>
+  <p>现实做法：<b>LGD 不追求精确，追求分档和保守</b>。按主体类型、债务层级、担保结构分几档，用稀疏历史样本加专家判断标定，明确标注低置信度。<b>同时把展期和置换当作独立状态建模</b>，不塞进「违约」或「正常」任何一边。</p>
+
+  <h4>隐含评级迁移必须显式建</h4>
+  <p>中债隐含评级调整会导致估值跳变，这是方法论产生的「人造事件」，但对 P&amp;L 的影响是真实的。要建两套：预测迁移的模型（比外部评级快但仍有滞后），以及迁移导致的估值跳变预估。</p>
+
+  <div class="note">
+    <span class="h">三个出口证明这笔投入合理</span>
+    <p>同一套引擎服务：<b>承销定价</b>（给发行人报价需知道市场会怎么定价）、<b>自营与做市的 rich/cheap 判断</b>、<b>对客信用研究服务</b>。这是「一套底座、多个出口」的第一个实例，也是华泰把 CAMS 做成投行、投资、资管共用平台的原因。</p>
+  </div>
+
+  <h3>风险因子清单</h3>
+
+  <table>
+    <thead><tr><th style="width:16%">组</th><th>因子</th></tr></thead>
+    <tbody>
+      <tr><td><b>利率</b></td><td>无风险曲线关键期限点（1M/3M/6M/1Y/2Y/3Y/5Y/7Y/10Y/15Y/20Y/30Y/50Y）；曲线形态（level / slope / curvature，PCA 前三主成分）；基准利差（国开-国债、口行-国开、农发-国开、地方债-国债）；<b>税收利差（免税老券 vs 应税新券——2025 年 8 月后新增，中国独有，无历史序列）</b>；swap spread；资金曲线（DR、R、交易所回购，隔夜到 1Y）；<b>R-DR 利差（券商身份的专属风险因子）</b></td></tr>
+      <tr><td><b>信用</b></td><td>评级利差曲线（外部评级与隐含评级各一套）；行业利差；区域利差（城投特有）；主体特有利差；<b>隐含评级迁移（人造因子，但 P&amp;L 影响真实）</b>；违约率与回收率</td></tr>
+      <tr><td><b>流动性</b></td><td>新老券利差；活跃度分层；买卖价差；<b>可交割券溢价（进入交割篮子带来的系统性偏贵）</b></td></tr>
+      <tr><td><b>波动率</b></td><td>利率波动率曲面（标的期限 × 期权到期 × moneyness）；股票波动率（可转债用）；波动率期限结构与偏斜</td></tr>
+      <tr><td><b>股票</b></td><td>正股价格、正股波动率、行业、市值（可转债）</td></tr>
+      <tr><td><b>基差与关联</b></td><td>期货基差 / IRR；CTD 切换；ETF 折溢价；跨市场同券价差</td></tr>
+      <tr><td><b>汇率</b></td><td>即期、掉期点、跨货币基差（跨境）</td></tr>
+      <tr><td><b>制度性</b><br><span style="color:var(--f-comp);font-size:12px">中国特有</span></td><td><b>供给冲击</b>（发行日历，可提前知晓的确定性冲击）；<b>机构行为</b>（理财赎回、债基申赎——海外无对应物，但 2022 年 11 月证明是一等风险源）；政策因子（OMO、MLF、降准降息）；季节性（月末、季末、缴税、缴准、政府债缴款）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note risk">
+    <p><b>海外的风险因子体系里没有制度性这一整块，直接搬过来会漏掉中国债市最大的几次波动的成因。</b></p>
+  </div>
+
+  <h3>机构级因子：三层建设路径</h3>
+  <p>已定方向为「保留基础，逐步增强」，拆成三层：</p>
+
+  <h4>第一层：机构类型的分类体系与行为画像</h4>
+  <p>属于主数据，<b>不需要任何新数据，是把已知的制度事实结构化</b>。对每类机构建固定画像表：负债端性质（稳定性、久期、赎回机制）；<b>考核机制（净息差 / 净值 / 绝对收益 / 相对排名——决定它在压力时会不会卖）</b>；投资约束（范围、久期、评级、杠杆）；<b>准入工具（能否用期货、能否进交易所、能否做 IRS——即第 2 部分准入图谱的因子层复用）</b>；季节性节奏。</p>
+
+  <h4>第二层：持仓与流量估计</h4>
+  <p>没有干净数据源，只能多源拼：中债登与上清所月度分投资者类型托管数据（月频滞后，唯一存量口径）；现券成交的机构类型净买卖数据（日频，部分源提供）；中金所每日会员持仓排名（期货侧高频观测）；公募基金规模与申赎披露；一级市场投标行为。</p>
+  <p><b>正确心态是先建框架和接口，数据逐步补，每个字段标注置信度。</b></p>
+  <p><b>与销售交易数据互补：</b>托管数据是月频滞后的存量，客户询价流是实时的意图。外部数据给全市场的慢镜头，内部数据给局部的实时切片——两者结合能画出别人画不出的机构行为图。</p>
+
+  <h4>第三层：压力传导链条</h4>
+  <p>2022 年 11 月的教训是：<b>压力不是从价格开始的，是从负债端开始的</b>。理财净值下跌 → 客户赎回 → 理财被迫卖债 → 价格下跌 → 净值再跌 → 更多赎回。这是一个正反馈环，起点在机构负债端，不在债券市场里。</p>
+  <p>要建的四件事：<b>谁先卖</b>（按负债端稳定性与考核机制排序）；<b>卖什么</b>（压力下的抛售顺序，通常先卖流动性最好的——这解释了为什么压力时利率债先跌）；<b>卖给谁</b>（还有谁有承接能力和意愿）；<b>你在链条里的位置</b>。</p>
+  <div class="note warn">
+    <p><b>最后一条对券商自营尤其重要：压力时你既是持仓者又是做市商，两个身份的利益是冲突的</b>——做市义务要求报价接盘，自营风险管理要求减仓。这个冲突必须事前想清楚并写成规则，不能在当天临时决定。</p>
+  </div>
+
+  <h3>跨资产因子纳入数据模型的五条业务规则</h3>
+  <ol>
+    <li><b>一个因子，全公司一个定义。</b>「10 年期国债收益率」同时作用于 10 年国债现券、T 合约、10Y IRS、政金债、信用债、债券 ETF、可转债债底。如果这七处各自定义，组合层面的风险就加不起来——你会得到七个数字，但没有一个是全组合的真实敞口。<b>这一条不成立，跨资产风险管理就是假的。</b></li>
+    <li><b>因子的分解关系必须显式。</b>信用债收益率 = 国债曲线关键点 + 品种利差 + 评级利差 + 行业/区域利差 + 主体特有利差 + 流动性溢价 + 税收调整。必须是模型里显式表达的层级，不能算完再拆——<b>对冲需要它</b>（用国债期货只能对冲第一项）；<b>归因需要它</b>。</li>
+    <li><b>敏感度口径必须统一。</b>bump 多大、单边还是双边、重定价时是否重建曲线、非线性资产用不用二阶项。口径不一致的敏感度不能相加，而组合风险的本质就是相加。</li>
+    <li><b>资产到因子的映射双向可查。</b>对任意资产能答「暴露在哪些因子上、权重多少」；对任意因子能答「哪些资产受影响、总敞口多少」。<b>双向可查是压力测试的前提。</b></li>
+    <li><b>有一类「因子」不是市场因子，但必须并行跟踪：会计科目（AC / FVOCI / FVTPL）、资本占用、额度占用。</b>它们不影响经济价值，但影响会计 P&amp;L 和能否继续持有。对券商自营，一只券在不同科目下的「风险」是不同的。<b>经济视图与会计视图必须并行存在——这是券商身份相对公募的额外维度，海外风险系统通常也无对应设计。</b></li>
+  </ol>
+</section>
+
+<!-- ============ PART 6 ============ -->
+<section class="part" id="p6">
+  <div class="part-head"><span class="tag">06</span><h2>数据层</h2></div>
+
+  <h3>八类问题，按危害程度排序</h3>
+
+  <h4>一 · 前视偏差（最隐蔽也最致命）</h4>
+  <p>几乎所有商业数据库存的是「当前值」而非「当时的值」。评级下调后只有下调后的评级；财务数据重述后只有重述后的版本；中债市场隐含评级调整频繁，历史序列很容易被覆盖。<b>后果：</b>回测 2023 年 1 月的策略时用的是 2023 年 3 月才发生的信息，信用类策略回测结果好得离谱，且找不出错在哪，因为每个字段看起来都正常。</p>
+  <p><b>这一条在债券上比股票严重得多</b>——债券的关键字段（评级、隐含评级、估值、条款变更、担保变更、发行人财务）几乎全都会被回溯修改。</p>
+  <p><b>处理：</b>每条记录必须带两个日期——<b>业务日期</b>（这个值描述哪一天）和<b>知识日期</b>（我们哪一天知道的）。查询接口只暴露「截至某日我知道什么」这一种语义。<b>没有变通方案，也不能事后补救，必须从第一天建库时做进去</b>；已建好的库要改，成本高到基本等于重建。</p>
+
+  <h4>二 · 把估值当价格</h4>
+  <p>大量信用债几天到几周不成交，看到的「价格」是估值，而估值机构为稳定性会做平滑。两层后果：波动率被削平，回测最大回撤远小于真实值、夏普虚高；<b>估值参考成交、成交参考估值形成自我循环</b>，在没有真实交易的区间里估值序列自相关性极高，任何均值回复策略都会显示漂亮的假信号。</p>
+  <p><b>处理：</b>每只券每天打<b>价格可信度标签</b>（真实成交 / 有活跃报价 / 纯模型估值 / 曲线插值），低可信度样本降权或剔除；对估值序列做<b>去平滑修正</b>，用可成交价格（活跃券、国债期货、ETF）反向校准平滑系数；<b>回测风险指标一律用去平滑序列</b>，收益可用原始序列。</p>
+
+  <h4>三 · 非市场化成交</h4>
+  <p>银行间存在大量代持、跨期调节收益、结构化发行相关、关联方交易，价格严重偏离市场但数据里和正常成交长得一样。</p>
+  <p><b>处理：</b>不要简单按「偏离估值超 X bp 就剔除」，那样会把真实价格发现也扔掉。<b>建打分模型输出每笔成交的市场化程度</b>，特征包括偏离估值的幅度与方向、成交时点（尾盘集中是强信号）、成交量是否为整数（正好 1 亿、5 亿）、该券历史成交分布、成交价格是否恰好等于某个整数收益率。打分而非二元剔除——<b>这些异常成交本身有信息，是识别结构化发行、判断发行人融资困境的线索。污染源用对了地方就变成信号源。</b></p>
+  <p class="s-b" style="font-size:13.5px;color:var(--ink3)">注：中债估值编制本身也会剔除异常值，如结合成交量剔除买断式回购或「做量」形成的价格。</p>
+
+  <h4>四 · 主数据：跨市场分析的地基</h4>
+  <ul>
+    <li><b>券级黄金记录</b>——同一只国债在银行间、上交所、深交所有不同代码，加上 Wind 码、彭博 ticker，需自建主键串联</li>
+    <li><b>续发的正确建模</b>——「发行日」必须拆成<b>首发日</b>和<b>本期发行日</b>：税收属性锚定首发日，CTD 判定和活跃券判定关心累计发行量。用一个字段应付，两头都错</li>
+    <li><b>发行人族谱</b>——统一社会信用代码为主键，把母子公司、SPV、城投平台的重组划转关系建成图结构。历史数据里统一社会信用代码常缺失，需人工回补，无捷径</li>
+    <li><b>条款结构化</b>——国内数据最大的缺口。含权债在信用债存量里占比很高，而<b>行权日而非到期日才是真实久期</b>。供应商给的往往只是募集说明书里的文本描述</li>
+  </ul>
+  <div class="note warn"><p><b>如果条款没结构化，组合久期是错的，而且系统性偏长</b>——对 500 亿盘子是实质性的风险计量错误。</p></div>
+
+  <h4>五 · 时间对齐</h4>
+  <p>三个市场交易时段各不相同、收盘时间不一致，用「日终数据」算跨市场基差实际是在比较不同时点的价格；日间波动大时噪音可达几个 bp。<b>处理：</b>放弃「日终」概念做跨市场分析，改用统一时点切片并记录每个市场在那一刻是收盘价还是盘中价；<b>原始时间戳一律保留，对齐在查询层做、不在存储层做</b>；事件驱动分析用事件时点对齐。</p>
+
+  <h4>六 · 结构性断点</h4>
+  <ul>
+    <li><b>2025 年 8 月 8 日增值税新政</b>——之后的国开-国债利差与之前不可比，历史均值回复参数直接失效</li>
+    <li><b>2018 年资管新规、2022 年理财净值化</b>——机构行为断点，赎回压力传导机制完全变了</li>
+    <li><b>2022 年 11 月理财赎回潮</b>——不是断点而是极值样本，决定压力情形参数</li>
+    <li><b>合约上市时点</b>——TL（30 年）2023 年才上市，涉及超长端对冲的回测在那之前是虚构的</li>
+    <li><b>交易机制变化</b>——交易所债券做市 2023 年推出、债券 ETF 品类 2025 年扩容并快速放量</li>
+  </ul>
+  <p><b>处理：</b>建<b>规则变更时间轴表</b>作为一等数据资产。回测框架强制声明适用区间，跨断点必须分段估参数。<b>关键不是技术是纪律——要让「跨越断点」在系统层面报错。</b></p>
+
+  <h4>七 · 期货连续序列</h4>
+  <p>主力合约拼接方法与移仓日定义都有多种选择，不同选择给出不同回测结果。在基差策略上问题被放大，因为<b>基差本身在移仓期就是跳变的</b>——用连续合约算基差，会把移仓造成的跳变当成基差的真实变动。<b>处理：</b>基差策略一律用具体合约，合约级原始数据永久保留，同时维护可交割券清单和转换因子的历史序列。</p>
+
+  <h4>八 · 内部持仓数据</h4>
+  <p>AC / FVOCI / FVTPL 在不同系统凑不出全组合视图；回购与债券借贷的穿透两头都容易漏（正回购出去的券法律和风险上还是你的，逆回购收到的质押券不是你的资产但影响流动性和 LCR）；科目转换的历史记录影响归因。</p>
+
+  <h3>架构上的三条硬规矩</h3>
+  <ol>
+    <li><b>raw 层只追加不修改。</b>外部数据原样落地，永不清洗、永不覆盖，所有清洗在下游做且保留规则版本——这样三个月后发现规则错了可以重跑而非重新采集，<b>而清洗规则一定会错</b></li>
+    <li><b>缺失和填充必须显式标记。</b>供应商会静默地用前值填充、用曲线插值且不告诉你</li>
+    <li><b>多源并行 + 差异监控。</b>不只是质控——<b>差异本身是信号</b>，中债与中证估值分歧扩大的券通常是流动性恶化或刚发生异常成交</li>
+  </ol>
+
+  <h3>数据商可信度：按字段分，不按供应商分</h3>
+  <p class="note" style="border-left-color:var(--ink);background:var(--rule2)"><b>同一个供应商的行情字段和条款字段，可信度差两个数量级。</b>用「Wind 靠不靠谱」这种粒度提问得不到有用答案。</p>
+  <table>
+    <thead><tr><th style="width:20%">档次</th><th>内容与处理</th></tr></thead>
+    <tbody>
+      <tr><td><b>第一档</b><br><span style="color:var(--ink3);font-size:12px">可直接用</span></td><td>交易所行情、中金所期货数据（机器生成，供应商只是转发）；招标结果、发行公告、托管月报。<b>正确做法是尽可能绕过供应商直接对接原始源</b>——不是因为供应商改数据，而是转发链路有延迟和字段丢失</td></tr>
+      <tr><td><b>第二档</b><br><span style="color:var(--ink3);font-size:12px">需交叉校验</span></td><td>中债、中证估值（权威，但是估值不是价格，且有平滑）；债券基础信息（<b>续发和条款变更是高频出错点</b>）；银行间成交数据（供应商聚合方式各异，笔数与金额口径经常对不上）</td></tr>
+      <tr><td><b>第三档</b><br><span style="color:var(--ink3);font-size:12px">必须自建</span></td><td>条款结构化字段（复杂结构基本被压平）；发行人族谱与关联关系；城投平台的行政层级、区域归属、平台重要性（<b>没有一家的分类会正好符合你的风控逻辑</b>）；隐含评级历史序列（被覆盖风险最高）；担保、增信、抵质押关系；<b>非市场化成交的标记（无任何供应商做）</b></td></tr>
+    </tbody>
+  </table>
+  <p><b>三个具体的坑。</b>字段口径不透明——同一指标名在不同表里定义不同，<b>建库第一步应是逐字段确认口径并写进文档</b>。多源不一致是常态而非异常，别指望找到「对的那个」。主观数据（如 YY 评分）要标注为观点，存的时候与客观字段分开。</p>
+
+  <h3>自建清洗：旁挂，不覆盖</h3>
+  <p>三层结构：<b>raw 层</b>原样落地永不修改；<b>enrichment 层</b>放自建字段独立存储；<b>serving 层</b>按优先级规则合并输出，且每个字段要能说出来自哪一层。</p>
+  <p><b>绝不能直接改 raw 层的值</b>——一旦改了，永远无法区分「供应商本来是错的」和「我们改错了」，而且供应商下次全量刷新会冲掉修改。</p>
+  <p><b>每个自建字段必须有证据链。</b>没有证据链的自建字段，三年后没人知道为什么这么填，也没人敢改，会变成所有人绕着走的雷。</p>
+  <table>
+    <thead><tr><th style="width:34%">最值得自建（按投入产出比）</th><th>不值得自建</th></tr></thead>
+    <tbody><tr><td>
+      1. 条款结构化——工作量最大，护城河最厚<br>
+      2. 券级税收属性（锚定首发日）<br>
+      3. 价格可信度标签——供应商完全没有<br>
+      4. 非市场化成交打分<br>
+      5. 发行人族谱图<br>
+      6. Point-in-time 快照——<b>今天不存，明天永远拿不到</b>
+    </td><td>
+      行情数据（直接接原始源）<br>
+      财务数据的原始录入（太贵）<br>
+      基础发行信息（供应商够用）<br><br>
+      <b>冲突解决规则：</b>有权威源的以权威源为准；无权威源的记录分歧本身并把分歧当信号；自建字段优先于供应商（因为有证据链）
+    </td></tr></tbody>
+  </table>
+  <p><b>供应商的历史数据会被静默修订</b>，同一查询在不同时间跑出不同结果且不通知。所以自己落地的快照长期看会比供应商的库更可信——它是唯一没被回溯修改过的版本。</p>
+
+  <h3>数据量：比想象的小得多</h3>
+  <table>
+    <thead><tr><th style="width:26%">类型</th><th class="num" style="width:22%">年增量</th><th class="num" style="width:18%">十年</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>日频核心库（估值）</td><td class="num">约 5000 万行 / 15–30GB</td><td class="num">200–300GB</td><td>10 万只 × 250 日 × 2 源 × 30 字段</td></tr>
+      <tr><td>成交明细</td><td class="num">约 2500 万行</td><td class="num">50GB 以内</td><td>日均约 10 万笔</td></tr>
+      <tr><td>国债期货 tick</td><td class="num">极小</td><td class="num">几十 GB</td><td>4 品种 × 3 活跃合约，500ms 快照</td></tr>
+      <tr><td>交易所 Level-2 全量</td><td class="num">数 GB / 天</td><td class="num">TB 级</td><td><b>应按标的选择性订阅，不全量落地</b></td></tr>
+      <tr><td>非结构化 PDF</td><td class="num">—</td><td class="num">几百 GB</td><td>冷数据，处理一次抽字段即可</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <span class="h">这个判断直接决定资源配置</span>
+    <p><b>中国债券市场对量化来说是「小数据」。</b>核心库全量压缩后几百 GB，一台配置好的服务器加列式存储就能跑，主数据用关系库，发行人族谱用递归查询即可。<b>不需要分布式方案。</b></p>
+    <p><b>不要在基础设施上花钱，要在条款解析、口径确认、人工核对上花钱。瓶颈从来不是存储和算力，是领域知识和人工投入。</b>把几万份募集说明书解析成结构化字段，成本主要是人力和验证，可能需要一到两人做很久，但价值远高于任何基础设施投入，且一旦做完就是永久资产，还会随新券发行持续增值。</p>
+  </div>
+
+  <h3>货币中介数据</h3>
+  <p><b>格局：</b>原银保监会批准 6 家货币经纪公司——平安利顺国际、上海国际、天津信唐、上海国利、中诚宝捷思、上田八木（中国）。它们<b>不得从事任何金融产品的自营业务</b>，业务范围覆盖境内外外汇、货币市场、债券市场和衍生产品交易。</p>
+  <p><b>为什么关键：</b>CFETS 的成交数据是<b>成交之后</b>的记录；货币中介手里的是<b>成交之前</b>的东西——挂着没成的买卖意向、报价背后的量、市场两边的真实意愿。<b>最有价值的恰恰是从未成交的报价</b>：成交只告诉你某价格上有人达成交易，未成交的报价告诉你<b>在什么价位上没人接</b>，这是判断真实供需的另一半，在任何官方数据里都不存在。</p>
+  <p><b>四个独占优势领域：</b>非活跃券和老券（中债估值最不可靠的地方恰是中介报价最有价值的地方）；<b>债券借贷</b>（谁想借哪只券是极强信号——<b>CTD 挤压最直接的预警</b>）；买断式与期限回购（资金曲线中长端的价格发现主要在这里，而 DR/R 只给隔夜和 7 天）；大宗意向。</p>
+  <div class="note warn">
+    <span class="h">必须知道的监管变化</span>
+    <p>2023 年 3 月监管收紧后，QB 终端（此前垄断上海国利的债券报价数据）处于停业状态；货币经纪商被要求<b>不能对数据收费</b>，随后出台《货币经纪公司提供数据标准》及数据服务白名单，报价数据重新通过 Wind、DM 等终端接入。<b>获取路径现在是规范化的，不是直接向中介买。</b>此事发生于三年前，之后可能还有演变，需向合作中介确认。</p>
+  </div>
+  <p><b>四个技术难点：</b>券名口语化（同一只券写成「24 国开 15」「国开 2415」或各种简称，需实体识别映射到主数据主键——<b>主数据不建好，中介数据根本没法用</b>）；跨中介去重（同一大单可能同时挂三家，只能概率性归并，并<b>明确承认聚合后的深度是上界而非真实值</b>）；indicative 与 firm 不明确（需打标签，并用历史成交反推<b>报价可实现率评分</b>）；时间戳不可靠（按低精度数据处理）。</p>
+  <div class="note">
+    <span class="h">一处重要修正</span>
+    <p>中债估值的输入数据<b>已经包括货币经纪公司的报价数据</b>（详见第 7 部分），所以中介报价不是「中债拿不到的信息」。真实优势是三条：<b>原始且实时</b>（中债输出的是日终聚合）、<b>自己的询价日志</b>（中债永远拿不到）、<b>组合视角</b>。</p>
+  </div>
+
+  <h3>销售交易数据：最独特的一块</h3>
+  <p><b>五类产出：</b>询价流（谁在问什么券、什么方向、什么量、什么时候）；成交与未成交的比例；客户拒绝后的市场成交价（最直接的报价质量反馈）；客户类型的行为模式；需求的领先指标。</p>
+  <p><b>为什么独特：</b>中债输入里有中介报价，但<b>没有你的客户询价</b>。「自己的询价日志」是作为 taker 的记录，销售交易数据是作为 maker 收到的记录——<b>两者合起来是市场需求的双向切片，市面上任何人都拿不到</b>。更重要的是性质：<b>这是意图数据，不是成交数据</b>。成交是意图与流动性匹配后的结果，询价是意图本身，在时间上更早、信息含量更高。</p>
+  <div class="note warn">
+    <span class="h">合规设计必须做在系统里</span>
+    <p><b>聚合 + 时滞 + 匿名化，三道处理之后才进入自营可见的视图。</b>聚合按客户类型不按单个客户；时滞 T+1 或更长，从机制上排除抢跑；匿名化去掉客户标识；<b>原始询价数据存在隔离库，自营账户物理上访问不到</b>。这个架构本身就是合规证据。</p>
+    <p><b>关键判断：合规约束与量化需求在这件事上基本不冲突。</b>量化要的是统计规律（「中小银行在 3–5 年段的买盘连续两周增加」），违规要的是个体信息（「某农商行明天要买 5 亿」）。<b>前者聚合后完全保留，后者聚合后完全消失。</b></p>
+  </div>
+
+  <h3>处理优先级</h3>
+  <ol>
+    <li><b>Point-in-time 架构</b>——无法事后补救</li>
+    <li><b>券级主数据 + 条款结构化</b>——所有跨市场和久期计算的前置</li>
+    <li><b>价格可信度标签</b>——决定风险数字是真是假</li>
+    <li><b>规则变更时间轴</b>——成本极低，避免的错误极大</li>
+    <li>其余按用到的顺序做</li>
+  </ol>
+  <p><b>第 1、2 项做对了，后面都是可慢慢解决的工程问题；做错了，后面所有分析建立在错误地基上，而且你不会知道——这是数据问题最恶劣的性质，它不报错，只是让你得出自信而错误的结论。</b></p>
+</section>
+
+<!-- ============ PART 7 ============ -->
+<section class="part" id="p7">
+  <div class="part-head"><span class="tag">07</span><h2>估值体系</h2></div>
+
+  <h3>第三方估值不止一家</h3>
+  <table>
+    <thead><tr><th style="width:18%">来源</th><th>特点</th></tr></thead>
+    <tbody>
+      <tr><td><b>中债估值</b></td><td>覆盖最广，银行间事实标准。<b>输入数据包括：</b>银行间双边报价、银行间结算数据、柜台市场双边报价、交易所成交数据、交易所固定收益平台报价和成交数据、<b>货币经纪公司的报价数据</b>、市场成员的收益率估值数据；并剔除异常值，如结合成交量剔除买断式回购或「做量」形成的价格。已覆盖所有在岸各币种债券品种以及银行信贷资产、理财资产和权益类资产</td></tr>
+      <tr><td><b>中证估值</b></td><td><b>实时债券估值在每个沪深交易日 9:00～16:30 发布，频率每 5 分钟一次</b>，用于债券 ETF 实时 IOPV 计算和日间交易参考——<b>「估值滞后」的批评对中证实时估值基本不成立</b>。另有<b>预期信用损失（ECL）</b>产品：按新金融工具会计准则，依中证隐含评级把债券分为三个信用风险阶段，在乐观、中性、悲观三种宏观场景下对剥离流动性溢价后的风险中性违约率做前瞻性调整，得出预期信用损失比例（对减值计提直接可用）</td></tr>
+      <tr><td><b>CFETS</b></td><td>每日发布 77 条债券收盘收益率曲线（7 条利率债、62 条信用债、8 条同业存单）；引入无可信价格债券的专家判断机制；对存在市场价格的债券按活跃度做流动性分层以校准模型估值。2024 年对含权债对外发布 2 个估值。违约债估值取<b>清算法与现金流贴现孰低</b></td></tr>
+      <tr><td><b>YY 等</b></td><td>本质是另一套观点。方法：通过内评确定等级，同一等级下选资质稳定主体的债券作样本；确定曲线关键点，用样本主体所有债券的一级发行票面和二级成交收益率调节；未成交关键点受相邻评级成交数据影响；用对数加多项式函数作最小二乘拟合</td></tr>
+    </tbody>
+  </table>
+  <p><b>第一件该做的事很简单：把三到四个源同时接进来，把分歧当作一等数据。</b></p>
+
+  <h3>为什么第三方估值都不够用</h3>
+  <p>不是它们做得不好，是<b>它们在回答另一个问题</b>。中债把自己的产品定义为「可变现参考价格」——注意「参考」二字。第三方估值必须做到全市场覆盖、方法可解释、跨机构可比、跨时间稳定，这四个约束决定了它必须聚合、必须平滑、必须对稀疏样本用模型外推。</p>
+
+  <figure>
+    <svg width="100%" viewBox="0 0 900 400" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>四层估值体系</title><desc>会计估值、风险估值、可变现估值、交易估值四层的用途与来源。</desc>
+      <defs><marker id="ah7" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+      <g><rect x="0" y="20" width="900" height="76" rx="3" fill="#F6F7F8" stroke="#A6ADB4" stroke-width="1" stroke-dasharray="4 3"/>
+        <text class="s-t" x="16" y="42" fill="#454C55">第一层 · 会计估值</text>
+        <text class="s-b" x="16" y="60">直接用中债或中证，不自建。要的是可审计、可解释、跨期一致</text>
+        <text class="s-m" x="16" y="80">但必须持续记录内部公允价值与会计估值的偏离 — 系统性偏离本身是信息</text>
+        <text class="s-b" x="884" y="52" text-anchor="end" fill="#454C55">外部源</text>
+        <text class="s-m" x="884" y="70" text-anchor="end">合规硬约束</text></g>
+
+      <g><rect x="0" y="106" width="900" height="76" rx="3" fill="#F0ECF8" stroke="#6B4FA8" stroke-width="1"/>
+        <text class="s-t" x="16" y="128" fill="#4A3577">第二层 · 风险估值（去平滑）</text>
+        <text class="s-b" x="16" y="146" fill="#6B4FA8">用可成交标的（国债期货、活跃券、ETF）反向标定平滑系数，还原真实波动</text>
+        <text class="s-m" x="16" y="166" fill="#6B4FA8">收益可用原始序列，风险指标必须用去平滑序列</text>
+        <text class="s-b" x="884" y="138" text-anchor="end" fill="#4A3577">自建</text>
+        <text class="s-m" x="884" y="156" text-anchor="end" fill="#6B4FA8">服务：自营、资管</text></g>
+
+      <g><rect x="0" y="192" width="900" height="88" rx="3" fill="#FAEDED" stroke="#A63232" stroke-width="1.4"/>
+        <text class="s-t" x="16" y="214" fill="#7A2424">第三层 · 可变现估值 — 500 亿盘子真正缺的那个数</text>
+        <text class="s-b" x="16" y="232" fill="#A63232">估值给的是中间价概念，不告诉你 8 亿能卖多少。可变现估值 = 估值 − 流动性折价</text>
+        <text class="s-b" x="16" y="250" fill="#A63232">折价是持仓量/日均成交、券龄、评级、剩余期限、是否活跃券的函数</text>
+        <text class="s-m" x="16" y="270" fill="#A63232">关键：组合的可变现价值 ≠ 逐券可变现价值的加总 — 同时卖会互相冲击，必须在组合层面建模</text>
+        <text class="s-b" x="884" y="228" text-anchor="end" fill="#7A2424">自建</text>
+        <text class="s-m" x="884" y="246" text-anchor="end" fill="#A63232">压力时决定生死</text></g>
+
+      <g><rect x="0" y="290" width="900" height="76" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+        <text class="s-t" x="16" y="312" fill="#123F3D">第四层 · 交易估值（自建公允价值）</text>
+        <text class="s-b" x="16" y="330" fill="#1B5B58">相对价值信号的来源。只覆盖持有和交易的几千只券，不覆盖全市场十万只</text>
+        <text class="s-m" x="16" y="350" fill="#1B5B58">若要做对客与承销业务，覆盖度须扩至全市场（参照 CAMS 的 3 万只 / 95%）</text>
+        <text class="s-b" x="884" y="322" text-anchor="end" fill="#123F3D">自建</text>
+        <text class="s-m" x="884" y="340" text-anchor="end" fill="#1B5B58">做市中间价的输入</text></g>
+
+      <line x1="0" y1="382" x2="900" y2="382" stroke="#DFE3E7" stroke-width="1"/>
+      <text class="s-b" x="0" y="398"><tspan font-weight="600" fill="#15181C">战略取舍：</tspan>中债必须覆盖全市场所以必须模型外推；你只覆盖几千只，可以用更好的信息和更细的模型。在你关心的那部分券上做得比中债好完全可行，在全市场上做得比中债好没必要也做不到。</text>
+    </svg>
+    <figcaption><b>四层估值体系。</b>四层回答四个不同的问题，第三方估值最多能满足其中一个。第三层是配置盘最缺的——它决定 2022 年 11 月那种场景下你知不知道手上真正拿着什么。</figcaption>
+  </figure>
+
+  <h3>你的真实信息优势（诚实版）</h3>
+  <ol>
+    <li><b>原始且实时</b>——中债拿到的是中介报价，输出的是日终聚合结果。你拿到的是同一批报价流的原始形态，可以自己决定怎么聚合、怎么加权、什么时点用</li>
+    <li><b>自己的询价日志</b>——包括未成交的询价，中债永远拿不到</li>
+    <li><b>组合视角</b>——中债估的是「一只券值多少」，你需要知道的是「我这 8 亿能卖多少」</li>
+  </ol>
+
+  <h3>两个市场化的校准信号</h3>
+  <p><b>ETF 市价对 IOPV 的偏离，本质是市场在对第三方估值投票。</b>IOPV 是用中证实时估值算的成分券组合净值，ETF 二级市价是真实成交出来的，两者的差就是市场认为估值偏离了多少。折价扩大意味着市场认为成分券估值偏高——而成分券本身可能几天不成交，估值上看不到任何异常。<b>ETF 折溢价不只是流动性压力的代理，它是估值误差的直接观测。</b></p>
+  <p><b>期货隐含的 CTD 估值同理。</b>期货价格除以转换因子反推隐含的可交割券价格，与中债估值对比。国债期货是连续竞价、有深度的，对 CTD 的定价比日终估值更可信。<b>基差异常时要先判断是现券估值错了还是期货错了——这个区分做不出来，基差策略的信号就不干净。</b></p>
+
+  <h3>两类券的具体处理</h3>
+  <p><b>含权债：先解决行权假设。</b>中债对含权债发布行权和到期两个口径，CFETS 2024 年也发布 2 个估值，<b>但选哪个是你的判断，不是数据供应商的</b>。中国特有的建模点：<b>发行人行为不完全理性</b>——城投赎回决策受再融资能力约束不是纯经济计算，永续债不续期带有信用事件性质有声誉成本。纯利率模型算出的期权价值不够，需叠加用历史行权数据训练的<b>发行人行为模型</b>。</p>
+  <p><b>信用债：做主体层面的横截面一致性检查。</b>第三方估值是逐券估的，容易出现同一发行人不同券隐含出不一致的主体利差。应反过来做：先估主体利差，再由期限、条款、流动性解释个券差异。<b>跑不通的地方要么是模型错了，要么是市场给了机会</b>，成本很低、信噪比很高。</p>
+
+  <div class="note warn">
+    <span class="h">一个开放问题 — 建议直接向估值机构确认</span>
+    <p>2025 年 8 月 8 日增值税新老划断后，同一发行人同期限的免税老券与应税新券理应有不同的收益率中枢。<b>未查到中债或中证公开的方法论更新说明</b>，说明它们如何在曲线构建和个券估值中处理这个差异。</p>
+    <p>这不代表没处理——可能通过成交数据自然吸收，尤其活跃券上。但对模型定价的券，如果曲线构建没有把应税和免税样本分开，<b>用这条曲线定价的所有券都会有系统性偏差</b>，且偏差方向随两类券的样本占比变化。</p>
+    <p><b>自检方法：</b>把 8 月 8 日前后首发的同期限券配对，看实际成交利差是否等于税收理论值，再看估值给出的利差是多少。<b>如果估值没充分反映，那就不只是市场没定价充分，是估值本身还没跟上。</b></p>
+  </div>
+</section>
+
+<!-- ============ PART 8 ============ -->
+<section class="part" id="p8">
+  <div class="part-head"><span class="tag">08</span><h2>交易成本与执行渠道</h2></div>
+
+  <p><b>真实成本 = 显性费用 + 屏幕价差 + 冲击成本 + 信息泄露 + 税</b></p>
+
+  <h3>场所成本梯度（统一到收益率口径的往返成本）</h3>
+  <table>
+    <thead><tr><th style="width:24%">工具</th><th class="num" style="width:18%">往返成本</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><b>国债期货（T）</b></td><td class="num">约 0.075bp</td><td>最小变动价位 0.005 元；手续费不高于每手 5 元；每手面值 100 万，1 tick = 50 元；往返 = 50 + 10 = 60 元/手 = 0.6bp（价格口径），除以久期约 8。保证金 2%，交割月前两日起 3%</td></tr>
+      <tr><td><b>债券 ETF</b></td><td class="num">约 0.05–0.15bp</td><td>tick 0.001 元、价格约 100 元，单 tick 约 0.1bp（价格口径）；活跃 ETF 价差 1–3 tick，除以 ETF 久期。免印花税，但有折溢价和跟踪误差两项额外成本</td></tr>
+      <tr><td>银行间活跃利率债</td><td class="num">0.25–0.5bp</td><td>10Y 国开新券双边价差；显性费用基本可忽略</td></tr>
+      <tr><td>银行间老券 / 非活跃券</td><td class="num">2–5bp</td><td>期货的 30–70 倍</td></tr>
+      <tr><td>AAA 中票</td><td class="num">5–10bp</td><td></td></tr>
+      <tr><td>中低等级信用债</td><td class="num">20–50bp+</td><td>或根本没有报价</td></tr>
+      <tr><td>IRS（FR007 5Y）</td><td class="num">1–2bp</td><td>无场内费用，有中介佣金或做市商价差，占用授信</td></tr>
+      <tr><td>交易所现券</td><td class="num">宽于银行间</td><td>有经手费</td></tr>
+    </tbody>
+  </table>
+  <p class="note" style="border-left-color:var(--ink);background:var(--rule2)"><b>成本梯度的跨度超过 500 倍。</b></p>
+
+  <h3>增值税：最容易漏掉的大项</h3>
+  <p>金融商品转让按卖出价扣除买入价后的余额为销售额，券商自营一般计税适用 6%。三条规则决定其行为：同一纳税期内正负差<b>可以盈亏相抵</b>；相抵后为负差的<b>可结转下一纳税期</b>；<b>年末仍有负差的，不得转入下一会计年度</b>。</p>
+  <ol>
+    <li><b>毛收益要打约 5.66% 的折。</b>任何策略的税前夏普和税后夏普不是一回事</li>
+    <li><b>亏损不能跨年结转，让年末的已实现盈亏管理有真实的税务价值。</b>年内累计负差时，年末前实现浮盈避免负差作废；累计大额正差时，主动实现浮亏可直接减税。<b>这是一个约束清楚、目标函数清楚的量化优化问题，且很少有机构系统性地做</b></li>
+    <li><b>高换手策略的税负是买入持有的数倍</b>——与成本梯度同向叠加，<b>高换手在贵的市场里是双重惩罚</b></li>
+  </ol>
+  <p class="s-b" style="font-size:13.5px;color:var(--ink3)">期货平仓盈亏的处理、以及实物交割与平仓的税务差异，需与税务口径确认后再建模，公开解读之间有分歧。</p>
+
+  <h3>银行间执行渠道</h3>
+  <p><b>五种成交方式：</b>指示性报价、做市报价（ESP）、请求报价、匿名点击（X-Bond）、对话报价。<b>程序化交易主要通行 ESP 和 X-Bond 两种</b>——以做市成交 / 完成做市商考核为目的的集中在 ESP，纯粹以盈利为目的的多集中在 X-Bond。银行间程序化交易资质审核有要求，主要参与成员以银行、券商为主。<b>持有做市商资格的机构可获取五档以上 bid-ask。</b></p>
+
+  <table>
+    <thead><tr><th style="width:22%">匿名工具</th><th style="width:32%">用途</th><th>推出时间</th></tr></thead>
+    <tbody>
+      <tr><td>X-Swap</td><td>利率互换匿名点击</td><td>最早</td></tr>
+      <tr><td>X-Repo</td><td>质押式回购匿名点击</td><td>2015 年 8 月</td></tr>
+      <tr><td>X-Bond</td><td>现券匿名点击</td><td>2016 年 9 月</td></tr>
+      <tr><td>债券匿名拍卖</td><td>违约债等低流动性债券</td><td>2018 年</td></tr>
+      <tr><td>X-Bargain</td><td>现券匿名询价，支持多轮匿名协商</td><td>2020 年 10 月</td></tr>
+      <tr><td>iDeal 意向报价板</td><td>支持匿名报价</td><td>2024 年 6 月</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="h">两种匿名不是一回事</span>
+    <p><b>交易所与期货是永久匿名</b>——有中央对手方，身份对交易对手永远不暴露。<b>X 系列是成交前匿名</b>——双方只有在交易完成后通过成交单才知道对手方是谁。后者的含义是：<b>单笔匿名，但连续交易会暴露模式</b>。你连着买十笔，事后每个对手方都拿到一张写着你名字的成交单，拼起来就是行为轨迹。<b>匿名保护是有时效的，对高频重复交易几乎无效。</b></p>
+  </div>
+
+  <h4>X-Bond：单位成本最低，但有一堵硬墙</h4>
+  <p><b>X-Bond 成交规模仍远未达到场外水平，但成交笔数高于场外，说明盘口深度较浅，平均维持在 3000 万左右。</b>对 500 亿盘子的含义：调 10 亿需要打三十几次盘口，实际打完前两三笔价格就动了。<b>X-Bond 上的成本不是一个数，是一条随规模非线性上升的曲线</b>——前 3000 万几乎免费，接下来急剧变贵。</p>
+  <p><b>一个常被忽略的选项：在 X-Bond 上做 maker 而非 taker。</b>主动点击是付价差，挂单等成交是赚价差。对调仓不急的配置盘，这个选择可把交易成本从负数变成正数，代价是承担逆向选择。</p>
+
+  <h4>货币中介：佣金买的是深度，不是价差</h4>
+  <p>佣金费率是商业谈判结果、按量分档，无可靠公开数据。<b>花这笔佣金买的是 X-Bond 上不存在的深度和覆盖</b>：大宗（一次谈 5 亿、10 亿而非打三十次 3000 万）、非活跃券（X-Bond 上根本没有报价）、债券借贷与买断式回购。半匿名——中介知道你是谁，对手方成交前不知道。</p>
+  <p><b>判断规则：当佣金 &lt; 在 X-Bond 上打穿盘口的冲击成本时，走中介划算。</b>对 500 亿盘子，大部分大额调仓的答案都指向中介。</p>
+
+  <h4>请求报价 / 对话报价：「无佣金」是假象</h4>
+  <p>从机构数量看，能发请求报价的最多，能发对话报价的次之，<b>能接请求报价的最少（只有做市商）</b>。<b>你在向少数做市商询价，而他们知道你是谁、知道你的方向、往往还能判断你急不急。</b>「零佣金」的代价是价差里的溢价，而且看不见、也没法量化，除非专门去测。</p>
+
+  <h3>四个渠道的横向对比</h3>
+  <table>
+    <thead><tr><th style="width:22%">渠道</th><th>佣金</th><th>屏幕价差</th><th>冲击成本</th><th>信息泄露</th></tr></thead>
+    <tbody>
+      <tr><td>X-Bond</td><td>≈0</td><td>最窄</td><td style="color:var(--f-comp)"><b>最高</b>（3000 万一堵墙）</td><td>最低</td></tr>
+      <tr><td>货币中介</td><td>有</td><td>中等</td><td style="color:var(--anchor)"><b>最低</b>（能找到深度）</td><td>中等</td></tr>
+      <tr><td>RFQ / 对话</td><td>0</td><td style="color:var(--f-comp)"><b>最宽</b>（因为暴露）</td><td>中等</td><td style="color:var(--f-comp)"><b>最高</b></td></tr>
+      <tr><td>X-Bargain / 匿名拍卖</td><td colspan="4">介于之间，专门解决「非活跃券 + 想匿名」这个组合</td></tr>
+    </tbody>
+  </table>
+  <p><b>决策是二维的：订单规模 × 券的活跃度。</b></p>
+  <ul>
+    <li>小单 + 活跃券 → X-Bond，且尽量做 maker</li>
+    <li><b>大单 + 活跃券 → 中介，或拆单走 X-Bond</b>（最需要算账的格子：拆单的冲击加时间成本 vs 中介佣金）</li>
+    <li>小单 + 非活跃券 → RFQ 或 X-Bargain</li>
+    <li><b>大单 + 非活跃券 → 中介，基本是唯一现实选项</b></li>
+    <li>违约债、极低流动性 → 匿名拍卖</li>
+  </ul>
+
+  <h3>第五个选项：自己做 maker</h3>
+  <p>两层价值：<b>数据</b>——五档 bid-ask 是普通参与者拿不到的，<b>做市商资格首先是一个数据资格</b>；<b>成本符号翻转</b>——在 ESP 上报价，从付价差变成收价差，对换手率不高、调仓有耐心的配置盘，是把执行从成本中心变成收入中心的路径。</p>
+
+  <h3>期货侧：期转现</h3>
+  <p>期货只有集中竞价一个执行渠道，但中金所有期转现制度，允许双方协商将期货头寸与现券同时完成交易。<b>对基差策略有实际意义</b>——一次性建立或了结双腿，避免分腿执行的时间风险。具体规则和当前可用性需核实。</p>
+
+  <h3>信息泄露成本：不出现在账单上</h3>
+  <p><b>怎么测：</b>记录每一次询价，<b>包括未成交的询价</b>，然后看询价之后一段时间里市场价格是否系统性朝不利方向移动。这是唯一能把信息泄露量化出来的方法，且要求保存自己的询价日志——又是一份别人拿不到的专有数据。</p>
+
+  <h3>统一交易决策函数</h3>
+  <p><b>输入：</b>券、方向、规模、紧急度、当前 X-Bond 盘口、中介报价、做市商报价。<b>输出：</b>渠道选择、拆单方案、每笔的限价和时间间隔。<b>目标函数：</b>佣金 + 预期冲击 + 预期信息泄露 + 时间成本的加总最小。</p>
+  <p><b>这个模型需要的数据现在都没有，而且买不到：</b>X-Bond 盘口的历史序列（要自己每天存）、中介报价流（要解析）、自己的完整询价日志（包括未成交的）。</p>
+
+  <div class="note risk">
+    <span class="h">由成本梯度得出的核心结论</span>
+    <p><b>换手率应该由成本梯度决定，而不是由信号强度决定。</b>一个信号在期货上值得做，在老券上可能就不值得，在中低等级信用债上肯定不值得——因为成本跨度是 500 倍，<b>而没有任何信号的强度能跨越 500 倍</b>。</p>
+    <p>落到工具选择：<b>高换手只能在国债期货和债券 ETF 上做；现券低换手且尽量集中在活跃券；信用债接近买入持有，成本梯度上它根本不支持交易。</b></p>
+  </div>
+</section>
+
+<!-- ============ PART 9 ============ -->
+<section class="part" id="p9">
+  <div class="part-head"><span class="tag">09</span><h2>跨市场品种关联</h2></div>
+
+  <h3>券商自营在各市场的实际位置（按议价能力排序）</h3>
+  <table>
+    <thead><tr><th style="width:22%">市场</th><th style="width:14%">议价能力</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><b>国债期货</b></td><td style="color:var(--anchor)"><b>最强</b></td><td>三因叠加：<b>匿名集中竞价——对手方不知道你是谁</b>（在银行间，每次询价都在暴露方向和急迫程度）；参与者结构有利，持券最多的银行大部分缺席；深度相对规模够用。约束是持仓限额与移仓期流动性集中</td></tr>
+      <tr><td><b>债券 ETF</b></td><td style="color:var(--anchor)"><b>次强</b><br><span style="font-size:12px">前提是做市资格</span></td><td>ETF 生态里真正稀缺的是<b>成分券的获取与处置能力</b>，而券商自营恰好同时有现券库存和银行间/交易所双通道</td></tr>
+      <tr><td>银行间活跃利率债</td><td>中等</td><td>活跃券上能拿到接近中间价的报价；<b>但议价能力从活跃券到非活跃券是断崖式下跌，不是渐变</b></td></tr>
+      <tr><td>IRS</td><td>中等偏弱</td><td>受授信约束，活跃做市商就几家。价值不在议价能力，在于它是<b>参与者与期货几乎不重叠的独立信息源</b></td></tr>
+      <tr><td>交易所现券</td><td>弱</td><td>流动性差，但有别人没有的相对优势——能同时站在两个市场，跨市场同主体价差是少数能套的人之一</td></tr>
+      <tr><td>可转债</td><td>弱且在恶化</td><td>市场快速萎缩，盘子在缩但量化资金没少，拥挤度上升</td></tr>
+      <tr><td><b>银行间信用债</b></td><td style="color:var(--f-comp)"><b>最弱</b><br><span style="font-size:12px">且有反转</span></td><td>前面所有市场里 500 亿要么不够大要么刚好，<b>只有在信用债上规模是负债而不是资产</b>。单只券存续常只有几亿到几十亿，持有 150–200 亿分散在几百只券，单只持仓占比很容易到 10–30%——<b>你既不是价格接受者也不是决定者，你是被困住的人</b></td></tr>
+      <tr><td>回购融资</td><td style="color:var(--f-comp)">结构性弱势</td><td>非银只能在 R 系列拿钱，紧张时大行优先满足内部和核心客户</td></tr>
+    </tbody>
+  </table>
+  <div class="note warn"><p><b>直接推论：信用债的配置上限不应该由收益率决定，应该由压力情形下的可变现性决定。</b></p></div>
+
+  <h3>关联的强度分层</h3>
+  <p class="note" style="border-left-color:var(--ink);background:var(--rule2)"><b>最重要的区分：有机制强制收敛的关联，和只靠套利资本维系的软关联，是两种完全不同的东西。</b></p>
+  <table>
+    <thead><tr><th style="width:26%">关联</th><th style="width:22%">机制</th><th>强度</th></tr></thead>
+    <tbody>
+      <tr><td>期货 ↔ CTD 现券</td><td>交割机制，到期必然收敛</td><td><b>最强</b>，唯一可按天算 P&amp;L、可上杠杆</td></tr>
+      <tr><td>ETF ↔ 成分券篮子</td><td>申赎机制</td><td>中强，受申赎门槛、成分券可得性、现金替代规则约束；<b>压力时会失效</b></td></tr>
+      <tr><td>可转债 ↔ 正股</td><td>转股机制 + 强赎条款</td><td>中强，但条款期权使其高度非线性</td></tr>
+      <tr><td>同一只券跨市场</td><td>转托管</td><td>中等，有时滞和成本</td></tr>
+      <tr><td><b>Swap spread</b></td><td style="color:var(--f-comp)"><b>无</b></td><td>没有任何机制保证收敛，参与者又几乎不重叠。<b>最容易长期偏离、也最难交易</b></td></tr>
+      <tr><td><b>国开 ↔ 国债利差</b></td><td style="color:var(--f-comp)"><b>无</b></td><td>只靠相对价值判断。<b>过去的锚很大一部分是税收，2025 年 8 月增值税新政把锚重新洗了一遍——历史序列的均值回复参数在此之后已不可用</b></td></tr>
+      <tr><td>期限结构、跨信用主体</td><td style="color:var(--f-comp)">无</td><td>纯判断</td></tr>
+    </tbody>
+  </table>
+  <p><b>这个区分决定能承担什么风险：</b>强制收敛类可做收敛交易，有明确时间边界和最坏情况；软关联类是相对价值判断，可能长期不收敛，需要资本承受力和耐心，不能加杠杆。<b>把后者当前者做，是国内固收自营最常见的亏钱方式。</b></p>
+
+  <h3>可操作性判断</h3>
+  <p class="note" style="border-left-color:var(--ink);background:var(--rule2)"><b>核心规则：一个跨品种关联能不能交易，取决于它两条腿里较弱的那条。</b></p>
+  <table>
+    <thead><tr><th style="width:24%">关联</th><th style="width:26%">两条腿评估</th><th>结论</th></tr></thead>
+    <tbody>
+      <tr><td>期现基差</td><td>期货强 + 活跃现券中等</td><td><b>可做，是主场。</b>但要盯 CTD——若切换到不活跃老券，现券腿立刻变弱，基差在屏幕上看着便宜实际做不了。<b>基差的可交易性不等于基差的数值</b></td></tr>
+      <tr><td>利率债 ETF 与成分券</td><td>两条腿都还行</td><td>可做</td></tr>
+      <tr><td>信用债 ETF 与成分券</td><td>ETF 中等 + 成分券弱</td><td><b>规模严重受限</b>，折溢价看着有空间但成分券凑不齐、卖不掉</td></tr>
+      <tr><td>Swap spread</td><td>IRS 弱</td><td>规模上限由 IRS 腿决定，与国债腿容量无关</td></tr>
+      <tr><td>跨市场同主体价差</td><td>两条腿都弱</td><td>只能小规模、机会性做，不能作为策略线</td></tr>
+      <tr><td>可转债与正股</td><td>两条腿都弱且竞争激烈</td><td>不建议作为主力</td></tr>
+    </tbody>
+  </table>
+  <p><b>统一结论：</b>500 亿在不同市场是不同的东西。在期货市场是可消化的对冲需求，在信用债市场是流动性陷阱。<b>配置权重必须按各市场的容量倒推，而不是按组合的目标久期或收益率目标正推。</b></p>
+
+  <h3>信息位置的不对称</h3>
+  <table>
+    <thead><tr><th style="width:18%">市场</th><th style="width:44%">可见信息</th><th>评价</th></tr></thead>
+    <tbody>
+      <tr><td>期货</td><td>委托簿深度 + 持仓量 + 中金所每日公布的会员持仓排名</td><td><b>信息最充分</b>，能直接观察机构行为</td></tr>
+      <tr><td>交易所</td><td>真实委托簿深度</td><td>现券里唯一有深度数据的场所</td></tr>
+      <tr><td>银行间</td><td>做市商报价 + 有限成交信息（做市商可见五档）</td><td><b>最不透明</b>，但能「听到声音」（iDeal、销售喊话）</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <span class="h">策略性应用：用透明市场推断不透明市场</span>
+    <p><b>ETF 的折溢价是信用债市场压力的高频代理指标。</b>信用债本身可能几天不成交，估值上看不到恶化；但 ETF 每天都在交易、每天都有价。折价开始扩大，说明有人在用 ETF 抢跑流动性——比等到信用债估值调整要早得多。</p>
+  </div>
+
+  <h3>压力情形：关联会断裂，不是变弱</h3>
+  <p>2022 年 11 月理财赎回潮是最近的教科书案例：ETF 大幅折价（成分券卖不掉，申赎机制事实上失灵）；信用债没有价格而不是价格差；期货贴水扩大（所有人同时来对冲）。</p>
+  <div class="note warn">
+    <p><b>最危险的一点：</b>强制收敛类的关联在压力时依然会收敛——交割不会取消。但<b>中途的保证金压力可能让你活不到收敛那一天</b>。这是收敛交易的真实风险，和「关联会不会失效」是两回事。</p>
+    <p><b>对建设工作的直接要求：必须做压力情形下的关联矩阵，不能用平时的相关系数。</b>特别是「用国债期货对冲信用债利率风险」这个假设——压力时信用利差走阔的幅度远超无风险利率变动，对冲比例会严重失真，而这恰恰是最需要它有效的时刻。</p>
+  </div>
+</section>
+
+<!-- ============ PART 10 ============ -->
+<section class="part" id="p10">
+  <div class="part-head"><span class="tag">10</span><h2>做市业务</h2></div>
+
+  <div class="note">
+    <span class="h">为什么做市是能力建设的第一步</span>
+    <p><b>它是唯一有外部履约标准的业务</b>，会逼着把估值、报价、库存、对冲、数据五件事同时做到生产级别。内部策略可以将就，做市不能。这个「被迫做对」的属性，对新建团队比任何 alpha 都值钱。</p>
+    <p>其他理由：<b>强制打通全链条</b>（做市要求同时具备可信的中间价、成本模型、库存对冲能力、实时风险计量、干净的数据管道——前面所有内容第一次必须合到一起才能运转）；<b>给你数据资格</b>（五档 bid-ask）；<b>改变市场位置</b>（在大部分市场是价格接受者，做市是唯一能改变这一点的路径）；<b>收益来源恰好可建模</b>。</p>
+  </div>
+
+  <h3>资质体系</h3>
+  <table>
+    <thead><tr><th style="width:24%">资质</th><th>分层与内容</th></tr></thead>
+    <tbody>
+      <tr><td><b>银行间现券做市</b></td><td>按类型分：综合类、利率债专项、信用债专项、公司信用债专项。主要做市券种包括国债、政策性金融债、地方政府债、同业存单、公司信用类债券、政府支持机构债、金融债、资产支持证券。<b>尝试做市</b>为入门路径——通过银行间同业拆借中心交易系统连续报出买卖双边报价并对报价请求合理报价，满足条件的市场参与者均可申请；分<b>综合做市</b>（对政府债券、政府类开发金融机构债券和非政府信用债券全面报价）与<b>专项做市</b>（对其中一类或两类重点报价）</td></tr>
+      <tr><td><b>交易所债券做市</b></td><td>沪深交易所 2023 年 2 月 6 日正式启动，依据《交易所债券做市业务指引》。<b>主做市商</b>对基准做市品种（政府债券、政策性金融债、高等级公司债等）持续做市，即「基准做市业务」；<b>一般做市商</b>对自选品种做市。基准做市品种包括 1 年期、2 年期、3 年期、5 年期、10 年期国债中分别选取最新上市的品种等</td></tr>
+      <tr><td><b>国债期货做市商</b></td><td>主做市商、一般做市商、预备做市商</td></tr>
+      <tr><td><b>ETF 流动性服务商</b></td><td>交易所层面的另一套资格</td></tr>
+    </tbody>
+  </table>
+  <p><b>建议的获取顺序：</b>银行间专项做市 + 交易所一般做市商 → ETF 流动性服务商 → 银行间综合类 → 国债期货做市商。前两个门槛最低，且<b>立刻能拿到五档盘口数据</b>；ETF 流动性服务商放第三因为与成分券库存直接协同；国债期货做市商放最后不是因为不重要，而是名额少、要竞争，等前面跑顺了再去争成功率更高。</p>
+
+  <h3>获取难度：牌照不难，履约难</h3>
+  <p><b>关键制度变化：</b>《关于完善银行间债券市场现券做市商管理有关事宜的公告》已<b>取消做市商行政审批</b>，现在是准入加自律管理。</p>
+  <p><b>真正的门槛是持续履约能力，做市义务是硬性的：</b>在做市债券总数、券种类型、待偿期限、双边报价空白时间等合规性方面严格遵守规定；做市报价应为<b>可点击成交的双边报价</b>，双边价差应处于市场合理范围；点击成交双边报价下买入价不得高于卖出价，<b>单笔申报数量不低于 100 万元面额</b>；应基于其做市债券对投资者的询价请求进行回复并在有效期内回复；按季度向人民银行提交报告并抄送交易商协会；不得利用做市报价扰乱市场正常价格水平，不得操纵市场，不得虚假做市；交易商协会定期评价。</p>
+  <div class="note risk">
+    <p><b>翻译成技术要求：</b>需要一个能在整个交易时段不间断、覆盖几十到上百只券、自动生成合理价差、且不出现报价空白的引擎。<b>这才是真门槛，而它正好是量化团队的活。</b></p>
+  </div>
+  <p><b>难度排序：</b>银行间专项做市（最低）→ 交易所一般做市商 → ETF 流动性服务商 → 银行间综合类（义务覆盖面大幅扩大）→ 交易所主做市商 → 中金所国债期货做市商。</p>
+
+  <h3>市场现状</h3>
+  <table>
+    <thead><tr><th style="width:20%">市场</th><th>做市商构成</th><th style="width:16%">时点</th></tr></thead>
+    <tbody>
+      <tr><td>银行间现券</td><td>共 107 家——综合类 89 家、利率债专项 14 家、信用债专项 3 家、公司信用债专项 1 家；<b>其中证券公司 38 家</b></td><td>2024 年 3 月 4 日</td></tr>
+      <tr><td>交易所债券</td><td>首批 12 家证券公司参与</td><td>2023 年 2 月 6 日启动</td></tr>
+      <tr><td>国债期货</td><td>8 家主做市商、4 家一般做市商、1 家预备做市商，<b>全部是证券公司</b></td><td>2022 年 1 月 25 日名单</td></tr>
+    </tbody>
+  </table>
+  <p class="s-b" style="font-size:13.5px;color:var(--ink3)">名单是公开的：交易商协会网站有银行间做市商名单完整表格，上交所债券信息网有主做市商名单。上述为两三年前时点，需拉最新版本。</p>
+  <div class="note">
+    <p><b>这三组数字放在一起说明：</b>银行间 107 家里券商只占三分之一强，但国债期货做市商是清一色券商。<b>在需要期货对冲能力的地方，券商是唯一玩家。</b></p>
+  </div>
+
+  <h3>券商场外做市的优势（按重要性排）</h3>
+  <ol>
+    <li><b>有期货可以对冲库存——最根本的一条。</b>做市的核心问题是库存风险管理，不是报价技巧。持券最多的银行大部分不能做国债期货。<b>没有期货的做市商只能靠现券对冲或裸扛库存，这和有期货是两个生意。</b>券商在这里的优势不是边际的，是结构性的</li>
+    <li><b>跨市场。</b>银行间加交易所双通道，而银行进不了交易所竞价。<b>券商可以在两个市场之间内部转移和对冲库存</b></li>
+    <li><b>ETF 的三位一体。</b>成分券库存 + 一级申赎 + 二级做市，只有券商能做全</li>
+    <li><b>客户结构不同。</b>券商面对非银（公募、保险、私募、理财），银行面对同业。非银流更择时、信息含量更高，虽然逆向选择更严重，但对建模更有价值</li>
+    <li><b>做市可以分层选择。</b>可选综合做市或专项做市，不必全面铺开</li>
+  </ol>
+  <p><b>劣势（必须诚实）：</b>资金成本高（非银只能拿 R 系列，库存 carry 成本天然高于银行）；净资本 500% 额度里做市库存和配置盘共用同一个池子；资产负债表规模决定扛库存能力不如银行；大行的授信额度不一定给足。</p>
+
+  <h3>一个必须知道的现实，以及它为什么反而是好消息</h3>
+  <p><b>对做市业务的批评：</b>境内债券市场交易相对扁平化和透明化，做市商缺少信息优势，也无明确的责任要求，尤其在市场大幅波动时难以提供有效的做市服务。这是实情——中国的债券做市商没有海外同行那种「看得见大量客户流」的结构性信息优势。</p>
+  <div class="note">
+    <p><b>但这对量化恰恰是好消息。</b>如果做市超额收益来自信息优势，那量化无从下手——信息优势是关系和地位带来的，建不出来。而既然国内做市收益主要来自<b>报价技术和库存管理</b>，它就是一个纯粹的建模问题。</p>
+  </div>
+  <ul>
+    <li><b>报价模型：</b>中间价（四层估值第四层）+ 库存偏斜 + 逆向选择保护 + 波动率调整</li>
+    <li><b>库存管理：</b>用期货剥离久期，保留想要的利差暴露</li>
+    <li><b>对手方评分：</b>谁在报价上成交、成交后价格朝哪走——量化逆向选择的唯一办法，也是别人抄不走的专有数据</li>
+    <li><b>报价宽度的动态调整：</b>按品种、按时段、按当前库存偏离</li>
+  </ul>
+  <p><b>一个实践上的差别：</b>利率债基准做市目前主要以<b>匹配成交</b>方式开展，信用债基准做市主要以<b>点击成交</b>方式开展。两种机制下的报价逻辑和逆向选择风险完全不同，<b>报价引擎要分开设计，不能用一套参数</b>。</p>
+
+  <h3>对银行金市部，做市资质有价值吗</h3>
+  <p><b>有价值，但价值来源和券商完全不同。</b></p>
+  <p><b>对银行成立的价值：</b>一级承销与二级做市的联动最重要——交易商协会自律指引明确提出「推动一级承销和二级做市均衡发展」，发行人会看你承销的债在二级有没有流动性，<b>做市能力直接支撑承销竞争力</b>，这是券商没有的协同。其次是客户服务能力的证明、五档数据、交易商协会定期评价带来的市场地位。还有一条实在的：<b>银行资金成本低（能拿 DR），扛库存的 carry 成本天然低于券商</b>。</p>
+  <p><b>两个硬伤：</b>没有期货对冲（除五大行和部分外资行），做市核心是库存风险管理，只能用现券对冲或裸扛，这是结构性缺陷而非能力问题；考核机制不匹配——银行金市部考核通常和净息差、FTP 挂钩，而做市赚的是价差和周转率，MTM 盈亏在这套考核里位置尴尬，<b>做得好也未必被认可</b>。</p>
+  <div class="note">
+    <p><b>判断：对银行金市部，做市资质的价值主要在「承销联动 + 客户服务 + 市场地位」，做市本身很难成为独立的盈利业务。</b>而对券商，做市可以是一门独立赚钱的生意。这解释了那组数字：107 家做市商里银行占多数，但国债期货做市商全是券商——<b>两类机构做市的动机根本不同</b>。</p>
+  </div>
+
+  <h3>规模上的诚实评估</h3>
+  <p>有券商研究给出的估计：2023 年证券行业营收 3950 亿元，按年均 8% 增速推算 2030 年行业营收约 7310.7 亿元，其中做市业务（仅股债现券）收入占比预计达 7.1%。折算下来全行业股债做市一年五百亿量级，分到债券、再分到单家机构——<b>这不是一门暴利生意</b>。它的价值在于稳定、可建模、且是券商身份的结构性优势所在。</p>
+</section>
+
+<!-- ============ PART 11 ============ -->
+<section class="part" id="p11">
+  <div class="part-head"><span class="tag">11</span><h2>客户业务与衍生品</h2></div>
+
+  <h3>代持：两个功能，只有一个有合规替代</h3>
+  <table>
+    <thead><tr><th style="width:26%">功能</th><th>替代路径</th></tr></thead>
+    <tbody>
+      <tr><td><b>A · 融资与头寸腾挪</b><br><span style="color:var(--ink3);font-size:12px">正当需求</span></td><td><b>有干净的替代品：买断式回购</b>（真实所有权转移、NAFMII 主协议、标准化条款）与<b>债券借贷</b></td></tr>
+      <tr><td><b>B · 规避监管指标</b><br><span style="color:var(--f-comp);font-size:12px">藏杠杆、调利润、绕限制</span></td><td style="color:var(--f-comp)"><b>没有合规替代品，因为它从来不是一项「服务」，它是违规行为本身</b></td></tr>
+    </tbody>
+  </table>
+  <div class="note warn">
+    <p>把 B 换成一个有主协议、有报备、有对冲账户的工具，不会让它变合规——只会让它变成有书面证据的违规。《证券公司收益互换业务管理办法》禁止证券公司<b>为违规资产出表、资金腾挪或者规避信息披露、投资范围、交易限制、杠杆约束等监管要求的行为提供服务，或向他人出借、变相出借交易商资质</b>。</p>
+    <p><b>结论：代持不是被 TRS 取代的，是被买断式回购和债券借贷取代的</b>——用标准化的银行间工具取代了它的正当功能，同时用明确的禁止性条款堵掉了它的不正当功能。<b>这是一次分拆，不是一次替换。</b></p>
+  </div>
+
+  <h3>券商柜台衍生品的实际边界：它其实是个权益类业务</h3>
+  <p><b>资质门槛。</b>收益互换和场外期权共用一套交易商资质：证监会认可的<b>场外期权一级交易商</b>或协会备案的<b>二级交易商</b>才能开展收益互换业务；<b>未获得交易商资质的券商只能与交易商开展基于自营目的的收益互换，不得与客户开展</b>。二级交易商条件：最近一年分类评级 A 类 A 级以上或 B 类 BBB 级以上，持续规范经营且专业人员、技术系统、风险管理符合条件，经协会备案；展业一年良好、无重大风险事件后可向证监会申请升为一级。当时存量：一级 8 家、二级 33 家。</p>
+  <p><b>融资类收益互换已被叫停。</b>因涉嫌变相杠杆融资，从协会《场外业务开展情况报告》看新增数量为零，截至 2021 年 6 月末未了结名义本金仅 0.01 亿元，实践层面已被全面叫停。《管理办法》第十一条要求使用交易所专用对冲账户开展挂钩股票、股票指数等<b>权益类</b>收益互换对冲交易——据此推下来，目前可开展的收益互换基本是权益（融券）类。</p>
+  <p><b>挂钩标的限制也指向权益。</b>挂钩标的应具备公允的市场定价和良好的流动性，列举的是股票、股票指数、大宗商品等；不得挂钩私募基金及资管计划等私募产品和场外衍生品；严禁通过挂钩标的变相投资非标资产；不得新增和展期以被交易所实行风险警示或进入退市程序的股票为挂钩标的的交易；不得通过嵌套、拆分、组合形成非线性合约变相开展场外期权业务。</p>
+  <div class="note">
+    <p><b>注意「包括但不限于」——债券没有被列举，也没有被排除。</b>但要过「公允的市场定价、良好的流动性」这一关，对绝大多数信用债过不去。真要做债券挂钩，标的范围现实上只能收窄到活跃利率债和高流动性品种，而这些品种的客户恰恰有更便宜的直接渠道。</p>
+    <p><b>结论：券商柜台的场外衍生品体系，是证监会 / 中证协监管下的、以权益为主的业务。它不是服务固收客户的主力工具。</b></p>
+  </div>
+  <p><b>其他适当性与禁止性要求：</b>交易对手方应具有资产配置、风险管理的真实需求，符合专业机构投资者标准；产品参与的应为合规设立的非结构化产品，穿透后单一投资者权益超过 20% 的应符合专业投资者标准；应使用专用对冲账户；禁止不当宣传推介（不得通过互联网、自媒体向公众宣传）；严禁与配资公司、荐股平台、P2P 平台等主体交易；中证报价应在场外业务交易报告库建立<b>负面客户数据库</b>；发生异常交易、违约事件、负面客户、重大业务风险等，应于事件发生之日起 <b>3 个交易日内</b>报送重大事项报告。</p>
+
+  <h3>固收客户的服务工具在另一个监管体系</h3>
+  <p class="note" style="border-left-color:var(--ink);background:var(--rule2)"><b>固收衍生品的主战场在银行间，归人民银行和交易商协会体系管，和券商柜台业务是两套并行的东西。</b></p>
+  <p>银行间体系下可提供：<b>利率互换（IRS）</b>——最主流的利率风险管理工具；<b>标准债券远期</b>；<b>利率期权</b>（Cap、Floor、Swaption）；<b>信用衍生品</b>——CRMA、CRMW、CDS、CLN；<b>买断式回购和债券借贷</b>——功能 A 的正解。走 NAFMII 主协议，参与者与券商柜台业务完全不同。</p>
+  <p>券商柜台这边对固收客户还剩一样有实际价值的：<b>收益凭证</b>——券商自己发行的债务工具，可挂钩利率或债券指数，本质是负债端产品，赚负债成本和资产端收益的差。</p>
+
+  <h3>盈利能力的分档评估</h3>
+  <table>
+    <thead><tr><th style="width:22%">档次</th><th style="width:34%">业务</th><th>判断</th></tr></thead>
+    <tbody>
+      <tr><td><b>第一档</b><br><span style="color:var(--anchor);font-size:12px">真正有钱赚</span></td><td>做市价差、买断式回购的资金利差、债券借贷费</td><td>收益来自承担的库存风险和资金能力，逻辑干净，规模可做起来</td></tr>
+      <tr><td><b>第二档</b><br><span style="font-size:12px;color:var(--ink3)">有价值但规模有限</span></td><td>IRS 和标准债券远期的对客业务</td><td>受制于授信和客户备案资质，量做不大，但是客户关系的必需品</td></tr>
+      <tr><td><b>第三档</b><br><span style="font-size:12px;color:var(--ink3)">基本不用指望</span></td><td>利率期权、信用衍生品</td><td>利率波动率不高、期权需求少、对冲工具本身不成熟；CRM 系列存量小、流动性差，主要靠政策推动。<b>当成产品线补齐，不要当成利润来源</b></td></tr>
+      <tr><td><b>第四档</b><br><span style="color:var(--f-comp);font-size:12px">已经关门</span></td><td>融资类互换</td><td>—</td></tr>
+    </tbody>
+  </table>
+  <p><b>综合：在固收客户上，券商的钱主要不来自「衍生品定价能力」，来自「库存风险承担能力」和「准入差异」。</b>这和股票场外衍生品的商业逻辑完全不同——那边卖的是波动率和结构，这边卖的是流动性和通路。</p>
+
+  <div class="note warn">
+    <span class="h">一条可直接使用的合规判断标准</span>
+    <p><b>问：这笔交易是让客户获得它本来就有权获得的敞口（只是执行更方便、成本更低），还是让客户获得它本来无权获得的敞口？</b></p>
+    <p>· 中小银行不能做国债期货，它向你买一只债，你自己去期货上对冲库存——<b>合规</b>。客户买的是债，不是期货敞口；对冲是你自己的风险管理<br>
+    · 客户受投资范围限制不能持有某类资产，你用 TRS 给它合成经济上等价的敞口——<b>被明令禁止的「为规避投资范围提供便利」</b><br>
+    · 客户杠杆已到上限，你帮它做一个不进表的头寸——<b>同上，且更严重</b></p>
+    <p><b>差别不在工具，在于你是在降低摩擦，还是在移除约束。</b>降低摩擦是 dealer 的本分；移除约束是替客户违规。</p>
+  </div>
+
+  <h3>能为哪些客户提供什么</h3>
+  <p class="note" style="border-left-color:var(--ink);background:var(--rule2)"><b>核心逻辑：全市场准入本身是可以零售出去的。</b>第 2 部分的准入矩阵反过来读，就是一张客户需求清单。</p>
+  <table>
+    <thead><tr><th style="width:22%">客户</th><th style="width:32%">它做不了什么</th><th>你能提供什么</th></tr></thead>
+    <tbody>
+      <tr><td><b>中小银行</b><br><span style="color:var(--anchor);font-size:12px">最大的客户群</span></td><td>进不了交易所竞价、做不了国债期货、不碰可转债、交易人手少系统弱</td><td>真正需要的不是好价格，是<b>确定性成交</b>。最有价值的形态是<b>含对冲的报价</b>：它想调整久期但没有期货，你报价接下它的现券，自己去期货上对冲——<b>你赚的是「它无法自己完成的对冲」的价值</b>，来自准入差异而非信息优势，因此稳定、可复制</td></tr>
+      <tr><td>公募基金与专户</td><td>准入较全，但申赎压力是高频的</td><td>大宗成交、ETF 申赎的成分券组合、债券借贷</td></tr>
+      <tr><td>保险与理财子</td><td>配置型需求，量大、择时弱</td><td>能吃下大单的能力</td></tr>
+      <tr><td><b>境外机构</b><br><span style="color:var(--anchor);font-size:12px">刚扩容</span></td><td>2025 年 9 月 26 日获准开展债券回购业务；2026 年 4 月放开套保用途国债期货</td><td>工具箱在快速补全，而<b>本地执行、授信和结算安排都需要合作方</b>。与跨境定价能力是同一件事的两面</td></tr>
+    </tbody>
+  </table>
+  <p><b>约束：</b>中小银行给券商的授信额度可能有限，直接限制能做多大；结算能力要跟上；信息隔离红线；代持绝对不能碰。</p>
+
+  <h3>买卖方联动：可以联动的部分，按合规确定性分层</h3>
+
+  <h4>第一层：完全正当，而且被鼓励</h4>
+  <ul>
+    <li><b>一级承销 ↔ 二级做市。</b>交易商协会自律指引直接提「推动一级承销和二级做市均衡发展」。承销的债在二级有流动性，发行人会认；承销余额也可通过做市消化</li>
+    <li><b>做市库存 ↔ 期货对冲 ↔ 回购融资 ↔ 债券借贷。</b>同一套风险和资金管理体系，不存在信息隔离问题</li>
+    <li><b>做市库存 ↔ 配置盘。</b>都是自营账户，是同一笔钱的不同形态</li>
+    <li><b>ETF 三位一体</b></li>
+  </ul>
+  <div class="note">
+    <span class="h">一条重要的制度豁免</span>
+    <p>《证券公司信息隔离墙制度指引》第十七条规定，对因保密侧业务列入限制名单的公司或证券，禁止相关的研究报告、自营、直投等业务，<b>但通过自营交易账户进行 ETF、LOF、组合投资、避险投资、量化投资，以及依法通过自营交易账户进行的事先约定性质的交易及做市交易除外</b>；同时要求不得违反法律法规、不得内幕交易和利益输送。</p>
+    <p><b>意义：做市和量化投资被明确从限制名单的禁止范围里摘出来，意味着投行那边接了某个项目，不会连带把做市业务停摆。这是做市业务能连续运转的制度前提。</b></p>
+  </div>
+
+  <h4>第二层：正当但必须设计隔离</h4>
+  <p>客户流的聚合统计用于自营决策、研究与销售交易和自营之间的信息流。原则是指引里那句：<b>进行业务创新或协同开展业务合作，应当事先评估是否可能存在敏感信息不当流动和使用的风险，建立或完善信息隔离墙管理措施。</b>注意「事先评估」——协同不是默认允许，是要先设计再做。</p>
+
+  <h4>第三层：红线</h4>
+  <p>指引第十九条：工作人员对未公开信息负有严格保密义务，<b>不得利用未公开信息为本公司、本人或他人谋取不当利益</b>，不得从事或明示暗示他人从事与未公开信息相关的交易。<b>「为本公司谋取不当利益」——自营就是本公司。</b>客户的未执行委托是未公开信息，用它给自营抢跑，是明确禁止的。</p>
+  <p>《证券公司内部控制指引》第十六条也要求：主要业务部门之间应建立健全隔离墙制度，确保经纪、自营、受托投资管理、投资银行、研究咨询等业务相对独立。</p>
+
+  <h3>「熟人」的价值：买到的不是价格</h3>
+  <p class="note" style="border-left-color:var(--ink);background:var(--rule2)"><b>熟人网络买到的主要不是更好的价格，是「找得到对手方」和「成交的确定性」。</b></p>
+  <ol>
+    <li>境内债券市场交易相对扁平化和透明化，做市商缺少信息优势。信息传播极快，一个大单的消息几分钟就散开——<b>独家信息的半衰期太短，短到不足以构成商业模式</b></li>
+    <li>价格本身相对透明（估值、中介报价、X-Bond 屏幕）。真正稀缺的从来不是「这只券值多少」，是「<b>谁手里有</b>」和「<b>谁愿意在这个量上成交</b>」</li>
+    <li><b>反向风险：熟人越多，打听时暴露也越多。</b>问了五个人，就有五个人知道你在找什么方向</li>
+  </ol>
+  <p><b>价值分布极不均匀：</b>活跃券、中小额上关系网价值接近零（X-Bond 更便宜、更匿名）；非活跃券、老券、大宗上价值极高（没有屏幕价格，价格发现完全靠人）。<b>关系网补的恰恰是议价能力断崖的那一侧。</b></p>
+  <p><b>还有一个不对称：认识的中小机构越多，网络价值越高；认识的大机构越多，价值越低。</b>大机构自己的交易能力比你强，不需要你。</p>
+
+  <h3>销售交易的价值：取决于客户是谁</h3>
+  <p><b>四层价值：</b>直接收入（价差、佣金）、流动性网络、客户流信息、一级分销能力。<b>但价值高度依赖客户结构</b>——推论是<b>客户越弱，你的价值越大</b>。客户都是大行和头部公募，销售交易价值有限；是城商行、农商行、中小基金，价值就高。</p>
+  <div class="note">
+    <p><b>对 500 亿自营盘还有一个被低估的价值：出货能力。</b>在信用债上规模是负债不是资产，单券持仓占比高到卖不动，你是被困住的那个。<b>有销售交易网络意味着有一个持续存在的出口。</b>这不是赚钱，是风险缓释，而对配置为主的盘子，价值可能高于多赚几个 bp。</p>
+  </div>
+
+  <h3>三处利益冲突要主动管理</h3>
+  <ol>
+    <li><b>做市报价的公允性</b>——不能因为自营想要某只券就给客户报差价。报价规则的一致性要能被审计</li>
+    <li><b>自营和客户竞争同一个流动性</b>——同方向时的优先级要有明文规则</li>
+    <li><b>研究观点与自营持仓</b>——研究报告发布前自营不能抢先建仓</li>
+  </ol>
+
+  <div class="note risk">
+    <span class="h">一个结构性判断</span>
+    <p><b>券商同时做买卖两侧，最大的价值不是信息优势</b>（中国债市太透明，信息半衰期太短），<b>是风险的内部循环</b>。做市接下的库存进配置盘 → 配置盘减的仓通过销售交易出 → 期货对冲久期 → 回购和债券借贷解决融资和券源 → ETF 消化成分券。</p>
+    <p><b>这是一个闭环，闭环的价值在于摩擦成本的降低，不在于信息。</b>同一笔风险在闭环里流转，每一次流转都省下一次对外交易的成本、税负和信息泄露。</p>
+    <p><b>对建设优先级的含义：把资源投在闭环的效率上（估值、报价、对冲、库存周转、执行成本），而不是投在打探消息上。</b></p>
+  </div>
+</section>
+
+<!-- ============ PART 12 ============ -->
+<section class="part" id="p12">
+  <div class="part-head"><span class="tag">12</span><h2>六个业务台详图</h2></div>
+
+  <div class="note">
+    <span class="h">为什么是六个而不是五个</span>
+    <p><b>资金台必须单独列。</b>它的目标函数和别人完全不同（融资成本最小 + 流动性安全，不是收益最大），而且它产出的<b>真实资金成本是所有其他台的输入</b>——carry 策略、IRR 判断、库存持有成本全部依赖这个数。把它塞在自营下面，这个数就不会被认真算。</p>
+  </div>
+
+  <p>券商的债券部门实际上并非单纯自营。做市用的就是自营账户，销售交易的对手方是自营盘，承销余额要靠自营和做市消化——<b>这些不是几条可以独立取舍的业务线，是同一笔风险的不同出口</b>。因此正确的架构形状是「一套底座 + 多个出口」，不是「多条业务各建各的」。</p>
+
+  <h3>为什么债券业务的能力复用率天然比股票高</h3>
+  <ul>
+    <li><b>债券的定价是可计算的。</b>有明确的现金流、统一的曲线、第三方估值体系。<b>一级发行定价和二级交易定价用的是同一条曲线</b>——投行给发行人报的价，和自营在二级买的价，背后是同一个模型。股票没有这个性质</li>
+    <li><b>信用判断在承销和投资上是同一件事。</b>投行判断「能不能发、发多少、什么价」，自营判断「能不能买」，做市判断「能不能扛库存」，资管判断「能不能配」——<b>问的是同一个问题</b>。华泰的 CAMS 正是一个引擎、五个出口</li>
+    <li><b>风险的计量口径共享。</b>自营组合、做市库存、对客敞口用同一套 KRD、凸性、压力测试</li>
+  </ul>
+
+  <figure>
+    <svg width="100%" viewBox="0 0 900 706" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>六个业务台的能力依赖剖面</title><desc>每个台消费哪些共享能力、拥有哪些独有能力、向底座回流哪些数据。</desc>
+      <text class="s-lbl" x="0" y="14">业务台 · 目标函数</text>
+      <text class="s-lbl" x="170" y="14">消费的共享能力</text>
+      <text class="s-lbl" x="420" y="14">独有能力（不共建）</text>
+      <text class="s-lbl" x="670" y="14">向底座回流的数据</text>
+
+      <g>
+        <rect x="0" y="26" width="150" height="96" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.5"/>
+        <text class="s-t" x="12" y="48">自营配置盘</text>
+        <text class="s-m" x="12" y="68">风控指标约束下的</text>
+        <text class="s-m" x="12" y="84">税后、资本调整后</text>
+        <text class="s-m" x="12" y="100">组合回报</text>
+        <rect x="160" y="26" width="240" height="96" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+        <text class="s-b" x="172" y="46" fill="#123F3D">全持仓定价（日频，压力时日内）</text>
+        <text class="s-b" x="172" y="64" fill="#1B5B58">税后定价 · 最高要求</text>
+        <text class="s-b" x="172" y="82" fill="#1B5B58">KRD / 凸性 / 利差久期</text>
+        <text class="s-b" x="172" y="100" fill="#1B5B58">资本影子价格 · 最高要求</text>
+        <text class="s-b" x="172" y="116" fill="#1B5B58">可变现估值、机构行为因子</text>
+        <rect x="410" y="26" width="240" height="96" rx="3" fill="#F0ECF8" stroke="#6B4FA8" stroke-width="1"/>
+        <text class="s-b" x="422" y="50" fill="#4A3577">资本约束优化器</text>
+        <text class="s-b" x="422" y="70" fill="#6B4FA8">科目摆布决策 AC/FVOCI/FVTPL</text>
+        <text class="s-b" x="422" y="90" fill="#6B4FA8">久期与曲线的战略配置</text>
+        <rect x="660" y="26" width="240" height="96" rx="3" fill="#E7F2F5" stroke="#1C7488" stroke-width="1" stroke-dasharray="4 3"/>
+        <text class="s-b" x="672" y="56" fill="#14515F">持仓与科目分布</text>
+        <text class="s-b" x="672" y="78" fill="#1C7488">实际调仓的执行数据</text>
+      </g>
+
+      <g>
+        <rect x="0" y="130" width="150" height="96" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.5"/>
+        <text class="s-t" x="12" y="152">做市台</text>
+        <text class="s-m" x="12" y="172">价差收入 − 库存损失</text>
+        <text class="s-m" x="12" y="188">− 资本占用</text>
+        <text class="s-m" x="12" y="204">且须满足做市义务</text>
+        <rect x="160" y="130" width="240" height="96" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+        <text class="s-b" x="172" y="150" fill="#123F3D">中间价 · 毫秒级、连续、全做市券</text>
+        <text class="s-b" x="172" y="168" fill="#1B5B58">波动率（定报价宽度）</text>
+        <text class="s-b" x="172" y="186" fill="#1B5B58">秒级库存风险计量</text>
+        <text class="s-b" x="172" y="204" fill="#1B5B58">逆向选择模型、可交割券溢价</text>
+        <rect x="410" y="130" width="240" height="96" rx="3" fill="#F0ECF8" stroke="#6B4FA8" stroke-width="1"/>
+        <text class="s-b" x="422" y="150" fill="#4A3577">报价引擎（库存偏斜、价差调整）</text>
+        <text class="s-b" x="422" y="170" fill="#6B4FA8">对手方评分</text>
+        <text class="s-b" x="422" y="190" fill="#6B4FA8">库存对冲策略</text>
+        <text class="s-b" x="422" y="210" fill="#6B4FA8">做市义务合规监控</text>
+        <rect x="660" y="130" width="240" height="96" rx="3" fill="#E7F2F5" stroke="#1C7488" stroke-width="1" stroke-dasharray="4 3"/>
+        <text class="s-b" x="672" y="156" fill="#14515F">五档盘口 · 给底座最大的贡献</text>
+        <text class="s-b" x="672" y="178" fill="#1C7488">成交流</text>
+        <text class="s-b" x="672" y="198" fill="#1C7488">对手方行为数据</text>
+      </g>
+
+      <g>
+        <rect x="0" y="234" width="150" height="96" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.5"/>
+        <text class="s-t" x="12" y="256">销售交易台</text>
+        <text class="s-m" x="12" y="276">客户收入</text>
+        <text class="s-m" x="12" y="292">+ 粘性 + 流量</text>
+        <rect x="160" y="234" width="240" height="96" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+        <text class="s-b" x="172" y="254" fill="#123F3D">全市场覆盖定价 · 覆盖度最高</text>
+        <text class="s-b" x="172" y="272" fill="#1B5B58">延迟不敏感、精度中等</text>
+        <text class="s-b" x="172" y="290" fill="#1B5B58">信用研究结论（对客咨询）</text>
+        <text class="s-b" x="172" y="308" fill="#1B5B58">公司库存实时视图、适当性检查</text>
+        <rect x="410" y="234" width="240" height="96" rx="3" fill="#F0ECF8" stroke="#6B4FA8" stroke-width="1"/>
+        <text class="s-b" x="422" y="258" fill="#4A3577">客户画像与管理</text>
+        <text class="s-b" x="422" y="278" fill="#6B4FA8">询价路由</text>
+        <text class="s-b" x="422" y="298" fill="#6B4FA8">对客报价加成规则</text>
+        <rect x="660" y="234" width="240" height="96" rx="3" fill="#E7F2F5" stroke="#1C7488" stroke-width="1" stroke-dasharray="4 3"/>
+        <text class="s-b" x="672" y="256" fill="#14515F">客户询价流 · 意图数据</text>
+        <text class="s-b" x="672" y="278" fill="#1C7488">成交 / 未成交比</text>
+        <text class="s-b" x="672" y="298" fill="#1C7488">拒绝后的市场成交价</text>
+      </g>
+
+      <g>
+        <rect x="0" y="338" width="150" height="96" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.5"/>
+        <text class="s-t" x="12" y="360">承销台</text>
+        <text class="s-m" x="12" y="380">承销费 + 市场份额</text>
+        <text class="s-m" x="12" y="396">+ 发行成功率</text>
+        <rect x="160" y="338" width="240" height="96" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+        <text class="s-b" x="172" y="358" fill="#123F3D">结构化信用估值 · 要求最高</text>
+        <text class="s-b" x="172" y="376" fill="#1B5B58">前瞻定价：市场会怎么给未发行</text>
+        <text class="s-b" x="172" y="392" fill="#1B5B58">主体定价，无历史成交</text>
+        <text class="s-b" x="172" y="410" fill="#1B5B58">同评级同期限可比曲线</text>
+        <text class="s-b" x="172" y="428" fill="#1B5B58">机构行为、二级流动性预判</text>
+        <rect x="410" y="338" width="240" height="96" rx="3" fill="#F0ECF8" stroke="#6B4FA8" stroke-width="1"/>
+        <text class="s-b" x="422" y="362" fill="#4A3577">簿记建档</text>
+        <text class="s-b" x="422" y="382" fill="#6B4FA8">发行人关系与尽调</text>
+        <text class="s-b" x="422" y="402" fill="#6B4FA8">承销团管理</text>
+        <rect x="660" y="338" width="240" height="96" rx="3" fill="#E7F2F5" stroke="#1C7488" stroke-width="1" stroke-dasharray="4 3"/>
+        <text class="s-b" x="672" y="362" fill="#14515F">一级市场数据 · 招标结果</text>
+        <text class="s-b" x="672" y="384" fill="#1C7488">认购倍数、投资者结构</text>
+        <text class="s-b" x="672" y="404" fill="#1C7488">（PD 模型的核心输入）</text>
+      </g>
+
+      <g>
+        <rect x="0" y="442" width="150" height="96" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.5"/>
+        <text class="s-t" x="12" y="464">资管条线</text>
+        <text class="s-m" x="12" y="484">净值、排名、规模</text>
+        <rect x="160" y="442" width="240" height="96" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+        <text class="s-b" x="172" y="462" fill="#123F3D">估值必须用第三方 · 合规硬约束</text>
+        <text class="s-b" x="172" y="480" fill="#1B5B58">内部研究可用自建</text>
+        <text class="s-b" x="172" y="498" fill="#1B5B58">组合风险，但约束集完全不同</text>
+        <text class="s-b" x="172" y="516" fill="#1B5B58">信用研究</text>
+        <rect x="410" y="442" width="240" height="96" rx="3" fill="#F0ECF8" stroke="#6B4FA8" stroke-width="1"/>
+        <text class="s-b" x="422" y="466" fill="#4A3577">净值核算</text>
+        <text class="s-b" x="422" y="486" fill="#6B4FA8">申赎管理与流动性预测</text>
+        <text class="s-b" x="422" y="506" fill="#6B4FA8">合规约束检查</text>
+        <rect x="660" y="442" width="240" height="96" rx="3" fill="#E7F2F5" stroke="#1C7488" stroke-width="1" stroke-dasharray="4 3"/>
+        <text class="s-b" x="672" y="472" fill="#14515F">申赎数据</text>
+        <text class="s-b" x="672" y="494" fill="#1C7488">机构行为因子的内部标定样本</text>
+      </g>
+
+      <g>
+        <rect x="0" y="546" width="150" height="96" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.5"/>
+        <text class="s-t" x="12" y="568">资金台</text>
+        <text class="s-m" x="12" y="588">融资成本最小</text>
+        <text class="s-m" x="12" y="604">+ 流动性安全</text>
+        <rect x="160" y="546" width="240" height="96" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+        <text class="s-b" x="172" y="566" fill="#123F3D">抵押品估值 · 须与现券估值同源</text>
+        <text class="s-b" x="172" y="584" fill="#1B5B58">折算率数据（两套规则）</text>
+        <text class="s-b" x="172" y="602" fill="#1B5B58">资金曲线</text>
+        <text class="s-b" x="172" y="620" fill="#1B5B58">LCR / NSFR 实时计算</text>
+        <rect x="410" y="546" width="240" height="96" rx="3" fill="#F0ECF8" stroke="#6B4FA8" stroke-width="1"/>
+        <text class="s-b" x="422" y="570" fill="#4A3577">质押券摆布优化（背包问题）</text>
+        <text class="s-b" x="422" y="590" fill="#6B4FA8">融资渠道管理</text>
+        <text class="s-b" x="422" y="610" fill="#6B4FA8">到期结构管理</text>
+        <rect x="660" y="546" width="240" height="96" rx="3" fill="#FAF2E0" stroke="#A5741A" stroke-width="1.4"/>
+        <text class="s-b" x="672" y="580" fill="#6F4E11">真实资金成本</text>
+        <text class="s-b" x="672" y="602" fill="#A5741A">所有台的定价输入，</text>
+        <text class="s-b" x="672" y="620" fill="#A5741A">也最容易被拍脑袋填</text>
+      </g>
+
+      <line x1="0" y1="662" x2="900" y2="662" stroke="#DFE3E7" stroke-width="1"/>
+      <text class="s-b" x="0" y="684"><tspan font-weight="600" fill="#15181C">读法：</tspan>左侧两列是共建的（第二列的能力全台共用），右侧两列是分化的。中间那列不共建，是各台的护城河。</text>
+      <text class="s-b" x="0" y="702">第四列的数据回流是这套架构最有价值的部分——每个台生产的东西，正好是别的台需要而外部买不到的。</text>
+    </svg>
+    <figcaption><b>六个业务台的依赖剖面。</b>注意做市台的「中间价」和自营台的「全持仓定价」——同样叫定价，一个是毫秒级的报价基准，一个是日频的分析用公允价。<b>这两个不是同一个服务的不同调用频率，是两个东西</b>，这是整个架构里最重要的一处分歧。</figcaption>
+  </figure>
+
+  <h3>依赖的冲突点</h3>
+  <p>这部分比上面的清单更重要：<b>六个台对同一项能力的要求是互相冲突的，而不是简单叠加。</b></p>
+  <table>
+    <thead><tr><th style="width:16%">台</th><th style="width:38%">对定价库的要求</th><th>冲突点</th></tr></thead>
+    <tbody>
+      <tr><td>做市</td><td>毫秒级、连续、做市券种</td><td>要<b>快</b>，覆盖面可以小</td></tr>
+      <tr><td>销售交易</td><td>全市场覆盖、精度中等</td><td>要<b>广</b>，慢一点无所谓</td></tr>
+      <tr><td>承销</td><td>未发行主体的前瞻定价、精度最高</td><td>要<b>准</b>，且是无成交样本下的准</td></tr>
+      <tr><td>自营</td><td>税后、资本调整后</td><td>要<b>特定口径</b>，别人不需要</td></tr>
+      <tr><td>资管</td><td>第三方、可审计</td><td>要<b>合规</b>，不能用自建</td></tr>
+    </tbody>
+  </table>
+  <div class="note risk">
+    <p><b>这五个要求不可能被一个服务同时满足。</b>结论是：同一个引擎，但必须分服务层级——快线、宽线、深线，而不是一个「定价 API」给所有人用。</p>
+    <p>风险计量同样冲突：做市要秒级库存 Greeks，自营要日频组合分解加压力测试，资金台要实时 LCR/NSFR，资管要合规约束检查——四种不同的计算频率和聚合口径。</p>
+    <p><b>这个冲突分析的价值在于：它是业务侧能给出的、对系统最有约束力的输入。</b>不用讨论技术方案，把这张冲突表交出去，架构自然就有形状了。</p>
+  </div>
+</section>
+
+<!-- ============ PART 13 ============ -->
+<section class="part" id="p13">
+  <div class="part-head"><span class="tag">13</span><h2>四条流与四个断点</h2></div>
+
+  <p>上一部分的分层视角只看得见纵向依赖。<b>但闭环跑在横向上</b>——四条流各自成环，而它们的断点决定了整套体系能不能真正运转。</p>
+
+  <h3>流一 · 风险的内部循环</h3>
+  <figure>
+    <svg width="100%" viewBox="0 0 900 322" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>风险流闭环</title><desc>风险从四个入口进入库存与配置盘，经四类工具中转，从四个出口离开。</desc>
+      <defs><marker id="ahr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+      <text class="s-lbl" x="0" y="16">入口</text>
+      <rect x="0" y="28" width="160" height="30" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/><text class="s-b" x="12" y="48">承销余额</text>
+      <rect x="0" y="64" width="160" height="30" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/><text class="s-b" x="12" y="84">做市接单</text>
+      <rect x="0" y="100" width="160" height="30" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/><text class="s-b" x="12" y="120">主动配置</text>
+      <rect x="0" y="136" width="160" height="30" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/><text class="s-b" x="12" y="156">客户卖出</text>
+
+      <path d="M162 43 L 240 43 L 240 97 L 336 97" fill="none" stroke="#6B4FA8" stroke-width="2" marker-end="url(#ahr)"/>
+      <path d="M162 79 L 240 79 L 240 97" fill="none" stroke="#6B4FA8" stroke-width="2"/>
+      <path d="M162 115 L 240 115 L 240 97" fill="none" stroke="#6B4FA8" stroke-width="2"/>
+      <path d="M162 151 L 240 151 L 240 97" fill="none" stroke="#6B4FA8" stroke-width="2"/>
+
+      <rect x="340" y="46" width="220" height="102" rx="3" fill="#F0ECF8" stroke="#6B4FA8" stroke-width="1.6"/>
+      <text class="s-t" x="450" y="72" text-anchor="middle" fill="#4A3577">做市库存 ⇄ 配置盘</text>
+      <text class="s-b" x="450" y="94" text-anchor="middle" fill="#6B4FA8">同一自营账户</text>
+      <text class="s-b" x="450" y="112" text-anchor="middle" fill="#6B4FA8">同一笔钱的不同形态</text>
+      <text class="s-m" x="450" y="134" text-anchor="middle" fill="#6B4FA8">断点：内部转移定价必须公允且留痕</text>
+
+      <path d="M564 97 L 660 97 L 660 43 L 738 43" fill="none" stroke="#6B4FA8" stroke-width="2" marker-end="url(#ahr)"/>
+      <path d="M660 79 L 738 79" fill="none" stroke="#6B4FA8" stroke-width="2" marker-end="url(#ahr)"/>
+      <path d="M660 115 L 738 115" fill="none" stroke="#6B4FA8" stroke-width="2" marker-end="url(#ahr)"/>
+      <path d="M660 97 L 660 151 L 738 151" fill="none" stroke="#6B4FA8" stroke-width="2" marker-end="url(#ahr)"/>
+
+      <text class="s-lbl" x="740" y="16">出口</text>
+      <rect x="740" y="28" width="160" height="30" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/><text class="s-b" x="752" y="48">做市卖出</text>
+      <rect x="740" y="64" width="160" height="30" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/><text class="s-b" x="752" y="84">销售给客户</text>
+      <rect x="740" y="100" width="160" height="30" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/><text class="s-b" x="752" y="120">持有到期</text>
+      <rect x="740" y="136" width="160" height="30" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/><text class="s-b" x="752" y="156">ETF 换出</text>
+
+      <line x1="450" y1="150" x2="450" y2="196" stroke="#6B4FA8" stroke-width="2" marker-end="url(#ahr)" marker-start="url(#ahr)"/>
+
+      <rect x="230" y="200" width="440" height="66" rx="3" fill="#FFFFFF" stroke="#6B4FA8" stroke-width="1" stroke-dasharray="5 3"/>
+      <text class="s-lbl" x="242" y="220" fill="#6B4FA8">中转工具</text>
+      <text class="s-b" x="242" y="242" fill="#4A3577">期货</text><text class="s-m" x="242" y="258" fill="#6B4FA8">剥离久期</text>
+      <text class="s-b" x="352" y="242" fill="#4A3577">回购</text><text class="s-m" x="352" y="258" fill="#6B4FA8">融资</text>
+      <text class="s-b" x="462" y="242" fill="#4A3577">债券借贷</text><text class="s-m" x="462" y="258" fill="#6B4FA8">收费</text>
+      <text class="s-b" x="572" y="242" fill="#4A3577">ETF 申赎</text><text class="s-m" x="572" y="258" fill="#6B4FA8">消化成分券</text>
+
+      <line x1="0" y1="284" x2="900" y2="284" stroke="#DFE3E7" stroke-width="1"/>
+      <text class="s-b" x="0" y="304"><tspan font-weight="600" fill="#15181C">关键性质：</tspan>每一次内部流转，都省下一次对外交易的价差、增值税和信息泄露。</text>
+      <text class="s-b" x="0" y="320"><tspan font-weight="600" fill="#15181C">推论：</tspan>闭环效率是前台业务规模的上限——它决定承销台敢接多大的余额、做市台敢报多大的量。这不是后台的效率问题。</text>
+    </svg>
+    <figcaption><b>风险流闭环。</b>这是整套架构的主循环。库存不必先卖出去再买回来、配置盘不必一次性砸盘——每一次内部流转都是一次省下的对外交易。</figcaption>
+  </figure>
+
+  <h3>流二 · 数据的循环</h3>
+  <figure>
+    <svg width="100%" viewBox="0 0 900 296" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>数据流闭环</title><desc>六个台各自产生外部买不到的数据，回流底座后服务全部台面。</desc>
+      <defs><marker id="ahd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+      <text class="s-lbl" x="0" y="16">六个台生产的专有数据 · 外部买不到</text>
+
+      <rect x="0" y="26" width="136" height="56" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/>
+      <text class="s-b" x="10" y="46">做市</text><text class="s-m" x="10" y="64" fill="#14515F">五档盘口</text><text class="s-m" x="10" y="78" fill="#14515F">对手方行为</text>
+
+      <rect x="152" y="26" width="136" height="56" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/>
+      <text class="s-b" x="162" y="46">销售交易</text><text class="s-m" x="162" y="64" fill="#14515F">客户询价流</text><text class="s-m" x="162" y="78" fill="#14515F">未成交记录</text>
+
+      <rect x="304" y="26" width="136" height="56" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/>
+      <text class="s-b" x="314" y="46">承销</text><text class="s-m" x="314" y="64" fill="#14515F">一级市场数据</text><text class="s-m" x="314" y="78" fill="#14515F">认购倍数</text>
+
+      <rect x="456" y="26" width="136" height="56" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/>
+      <text class="s-b" x="466" y="46">资金台</text><text class="s-m" x="466" y="64" fill="#14515F">真实资金成本</text><text class="s-m" x="466" y="78" fill="#14515F">折算率实况</text>
+
+      <rect x="608" y="26" width="136" height="56" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/>
+      <text class="s-b" x="618" y="46">资管</text><text class="s-m" x="618" y="64" fill="#14515F">申赎数据</text><text class="s-m" x="618" y="78" fill="#14515F">内部标定样本</text>
+
+      <rect x="760" y="26" width="136" height="56" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/>
+      <text class="s-b" x="770" y="46">自营</text><text class="s-m" x="770" y="64" fill="#14515F">执行数据</text><text class="s-m" x="770" y="78" fill="#14515F">询价日志</text>
+
+      <line x1="68" y1="84" x2="68" y2="126" stroke="#1C7488" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#ahd)"/>
+      <line x1="220" y1="84" x2="220" y2="126" stroke="#1C7488" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#ahd)"/>
+      <line x1="372" y1="84" x2="372" y2="126" stroke="#1C7488" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#ahd)"/>
+      <line x1="524" y1="84" x2="524" y2="126" stroke="#1C7488" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#ahd)"/>
+      <line x1="676" y1="84" x2="676" y2="126" stroke="#1C7488" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#ahd)"/>
+      <line x1="828" y1="84" x2="828" y2="126" stroke="#1C7488" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#ahd)"/>
+
+      <rect x="0" y="130" width="896" height="56" rx="3" fill="#E7F2F5" stroke="#1C7488" stroke-width="1.4"/>
+      <text class="s-t" x="16" y="152" fill="#14515F">共享数据底座</text>
+      <text class="s-b" x="16" y="172" fill="#1C7488">主数据与条款 · 行情与成交 · 多源估值 · 因子库 · PIT 快照 · 中介报价解析</text>
+      <text class="s-b" x="884" y="162" text-anchor="end" fill="#14515F">raw 只追加，enrichment 旁挂</text>
+
+      <line x1="450" y1="188" x2="450" y2="222" stroke="#1C7488" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#ahd)"/>
+      <rect x="230" y="226" width="440" height="36" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+      <text class="s-b" x="450" y="249" text-anchor="middle" fill="#123F3D">定价 · 风险 · 信用 · 优化执行 — 服务全部六个台</text>
+
+      <line x1="0" y1="278" x2="900" y2="278" stroke="#DFE3E7" stroke-width="1"/>
+      <text class="s-b" x="0" y="294"><tspan font-weight="600" fill="#15181C">这个循环的性质：</tspan>每个台生产的东西，正好是别的台需要而外部买不到的。外部数据商能卖给你的，别人也都买得到；这个内循环产出的，只有你有。</text>
+    </svg>
+    <figcaption><b>数据流闭环。</b>承销的一级数据是信用 PD 模型的核心输入；销售的客户询价是做市的需求预判；做市的五档盘口是自营的执行基准；资管的申赎是机构行为因子的内部标定样本。<b>这是一个真正的正反馈——业务做得越多，底座越好，底座越好，业务做得越准。</b></figcaption>
+  </figure>
+
+  <h3>流三 · 资金与抵押品</h3>
+  <figure>
+    <svg width="100%" viewBox="0 0 900 288" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>资金流</title><desc>融资来源经资金台配置到各业务台，抵押品反向流动，FTP 是关键断点。</desc>
+      <defs><marker id="ahc" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+      <text class="s-lbl" x="0" y="16">融资来源</text>
+      <rect x="0" y="26" width="170" height="32" rx="3" fill="#FAF2E0" stroke="#A5741A" stroke-width="1"/><text class="s-b" x="12" y="47" fill="#6F4E11">银行间质押式回购 · R 系列</text>
+      <rect x="0" y="64" width="170" height="32" rx="3" fill="#FAF2E0" stroke="#A5741A" stroke-width="1"/><text class="s-b" x="12" y="85" fill="#6F4E11">交易所回购 · 标准券</text>
+      <rect x="0" y="102" width="170" height="32" rx="3" fill="#FAF2E0" stroke="#A5741A" stroke-width="1"/><text class="s-b" x="12" y="123" fill="#6F4E11">买断式回购</text>
+      <rect x="0" y="140" width="170" height="32" rx="3" fill="#FAF2E0" stroke="#A5741A" stroke-width="1"/><text class="s-b" x="12" y="161" fill="#6F4E11">次级债 / 公司债 / 收益凭证</text>
+
+      <rect x="0" y="182" width="170" height="34" rx="3" fill="#FAEDED" stroke="#A63232" stroke-width="1.2" stroke-dasharray="5 3"/>
+      <text class="s-m" x="12" y="199" fill="#7A2424">DR 系列 · 存款类机构专享</text>
+      <text class="s-m" x="12" y="213" fill="#A63232">非银不可得 → R-DR 利差</text>
+
+      <path d="M172 42 L 240 42 L 240 105 L 316 105" fill="none" stroke="#A5741A" stroke-width="2" stroke-dasharray="2 3" marker-end="url(#ahc)"/>
+      <path d="M172 80 L 240 80 L 240 105" fill="none" stroke="#A5741A" stroke-width="2" stroke-dasharray="2 3"/>
+      <path d="M172 118 L 240 118 L 240 105" fill="none" stroke="#A5741A" stroke-width="2" stroke-dasharray="2 3"/>
+      <path d="M172 156 L 240 156 L 240 105" fill="none" stroke="#A5741A" stroke-width="2" stroke-dasharray="2 3"/>
+
+      <rect x="320" y="52" width="200" height="106" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.6"/>
+      <text class="s-t" x="420" y="78" text-anchor="middle">资金台</text>
+      <text class="s-b" x="420" y="100" text-anchor="middle">质押券摆布优化</text>
+      <text class="s-b" x="420" y="118" text-anchor="middle">到期结构 · LCR / NSFR</text>
+      <text class="s-m" x="420" y="140" text-anchor="middle" fill="#A5741A">目标：成本最小 + 流动性安全</text>
+
+      <path d="M524 105 L 596 105 L 596 42 L 668 42" fill="none" stroke="#A5741A" stroke-width="2" stroke-dasharray="2 3" marker-end="url(#ahc)"/>
+      <path d="M596 80 L 668 80" fill="none" stroke="#A5741A" stroke-width="2" stroke-dasharray="2 3" marker-end="url(#ahc)"/>
+      <path d="M596 118 L 668 118" fill="none" stroke="#A5741A" stroke-width="2" stroke-dasharray="2 3" marker-end="url(#ahc)"/>
+      <path d="M596 105 L 596 156 L 668 156" fill="none" stroke="#A5741A" stroke-width="2" stroke-dasharray="2 3" marker-end="url(#ahc)"/>
+
+      <text class="s-lbl" x="670" y="16">使用方 · 按 FTP 分摊</text>
+      <rect x="670" y="26" width="226" height="32" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/><text class="s-b" x="682" y="47">配置盘 · carry 的真实成本基准</text>
+      <rect x="670" y="64" width="226" height="32" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/><text class="s-b" x="682" y="85">做市库存 · 持有成本</text>
+      <rect x="670" y="102" width="226" height="32" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/><text class="s-b" x="682" y="123">期货保证金</text>
+      <rect x="670" y="140" width="226" height="32" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1"/><text class="s-b" x="682" y="161">对客融资服务</text>
+
+      <path d="M780 176 L 780 196 L 420 196 L 420 160" fill="none" stroke="#6B4FA8" stroke-width="1.8" marker-end="url(#ahc)"/>
+      <text class="s-m" x="600" y="190" text-anchor="middle" fill="#4A3577">抵押品反向流动（风险流与资金流在这里交汇）</text>
+
+      <line x1="0" y1="234" x2="900" y2="234" stroke="#DFE3E7" stroke-width="1"/>
+      <text class="s-b" x="0" y="254"><tspan font-weight="600" fill="#A63232">断点：</tspan>如果真实资金成本不能准确分摊到各台，每个台的 P&amp;L 都是失真的——做市台以为赚了价差，实际库存的资金成本吃掉了；配置盘以为 carry 为正，按真实负债成本算是负的。</text>
+      <text class="s-b" x="0" y="272"><tspan font-weight="600" fill="#15181C">债券 FTP 比银行更复杂：</tspan>要区分不同期限的资金、质押券占用的机会成本、以及 R 与 DR 那个断层——</text>
+      <text class="s-b" x="0" y="288">资金成本在压力时会跳，FTP 必须能反映这个跳动，不能用年度平均值。</text>
+    </svg>
+    <figcaption><b>资金流与 FTP。</b>这是四条流里唯一需要真正「设计」而不只是「打通」的一条。<b>没有 FTP，所有台的业绩都是假的，资本分配也就没有依据。</b></figcaption>
+  </figure>
+
+  <h3>流四 · 合规边界与内外部门限</h3>
+  <figure>
+    <svg width="100%" viewBox="0 0 900 330" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>合规边界</title><desc>内幕信息、客户委托信息、跨台交易三处边界，以及豁免条款。</desc>
+      <defs><marker id="ahx" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+      <rect x="0" y="26" width="240" height="120" rx="3" fill="#FAEDED" stroke="#A63232" stroke-width="1.4" stroke-dasharray="6 3"/>
+      <text class="s-t" x="14" y="48" fill="#7A2424">承销侧 · 保密墙内</text>
+      <text class="s-b" x="14" y="70" fill="#A63232">未公开的发行意向</text>
+      <text class="s-b" x="14" y="88" fill="#A63232">发行人尽调信息</text>
+      <text class="s-b" x="14" y="106" fill="#A63232">限制名单</text>
+      <text class="s-m" x="14" y="130" fill="#A63232">→ 走隔离库，不进共享底座</text>
+
+      <rect x="330" y="26" width="240" height="120" rx="3" fill="#FAEDED" stroke="#A63232" stroke-width="1.4" stroke-dasharray="6 3"/>
+      <text class="s-t" x="344" y="48" fill="#7A2424">销售侧 · 客户信息</text>
+      <text class="s-b" x="344" y="70" fill="#A63232">未执行的客户委托</text>
+      <text class="s-b" x="344" y="88" fill="#A63232">单个客户的意图</text>
+      <text class="s-m" x="344" y="112" fill="#A63232">→ 聚合 + 时滞 + 匿名化</text>
+      <text class="s-m" x="344" y="130" fill="#A63232">→ 原始数据物理隔离</text>
+
+      <rect x="660" y="26" width="236" height="120" rx="3" fill="#FAEDED" stroke="#A63232" stroke-width="1.4" stroke-dasharray="6 3"/>
+      <text class="s-t" x="674" y="48" fill="#7A2424">跨台交易</text>
+      <text class="s-b" x="674" y="70" fill="#A63232">库存 ⇄ 配置盘转移</text>
+      <text class="s-b" x="674" y="88" fill="#A63232">资管 ⇄ 做市成交</text>
+      <text class="s-m" x="674" y="112" fill="#A63232">→ 内部转移定价规则事前定死</text>
+      <text class="s-m" x="674" y="130" fill="#A63232">→ 用什么价、谁批、留什么痕</text>
+
+      <line x1="120" y1="150" x2="120" y2="180" stroke="#A63232" stroke-width="2" stroke-dasharray="1 4" stroke-linecap="round"/>
+      <line x1="450" y1="150" x2="450" y2="180" stroke="#A63232" stroke-width="2" stroke-dasharray="1 4" stroke-linecap="round"/>
+      <line x1="778" y1="150" x2="778" y2="180" stroke="#A63232" stroke-width="2" stroke-dasharray="1 4" stroke-linecap="round"/>
+
+      <rect x="0" y="184" width="896" height="52" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+      <text class="s-t" x="16" y="206" fill="#123F3D">可以穿越的：公开数据</text>
+      <text class="s-b" x="16" y="226" fill="#1B5B58">招标结果 · 认购倍数 · 已成交产生的库存变化 · 按客户类型聚合的流量统计 · 五档盘口 · 市场行情</text>
+
+      <rect x="0" y="248" width="896" height="46" rx="3" fill="#FFFFFF" stroke="#1B5B58" stroke-width="1" stroke-dasharray="4 3"/>
+      <text class="s-b" x="16" y="270" fill="#123F3D">制度豁免：限制名单的禁止范围不包括 ETF、LOF、组合投资、避险投资、量化投资，以及依法通过自营账户进行的</text>
+      <text class="s-b" x="16" y="288" fill="#123F3D">事先约定性质的交易及做市交易 —— 这是做市与量化业务能连续运转的制度前提。</text>
+
+      <line x1="0" y1="310" x2="900" y2="310" stroke="#DFE3E7" stroke-width="1"/>
+      <text class="s-b" x="0" y="326"><tspan font-weight="600" fill="#15181C">边界的判断标准：</tspan>已成交产生的库存变化是你的；未成交的客户意图是客户的。前者可用，后者不可用于自营。</text>
+    </svg>
+    <figcaption><b>合规边界。</b><b>合规约束与量化需求在多数场景下并不冲突</b>——量化要的是统计规律，违规要的是个体信息；聚合处理后前者完全保留、后者完全消失。设计对了，不会因合规损失多少信息。</figcaption>
+  </figure>
+
+  <h3>四个断点：建设的实际优先级</h3>
+  <p>闭环画出来容易，跑起来会在四个地方断。<b>这四项都不是量化问题，是制度和数据问题；但它们不解决，前面所有分析能力都只能在单个台内部使用，形不成闭环。</b></p>
+  <table>
+    <thead><tr><th style="width:8%">序</th><th style="width:22%">断点</th><th style="width:14%">位置</th><th>后果与修法</th></tr></thead>
+    <tbody>
+      <tr><td><b>1</b></td><td><b>科目隔离</b></td><td>数据底座层</td><td>AC / FVOCI / FVTPL 在不同系统，凑不出全组合视图，<b>风险计量这一环直接断掉</b>——不知道全公司真实敞口，就没法做资本分配。<b>最基础、也最该先修</b></td></tr>
+      <tr><td><b>2</b></td><td><b>FTP</b><br><span style="color:var(--f-cash);font-size:12px">资金成本内部分摊</span></td><td>资金台 → 各台横向</td><td><b>没有 FTP，所有台的业绩都是假的</b>，资本分配没有依据。且债券 FTP 比银行更复杂——必须能反映压力时的成本跳动，不能用年度平均值。<b>四个断点里唯一需要真正设计而非只是打通的一个</b></td></tr>
+      <tr><td><b>3</b></td><td><b>内部转移定价</b></td><td>业务台之间横向</td><td>没有公允规则，<b>这条通道会变成利益输送的路径</b>——把亏损仓位转给另一个台，或把好价格留给自己。规则必须事前定死：用什么价、谁批、留什么痕</td></tr>
+      <tr><td><b>4</b></td><td><b>信息隔离</b></td><td>承销 → 底座回流</td><td>内幕信息不能进共享底座，公开的一级数据可以。<b>边界必须写死在系统里</b>，不能靠流程和自觉</td></tr>
+    </tbody>
+  </table>
+  <div class="note warn">
+    <p><b>修复顺序很清楚：</b>科目统一（不修就没有全景）→ FTP（不修业绩全是假的）→ 内部转移定价（不修合规跑不通）→ 信息隔离（不修有法律风险）。</p>
+  </div>
+</section>
+
+<!-- ============ PART 14 ============ -->
+<section class="part" id="p14">
+  <div class="part-head"><span class="tag">14</span><h2>业务大图</h2></div>
+
+  <p>前面十三部分的内容在这里合成。这张图上有五样东西：<b>业务内容</b>（谁在做什么）、<b>风险流</b>（紫）、<b>数据流</b>（蓝）、<b>资金流</b>（金）、<b>合规与内外部门限</b>（红）。四个断点用红色序号标出。</p>
+
+  <figure>
+    <svg width="100%" viewBox="0 0 900 616" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>券商 FICC 业务全景大图</title>
+      <desc>自上而下为外部主体、业务台、库存与中转工具、共享能力、数据底座五层，叠加风险流、数据流、资金流与合规边界。</desc>
+      <defs><marker id="am" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+      <text class="s-lbl" x="0" y="14">外部主体</text>
+      <rect x="0" y="24" width="136" height="50" rx="3" fill="#F6F7F8" stroke="#A6ADB4" stroke-width="1" stroke-dasharray="4 3"/>
+      <text class="s-b" x="68" y="45" text-anchor="middle" fill="#454C55">发行人</text><text class="s-m" x="68" y="62" text-anchor="middle">一级供给</text>
+      <rect x="152" y="24" width="136" height="50" rx="3" fill="#F6F7F8" stroke="#A6ADB4" stroke-width="1" stroke-dasharray="4 3"/>
+      <text class="s-b" x="220" y="45" text-anchor="middle" fill="#454C55">机构客户</text><text class="s-m" x="220" y="62" text-anchor="middle">中小银行 · 基金 · 境外</text>
+      <rect x="304" y="24" width="136" height="50" rx="3" fill="#F6F7F8" stroke="#A6ADB4" stroke-width="1" stroke-dasharray="4 3"/>
+      <text class="s-b" x="372" y="45" text-anchor="middle" fill="#454C55">银行间</text><text class="s-m" x="372" y="62" text-anchor="middle">X 系列 · 中介 · RFQ</text>
+      <rect x="456" y="24" width="136" height="50" rx="3" fill="#F6F7F8" stroke="#A6ADB4" stroke-width="1" stroke-dasharray="4 3"/>
+      <text class="s-b" x="524" y="45" text-anchor="middle" fill="#454C55">交易所</text><text class="s-m" x="524" y="62" text-anchor="middle">竞价 · ETF · 可转债</text>
+      <rect x="608" y="24" width="136" height="50" rx="3" fill="#F6F7F8" stroke="#A6ADB4" stroke-width="1" stroke-dasharray="4 3"/>
+      <text class="s-b" x="676" y="45" text-anchor="middle" fill="#454C55">中金所</text><text class="s-m" x="676" y="62" text-anchor="middle">国债期货 · 期权待上市</text>
+      <rect x="760" y="24" width="136" height="50" rx="3" fill="#FAEDED" stroke="#A63232" stroke-width="1" stroke-dasharray="4 3"/>
+      <text class="s-b" x="828" y="45" text-anchor="middle" fill="#7A2424">监管与自律</text><text class="s-m" x="828" y="62" text-anchor="middle" fill="#A63232">净资本 · 额度 · 报送</text>
+
+      <line x1="0" y1="88" x2="896" y2="88" stroke="#A63232" stroke-width="1.4" stroke-dasharray="8 4"/>
+      <text class="s-m" x="896" y="84" text-anchor="end" fill="#A63232">外部边界 · 准入决定可达工具</text>
+
+      <text class="s-lbl" x="0" y="112">业务台</text>
+      <rect x="0" y="122" width="136" height="68" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.5"/>
+      <text class="s-t" x="68" y="146" text-anchor="middle">承销</text><text class="s-m" x="68" y="164" text-anchor="middle">簿记 · 发行定价</text><text class="s-m" x="68" y="180" text-anchor="middle">产出一级数据</text>
+      <rect x="152" y="122" width="136" height="68" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.5"/>
+      <text class="s-t" x="220" y="146" text-anchor="middle">做市</text><text class="s-m" x="220" y="164" text-anchor="middle">报价引擎 · 库存</text><text class="s-m" x="220" y="180" text-anchor="middle">产出五档盘口</text>
+      <rect x="304" y="122" width="136" height="68" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.5"/>
+      <text class="s-t" x="372" y="146" text-anchor="middle">自营配置</text><text class="s-m" x="372" y="164" text-anchor="middle">资本优化 · 科目</text><text class="s-m" x="372" y="180" text-anchor="middle">500 亿主盘</text>
+      <rect x="456" y="122" width="136" height="68" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.5"/>
+      <text class="s-t" x="524" y="146" text-anchor="middle">销售交易</text><text class="s-m" x="524" y="164" text-anchor="middle">对客报价 · 撮合</text><text class="s-m" x="524" y="180" text-anchor="middle">产出询价流</text>
+      <rect x="608" y="122" width="136" height="68" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.5"/>
+      <text class="s-t" x="676" y="146" text-anchor="middle">资管</text><text class="s-m" x="676" y="164" text-anchor="middle">净值 · 申赎</text><text class="s-m" x="676" y="180" text-anchor="middle">第三方估值</text>
+      <rect x="760" y="122" width="136" height="68" rx="3" fill="#FFFFFF" stroke="#15181C" stroke-width="1.5"/>
+      <text class="s-t" x="828" y="146" text-anchor="middle">资金</text><text class="s-m" x="828" y="164" text-anchor="middle">质押摆布 · 期限</text><text class="s-m" x="828" y="180" text-anchor="middle">产出真实成本</text>
+
+      <line x1="68" y1="76" x2="68" y2="120" stroke="#6B4FA8" stroke-width="1.8" marker-end="url(#am)"/>
+      <line x1="220" y1="76" x2="220" y2="120" stroke="#6B4FA8" stroke-width="1.8" marker-end="url(#am)" marker-start="url(#am)"/>
+      <line x1="524" y1="76" x2="524" y2="120" stroke="#6B4FA8" stroke-width="1.8" marker-end="url(#am)" marker-start="url(#am)"/>
+      <line x1="676" y1="76" x2="676" y2="120" stroke="#1C7488" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#am)"/>
+      <line x1="828" y1="76" x2="828" y2="120" stroke="#A5741A" stroke-width="1.8" stroke-dasharray="2 3" marker-end="url(#am)" marker-start="url(#am)"/>
+
+      <line x1="600" y1="118" x2="600" y2="196" stroke="#A63232" stroke-width="1.6" stroke-dasharray="1 5" stroke-linecap="round"/>
+      <text class="s-m" x="604" y="206" fill="#A63232">资管隔离</text>
+      <line x1="146" y1="118" x2="146" y2="196" stroke="#A63232" stroke-width="1.6" stroke-dasharray="1 5" stroke-linecap="round"/>
+      <text class="s-m" x="0" y="206" fill="#A63232">保密墙 · 仅公开数据可穿越</text>
+
+      <path d="M68 192 L 68 218 L 150 218" fill="none" stroke="#6B4FA8" stroke-width="2" marker-end="url(#am)"/>
+      <line x1="220" y1="192" x2="220" y2="228" stroke="#6B4FA8" stroke-width="2" marker-end="url(#am)" marker-start="url(#am)"/>
+      <line x1="372" y1="192" x2="372" y2="228" stroke="#6B4FA8" stroke-width="2" marker-end="url(#am)" marker-start="url(#am)"/>
+      <path d="M524 192 L 524 218 L 442 218" fill="none" stroke="#6B4FA8" stroke-width="2" marker-end="url(#am)"/>
+
+      <rect x="152" y="230" width="288" height="62" rx="3" fill="#F0ECF8" stroke="#6B4FA8" stroke-width="1.6"/>
+      <text class="s-t" x="296" y="254" text-anchor="middle" fill="#4A3577">做市库存 ⇄ 配置盘</text>
+      <text class="s-m" x="296" y="274" text-anchor="middle" fill="#6B4FA8">同一自营账户 · 同一笔钱的不同形态</text>
+      <circle cx="164" cy="242" r="8" fill="#A63232"/><text x="164" y="246" text-anchor="middle" font-size="10" font-weight="600" fill="#FFFFFF">3</text>
+
+      <line x1="442" y1="261" x2="466" y2="261" stroke="#6B4FA8" stroke-width="2" marker-end="url(#am)" marker-start="url(#am)"/>
+
+      <rect x="468" y="230" width="276" height="62" rx="3" fill="#FFFFFF" stroke="#6B4FA8" stroke-width="1" stroke-dasharray="5 3"/>
+      <text class="s-lbl" x="480" y="248" fill="#6B4FA8">中转工具</text>
+      <text class="s-m" x="480" y="268" fill="#4A3577">期货 剥离久期</text>
+      <text class="s-m" x="480" y="284" fill="#4A3577">回购 融资</text>
+      <text class="s-m" x="620" y="268" fill="#4A3577">借贷 收费</text>
+      <text class="s-m" x="620" y="284" fill="#4A3577">ETF 消化成分券</text>
+
+      <path d="M828 192 L 828 261 L 748 261" fill="none" stroke="#A5741A" stroke-width="2" stroke-dasharray="2 3" marker-end="url(#am)"/>
+      <circle cx="800" cy="212" r="8" fill="#A63232"/><text x="800" y="216" text-anchor="middle" font-size="10" font-weight="600" fill="#FFFFFF">2</text>
+
+      <line x1="0" y1="308" x2="896" y2="308" stroke="#DFE3E7" stroke-width="1"/>
+
+      <text class="s-lbl" x="0" y="332">共享能力层 · 一套底座，六个出口</text>
+      <rect x="0" y="342" width="212" height="66" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+      <text class="s-t" x="106" y="366" text-anchor="middle" fill="#123F3D">定价服务</text>
+      <text class="s-m" x="106" y="384" text-anchor="middle" fill="#1B5B58">曲线 · 税后 · 含权 · 穿透</text>
+      <text class="s-m" x="106" y="400" text-anchor="middle" fill="#1B5B58">分快线 / 宽线 / 深线</text>
+      <rect x="228" y="342" width="212" height="66" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+      <text class="s-t" x="334" y="366" text-anchor="middle" fill="#123F3D">风险服务</text>
+      <text class="s-m" x="334" y="384" text-anchor="middle" fill="#1B5B58">因子 · KRD · 可变现估值</text>
+      <text class="s-m" x="334" y="400" text-anchor="middle" fill="#1B5B58">经济视图 / 会计视图并行</text>
+      <rect x="456" y="342" width="212" height="66" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+      <text class="s-t" x="562" y="366" text-anchor="middle" fill="#123F3D">信用服务</text>
+      <text class="s-m" x="562" y="384" text-anchor="middle" fill="#1B5B58">PD · LGD · 隐含评级迁移</text>
+      <text class="s-m" x="562" y="400" text-anchor="middle" fill="#1B5B58">结构化，不做简化版</text>
+      <rect x="684" y="342" width="212" height="66" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+      <text class="s-t" x="790" y="366" text-anchor="middle" fill="#123F3D">优化与执行</text>
+      <text class="s-m" x="790" y="384" text-anchor="middle" fill="#1B5B58">资本影子价格 · 冲击成本</text>
+      <text class="s-m" x="790" y="400" text-anchor="middle" fill="#1B5B58">渠道选择 · 质押摆布</text>
+
+      <line x1="106" y1="336" x2="106" y2="300" stroke="#1B5B58" stroke-width="1.8" marker-end="url(#am)"/>
+      <line x1="334" y1="336" x2="334" y2="300" stroke="#1B5B58" stroke-width="1.8" marker-end="url(#am)"/>
+      <line x1="562" y1="336" x2="562" y2="300" stroke="#1B5B58" stroke-width="1.8" marker-end="url(#am)"/>
+      <line x1="790" y1="336" x2="790" y2="300" stroke="#1B5B58" stroke-width="1.8" marker-end="url(#am)"/>
+
+      <line x1="160" y1="410" x2="160" y2="446" stroke="#1C7488" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#am)" marker-start="url(#am)"/>
+      <line x1="440" y1="410" x2="440" y2="446" stroke="#1C7488" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#am)" marker-start="url(#am)"/>
+      <line x1="720" y1="410" x2="720" y2="446" stroke="#1C7488" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#am)" marker-start="url(#am)"/>
+
+      <rect x="0" y="450" width="896" height="70" rx="3" fill="#E7F2F5" stroke="#1C7488" stroke-width="1.4"/>
+      <text class="s-t" x="16" y="474" fill="#14515F">共享数据底座</text>
+      <text class="s-m" x="16" y="494" fill="#1C7488">主数据与条款结构化 · 券级税收属性 · 行情与成交 · 多源估值与分歧 · 因子库 · 中介报价解析 · 客户询价（隔离聚合后）</text>
+      <text class="s-m" x="16" y="512" fill="#1C7488">Point-in-time 快照 · raw 只追加不修改 · enrichment 旁挂不覆盖 · 价格可信度标签 · 规则变更时间轴</text>
+      <circle cx="874" cy="470" r="8" fill="#A63232"/><text x="874" y="474" text-anchor="middle" font-size="10" font-weight="600" fill="#FFFFFF">1</text>
+      <circle cx="874" cy="500" r="8" fill="#A63232"/><text x="874" y="504" text-anchor="middle" font-size="10" font-weight="600" fill="#FFFFFF">4</text>
+
+      <line x1="0" y1="540" x2="896" y2="540" stroke="#DFE3E7" stroke-width="1"/>
+      <text class="s-b" x="0" y="560"><tspan font-weight="600" fill="#A63232">断点 1 科目隔离</tspan> — AC/FVOCI/FVTPL 分散在不同系统，凑不出全组合视图。最基础，最该先修。</text>
+      <text class="s-b" x="0" y="578"><tspan font-weight="600" fill="#A63232">断点 2 FTP</tspan> — 资金成本不能准确分摊，所有台的 P&amp;L 都是假的。唯一需要真正设计的一个。</text>
+      <text class="s-b" x="0" y="596"><tspan font-weight="600" fill="#A63232">断点 3 内部转移定价</tspan> — 库存⇄配置盘的转移若无公允规则，会变成利益输送路径。</text>
+      <text class="s-b" x="0" y="614"><tspan font-weight="600" fill="#A63232">断点 4 信息隔离</tspan> — 内幕信息不得进共享底座，边界写在系统里而非流程里。</text>
+    </svg>
+    <figcaption><b>业务大图。</b>五层结构：外部主体、业务台、库存与中转、共享能力、数据底座。<b>纵向是依赖（向下消费能力、向上回流数据），横向是闭环（风险与资金在台之间循环）。</b>四个红色序号是断点位置——它们不是量化问题，是制度和数据问题，但不解决就形不成闭环。</figcaption>
+  </figure>
+
+  <h3>大图上的三个结论</h3>
+  <ol>
+    <li><b>共享层的宽度决定业务能铺多广。</b>定价服务的覆盖度是纯自营的几千只、还是对客口径的全市场三万只，直接决定销售交易台和承销台能不能真正运转。<b>这个决定必须在建之前做，事后扩容代价极大。</b></li>
+    <li><b>横向闭环的效率决定业务能做多大。</b>库存能在台之间顺畅流转，承销台才敢接大额余额，做市台才敢报大量。<b>闭环效率是前台业务规模的上限，不是后台的效率指标。</b></li>
+    <li><b>四个断点全部在纵横交界处。</b>科目在底座与业务台之间，FTP 和内部转移定价在业务台横向之间，信息隔离在承销台与底座之间。<b>这不是巧合——分层架构天然看不见横向流，而闭环恰恰跑在横向上。</b></li>
+  </ol>
+</section>
+
+<!-- ============ PART 15 ============ -->
+<section class="part" id="p15">
+  <div class="part-head"><span class="tag">15</span><h2>研究组件与频率分层</h2></div>
+
+  <p>把共享能力层展开成可实施的组件清单。每个组件标三样：服务对象、<b>频率要求</b>、数据依赖。<b>第二项是技术选型真正的驱动因素。</b></p>
+
+  <h3>定价服务</h3>
+  <table>
+    <thead><tr><th style="width:42%">组件</th><th style="width:28%">服务对象</th><th>频率</th></tr></thead>
+    <tbody>
+      <tr><td>曲线构建引擎（国债 / 国开 / 口行 / 农发 / 信用分层 / 资金）</td><td>全部</td><td>日频 + 日内刷新</td></tr>
+      <tr><td>税后现金流引擎（新老划断、利息 vs 资本利得、多投资者口径）</td><td>自营、承销、资管</td><td>日频</td></tr>
+      <tr><td>个券定价与残差分解（剔除流动性、税收、可交割溢价）</td><td>自营、做市、销售</td><td>日内多次</td></tr>
+      <tr><td>含权债定价（利率模型 + 发行人行为模型）</td><td>全部</td><td>日频</td></tr>
+      <tr><td>股债耦合定价（可转债 / EB）</td><td>自营、做市</td><td>日内</td></tr>
+      <tr><td>波动率曲面构建</td><td>做市、期权</td><td>日内</td></tr>
+      <tr><td>组合穿透定价（ETF / 基金）</td><td>全部</td><td>分钟级</td></tr>
+      <tr><td>抵押品估值与折算率</td><td>资金台</td><td>日频</td></tr>
+      <tr><td><b>做市中间价服务</b></td><td>做市</td><td style="color:var(--f-comp)"><b>毫秒级</b></td></tr>
+    </tbody>
+  </table>
+  <div class="note risk">
+    <p><b>注意最后一行和第三行的区别</b>——同样是「定价」，一个是分析用的公允价，一个是报价用的中间价。<b>这两个不是同一个服务的不同调用频率，是两个东西。</b>第 12 部分讲的定价库五种冲突要求，冲突主要就在这里。</p>
+  </div>
+
+  <h3>风险服务</h3>
+  <table>
+    <thead><tr><th style="width:42%">组件</th><th style="width:28%">服务对象</th><th>频率</th></tr></thead>
+    <tbody>
+      <tr><td>因子体系与映射（统一 ID、分解层级、敏感度口径）</td><td>全部</td><td>静态 + 日更</td></tr>
+      <tr><td>敏感度引擎（KRD、凸性、利差久期、Greeks）</td><td>自营、做市、资管</td><td>日频 / 做市秒级</td></tr>
+      <tr><td>组合聚合与穿透</td><td>自营、资管</td><td>日频</td></tr>
+      <tr><td>去平滑与真实波动率还原</td><td>自营、资管</td><td>日频</td></tr>
+      <tr><td>可变现估值与流动性折价</td><td>自营、资金台</td><td>日频 + 压力时日内</td></tr>
+      <tr><td>压力测试与情景引擎（含机构行为传导链）</td><td>自营、资管、资金</td><td>周频 + 事件触发</td></tr>
+      <tr><td>经济视图 / 会计视图并行</td><td>自营</td><td>日频</td></tr>
+      <tr><td><b>库存实时 Greeks</b></td><td>做市</td><td style="color:var(--f-comp)"><b>秒级</b></td></tr>
+      <tr><td>LCR / NSFR 实时计算</td><td>资金台</td><td>日内</td></tr>
+    </tbody>
+  </table>
+
+  <h3>信用服务</h3>
+  <table>
+    <thead><tr><th style="width:42%">组件</th><th style="width:28%">服务对象</th><th>频率</th></tr></thead>
+    <tbody>
+      <tr><td>PD 模型（城投 / 产业分叉，政策支持度为主变量）</td><td>承销、自营、资管</td><td>月频 + 事件触发</td></tr>
+      <tr><td>LGD 分档（含展期、置换的独立状态）</td><td>同上</td><td>季频</td></tr>
+      <tr><td>隐含评级迁移预测</td><td>自营、做市、资管</td><td>周频</td></tr>
+      <tr><td>一级市场再融资能力监测</td><td>全部</td><td>日频</td></tr>
+      <tr><td>信用预警扫描</td><td>全部</td><td>日频</td></tr>
+      <tr><td>主体利差横截面一致性检查</td><td>自营、承销</td><td>日频</td></tr>
+    </tbody>
+  </table>
+
+  <h3>优化与执行</h3>
+  <table>
+    <thead><tr><th style="width:42%">组件</th><th style="width:28%">服务对象</th><th>频率</th></tr></thead>
+    <tbody>
+      <tr><td>资本约束优化与影子价格</td><td>自营、管理层</td><td>日频 + 交易前查询</td></tr>
+      <tr><td><b>边际资本成本查询</b></td><td>全部</td><td style="color:var(--f-cash)"><b>交易前实时</b></td></tr>
+      <tr><td>质押券摆布优化</td><td>资金台</td><td>日频</td></tr>
+      <tr><td>税务优化（年末已实现盈亏管理）</td><td>自营</td><td>季频 + 年末密集</td></tr>
+      <tr><td>冲击成本模型</td><td>自营、做市、销售</td><td>日更参数、实时查询</td></tr>
+      <tr><td>渠道选择与拆单</td><td>自营、销售</td><td>实时</td></tr>
+      <tr><td>TCA 与对手方评分</td><td>自营、做市、销售</td><td>日频回溯</td></tr>
+      <tr><td>信息泄露测量</td><td>自营、销售</td><td>周频</td></tr>
+      <tr><td><b>报价引擎</b>（库存偏斜、价差调整、义务约束）</td><td>做市</td><td style="color:var(--f-comp)"><b>毫秒级</b></td></tr>
+      <tr><td>逆向选择检测</td><td>做市</td><td>秒级 + 日频回溯</td></tr>
+    </tbody>
+  </table>
+
+  <h3>行为与供需（横跨多组）</h3>
+  <p>机构分类与画像（静态主数据）、持仓与流量估计（月频拼接 + 日频修正）、压力传导链模型（周频标定）、供给日历与招标预测（日频 + 事件）、资金面日历效应（日频）。</p>
+
+  <h3>频率分层：技术选型的真正入口</h3>
+  <figure>
+    <svg width="100%" viewBox="0 0 900 290" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>组件的频率分层</title><desc>约四十个组件按频率分档，仅四个需要低延迟，全部在做市台。</desc>
+      <rect x="0" y="24" width="150" height="52" rx="3" fill="#FAEDED" stroke="#A63232" stroke-width="1.4"/>
+      <text class="s-t" x="75" y="46" text-anchor="middle" fill="#7A2424">毫秒级</text>
+      <text class="s-t" x="75" y="66" text-anchor="middle" fill="#A63232">2 个</text>
+      <text class="s-b" x="166" y="46" fill="#7A2424">做市中间价 · 报价引擎</text>
+      <text class="s-m" x="166" y="64" fill="#A63232">全部在做市台</text>
+
+      <rect x="0" y="84" width="150" height="46" rx="3" fill="#FAEDED" stroke="#A63232" stroke-width="1"/>
+      <text class="s-t" x="75" y="104" text-anchor="middle" fill="#7A2424">秒级</text>
+      <text class="s-t" x="75" y="122" text-anchor="middle" fill="#A63232">2 个</text>
+      <text class="s-b" x="166" y="104" fill="#7A2424">库存 Greeks · 逆向选择检测</text>
+      <text class="s-m" x="166" y="122" fill="#A63232">同样在做市台</text>
+
+      <rect x="0" y="138" width="150" height="46" rx="3" fill="#FAF2E0" stroke="#A5741A" stroke-width="1"/>
+      <text class="s-t" x="75" y="158" text-anchor="middle" fill="#6F4E11">交易前查询</text>
+      <text class="s-t" x="75" y="176" text-anchor="middle" fill="#A5741A">3 个</text>
+      <text class="s-b" x="166" y="158" fill="#6F4E11">边际资本成本 · 冲击成本 · 渠道选择</text>
+      <text class="s-m" x="166" y="176" fill="#A5741A">要求响应快，但不是流式</text>
+
+      <rect x="0" y="192" width="150" height="40" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1"/>
+      <text class="s-t" x="75" y="210" text-anchor="middle" fill="#123F3D">分钟到日内</text>
+      <text class="s-t" x="75" y="226" text-anchor="middle" fill="#1B5B58">约 6 个</text>
+      <text class="s-b" x="166" y="210" fill="#123F3D">组合穿透 · 残差扫描 · 波动率曲面 · LCR/NSFR</text>
+
+      <rect x="0" y="240" width="150" height="40" rx="3" fill="#E6F0EF" stroke="#1B5B58" stroke-width="1.4"/>
+      <text class="s-t" x="75" y="258" text-anchor="middle" fill="#123F3D">日频及以上</text>
+      <text class="s-t" x="75" y="274" text-anchor="middle" fill="#1B5B58">约 30 个</text>
+      <text class="s-b" x="166" y="258" fill="#123F3D">绝大多数组件 — 批处理即可</text>
+      <text class="s-m" x="166" y="276" fill="#1B5B58">含 PD、LGD、压力标定、税务优化等周月季频组件</text>
+    </svg>
+    <figcaption><b>频率分层。</b>把约四十个组件按频率重排，形状非常清楚：<b>真正需要低延迟的只有 4 个，而且全部在做市台；其余三十多个都是批处理或查询。</b></figcaption>
+  </figure>
+
+  <div class="note risk">
+    <span class="h">对技术选型的直接含义</span>
+    <p><b>不该用一套系统承载全部。</b>为了 4 个组件把整套架构做成低延迟的，代价极高且没必要；反过来把这 4 个塞进批处理体系，做市根本跑不起来。</p>
+    <p><b>边界应该画在做市报价链路和其余部分之间，而不是画在「自研 vs 外采」上。</b></p>
+    <p>顺带印证：日频核心库十年压缩后是几百 GB 量级——<b>三十多个日频组件跑在几百 GB 上，是单机就能解决的问题。</b></p>
+  </div>
+</section>
+
+<!-- ============ PART 16 ============ -->
+<section class="part" id="p16">
+  <div class="part-head"><span class="tag">16</span><h2>核心判断与待核实清单</h2></div>
+
+  <h3>反复收敛的核心判断</h3>
+  <p>以下判断在多个独立分析路径上重复出现，可信度较高。</p>
+
+  <table>
+    <thead><tr><th style="width:6%">#</th><th style="width:38%">判断</th><th>由哪些路径独立得出</th></tr></thead>
+    <tbody>
+      <tr><td><b>1</b></td><td><b>券商自营真正的钱来自成本优势和风险承担能力，不是来自信息优势</b></td><td>做市分析（境内做市商缺少信息优势）；执行成本分析（成本梯度跨度 500 倍）；买卖方联动分析（信息半衰期太短）</td></tr>
+      <tr><td><b>2</b></td><td><b>换手率应由成本梯度决定，而非信号强度</b><br><span style="color:var(--ink3);font-size:12.5px">高换手只能在期货和 ETF；现券低换手且集中在活跃券；信用债接近买入持有</span></td><td>交易成本分析（500 倍跨度）；议价能力分析（活跃券与非活跃券的断崖）；容量分析（各市场容量差异）。<b>三条独立路径给出同样的工具排序</b></td></tr>
+      <tr><td><b>3</b></td><td><b>500 亿在不同市场是不同的东西</b>——在期货市场是可消化的对冲需求，在信用债市场是流动性陷阱</td><td>配置权重必须按各市场容量倒推，不能按组合目标正推</td></tr>
+      <tr><td><b>4</b></td><td><b>量化在配置盘上的价值基数是 500 亿全部，不是可交易的那 100–250 亿</b></td><td>把资本回报改善 5–10bp 和一个 50 亿容量策略做出 2% 超额是同一量级的钱，但前者不占额度、不承担新增市场风险、不依赖行情、不会因拥挤而衰减</td></tr>
+      <tr><td><b>5</b></td><td><b>做市是这个身份最专属、最不可替代、且量化最能发力的业务</b></td><td>它的收益来源恰好是可建模的那一类（报价技术和库存管理），不是靠关系的那一类；且它是唯一有外部履约标准、能逼着把全链条做到生产级别的业务</td></tr>
+      <tr><td><b>6</b></td><td><b>数据的瓶颈是领域知识和人工投入，不是存储和算力</b></td><td>中国债市对量化是「小数据」。不要买大数据平台，要花钱在条款解析、口径确认、人工核对上</td></tr>
+      <tr><td><b>7</b></td><td><b>合规约束与量化需求在多数场景下不冲突</b></td><td>量化要统计规律，违规要个体信息；聚合处理后前者完全保留、后者完全消失</td></tr>
+      <tr><td><b>8</b></td><td><b>结构性无效性的可持续性 = 套利者被制度性排除的程度</b></td><td>可转债（所有人都能进）效率最高、衰减最快；ETF 折溢价（需成分券能力）券商结构性占优；期现基差（套利者受准入限制）偏离持久；swap spread（参与者不重叠）偏离最持久但最难交易</td></tr>
+      <tr><td><b>9</b></td><td><b>「一套底座、多个出口」是债券业务的正确形状</b></td><td>债券定价可计算、信用判断在承销与投资上是同一件事、风险计量口径共享——复用率天然高于股票业务。华泰 CAMS 一个引擎服务五个出口是已验证的实例</td></tr>
+      <tr><td><b>10</b></td><td><b>闭环效率是前台业务规模的上限，不是后台的效率指标</b></td><td>库存能在台之间顺畅流转，承销台才敢接大额余额，做市台才敢报大量</td></tr>
+    </tbody>
+  </table>
+
+  <h3>三个已定的业务决策</h3>
+  <ol>
+    <li><b>信用估值做结构化版，不做简化版。</b>简化版复制的是已经免费拥有的东西，且会让人误以为自己有定价能力</li>
+    <li><b>可转债与跨境要做，作为独立投入模块</b>——但独立投入 ≠ 独立架构，因子体系和组合视图必须共享</li>
+    <li><b>制度型因子细化到机构一级</b>，按「保留基础、逐步增强」三层推进</li>
+  </ol>
+
+  <h3>待核实清单</h3>
+  <p>以下事项在讨论中标注为需要核实，落地前应按现行文本或直接向相关机构确认。</p>
+
+  <h4>监管与准入</h4>
+  <ol class="vlist">
+    <li>商业银行参与国债期货试点的最新名单及是否扩容至股份行、中小银行</li>
+    <li>上市银行参与交易所债券市场的当前范围（协议交易 vs 竞价）</li>
+    <li>公募基金参与国债期货的现行比例限制具体数字</li>
+    <li>理财子参与国债期货的准入状态</li>
+    <li>私募进入银行间的现行执行口径（2015 年通知之后是否有调整）</li>
+    <li>银行间做市商、交易所主做市商、中金所国债期货做市商的最新名单（本文数字为 2022–2024 年时点）</li>
+    <li>场外期权一级 / 二级交易商的当前名单与数量（本文为 2021 年时点）</li>
+    <li>收益互换挂钩标的的最新口径，特别是债券是否在实践中被接受</li>
+  </ol>
+
+  <h4>风控指标</h4>
+  <ol class="vlist" start="9">
+    <li><b>国债期货、债券远期、利率互换、信用衍生品计入「自营非权益类证券及其衍生品」的具体折算系数</b>（本文引用的原文为截断状态）— 这一项影响所有容量测算</li>
+    <li>现行风控指标管理办法的最新修订版本及各项系数</li>
+  </ol>
+
+  <h4>期货与交割</h4>
+  <ol class="vlist" start="11">
+    <li><b>中金所各国债期货品种的现行持仓限额</b>（一般月份、交割月前、交割月）</li>
+    <li><b>套保 / 套利额度的申请条件与审批周期</b> — 影响基差策略上限</li>
+    <li>期转现制度的当前可用性与具体规则</li>
+    <li>国债期货期权的仿真进展与预计上市时间</li>
+  </ol>
+
+  <h4>税务</h4>
+  <ol class="vlist" start="15">
+    <li>资本利得（金融商品转让）增值税的具体处理，特别是跨科目转换的口径</li>
+    <li>国债期货平仓盈亏、以及实物交割与平仓的税务处理差异</li>
+    <li>增值税新老划断在实操中的边缘情形（如债券置换、重组）</li>
+  </ol>
+
+  <h4>估值</h4>
+  <ol class="vlist" start="18">
+    <li><b>中债、中证在 2025 年 8 月增值税新政后，曲线构建和个券估值是否区分应税券与免税券</b> — 建议直接向估值机构确认；若未充分反映，则不只是市场没定价充分，是估值本身还没跟上</li>
+  </ol>
+
+  <h4>执行与数据</h4>
+  <ol class="vlist" start="19">
+    <li>银行间各市场的现行交易时段与收盘时点</li>
+    <li>货币经纪公司报价数据的当前获取安排（2023 年白名单制度之后的演变）</li>
+    <li>货币经纪佣金的实际费率与分档（商业谈判，无公开数据）</li>
+    <li>银行间程序化交易的资质审核具体要求</li>
+  </ol>
+
+  <div class="note warn">
+    <span class="h">最该先问的三项</span>
+    <p><b>第 9 项</b>（风控指标折算系数）影响所有容量测算；<b>第 11、12 项</b>（持仓限额与套保额度）影响基差策略上限；<b>第 18 项</b>（估值是否区分税收属性）影响所有模型定价的券。</p>
+  </div>
+
+  <h3>后续方向</h3>
+  <table>
+    <thead><tr><th style="width:22%">组</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td><b>A · 直接实施</b></td><td><b>做市报价引擎</b>（中间价怎么取、库存偏斜函数、逆向选择识别与防护、做市义务写进目标函数当硬约束、虚假做市的合规边界在代码层面卡住、利率债匹配成交与信用债点击成交两套参数）；<b>可变现估值与流动性折价函数</b>；<b>条款结构化工程</b>；<b>冲击成本模型与统一交易决策函数</b></td></tr>
+      <tr><td><b>B · 模型与方法</b></td><td>收益归因模型；税后定价体系的完整落地；资本约束优化与影子价格；期现体系深度建模（交割期权定价、CTD 切换概率、可交割券溢价分离）；发行人行权行为模型</td></tr>
+      <tr><td><b>C · 架构与体系</b></td><td>风险内部循环的路径成本与瓶颈量化；压力情形下的跨市场关联矩阵；数据架构的具体设计（PIT 表结构、三层边界、多源冲突规则）；销售交易数据的隔离与聚合架构</td></tr>
+      <tr><td><b>D · 尚未展开</b></td><td>国债期货期权的准备工作（波动率曲面、仿真参与、做市商席位争取）；银行间衍生品的对客业务；债券借贷的系统化（与期权做市的 delta 对冲联动）；境外机构服务；一级承销与二级做市的联动量化；合规科技</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <span class="h">技术选型的三个输入</span>
+    <p>这份文档能直接交给技术侧的，是三样东西：<b>第 12 部分的五种定价库冲突要求</b>（快线 / 宽线 / 深线的分歧）、<b>第 15 部分的频率分层</b>（只有 4 个组件需要低延迟，且全在做市台）、<b>第 13 与 14 部分的四个断点</b>（科目、FTP、内部转移定价、信息隔离）。</p>
+    <p>把这三样交出去，架构自然就有形状了——不需要先讨论自研还是外采。</p>
+  </div>
+</section>
+
+</div>
