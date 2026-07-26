@@ -1,10 +1,35 @@
 # ficant
 
 > **Fixed Income Connected AI-Native Technology**  
-> 固定收益优先、AI 原生、领域驱动、可复现的量化研究操作系统。
+> 固定收益优先、领域驱动、可复现、可分层扩展的量化研究基础设施。
 
-**文档版本：** v0.2  
-**文档状态：** 系统级 README / 架构基线  
+---
+
+## ⚠ 权威交接（2026-07-26）
+
+**本文不再是权威。** 自 SPEC v1.0 起，三份 Human 拥有的文档承担控制面：
+
+| 文档 | 回答 |
+|---|---|
+| [`SPEC.md`](SPEC.md) | 什么必须为真（分层法则、边界、领域不变量、一期范围） |
+| [`ACCEPTANCE.md`](ACCEPTANCE.md) | 如何判定其为真（30 条，Human 逐条批准） |
+| [`MANUAL.md`](MANUAL.md) | 从外面看，现在什么为真 |
+
+**本文与上述三份冲突时，一律以它们为准。** 本文降级为技术基线与背景材料——记录技术选型、架构形态、仓库结构与已交付 Phase 的历史状态，供人查阅，不作为判定依据。
+
+**已知与 SPEC 冲突、将在 R1 迁出或改写的章节：**
+
+- §3.2「不负责」表中的「投资组合会计」与「OMS / EMS」两行 —— 已由 SPEC §2 的 B1 / B2 取代（持仓与会计分类进入 ficant；执行相关的建模与标定属于 ficant，运行时调用不属于）
+- §3.3 平台输出边界 —— 已由 SPEC §2 补入 `PolicyArtifact`
+- §11 首批实现顺序 —— 已由 [`docs/architecture/layering-refactor.md`](docs/architecture/layering-refactor.md) 的 R1–R7 迭代序列取代；Phase 5 后移、Phase 7/8 整体后移
+- §12 v0.1 最小可交付范围 —— 已由 SPEC §4 与 ACCEPTANCE 取代
+
+重构诊断与施工说明见 [`docs/architecture/layering-refactor.md`](docs/architecture/layering-refactor.md)。
+
+---
+
+**文档版本：** v0.2（背景材料）  
+**文档状态：** 技术基线 / 历史记录，非权威  
 **首个市场：** 中国国债现券与国债期货  
 **唯一后台语言：** Rust  
 **研究节点语言：** Python  
@@ -28,7 +53,9 @@ FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三�
 - 数个迭代后，Human 创建指向当前 `main` 的不可变 `v*` 版本 tag，才把候选交给中央 `kayz/cicd`。该 tag 授权 GitHub 版本 CI、Linux 镜像、GHCR、测试环境部署、健康/冒烟检查和回滚；本地通过不能替代这些版本交付证据。
 - 历史 HOQA/PROQAID 材料保留在 `docs/history/hoqa/` 作为当时证据，不再驱动当前工作；权威边界见 [ADR-0009](docs/architecture/adr/0009-opaid-local-development-and-cicd-release-boundary.md)。
 
-> 本文是 ficant 当前唯一的系统技术基线。除非通过正式 ADR 修改，后续设计和实现不得引入平行后台语言、平行数据库、平行 API 契约或平行运行体系。
+> 本文记录 ficant 的技术基线。除非通过正式 ADR 修改，后续设计和实现不得引入平行后台语言、平行数据库、平行 API 契约或平行运行体系。
+>
+> 关于**什么必须为真**，权威在 [`SPEC.md`](SPEC.md)，不在本文。
 
 ## GitHub 测试环境发布（2026-07-17）
 
@@ -1131,7 +1158,7 @@ PostgreSQL 16 schema
 
 **目标：** 建立平台权威基准，供 AI 节点和研究实现比较。
 
-**当前状态（2026-07-19）：** Phase 2A 已交付固定利率/贴现国债的现金流、价格、YTM、久期、凸性与 DV01；Phase 2B 已交付区间内实际日数线性 YTM 曲线和未融资 Carry/Roll-down 分解；Phase 2C 已交付中金所 `TS`/`TF`/`T`/`TL` 合约与可交割券资格、CF、交割发票价、基差、含融资成本净基差、IRR 和 CTD；Phase 2D 已交付基于 CTD、转换因子和带符号目标 DV01 的单合约期现套保比例；Phase 2E 已通过加法式 `ficant.rates.v1.RatesAnalyticsService` 和 Python SDK 暴露五类真实生产调用。所有切片均贯通冻结合同、独立 Oracle 或 Golden Case、C++/Rust 生产路径和确定性结果验证；Python SDK 的结果与参考结果一致，因此 Phase 2 已正式退出。公共边界、最终证据与残余风险见 [Phase 2E iteration brief](docs/iterations/2026-07-phase2e-python-sdk.md)。
+**当前状态（2026-07-19）：** Phase 2A 已交付固定利率/贴现国债的现金流、价格、YTM、久期、凸性与 DV01；Phase 2B 已交付区间内实际日数线性 YTM 曲线和未融资 Carry/Roll-down 分解；Phase 2C 已交付中金所 `TS`/`TF`/`T`/`TL` 合约与可交割券资格、CF、交割发票价、基差、含融资成本净基差、IRR 和 CTD；Phase 2D 已交付基于 CTD、转换因子和带符号目标 DV01 的单合约期现套保比例；Phase 2E 已通过加法式 `ficant.rates.v1.RatesAnalyticsService` 和 Python SDK 暴露五类真实生产调用。所有切片均贯通冻结合同、独立 Oracle 或 Golden Case、C++/Rust 生产路径和确定性结果验证；Python SDK 的结果与参考结果一致，因此 Phase 2 已正式退出。公共边界、最终证据与残余风险见 [Phase 2E iteration brief](docs/history/iterations/2026-07-phase2e-python-sdk.md)。
 
 优先实现：
 
@@ -1167,7 +1194,7 @@ PostgreSQL 16 schema
 
 **目标：** 从异构输入形成可复现研究数据。
 
-**当前状态（2026-07-20）：** Phase 3A 已交付版本化 DataSource、文件 NDJSON 与 PostgreSQL 双源接入、精确版本映射、双时间点时过滤、失败关闭的数据质量规则和固定 16 列 Canonical Quote Arrow Schema。Phase 3B 已把该 RecordBatch 编码为参数冻结的确定性 Parquet 与 canonical Manifest，并复用 Phase 1 双 blob proof 发布为真实 `DataSnapshot`。正式重读先完成 PostgreSQL metadata、Ceph RGW 两个 required payload 和内容摘要校验，再校验 Snapshot/Manifest/Parquet 三方绑定后解码；真实验收在销毁外部 source adapter、重建存储 adapter 后仍只按 Snapshot ID 得到相同 RecordBatch，外源调用次数保持一次。因此 Phase 3 已正式退出；最终证据与残余风险见 [Phase 3B iteration brief](docs/iterations/2026-07-phase3b-immutable-parquet-snapshot.md)。
+**当前状态（2026-07-20）：** Phase 3A 已交付版本化 DataSource、文件 NDJSON 与 PostgreSQL 双源接入、精确版本映射、双时间点时过滤、失败关闭的数据质量规则和固定 16 列 Canonical Quote Arrow Schema。Phase 3B 已把该 RecordBatch 编码为参数冻结的确定性 Parquet 与 canonical Manifest，并复用 Phase 1 双 blob proof 发布为真实 `DataSnapshot`。正式重读先完成 PostgreSQL metadata、Ceph RGW 两个 required payload 和内容摘要校验，再校验 Snapshot/Manifest/Parquet 三方绑定后解码；真实验收在销毁外部 source adapter、重建存储 adapter 后仍只按 Snapshot ID 得到相同 RecordBatch，外源调用次数保持一次。因此 Phase 3 已正式退出；最终证据与残余风险见 [Phase 3B iteration brief](docs/history/iterations/2026-07-phase3b-immutable-parquet-snapshot.md)。
 
 优先实现：
 
