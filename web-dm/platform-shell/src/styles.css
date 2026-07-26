@@ -155,3 +155,337 @@ button:focus-visible, iframe:focus-visible { outline: 0.2rem solid var(--copper)
     transition-duration: 0s !important;
   }
 }
+
+.phase5a-observer {
+  margin-top: 1.5rem;
+  border: 1px solid #2f3c46;
+  background: #111a20;
+  box-shadow: 0 18px 48px rgb(0 0 0 / 24%);
+}
+
+.phase5a-observer h2,
+.phase5a-observer h3,
+.phase5a-observer h4 {
+  color: #eef4f6;
+}
+
+.observer-warning,
+.observer-output-heading,
+.observer-payload > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.observer-warning {
+  padding: 1.25rem 1.4rem;
+  border-bottom: 1px solid #2f3c46;
+}
+
+.observer-warning h2,
+.observer-output-heading h3,
+.observer-nodes h3,
+.observer-cashflows h4 {
+  margin: 0.2rem 0 0;
+}
+
+.observer-warning > strong {
+  border: 1px solid #f2b84b;
+  padding: 0.35rem 0.55rem;
+  color: #f2c76f;
+  font: 700 0.72rem/1.2 ui-monospace, "Cascadia Code", monospace;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.observer-disclaimer {
+  margin: 0;
+  padding: 0.9rem 1.4rem;
+  border-bottom: 1px solid #2f3c46;
+  color: #c2cbd1;
+  line-height: 1.65;
+}
+
+.observer-query {
+  padding: 1.2rem 1.4rem;
+  border-bottom: 1px solid #2f3c46;
+}
+
+.observer-query label {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: #9eabb4;
+  font: 700 0.72rem/1.2 ui-monospace, "Cascadia Code", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.observer-query > div {
+  display: grid;
+  grid-template-columns: minmax(18rem, 1fr) auto;
+  gap: 0.65rem;
+}
+
+.observer-query input {
+  min-width: 0;
+  border: 1px solid #40515d;
+  border-radius: 0;
+  background: #0b1217;
+  color: #f4f7f8;
+  padding: 0.75rem 0.85rem;
+  font: 500 0.9rem/1.4 ui-monospace, "Cascadia Code", monospace;
+  text-transform: uppercase;
+}
+
+.observer-query input:focus-visible,
+.observer-node-button:focus-visible {
+  outline: 3px solid #82c7ea;
+  outline-offset: 2px;
+}
+
+.observer-error {
+  margin: 0;
+  padding: 0.85rem 1.4rem;
+  border-bottom: 1px solid #6f3a3a;
+  background: #2a1719;
+  color: #ffb5b5;
+}
+
+.observer-facts,
+.observer-measures {
+  display: grid;
+  margin: 0;
+}
+
+.observer-facts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid #2f3c46;
+}
+
+.observer-measures {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.observer-facts > div,
+.observer-measures > div {
+  min-width: 0;
+  padding: 0.85rem 1rem;
+  border-right: 1px solid #2f3c46;
+  border-bottom: 1px solid #2f3c46;
+}
+
+.observer-facts dt,
+.observer-measures dt {
+  color: #8e9ba5;
+  font-size: 0.72rem;
+}
+
+.observer-facts dd,
+.observer-measures dd {
+  overflow-wrap: anywhere;
+  margin: 0.35rem 0 0;
+  color: #eef4f6;
+}
+
+.observer-bindings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid #2f3c46;
+}
+
+.observer-bindings-grid > section {
+  min-width: 0;
+  overflow-x: auto;
+  padding: 1rem 1.4rem;
+}
+
+.observer-bindings-grid > section + section {
+  border-left: 1px solid #2f3c46;
+}
+
+.observer-bindings-grid h3 {
+  margin: 0 0 0.7rem;
+}
+
+.observer-bindings-grid table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.observer-bindings-grid th,
+.observer-bindings-grid td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid #2f3c46;
+  text-align: left;
+  vertical-align: top;
+}
+
+.observer-bindings-grid th {
+  color: #9eabb4;
+  font-size: 0.72rem;
+}
+
+.observer-bindings-grid code {
+  overflow-wrap: anywhere;
+  color: #c9e4ef;
+  font: 0.7rem/1.45 ui-monospace, "Cascadia Code", monospace;
+}
+
+.observer-facts .mono,
+.observer-payload code {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.72rem;
+}
+
+.observer-nodes {
+  padding: 1.2rem 1.4rem;
+  border-bottom: 1px solid #2f3c46;
+}
+
+.observer-nodes ul {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.observer-node-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid #40515d;
+  border-radius: 0;
+  background: #0b1217;
+  color: #f0f5f7;
+  padding: 0.75rem 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.observer-node-button[aria-pressed="true"] {
+  border-color: #82c7ea;
+  background: #132833;
+}
+
+.observer-node-button span {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+}
+
+.observer-node-button small {
+  color: #9eabb4;
+}
+
+.observer-output {
+  padding: 1.2rem 1.4rem 1.4rem;
+}
+
+.observer-output-heading {
+  margin-bottom: 0.8rem;
+}
+
+.observer-output-heading > span {
+  color: #9eabb4;
+  font-size: 0.78rem;
+}
+
+.observer-payload {
+  border: 1px solid #40515d;
+  background: #0b1217;
+}
+
+.observer-payload + .observer-payload {
+  margin-top: 0.8rem;
+}
+
+.observer-payload > header {
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid #2f3c46;
+}
+
+.observer-payload > header div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.observer-payload > header small {
+  color: #9eabb4;
+}
+
+.observer-payload code {
+  max-width: 50%;
+  overflow-wrap: anywhere;
+  color: #8fd1b5;
+}
+
+.observer-cashflows {
+  overflow-x: auto;
+  padding: 0.9rem 1rem 1rem;
+}
+
+.observer-cashflows table {
+  width: 100%;
+  margin-top: 0.7rem;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.observer-cashflows th,
+.observer-cashflows td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid #2f3c46;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.observer-cashflows th:first-child,
+.observer-cashflows td:first-child,
+.observer-cashflows th:nth-child(2),
+.observer-cashflows td:nth-child(2),
+.observer-cashflows th:nth-child(3),
+.observer-cashflows td:nth-child(3) {
+  text-align: left;
+}
+
+.observer-cashflows th {
+  color: #9eabb4;
+  font-size: 0.72rem;
+}
+
+.observer-engine,
+.observer-empty {
+  margin: 0;
+  padding: 0.8rem 1rem;
+  color: #9eabb4;
+  font-size: 0.78rem;
+}
+
+@media (max-width: 760px) {
+  .observer-query > div,
+  .observer-facts,
+  .observer-bindings-grid,
+  .observer-measures {
+    grid-template-columns: 1fr;
+  }
+
+  .observer-bindings-grid > section + section {
+    border-top: 1px solid #2f3c46;
+    border-left: 0;
+  }
+
+  .observer-warning,
+  .observer-output-heading,
+  .observer-payload > header,
+  .observer-node-button {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .observer-payload code {
+    max-width: none;
+  }
+}

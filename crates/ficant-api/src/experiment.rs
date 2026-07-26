@@ -24,6 +24,7 @@ use ficant_domain::research::{
     ResearchGraph, ResearchGraphInput, ResearchNode, ResearchNodeContract,
     ResearchNodeContractInput, ResourceLimits, RunJournal, RunState, TypedValue,
 };
+use ficant_runtime::{NativePortValue, decode_canonical_output_bytes};
 use prost::Message;
 use tonic::{Request, Response, Status};
 
@@ -33,6 +34,7 @@ use crate::registry::PlatformPort;
 
 const READ_SCOPE: &str = "experiment:read";
 const WRITE_SCOPE: &str = "experiment:write";
+const MAX_OBSERVED_OUTPUT_ENVELOPE_BYTES: u64 = 1_048_576;
 
 pub trait TrustedNodeCatalog: Send + Sync {
     fn native_source_digest(&self) -> ContentHash;
@@ -407,6 +409,73 @@ impl ExperimentService for ExperimentGrpcService {
             .ok_or_else(|| self.status("experiment-trace-output", &not_found()))?;
         Ok(Response::new(research_pb::TraceGraphOutputResponse {
             trace: Some(output_trace_to_proto(&trace)?),
+        }))
+    }
+
+    async fn read_node_output(
+        &self,
+        request: Request<research_pb::ReadNodeOutputRequest>,
+    ) -> Result<Response<research_pb::ReadNodeOutputResponse>, Status> {
+        self.authorize(request.metadata(), READ_SCOPE)?;
+        let trace_context = trace_context(request.get_ref());
+        let value = request.into_inner();
+        let run_id = parse_ulid(value.run_id)?;
+        let node_id = parse_ulid(value.node_id)?;
+        let trace = self
+            .phase4
+            .trace_output(self.trusted.access(), &run_id, &node_id)
+            .await
+            .map_err(|error| self.status("experiment-read-node-output", &error))?
+            .ok_or_else(|| self.status("experiment-read-node-output", &not_found()))?;
+        let mut selected = trace
+            .manifests
+            .iter()
+            .filter(|stored| stored.node_id == node_id);
+        let stored = selected
+            .next()
+            .ok_or_else(|| Status::data_loss("节点输出清单缺失"))?;
+        if selected.next().is_some() {
+            return Err(Status::data_loss("节点输出清单不唯一"));
+        }
+        if stored.artifact.blob_size() > MAX_OBSERVED_OUTPUT_ENVELOPE_BYTES {
+            return Err(Status::resource_exhausted("节点输出超过观测接口大小上限"));
+        }
+        let reads = VerifiedReadFacade::new(
+            self.artifacts.as_ref(),
+            &NoSignals,
+            self.snapshots.as_ref(),
+            self.blobs.as_ref(),
+            self.integrity_events.as_ref(),
+        );
+        let verified = reads
+            .read_verified_artifact(
+                self.trusted.access(),
+                stored.artifact.id().clone(),
+                trace_context,
+            )
+            .await
+            .map_err(|error| self.status("experiment-read-node-output", &error))?;
+        if verified.artifact() != &stored.artifact {
+            return Err(Status::data_loss("节点输出 Artifact 与清单不一致"));
+        }
+        let verified_size = u64::try_from(verified.payload().bytes().len())
+            .map_err(|_| Status::resource_exhausted("节点输出超过观测接口大小上限"))?;
+        if verified_size > MAX_OBSERVED_OUTPUT_ENVELOPE_BYTES {
+            return Err(Status::resource_exhausted("节点输出超过观测接口大小上限"));
+        }
+        let outputs = decode_canonical_output_bytes(
+            verified.payload().bytes(),
+            Some(stored.artifact.content_hash()),
+        )
+        .map_err(|_| Status::data_loss("节点输出 envelope 校验失败"))?;
+        let stored_proto = stored_manifest_to_proto(stored)?;
+        let manifest = stored_proto
+            .manifest
+            .ok_or_else(|| Status::data_loss("节点输出清单无法映射"))?;
+        let observed = observed_outputs(&manifest, outputs)?;
+        Ok(Response::new(research_pb::ReadNodeOutputResponse {
+            manifest: Some(manifest),
+            outputs: observed,
         }))
     }
 
@@ -1190,6 +1259,40 @@ fn typed_value_to_proto(value: &TypedValue) -> research_pb::TypedValue {
     }
 }
 
+fn observed_outputs(
+    manifest: &research_pb::NodeOutputManifest,
+    outputs: Vec<NativePortValue>,
+) -> Result<Vec<research_pb::ObservedNodeOutput>, Status> {
+    let declared = manifest
+        .content
+        .as_ref()
+        .ok_or_else(|| Status::data_loss("节点输出清单内容缺失"))?;
+    if declared.outputs.len() != outputs.len() {
+        return Err(Status::data_loss("节点输出数量与清单不一致"));
+    }
+    declared
+        .outputs
+        .iter()
+        .zip(outputs)
+        .map(|(binding, output)| {
+            let value_type = typed_value_to_proto(output.value_type());
+            let content_hash = hash_to_proto(output.content_hash());
+            if binding.port_name != output.port_name()
+                || binding.value_type.as_ref() != Some(&value_type)
+                || binding.content_hash.as_ref() != Some(&content_hash)
+            {
+                return Err(Status::data_loss("节点输出端口与清单不一致"));
+            }
+            Ok(research_pb::ObservedNodeOutput {
+                port_name: output.port_name().to_owned(),
+                value_type: Some(value_type),
+                content_hash: Some(content_hash),
+                payload: output.payload().to_vec(),
+            })
+        })
+        .collect()
+}
+
 fn port_to_proto(value: &PortType) -> research_pb::PortType {
     research_pb::PortType {
         port_name: value.port_name().to_owned(),
@@ -1263,4 +1366,112 @@ fn lineage() -> ApplicationError {
 
 fn hash_mismatch() -> ApplicationError {
     ApplicationError::new(ApplicationErrorCategory::HashMismatch, false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tonic::Code;
+
+    fn fixture_output() -> NativePortValue {
+        NativePortValue::new(
+            "analysis",
+            TypedValue::new(
+                "ficant.rates.v1.analyze-bond-result",
+                Version::new(1).expect("version"),
+                ContentHash::digest(b"analysis-schema"),
+            )
+            .expect("typed value"),
+            b"persisted-analysis".to_vec(),
+        )
+        .expect("native output")
+    }
+
+    fn fixture_manifest(output: &NativePortValue) -> research_pb::NodeOutputManifest {
+        research_pb::NodeOutputManifest {
+            attempt: 1,
+            content: Some(research_pb::NodeOutputManifestContent {
+                outputs: vec![research_pb::NodeOutputBinding {
+                    port_name: output.port_name().to_owned(),
+                    value_type: Some(typed_value_to_proto(output.value_type())),
+                    content_hash: Some(hash_to_proto(output.content_hash())),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn observed_output_preserves_verified_payload_and_declared_metadata() {
+        let output = fixture_output();
+        let expected_payload = output.payload().to_vec();
+        let manifest = fixture_manifest(&output);
+
+        let observed = observed_outputs(&manifest, vec![output]).expect("matching output");
+
+        assert_eq!(observed.len(), 1);
+        assert_eq!(observed[0].port_name, "analysis");
+        assert_eq!(observed[0].payload, expected_payload);
+        assert_eq!(
+            observed[0].value_type,
+            manifest.content.as_ref().expect("content").outputs[0].value_type
+        );
+        assert_eq!(
+            observed[0].content_hash,
+            manifest.content.as_ref().expect("content").outputs[0].content_hash
+        );
+    }
+
+    #[test]
+    fn observed_output_rejects_missing_manifest_content() {
+        let error = observed_outputs(
+            &research_pb::NodeOutputManifest::default(),
+            vec![fixture_output()],
+        )
+        .expect_err("missing content must fail");
+
+        assert_eq!(error.code(), Code::DataLoss);
+        assert_eq!(error.message(), "节点输出清单内容缺失");
+    }
+
+    #[test]
+    fn observed_output_rejects_output_count_drift() {
+        let output = fixture_output();
+        let manifest = fixture_manifest(&output);
+        let error = observed_outputs(&manifest, Vec::new()).expect_err("count drift must fail");
+
+        assert_eq!(error.code(), Code::DataLoss);
+        assert_eq!(error.message(), "节点输出数量与清单不一致");
+    }
+
+    #[test]
+    fn observed_output_rejects_port_name_type_and_hash_drift() {
+        for mutation in ["port", "type", "hash"] {
+            let output = fixture_output();
+            let mut manifest = fixture_manifest(&output);
+            let binding = &mut manifest.content.as_mut().expect("content").outputs[0];
+            match mutation {
+                "port" => binding.port_name = "risk".to_owned(),
+                "type" => {
+                    binding.value_type.as_mut().expect("value type").type_id =
+                        "ficant.rates.v1.risk-summary".to_owned();
+                }
+                "hash" => {
+                    binding.content_hash = Some(hash_to_proto(&ContentHash::digest(b"tampered")));
+                }
+                _ => unreachable!(),
+            }
+
+            let error =
+                observed_outputs(&manifest, vec![output]).expect_err("metadata drift must fail");
+            assert_eq!(error.code(), Code::DataLoss, "mutation {mutation}");
+            assert_eq!(
+                error.message(),
+                "节点输出端口与清单不一致",
+                "mutation {mutation}"
+            );
+        }
+    }
 }

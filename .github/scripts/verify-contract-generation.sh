@@ -3,7 +3,7 @@
 set -euo pipefail
 
 CONTRACT_BASE_SHA=737807302351fe8feee425a89d666caf3d611f96
-DESCRIPTOR_SHA256=81cede8c016bea5278d13fda68dd96ed8ba84dede1d83caf25e30367d854f6bf
+DESCRIPTOR_SHA256=faecbe1713c036e3031352b76c7b6b82a07d42b83ab9fdca02421a5d87d2072c
 
 die() {
   printf 'contract-generation: %s\n' "$1" >&2

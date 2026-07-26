@@ -13,6 +13,8 @@ import { usePoliteAnnouncements } from "./announcements";
 import { SafeErrorPanel } from "./error";
 import { AppFrame, validateLaunchBoundary } from "./loader";
 import { networkFailure, type PlatformClient } from "./registry";
+import type { Phase5AObservationClient } from "./observation-client";
+import { Phase5AObserver } from "./phase5a-observer";
 import { classifySession, sessionExpiryLabel, timestampMilliseconds } from "./session";
 
 type View =
@@ -44,11 +46,17 @@ const systemNow = () => new Date();
 
 export interface PlatformShellProps {
   client: PlatformClient;
+  observationClient?: Phase5AObservationClient;
   now?: () => Date;
   transport?: "grpc-web" | "test";
 }
 
-export function PlatformShell({ client, now = systemNow, transport = "test" }: PlatformShellProps) {
+export function PlatformShell({
+  client,
+  observationClient,
+  now = systemNow,
+  transport = "test",
+}: PlatformShellProps) {
   const [view, setView] = useState<View>({ kind: "booting" });
   const [announcement, announce] = usePoliteAnnouncements("正在建立安全会话");
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -414,6 +422,9 @@ export function PlatformShell({ client, now = systemNow, transport = "test" }: P
           </section>
         ) : null}
         {view.kind === "registry-ready" ? <RegistryList view={view} onOpen={openApp} /> : null}
+        {observationClient && (view.kind === "registry-ready" || view.kind === "registry-empty")
+          ? <Phase5AObserver client={observationClient} />
+          : null}
         {view.kind === "registry-error" ? (
           <SafeErrorPanel error={view.error} onRetry={() => void loadRegistry(view.session)} retryLabel="重新读取应用目录" />
         ) : null}

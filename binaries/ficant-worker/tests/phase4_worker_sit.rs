@@ -2,6 +2,7 @@
 
 mod support;
 
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use chrono::DateTime;
@@ -21,6 +22,9 @@ use ficant_contracts::ficant::rates::v1::{
     CalendarBinding, CalendarRequirement, CouponFrequency, ObjectBinding, RiskSummary,
     analyze_bond_request,
 };
+use ficant_contracts::ficant::research::v1::{
+    ReadNodeOutputRequest, experiment_service_server::ExperimentService,
+};
 use ficant_domain::analytics::{ALGORITHM_ID, CONVENTION_PROFILE};
 use ficant_domain::primitives::{ContentHash, LineageRef, OwnerRef, Ulid, Version};
 use ficant_domain::research::{
@@ -35,11 +39,13 @@ use ficant_native_nodes::{
     cgb_bond_risk_summary_contract, native_node_source_digest,
 };
 use ficant_runtime::{NativeNode, decode_canonical_output_bytes, replay_graph_execution};
+use ficant_server::{ServerSettings, build_grpc_services_with_experiment};
 use ficant_storage::s3::S3BlobStore;
 use ficant_worker::{
     ProductionWorkerBackend, WorkerBackend, WorkerConfig, canonical_environment_digest, run_claimed,
 };
 use prost::Message;
+use tonic::{Code, Request};
 
 const PREFIX: &str = "01ARZ3NDEKTSV4RRFFQ69G5FA";
 
@@ -496,6 +502,65 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
     assert!(summary.dv01.is_some());
     assert!(summary.source_metadata.is_some());
 
+    let settings = ServerSettings::try_from_values(&server_values(
+        &config.database_url,
+        &config.s3_endpoint,
+        &config.s3_bucket,
+        &config.s3_access_key,
+        &config.s3_secret_key,
+        config.runtime_image_digest.clone(),
+        config.native_source_digest.clone(),
+    ))
+    .unwrap();
+    let (_, _, experiment) = build_grpc_services_with_experiment(&settings).unwrap();
+    let observed = experiment
+        .read_node_output(Request::new(ReadNodeOutputRequest {
+            run_id: Some(proto_id('R')),
+            node_id: Some(proto_id('A')),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(observed.outputs.len(), 1);
+    assert_eq!(observed.outputs[0].port_name, RESULT_PORT);
+    assert_eq!(observed.outputs[0].payload, outputs[0].payload());
+    assert_eq!(
+        observed.outputs[0].content_hash.as_ref().unwrap(),
+        &proto_hash(outputs[0].content_hash())
+    );
+    assert!(
+        observed.manifest.is_some(),
+        "observability read must return the persisted manifest"
+    );
+
+    sqlx::query(
+        "UPDATE storage.blobs SET blob_size=blob_size+1
+         WHERE tenant_id=$1 AND content_hash=$2",
+    )
+    .bind(owner().tenant_id().as_str())
+    .bind(hex(artifact.content_hash()))
+    .execute(&pool)
+    .await
+    .unwrap();
+    let integrity_error = experiment
+        .read_node_output(Request::new(ReadNodeOutputRequest {
+            run_id: Some(proto_id('R')),
+            node_id: Some(proto_id('A')),
+        }))
+        .await
+        .expect_err("observability read must fail closed on Ceph metadata drift");
+    assert_ne!(integrity_error.code(), Code::Ok);
+    sqlx::query(
+        "UPDATE storage.blobs SET blob_size=$3
+         WHERE tenant_id=$1 AND content_hash=$2",
+    )
+    .bind(owner().tenant_id().as_str())
+    .bind(hex(artifact.content_hash()))
+    .bind(i64::try_from(artifact.blob_size()).unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+
     let events = read_journal(&repository, &scope, run_id).await;
     let replay = replay_graph_execution(&graph, &events).unwrap();
     assert_eq!(replay.run_state(), RunState::Succeeded);
@@ -504,6 +569,83 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
         replay.last_checkpoint().unwrap().output_hash(),
         second_artifact.content_hash()
     );
+}
+
+fn server_values(
+    database_url: &str,
+    s3_endpoint: &str,
+    s3_bucket: &str,
+    s3_access_key: &str,
+    s3_secret_key: &str,
+    runtime_image_digest: ContentHash,
+    native_source_digest: ContentHash,
+) -> BTreeMap<String, String> {
+    const KEY: &str = "3031323334353637383961626364656630313233343536373839616263646566";
+    BTreeMap::from([
+        ("FICANT_GRPC_BIND".to_owned(), "127.0.0.1:50051".to_owned()),
+        (
+            "FICANT_GRPC_WEB_ALLOWED_ORIGINS".to_owned(),
+            "http://127.0.0.1:4174".to_owned(),
+        ),
+        ("FICANT_PLATFORM_SIGNING_KEY_HEX".to_owned(), KEY.to_owned()),
+        ("FICANT_PLATFORM_TRACE_KEY_HEX".to_owned(), KEY.to_owned()),
+        (
+            "FICANT_EXPERIMENT_DATABASE_URL".to_owned(),
+            database_url.to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_S3_ENDPOINT".to_owned(),
+            s3_endpoint.to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_S3_BUCKET".to_owned(),
+            s3_bucket.to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_S3_ACCESS_KEY".to_owned(),
+            s3_access_key.to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_S3_SECRET_KEY".to_owned(),
+            s3_secret_key.to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_CURSOR_KEY_HEX".to_owned(),
+            KEY.to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_TENANT_ID".to_owned(),
+            id('0').as_str().to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_OWNER_ID".to_owned(),
+            id('1').as_str().to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_ACTOR_ID".to_owned(),
+            id('2').as_str().to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST".to_owned(),
+            format!("sha256:{}", hex(&runtime_image_digest)),
+        ),
+        (
+            "FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION".to_owned(),
+            "ficant.worker.environment.v1\narch=amd64\nos=linux\nprofile=worker-sit".to_owned(),
+        ),
+        (
+            "FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST".to_owned(),
+            format!("sha256:{}", hex(&native_source_digest)),
+        ),
+        (
+            "FICANT_LOOPBACK_SUBJECT".to_owned(),
+            "phase5a-observer".to_owned(),
+        ),
+        (
+            "FICANT_LOOPBACK_SCOPES".to_owned(),
+            "experiment:read".to_owned(),
+        ),
+    ])
 }
 
 async fn publish_blob(

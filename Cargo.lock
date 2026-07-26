@@ -764,6 +764,7 @@ dependencies = [
  "ficant-application",
  "ficant-contracts",
  "ficant-domain",
+ "ficant-runtime",
  "prost",
  "prost-types",
  "ring",
@@ -938,17 +939,20 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "ficant-api",
  "ficant-application",
  "ficant-bootstrap",
  "ficant-contracts",
  "ficant-domain",
  "ficant-native-nodes",
  "ficant-runtime",
+ "ficant-server",
  "ficant-storage",
  "prost",
  "prost-types",
  "sqlx",
  "tokio",
+ "tonic",
 ]
 
 [[package]]
