@@ -4,7 +4,7 @@
 
 **迭代** R1 · **状态** 待 Human 冻结 · **依据** SPEC v1.1、ACCEPTANCE v0.1（30 条）、[`../architecture/layering-refactor.md`](../architecture/layering-refactor.md)
 
-**Base commit SHA：** `<Root Orchestrator 开工第一步自行冻结，见 §3>`
+**Base commit SHA：** `403ff701610b1494ed2b88073832d3f8a56304d1`
 
 **依据的 ADR（全部 Accepted，2026-07-26）：** [0011](../architecture/adr/0011-position-as-snapshot-not-state.md) · [0012](../architecture/adr/0012-research-subject-identity-and-state.md) · [0013](../architecture/adr/0013-layering-law-shape-in-core-content-in-rulepack.md) · [0014](../architecture/adr/0014-policy-artifact-and-shared-evaluator.md) · [0015](../architecture/adr/0015-global-factor-identity.md) · [0016](../architecture/adr/0016-analytics-service-as-first-class-execution.md) · [0017](../architecture/adr/0017-data-health-and-coverage-declaration.md) · [0018](../architecture/adr/0018-platform-admin-and-researcher-separation.md)
 
@@ -32,13 +32,18 @@ R1 是唯一一轮以建立判据为主的迭代。它交付的主要不是能�
 |---|---|---|
 | **AC03** | 全仓库不存在 `market == "CN"` 或等价市场分支 | 分层检查脚本纳入 `check.ps1`，命中即失败 |
 
-**本轮建立判据但不点亮**（红灯是预期状态，由后续轮次转绿）：
+**本轮建立的可执行判据但不点亮**（红灯是预期状态，由后续轮次转绿）：
 
 | 条目 | 判据形态 | 转绿轮次 |
 |---|---|---|
 | AC01 | `ficant-domain` 内规则数值检索，`futures_delivery` 暂列 allowlist | R2 |
-| AC02 | 换 RulePack 换结果的对照用例（当前必然失败） | R2 |
-| AC04 | 虚构市场的 L0/L1/L2 改动行数统计脚本 | R7 |
+
+**后续轮次建立判据，R1 不宣称已建立：**
+
+| 条目 | 所需判据 | 负责轮次 |
+|---|---|---|
+| AC02 | 换 RulePack 换结果的对照用例，以及缺失规则项的精确失败断言 | R2 |
+| AC04 | 虚构市场 RulePack 与 Subject 的端到端计算、L0/L1/L2 改动行数统计 | R7 |
 
 **本轮专属闸门（不进 ACCEPTANCE）：**
 
@@ -73,7 +78,7 @@ R1 是唯一一轮以建立判据为主的迭代。它交付的主要不是能�
 
 | 文件 | 消息 | 要点 |
 |---|---|---|
-| `subject.proto` | `Subject`、`SubjectVersion`、`AccessSet`、`FundingTier`、`TaxTreatment`、`ConstraintSetRef` | **只装身份**：准入集、资金档**可得性**、税收待遇、考核机制、约束集引用。可版本化。**引用而非内嵌任何数值** |
+| `subject.proto` | `Subject`、`SubjectVersion`、`SubjectRecord`、`AccessSet`、`FundingTier`、`TaxTreatment`、`ConstraintSetRef` | **只装身份**：准入集、资金档**可得性**、税收待遇、考核机制、约束集引用。可版本化。**引用而非内嵌任何数值** |
 | `subject_state.proto` | `SubjectStateSnapshot`、`LimitCeiling` | **只装状态**：净资本、各项额度**上限**。走双时间通道，**不是版本**。额度**占用**由持仓算出，不在此存储（ADR-0012） |
 
 新增服务（加法式）：`ficant.core.v1.RegistryService` 提供 `RegisterSubject` / `GetSubject` / `RegisterSubjectState` / `GetSubjectState`，需 `registry:read` / `registry:write` scope。
@@ -107,7 +112,15 @@ Root Orchestrator 冻结 base 后即可开工。
 
 ## 6. 最终真实测试证据
 
-`<本节由执行本轮的 Root 在完成后填写，须记录实际命令、exit code 与可得的 test count。计划命令、-ListOnly 输出与 Worker 文字声明都不能冒充测试通过。>`
+以下均在本候选上实际执行；所列 exit code 均为 `0`。
+
+- `.\scripts\check-fast.ps1`：快速门禁通过。分层门禁报告 `AC03=0`、`AC01=12`、allowlist `=1`；门禁 fixture 为按实际调用计数的 18 个断言，覆盖 Rust、C++、tests、migrations 与字符串拼接绕过。可得的新增针对性测试包括 Registry API 1、主体领域 2、主体血缘映射 1、server composition 3。
+- `.\scripts\check.ps1`：完整本地检查通过。包含严格 Clippy、Rust/C++/Python/Web 构建与测试；生成契约 14 项、C++ CTest 8 项、Python 生成契约 1 通过/1 按设计跳过及 live parity 1 通过、Web 35 项通过。验收矩阵报告 `Q-001..Q-036` 36 项映射完整且冻结资产未变。
+- `cargo test --offline --locked -p ficant-server`：server 生产组合的 3 项、health probe 的 5 项、integrity sink 的 3 项测试通过。
+- `.\scripts\dev-up.ps1`：本地 PostgreSQL、Ceph RGW、migration、Server、Worker、Web、UI 拓扑就绪；除一次性 migration 正常退出外，其余预期服务均健康。
+- 实际执行的一次性 Python gRPC-Web 垂直切片（经 UI `/ficant-api`）：`RegisterSubject`、`GetSubject`、`RegisterSubjectState`、`GetSubjectState` 逐字段往返相同；带 `subject_ref` 的 `AnalyzeBond` 与不带该字段的调用数值逐字段相同，且结果元数据带回相同主体版本引用。另以早于 `visible_at` 一秒的 `knowledge_at` 查询，得到结构化 `NotFound`。两项切片检查均通过。
+- `.\scripts\dev-down.ps1`：开发容器停止成功，脚本默认保留 PostgreSQL 与 Ceph 命名卷。
+- `.\scripts\check.ps1 -IncludeIntegration`：风险回归通过。可得环境测试共 31 项：migration 4、lease queue 1、执行闭包 3、生产 worker 1、Phase 1 1、负向不变量 13、Phase 2B/2C/2D 各 1、Phase 3A 2、Phase 3B 3。
 
 规定的本轮自测命令：
 
@@ -126,7 +139,7 @@ Root Orchestrator 冻结 base 后即可开工。
 .\scripts\check.ps1 -IncludeIntegration
 ```
 
-**允许写路径：** `interface/proto/ficant/core/v1/subject.proto`、`interface/proto/ficant/core/v1/subject_state.proto`、`interface/proto/ficant/rates/v1/analytics.proto`（仅新增 `subject_ref`）、`crates/ficant-domain/src/**`、`crates/ficant-api/src/**`、`crates/ficant-application/src/**`、`crates/ficant-storage/src/postgres/**`、`migrations/postgresql/**`、`scripts/**`、`docs/architecture/adr/**`、`README.md`、`MANUAL.md`
+**允许写路径：** `interface/proto/ficant/core/v1/subject.proto`、`interface/proto/ficant/core/v1/subject_state.proto`、`interface/proto/ficant/rates/v1/analytics.proto`（仅新增 `subject_ref`）、`crates/ficant-domain/src/**`、`crates/ficant-api/src/**`、`crates/ficant-application/src/**`、`crates/ficant-storage/src/postgres/**`、`migrations/postgresql/**`、`scripts/**`、`docs/architecture/adr/**`、`README.md`、`MANUAL.md`、`binaries/ficant-server/src/lib.rs`（仅 RegistryService 的生产组合与路由；Human 于 2026-07-27 授权）
 
 **禁止写路径：** `cpp/**`、`crates/ficant-domain/src/futures_delivery.rs`、`crates/ficant-data/src/canonical.rs`、`crates/ficant-domain/src/market/bond.rs`、`tests/golden-cases/**`、`.github/**`、`deploy/**`、`cicd.yml`、`SPEC.md`、`ACCEPTANCE.md`
 
@@ -136,10 +149,8 @@ Root Orchestrator 冻结 base 后即可开工。
 
 ## 7. 残余风险
 
-`<完成后补充实测残余风险。以下为开工前的预判。>`
-
-- **本轮最可能的越界是"顺手把其他契约也定义了"。** 非目标里已显式列出五个 proto 文件，且允许写路径按文件名精确限定，不给目录通配。Root 检查真实 diff 时应首先核对是否出现未授权的 `.proto`。
-- **Constraint 的"只有形状"边界容易被侵蚀。** agent 会不知疲倦地优化它摸得到的一切，很可能把 `500%` 写进 domain 当默认值。分层检查必须在本轮就位——这正是它排在最前的理由。
-- **allowlist 会被当成逃生舱。** 规格上它只能移除不能新增；若 Root 在 diff 中发现 allowlist 增加了条目，即为失败候选，不论测试是否通过。
-- **主体版本标识进入历史血缘后不可更改**，与 FactorId 同属高不可逆项。建议 Human 直接审阅 `subject.proto` 的版本字段设计，而非依赖验收清单。
-- 新增 2 个 proto 文件与 1 个 service 会增加契约测试与三侧类型生成的构建时长，需观察是否触及熵预算。
+- **主体仍只有形状与血缘。** `FundingTier`、税收待遇、净资本和额度上限尚不影响融资成本、税收或约束判断；调用方继续提供融资利率。这是 R1 的明确非目标，后续语义轮必须保持数值回归证据。
+- **主体版本引用具有不可逆性。** 它已可进入历史 `AnalyzeBond` 结果元数据；版本字段或版本演进策略的后续变更必须保持既有血缘可读。
+- **唯一遗留 allowlist 是受控债券期货交割规则。** 分层门禁实测为恰好一条 `futures_delivery`（移除轮次 R2）；后续轮只能移除，不能增加。
+- **RegistryService 当前是服务契约，不是业务界面。** 已验证 gRPC-Web 路由和认证 scope；Platform Shell 仍未提供主体搜索、编辑、资金/税收或额度业务工作流。
+- **AC02 与 AC04 尚无可执行判据。** R1 不再把它们表述为已建立；R2 必须以 RulePack 语义对照用例建立 AC02，R7 必须以虚构市场端到端场景和行数统计建立 AC04。

@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package ficant.core.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+import "google/protobuf/timestamp.proto";
+
+message SubjectStateSnapshot {
+  Ulid snapshot_id = 1;
+  VersionRef subject_ref = 2;
+  DecimalValue net_capital = 3;
+  repeated LimitCeiling limit_ceilings = 4;
+  google.protobuf.Timestamp observed_at = 5;
+  google.protobuf.Timestamp visible_at = 6;
+  string market_timezone = 7;
+}
+
+message LimitCeiling {
+  string limit_code = 1;
+  DecimalValue ceiling = 2;
+}
+
+message RegisterSubjectStateRequest {
+  SubjectStateSnapshot snapshot = 1;
+}
+
+message RegisterSubjectStateResponse {
+  oneof result {
+    SubjectStateSnapshot snapshot = 1;
+    ErrorDetail error = 2;
+  }
+}
+
+message GetSubjectStateRequest {
+  Ulid snapshot_id = 1;
+  google.protobuf.Timestamp knowledge_at = 2;
+}
+
+message GetSubjectStateResponse {
+  oneof result {
+    SubjectStateSnapshot snapshot = 1;
+    ErrorDetail error = 2;
+  }
+}

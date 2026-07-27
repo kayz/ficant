@@ -51,6 +51,9 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     let required = [
         "core.definition_identities",
         "core.idempotency_records",
+        "core.subject_versions",
+        "core.subject_state_snapshots",
+        "core.subject_state_limit_ceilings",
         "data.source_identities",
         "data.sources",
         "market.bonds",
@@ -93,7 +96,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
             .fetch_one(&pool)
             .await
             .expect("migration history must be queryable");
-    assert_eq!(migration_count, 13);
+    assert_eq!(migration_count, 14);
     let artifact_column: bool = sqlx::query_scalar(
         "SELECT EXISTS(
              SELECT 1 FROM information_schema.columns

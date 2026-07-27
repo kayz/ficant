@@ -1,0 +1,129 @@
+[CmdletBinding()]
+param()
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$gatePath = Join-Path $PSScriptRoot 'check-layering.ps1'
+if (-not (Test-Path -LiteralPath $gatePath -PathType Leaf)) {
+    throw "Layering gate script is missing: $gatePath"
+}
+if ($null -eq (Get-Command 'pwsh' -ErrorAction SilentlyContinue)) {
+    throw 'Required command pwsh was not found.'
+}
+
+$script:AssertionCount = 0
+
+$tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+$tempRoot = [System.IO.Path]::GetFullPath((Join-Path $tempBase ('ficant-layering-gate-' + [Guid]::NewGuid().ToString('N'))))
+if (-not $tempRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to create fixture outside the temporary directory: $tempRoot"
+}
+
+function Write-FixtureFile {
+    param(
+        [Parameter(Mandatory)][string]$RelativePath,
+        [Parameter(Mandatory)][string]$Content
+    )
+
+    $path = Join-Path $tempRoot ($RelativePath.Replace('/', '\'))
+    $parent = Split-Path -Parent $path
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    Set-Content -LiteralPath $path -Value $Content -Encoding utf8
+    return $path
+}
+
+function Invoke-GateExpect {
+    param(
+        [Parameter(Mandatory)][int]$ExpectedExitCode,
+        [Parameter(Mandatory)][string]$Scenario
+    )
+
+    $output = & pwsh -NoProfile -File $gatePath -RepositoryRoot $tempRoot 2>&1
+    $actualExitCode = $LASTEXITCODE
+    if ($actualExitCode -ne $ExpectedExitCode) {
+        $renderedOutput = ($output | Out-String).Trim()
+        throw "Scenario '$Scenario' expected exit code $ExpectedExitCode but got $actualExitCode. Output: $renderedOutput"
+    }
+
+    $script:AssertionCount++
+}
+
+$countryCode = [string]::Concat([char]67, [char]78)
+$allowlist = @'
+[
+  {
+    "path": "crates/ficant-domain/src/futures_delivery.rs",
+    "violation": "market-rule-values",
+    "removal_round": "R2"
+  }
+]
+'@
+
+try {
+    New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+    Write-FixtureFile -RelativePath 'scripts/layering-allowlist.json' -Content $allowlist | Out-Null
+    Write-FixtureFile -RelativePath 'crates/ficant-domain/src/futures_delivery.rs' -Content 'const PRODUCT_CODE: &str = "TS";' | Out-Null
+
+    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'allowlisted domain rule passes'
+
+    $comparison = 'let supported = market == "' + $countryCode + '";'
+    $comparisonPath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/market_comparison.rs' -Content $comparison
+    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'market comparison is rejected'
+    Remove-Item -LiteralPath $comparisonPath
+    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'market comparison removal restores pass'
+
+    $matchBranch = 'match market { "' + $countryCode + '" => 1, _ => 0 }'
+    $matchPath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/market_match.rs' -Content $matchBranch
+    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'market match branch is rejected'
+    Remove-Item -LiteralPath $matchPath
+    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'market match removal restores pass'
+
+    $mapBranch = 'let values = HashMap::from([("' + $countryCode + '", 1)]);'
+    $mapPath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/market_map.rs' -Content $mapBranch
+    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'market keyed map is rejected'
+    Remove-Item -LiteralPath $mapPath
+    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'market map removal restores pass'
+
+    $quote = [char]34
+    $concatenatedBranch = 'let supported = market == (' + $quote + [char]67 + $quote + ' + ' + $quote + [char]78 + $quote + ');'
+    $concatenatedPath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/market_concatenation.rs' -Content $concatenatedBranch
+    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'concatenated market code is rejected'
+    Remove-Item -LiteralPath $concatenatedPath
+    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'concatenated market code removal restores pass'
+
+    $cppPath = Write-FixtureFile -RelativePath 'cpp/market_branch.cpp' -Content ('if (market == "' + $countryCode + '") { return 1; }')
+    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'C++ market branch is rejected'
+    Remove-Item -LiteralPath $cppPath
+    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'C++ market branch removal restores pass'
+
+    $testPath = Write-FixtureFile -RelativePath 'tests/market_branch.rs' -Content ('match market { "' + $countryCode + '" => 1, _ => 0 }')
+    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'test source market branch is rejected'
+    Remove-Item -LiteralPath $testPath
+    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'test source market branch removal restores pass'
+
+    $migrationPath = Write-FixtureFile -RelativePath 'migrations/market_branch.sql' -Content ('CASE ''' + $countryCode + ''' WHEN ''x'' THEN 1 END')
+    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'migration market branch is rejected'
+    Remove-Item -LiteralPath $migrationPath
+    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'migration market branch removal restores pass'
+
+    $unallowlistedRulePath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/other_market_rules.rs' -Content 'const PRODUCT_CODE: &str = "TF";'
+    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'non-allowlisted domain rule is rejected'
+    Remove-Item -LiteralPath $unallowlistedRulePath
+    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'non-allowlisted rule removal restores pass'
+
+    Write-FixtureFile -RelativePath 'scripts/layering-allowlist.json' -Content '[]' | Out-Null
+    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'removing allowlist before rule removal is rejected'
+
+    Write-Host ("Layering gate fixture tests passed ({0} assertions)." -f $script:AssertionCount)
+    exit 0
+}
+catch {
+    Write-Error $_
+    exit 1
+}
+finally {
+    if (Test-Path -LiteralPath $tempRoot -PathType Container) {
+        Remove-Item -LiteralPath $tempRoot -Recurse -Force
+    }
+}

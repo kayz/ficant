@@ -248,12 +248,18 @@ impl RatesGrpcService {
 pub struct ParsedBondAnalyticsRequest {
     input: BondAnalyticsInput,
     units: UnitBindings,
+    subject_ref: Option<VersionRef>,
 }
 
 impl ParsedBondAnalyticsRequest {
     #[must_use]
     pub fn input(&self) -> &BondAnalyticsInput {
         &self.input
+    }
+
+    #[must_use]
+    pub fn subject_ref(&self) -> Option<&VersionRef> {
+        self.subject_ref.as_ref()
     }
 }
 
@@ -267,6 +273,16 @@ pub fn parse_analyze_bond_request(
 ) -> Result<ParsedBondAnalyticsRequest, ApplicationError> {
     let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::bond())?;
     let terms = parse_bond_terms(request.terms.as_ref(), &context.units)?;
+    let subject_ref = request
+        .subject_ref
+        .as_ref()
+        .map(|reference| {
+            Ok::<_, ApplicationError>(VersionRef::new(
+                parse_ulid(reference.id.as_ref())?,
+                Version::new(reference.version).map_err(map_domain_error)?,
+            ))
+        })
+        .transpose()?;
     let (mode, input_value) = match request.input.as_ref() {
         Some(pb::analyze_bond_request::Input::YieldToMaturity(value)) => (
             AnalyticsMode::YieldIn,
@@ -295,6 +311,7 @@ pub fn parse_analyze_bond_request(
     Ok(ParsedBondAnalyticsRequest {
         input,
         units: context.units,
+        subject_ref,
     })
 }
 
@@ -308,7 +325,13 @@ pub fn execute_parsed_bond_request(
     request: &ParsedBondAnalyticsRequest,
 ) -> Result<pb::AnalyzeBondResult, ApplicationError> {
     let result = CalculateBondAnalytics::new(engine).execute(&request.input)?;
-    Ok(bond_result(&result, &request.units))
+    let mut mapped = bond_result(&result, &request.units);
+    if let Some(subject_ref) = request.subject_ref()
+        && let Some(metadata) = mapped.metadata.as_mut()
+    {
+        metadata.subject_ref = Some(proto_version_ref(subject_ref));
+    }
+    Ok(mapped)
 }
 
 /// Runs the shared pure parse, native calculation, and protobuf result mapping path.
@@ -889,6 +912,16 @@ fn metadata(schema_id: &str, algorithm: ExpectedAlgorithm) -> pb::ResultMetadata
             convention_profile: algorithm.convention.to_owned(),
             abi_version: ABI_VERSION,
         }),
+        subject_ref: None,
+    }
+}
+
+fn proto_version_ref(value: &VersionRef) -> ficant_contracts::ficant::core::v1::VersionRef {
+    ficant_contracts::ficant::core::v1::VersionRef {
+        id: Some(ficant_contracts::ficant::core::v1::Ulid {
+            value: value.id().as_str().to_owned(),
+        }),
+        version: value.version().get(),
     }
 }
 
@@ -930,4 +963,21 @@ fn platform_application_error(failure: &PlatformFailure) -> ApplicationError {
 
 fn invalid() -> ApplicationError {
     map_domain_error(DomainErrorCode::InvalidValue)
+}
+
+#[cfg(test)]
+mod subject_lineage_tests {
+    use super::proto_version_ref;
+    use ficant_domain::primitives::{Ulid, Version, VersionRef};
+
+    #[test]
+    fn subject_version_reference_maps_without_numeric_payload() {
+        let reference = VersionRef::new(
+            Ulid::new("01J00000000000000000000009").unwrap(),
+            Version::new(7).unwrap(),
+        );
+        let mapped = proto_version_ref(&reference);
+        assert_eq!(mapped.id.unwrap().value, "01J00000000000000000000009");
+        assert_eq!(mapped.version, 7);
+    }
 }

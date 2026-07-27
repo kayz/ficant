@@ -14,6 +14,7 @@ pub mod ficant {
     pub mod core {
         pub mod v1 {
             include!("generated/ficant.core.v1.rs");
+            include!("generated/ficant.core.v1.tonic.rs");
         }
     }
 

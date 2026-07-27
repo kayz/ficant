@@ -142,6 +142,7 @@ fn golden_request() -> AnalyzeBondRequest {
             4,
             unit('C'),
         ))),
+        subject_ref: None,
     }
 }
 

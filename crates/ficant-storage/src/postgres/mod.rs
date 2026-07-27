@@ -10,6 +10,7 @@ pub mod phase4_execution;
 pub mod runs;
 pub mod signals;
 pub mod snapshots;
+pub mod subjects;
 
 use std::sync::Arc;
 

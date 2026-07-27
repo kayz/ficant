@@ -45,6 +45,7 @@ message ResultMetadata {
   string engine_id = 2;
   string engine_version = 3;
   AlgorithmBinding algorithm = 4;
+  ficant.core.v1.VersionRef subject_ref = 5;
 }
 
 enum CouponFrequency {
@@ -134,6 +135,7 @@ message AnalyzeBondRequest {
     ficant.core.v1.DecimalValue yield_to_maturity = 8;
     ficant.core.v1.DecimalValue clean_price = 9;
   }
+  ficant.core.v1.VersionRef subject_ref = 10;
 }
 
 message AnalyzeBondResult {

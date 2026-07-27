@@ -17,6 +17,7 @@ pub mod futures_hedge;
 pub mod market;
 pub mod primitives;
 pub mod research;
+pub mod subject;
 
 use thiserror::Error;
 
