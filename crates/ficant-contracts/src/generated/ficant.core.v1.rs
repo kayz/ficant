@@ -164,4 +164,191 @@ impl ErrorCode {
         }
     }
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SubjectStateSnapshot {
+    #[prost(message, optional, tag="1")]
+    pub snapshot_id: ::core::option::Option<Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub subject_ref: ::core::option::Option<VersionRef>,
+    #[prost(message, optional, tag="3")]
+    pub net_capital: ::core::option::Option<DecimalValue>,
+    #[prost(message, repeated, tag="4")]
+    pub limit_ceilings: ::prost::alloc::vec::Vec<LimitCeiling>,
+    #[prost(message, optional, tag="5")]
+    pub observed_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag="6")]
+    pub visible_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(string, tag="7")]
+    pub market_timezone: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct LimitCeiling {
+    #[prost(string, tag="1")]
+    pub limit_code: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub ceiling: ::core::option::Option<DecimalValue>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RegisterSubjectStateRequest {
+    #[prost(message, optional, tag="1")]
+    pub snapshot: ::core::option::Option<SubjectStateSnapshot>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RegisterSubjectStateResponse {
+    #[prost(oneof="register_subject_state_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<register_subject_state_response::Result>,
+}
+/// Nested message and enum types in `RegisterSubjectStateResponse`.
+pub mod register_subject_state_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Snapshot(super::SubjectStateSnapshot),
+        #[prost(message, tag="2")]
+        Error(super::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetSubjectStateRequest {
+    #[prost(message, optional, tag="1")]
+    pub snapshot_id: ::core::option::Option<Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub knowledge_at: ::core::option::Option<::prost_types::Timestamp>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetSubjectStateResponse {
+    #[prost(oneof="get_subject_state_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_subject_state_response::Result>,
+}
+/// Nested message and enum types in `GetSubjectStateResponse`.
+pub mod get_subject_state_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Snapshot(super::SubjectStateSnapshot),
+        #[prost(message, tag="2")]
+        Error(super::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Subject {
+    #[prost(message, optional, tag="1")]
+    pub subject_id: ::core::option::Option<Ulid>,
+    #[prost(string, tag="2")]
+    pub display_name: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SubjectVersion {
+    #[prost(message, optional, tag="1")]
+    pub subject_ref: ::core::option::Option<VersionRef>,
+    #[prost(message, optional, tag="2")]
+    pub access_set: ::core::option::Option<AccessSet>,
+    #[prost(enumeration="FundingTier", tag="3")]
+    pub funding_tier: i32,
+    #[prost(message, optional, tag="4")]
+    pub tax_treatment: ::core::option::Option<TaxTreatment>,
+    #[prost(string, tag="5")]
+    pub assessment_mechanism: ::prost::alloc::string::String,
+    #[prost(string, tag="6")]
+    pub liability_profile: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="7")]
+    pub constraint_set_ref: ::core::option::Option<ConstraintSetRef>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SubjectRecord {
+    #[prost(message, optional, tag="1")]
+    pub subject: ::core::option::Option<Subject>,
+    #[prost(message, optional, tag="2")]
+    pub subject_version: ::core::option::Option<SubjectVersion>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AccessSet {
+    #[prost(string, repeated, tag="1")]
+    pub market_codes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, repeated, tag="2")]
+    pub tool_codes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TaxTreatment {
+    #[prost(string, tag="1")]
+    pub value_added_tax_profile: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub income_tax_profile: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ConstraintSetRef {
+    #[prost(message, optional, tag="1")]
+    pub r#ref: ::core::option::Option<VersionRef>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RegisterSubjectRequest {
+    #[prost(message, optional, tag="1")]
+    pub subject: ::core::option::Option<Subject>,
+    #[prost(message, optional, tag="2")]
+    pub subject_version: ::core::option::Option<SubjectVersion>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RegisterSubjectResponse {
+    #[prost(oneof="register_subject_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<register_subject_response::Result>,
+}
+/// Nested message and enum types in `RegisterSubjectResponse`.
+pub mod register_subject_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Subject(super::SubjectRecord),
+        #[prost(message, tag="2")]
+        Error(super::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetSubjectRequest {
+    #[prost(message, optional, tag="1")]
+    pub subject_ref: ::core::option::Option<VersionRef>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetSubjectResponse {
+    #[prost(oneof="get_subject_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_subject_response::Result>,
+}
+/// Nested message and enum types in `GetSubjectResponse`.
+pub mod get_subject_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Subject(super::SubjectRecord),
+        #[prost(message, tag="2")]
+        Error(super::ErrorDetail),
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum FundingTier {
+    Unspecified = 0,
+    DrAvailable = 1,
+    ROnly = 2,
+}
+impl FundingTier {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "FUNDING_TIER_UNSPECIFIED",
+            Self::DrAvailable => "FUNDING_TIER_DR_AVAILABLE",
+            Self::ROnly => "FUNDING_TIER_R_ONLY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FUNDING_TIER_UNSPECIFIED" => Some(Self::Unspecified),
+            "FUNDING_TIER_DR_AVAILABLE" => Some(Self::DrAvailable),
+            "FUNDING_TIER_R_ONLY" => Some(Self::ROnly),
+            _ => None,
+        }
+    }
+}
 // @@protoc_insertion_point(module)

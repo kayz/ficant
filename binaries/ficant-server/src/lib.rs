@@ -1,13 +1,13 @@
 use ficant_api::{
     ExperimentGrpcService, GrpcWebServeError, GrpcWebServerConfig, PlatformApplication,
-    PlatformGrpcService, PlatformPort, RatesGrpcService, SessionPolicy, SystemClock,
-    TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
-    serve_grpc_web_with_rates_and_experiment,
+    PlatformGrpcService, PlatformPort, RatesGrpcService, SessionPolicy, SubjectRegistryGrpcService,
+    SystemClock, TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
+    serve_grpc_web_with_rates_and_experiment_and_registry,
 };
 use ficant_application::ports::{
     AeadCursorCodec, ArtifactRepository, CursorKey, DefinitionRepository, ExperimentRepository,
     Phase4ExecutionRepository, RunJournalRepository, SnapshotRepository,
-    SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader,
+    SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobReader,
 };
 use ficant_application::{ApplicationError, map_runtime_error};
 use ficant_domain::primitives::{ContentHash, Ulid};
@@ -273,7 +273,7 @@ pub fn build_grpc_services(
     Ok((platform, rates))
 }
 
-/// Composes all production services, including the PostgreSQL/S3-backed Experiment boundary.
+/// Composes the Platform, Rates, and PostgreSQL/S3-backed Experiment production services.
 ///
 /// # Errors
 ///
@@ -281,6 +281,27 @@ pub fn build_grpc_services(
 pub fn build_grpc_services_with_experiment(
     settings: &ServerSettings,
 ) -> Result<(PlatformGrpcService, RatesGrpcService, ExperimentGrpcService), ServerError> {
+    let (platform, rates, experiment, _) =
+        build_grpc_services_with_experiment_and_registry(settings)?;
+    Ok((platform, rates, experiment))
+}
+
+/// Composes all production services, including the PostgreSQL-backed Subject Registry.
+///
+/// # Errors
+///
+/// Returns a redacted composition error when trusted configuration or adapters cannot be built.
+pub fn build_grpc_services_with_experiment_and_registry(
+    settings: &ServerSettings,
+) -> Result<
+    (
+        PlatformGrpcService,
+        RatesGrpcService,
+        ExperimentGrpcService,
+        SubjectRegistryGrpcService,
+    ),
+    ServerError,
+> {
     let (platform, rates) = build_grpc_services(settings)?;
     let application = build_platform_application(settings)?;
     let pool = PgPoolOptions::new()
@@ -321,8 +342,10 @@ pub fn build_grpc_services_with_experiment(
     let snapshot_repository: Arc<dyn SnapshotRepository> = repository.clone();
     let artifacts: Arc<dyn ArtifactRepository> = repository.clone();
     let definitions: Arc<dyn DefinitionRepository> = repository.clone();
+    let subjects: Arc<dyn SubjectRepository> = repository.clone();
     let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository;
     let blobs: Arc<dyn VerifiedBlobReader> = blob_store;
+    let registry_identity = Arc::clone(&application);
     let experiment = ExperimentGrpcService::new(
         application,
         experiments,
@@ -340,7 +363,10 @@ pub fn build_grpc_services_with_experiment(
         &settings.trace_key,
     )
     .map_err(config)?;
-    Ok((platform, rates, experiment))
+    let registry =
+        SubjectRegistryGrpcService::new(registry_identity, subjects, &settings.trace_key)
+            .map_err(config)?;
+    Ok((platform, rates, experiment, registry))
 }
 
 struct ProductionNativeCatalog;
@@ -387,8 +413,9 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         .filter_map(|key| env::var(key).ok().map(|value| ((*key).to_owned(), value)))
         .collect();
     let settings = ServerSettings::try_from_values(&values)?;
-    let (platform, rates, experiment) = build_grpc_services_with_experiment(&settings)?;
-    serve_grpc_web_with_rates_and_experiment(
+    let (platform, rates, experiment, registry) =
+        build_grpc_services_with_experiment_and_registry(&settings)?;
+    serve_grpc_web_with_rates_and_experiment_and_registry(
         GrpcWebServerConfig {
             bind: settings.bind,
             allowed_origins: settings.allowed_origins.clone(),
@@ -396,6 +423,7 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         platform,
         rates,
         experiment,
+        registry,
     )
     .await?;
     Ok(())

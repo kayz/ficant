@@ -13,6 +13,8 @@ $cppBuildDirectory = Join-Path $script:FicantRoot 'build\local-cpp-vs-llvm-19'
 $webDirectory = Join-Path $script:FicantRoot 'web-dm'
 
 $steps = @(
+    New-FicantCheckStep -Name 'Layering gate' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-File', 'scripts/check-layering.ps1')
+    New-FicantCheckStep -Name 'Layering gate fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-File', 'scripts/test-layering-check.ps1')
     New-FicantCheckStep -Name 'Rust formatting' -FilePath 'cargo' -ArgumentList @('fmt', '--all', '--', '--check')
     New-FicantCheckStep -Name 'Rust strict Clippy' -FilePath 'cargo' -ArgumentList @('clippy', '--offline', '--workspace', '--all-targets', '--locked', '--exclude', 'ficant-contracts', '--exclude', 'ficant-contract-tests', '--no-deps', '--', '-D', 'warnings')
     New-FicantCheckStep -Name 'Rust workspace build' -FilePath 'cargo' -ArgumentList @('build', '--offline', '--workspace', '--all-targets', '--locked')
@@ -62,7 +64,7 @@ try {
     }
 
     Assert-FicantRustCapability
-    foreach ($command in @('cmake', 'ctest', 'ninja', 'uv', 'node', 'corepack')) {
+    foreach ($command in @('pwsh', 'cmake', 'ctest', 'ninja', 'uv', 'node', 'corepack')) {
         Assert-FicantCommand $command
     }
     Assert-FicantCommand $cppCompiler

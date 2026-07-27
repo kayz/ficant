@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package ficant.core.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+import "ficant/core/v1/subject_state.proto";
+
+message Subject {
+  Ulid subject_id = 1;
+  string display_name = 2;
+}
+
+message SubjectVersion {
+  VersionRef subject_ref = 1;
+  AccessSet access_set = 2;
+  FundingTier funding_tier = 3;
+  TaxTreatment tax_treatment = 4;
+  string assessment_mechanism = 5;
+  string liability_profile = 6;
+  ConstraintSetRef constraint_set_ref = 7;
+}
+
+message SubjectRecord {
+  Subject subject = 1;
+  SubjectVersion subject_version = 2;
+}
+
+message AccessSet {
+  repeated string market_codes = 1;
+  repeated string tool_codes = 2;
+}
+
+enum FundingTier {
+  FUNDING_TIER_UNSPECIFIED = 0;
+  FUNDING_TIER_DR_AVAILABLE = 1;
+  FUNDING_TIER_R_ONLY = 2;
+}
+
+message TaxTreatment {
+  string value_added_tax_profile = 1;
+  string income_tax_profile = 2;
+}
+
+message ConstraintSetRef {
+  VersionRef ref = 1;
+}
+
+message RegisterSubjectRequest {
+  Subject subject = 1;
+  SubjectVersion subject_version = 2;
+}
+
+message RegisterSubjectResponse {
+  oneof result {
+    SubjectRecord subject = 1;
+    ErrorDetail error = 2;
+  }
+}
+
+message GetSubjectRequest {
+  VersionRef subject_ref = 1;
+}
+
+message GetSubjectResponse {
+  oneof result {
+    SubjectRecord subject = 1;
+    ErrorDetail error = 2;
+  }
+}
+
+// RegistryService requires registry:write for registration and registry:read
+// for lookup. Scope is carried by the transport credential, not this API.
+service RegistryService {
+  rpc RegisterSubject(RegisterSubjectRequest) returns (RegisterSubjectResponse);
+  rpc GetSubject(GetSubjectRequest) returns (GetSubjectResponse);
+  rpc RegisterSubjectState(RegisterSubjectStateRequest) returns (RegisterSubjectStateResponse);
+  rpc GetSubjectState(GetSubjectStateRequest) returns (GetSubjectStateResponse);
+}

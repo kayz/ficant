@@ -84,7 +84,14 @@ function Assert-LocalEnvironment {
         ',',
         [System.StringSplitOptions]::RemoveEmptyEntries
     )
-    foreach ($scope in @('apps:read', 'experiment:read', 'experiment:write')) {
+    foreach ($scope in @(
+        'apps:read',
+        'experiment:read',
+        'experiment:write',
+        'rates:analyze',
+        'registry:read',
+        'registry:write'
+    )) {
         if ($scopes -notcontains $scope) {
             throw "FICANT_BOOTSTRAP_SCOPES must include $scope."
         }
@@ -246,7 +253,7 @@ if (-not (Test-Path -LiteralPath $environmentFile -PathType Leaf)) {
         "FICANT_EXPERIMENT_CURSOR_KEY_HEX=$(New-RandomHex -ByteCount 32)",
         'FICANT_BOOTSTRAP_SUBJECT=local-platform-user',
         "FICANT_BOOTSTRAP_BEARER_TOKEN=$(New-RandomHex -ByteCount 32)",
-        'FICANT_BOOTSTRAP_SCOPES=apps:read,experiment:read,experiment:write'
+        'FICANT_BOOTSTRAP_SCOPES=apps:read,experiment:read,experiment:write,rates:analyze,registry:read,registry:write'
     )
     [System.IO.File]::WriteAllLines(
         $environmentFile,

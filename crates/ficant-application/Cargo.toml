@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 async-trait = { workspace = true }
+chrono = { workspace = true }
 ficant-domain = { path = "../ficant-domain" }
 ficant-runtime = { path = "../ficant-runtime" }
 ring = { workspace = true }

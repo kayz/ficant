@@ -65,6 +65,8 @@ pub struct ResultMetadata {
     pub engine_version: ::prost::alloc::string::String,
     #[prost(message, optional, tag="4")]
     pub algorithm: ::core::option::Option<AlgorithmBinding>,
+    #[prost(message, optional, tag="5")]
+    pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BondTerms {
@@ -164,6 +166,8 @@ pub struct AnalyzeBondRequest {
     pub calendar: ::core::option::Option<CalendarBinding>,
     #[prost(message, optional, tag="7")]
     pub terms: ::core::option::Option<BondTerms>,
+    #[prost(message, optional, tag="10")]
+    pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
     #[prost(oneof="analyze_bond_request::Input", tags="8, 9")]
     pub input: ::core::option::Option<analyze_bond_request::Input>,
 }

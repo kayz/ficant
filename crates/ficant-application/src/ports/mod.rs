@@ -18,6 +18,7 @@ mod rule_pack_resolution;
 mod runs;
 mod signals;
 mod snapshots;
+mod subjects;
 mod unit_resolution;
 
 pub use access::AccessScope;
@@ -79,6 +80,7 @@ pub use snapshots::{
     PublishSnapshot, SnapshotBlobRole, SnapshotProofKind, SnapshotRepository, SnapshotValue,
     StagedSnapshotBlob, StagedSnapshotProof, VerifiedSnapshotBlob, VerifiedSnapshotProof,
 };
+pub use subjects::SubjectRepository;
 pub use unit_resolution::{
     MarketFactFieldRole, MarketFactKind, MarketFactUnitResolver, ResolvedMarketFactProof,
     ResolvedUnitBinding, ValidatedMarketFact,
