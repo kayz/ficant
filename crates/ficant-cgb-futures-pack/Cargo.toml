@@ -1,5 +1,5 @@
 [package]
-name = "ficant-fixed-income-native"
+name = "ficant-cgb-futures-pack"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,15 +8,10 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-chrono = { workspace = true }
 ficant-application = { path = "../ficant-application" }
+ficant-contracts = { path = "../ficant-contracts" }
 ficant-domain = { path = "../ficant-domain" }
-ficant-kernel-sys = { path = "../ficant-kernel-sys" }
+prost = { workspace = true }
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-ficant-cgb-futures-pack = { path = "../ficant-cgb-futures-pack" }
-rust_decimal = { workspace = true }
-serde_json = { workspace = true }

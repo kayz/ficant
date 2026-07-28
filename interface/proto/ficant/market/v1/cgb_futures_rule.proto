@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package ficant.market.v1;
+
+import "ficant/core/v1/common.proto";
+
+// CgbFuturesDeliveryRulePack is L3 content consumed only by the cgb-futures adapter.
+// It contains every market-specific numerical convention used by futures delivery.
+message CgbFuturesDeliveryRulePack {
+  repeated CgbFuturesProductRule products = 1;
+  repeated uint32 delivery_months = 2;
+  ficant.core.v1.DecimalValue nominal_coupon = 3;
+  ficant.core.v1.DecimalValue face_quote_basis = 4;
+  optional uint32 accrued_interest_day_count = 5;
+  optional uint32 conversion_factor_rounding_places = 6;
+  optional uint32 accrued_interest_rounding_places = 7;
+  optional uint32 annual_day_basis = 8;
+}
+
+message CgbFuturesProductRule {
+  optional string product_code = 1;
+  optional uint32 original_term_max_months = 2;
+  optional uint32 residual_min_months = 3;
+
+  oneof residual_upper_bound {
+    uint32 residual_max_months = 4;
+    bool residual_max_months_unbounded = 5;
+  }
+}

@@ -1,21 +1,119 @@
 use ficant_domain::futures_delivery::{
-    FuturesDeliverableInput, FuturesDeliveryBasketResult, FuturesDeliveryResult,
+    CgbFuturesProduct, FuturesDeliverableInput, FuturesDeliveryBasketResult, FuturesDeliveryResult,
+    FuturesDeliveryRule,
 };
-use ficant_domain::primitives::{LineageRef, Ulid};
+use ficant_domain::market::MarketRulePack;
+use ficant_domain::primitives::{LineageRef, MarketTime, Ulid};
 use ficant_domain::research::{Artifact, ArtifactKind};
-use ficant_domain::{ContentAddressed, DomainErrorCode, Lineaged};
+use ficant_domain::{ContentAddressed, DomainErrorCode, Lineaged, VersionedDefinition};
 
 use crate::ports::{
     AccessScope, ApplicationResult, ArtifactRepository, BeginBlobStage, BlobStore,
-    FuturesDeliveryArtifactCodec, FuturesDeliveryEngine, IdempotencyKey, IntegrityEventSink,
-    PublishArtifact, RequiredVerifiedBlobRead, SafeTraceContext, VerifiedBlobReader,
-    VerifiedBlobRole, VerifiedReadResourceKind, VerifyBlobStage,
+    DefinitionRepository, DefinitionValue, FuturesDeliveryArtifactCodec, FuturesDeliveryEngine,
+    FuturesDeliveryRuleParser, IdempotencyKey, IntegrityEventSink, PublishArtifact,
+    RequiredVerifiedBlobRead, SafeTraceContext, VerifiedBlobReader, VerifiedBlobRole,
+    VerifiedReadResourceKind, VerifyBlobStage,
 };
 use crate::use_cases::bond_analytics::map_analytics_error;
 use crate::{ApplicationError, ApplicationErrorCategory, map_domain_error};
 
 pub const FUTURES_DELIVERY_MEDIA_TYPE: &str =
     "application/vnd.apache.arrow.file; profile=ficant.cgb-futures-delivery.v1";
+
+/// Resolves the exact persisted `RulePack` binding into the provider-neutral delivery-rule shape.
+///
+/// This is deliberately separate from the numerical engine: all identity, authorization,
+/// effective-time, content-hash, and typed-envelope checks complete before any engine call.
+pub struct ResolveFuturesDeliveryRule<'a> {
+    definitions: &'a dyn DefinitionRepository,
+    parser: &'a dyn FuturesDeliveryRuleParser,
+}
+
+impl<'a> ResolveFuturesDeliveryRule<'a> {
+    #[must_use]
+    pub const fn new(
+        definitions: &'a dyn DefinitionRepository,
+        parser: &'a dyn FuturesDeliveryRuleParser,
+    ) -> Self {
+        Self {
+            definitions,
+            parser,
+        }
+    }
+
+    /// Reads and parses the exact `RulePack` before a futures-delivery calculation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a fail-closed error for missing definitions/content, mismatched bindings, expired
+    /// packs, hash drift, wrong typed envelopes, or missing required rule items.
+    pub async fn execute(
+        &self,
+        scope: &AccessScope,
+        binding: &ficant_domain::analytics::AnalyticsObjectRef,
+        valuation_at: MarketTime,
+        product: CgbFuturesProduct,
+    ) -> ApplicationResult<FuturesDeliveryRule> {
+        let resolved = self
+            .definitions
+            .get_version(
+                scope,
+                binding.version_ref().id().clone(),
+                binding.version_ref().version(),
+            )
+            .await?
+            .ok_or_else(lineage_incomplete)?;
+        let DefinitionValue::MarketRulePack(rule_pack) = resolved else {
+            return Err(lineage_incomplete());
+        };
+        validate_delivery_rule_pack(scope, binding, &valuation_at, &rule_pack, self.parser)?;
+        let content = rule_pack
+            .content()
+            .ok_or_else(|| ApplicationError::rule_pack_item_missing("context.rule_pack.content"))?;
+        self.parser.parse(content, product)
+    }
+}
+
+fn validate_delivery_rule_pack(
+    scope: &AccessScope,
+    binding: &ficant_domain::analytics::AnalyticsObjectRef,
+    valuation_at: &MarketTime,
+    rule_pack: &MarketRulePack,
+    parser: &dyn FuturesDeliveryRuleParser,
+) -> ApplicationResult<()> {
+    if rule_pack.identity() != binding.version_ref().id().as_str()
+        || rule_pack.version() != binding.version_ref().version().get()
+    {
+        return Err(lineage_incomplete());
+    }
+    scope.authorize(rule_pack.owner())?;
+    if rule_pack.content_hash() != binding.content_hash() {
+        return Err(map_domain_error(DomainErrorCode::ContentHashMismatch));
+    }
+    if rule_pack.effective().from().instant() > valuation_at.instant()
+        || valuation_at.instant() >= rule_pack.effective().to().instant()
+    {
+        return Err(map_domain_error(DomainErrorCode::InvalidEffectiveTime));
+    }
+    let content = rule_pack
+        .content()
+        .ok_or_else(|| ApplicationError::rule_pack_item_missing("context.rule_pack.content"))?;
+    rule_pack
+        .content_hash()
+        .verify(content.value())
+        .map_err(map_domain_error)?;
+    if rule_pack.market() != parser.market()
+        || rule_pack.rule_type() != parser.rule_type()
+        || content.type_url() != parser.type_url()
+    {
+        return Err(map_domain_error(DomainErrorCode::InvalidValue));
+    }
+    Ok(())
+}
+
+fn lineage_incomplete() -> ApplicationError {
+    ApplicationError::new(ApplicationErrorCategory::LineageIncomplete, false)
+}
 
 pub struct CalculateFuturesDeliveryBasket<'a> {
     engine: &'a dyn FuturesDeliveryEngine,
@@ -50,6 +148,7 @@ impl<'a> CalculateFuturesDeliveryBasket<'a> {
                 || input.delivery_month_first() != first.delivery_month_first()
                 || input.delivery_date() != first.delivery_date()
                 || input.product() != first.product()
+                || input.rule() != first.rule()
                 || input.futures_clean_price() != first.futures_clean_price()
                 || input.financing_rate() != first.financing_rate()
         }) {

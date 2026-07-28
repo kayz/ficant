@@ -3,7 +3,10 @@ use ficant_domain::analytics::{
     AnalyticsObjectRef, BondTerms, BusinessDayConvention, CouponFrequency, DayCountConvention,
     FixedDecimal,
 };
-use ficant_domain::futures_delivery::{CgbFuturesProduct, FuturesDeliverableInput, is_deliverable};
+use ficant_domain::futures_delivery::{
+    CgbFuturesProduct, FuturesDeliverableInput, FuturesDeliveryRule, FuturesDeliveryRuleInput,
+    is_deliverable,
+};
 use ficant_domain::primitives::{ContentHash, MarketTime, OwnerRef, Ulid, Version, VersionRef};
 
 #[test]
@@ -15,23 +18,24 @@ fn all_four_products_accept_and_reject_exact_residual_boundaries() {
         (CgbFuturesProduct::ThirtyYear, 300, None),
     ] {
         let delivery = date(2026, 9, 1);
+        let rule = rule(product);
         let minimum_terms = terms(date(2025, 1, 1), add_months(delivery, minimum), product);
-        assert!(is_deliverable(product, &minimum_terms, delivery).unwrap());
+        assert!(is_deliverable(&rule, &minimum_terms, delivery).unwrap());
         let too_short = terms(
             date(2025, 1, 1),
             add_days(add_months(delivery, minimum), -1),
             product,
         );
-        assert!(!is_deliverable(product, &too_short, delivery).unwrap());
+        assert!(!is_deliverable(&rule, &too_short, delivery).unwrap());
         if let Some(maximum) = maximum {
             let upper = terms(date(2025, 1, 1), add_months(delivery, maximum), product);
-            assert!(is_deliverable(product, &upper, delivery).unwrap());
+            assert!(is_deliverable(&rule, &upper, delivery).unwrap());
             let too_long = terms(
                 date(2025, 1, 1),
                 add_days(add_months(delivery, maximum), 1),
                 product,
             );
-            assert!(!is_deliverable(product, &too_long, delivery).unwrap());
+            assert!(!is_deliverable(&rule, &too_long, delivery).unwrap());
         }
     }
 }
@@ -44,7 +48,7 @@ fn input_rejects_non_quarter_delivery_and_ineligible_bond() {
     assert!(build(input).is_err());
 
     let mut input = valid_input(CgbFuturesProduct::TenYear);
-    input.10 = terms(
+    input.11 = terms(
         date(2024, 1, 1),
         date(2032, 12, 31),
         CgbFuturesProduct::FiveYear,
@@ -63,6 +67,7 @@ type InputTuple = (
     NaiveDate,
     NaiveDate,
     CgbFuturesProduct,
+    FuturesDeliveryRule,
     BondTerms,
 );
 
@@ -90,6 +95,7 @@ fn valid_input(product: CgbFuturesProduct) -> InputTuple {
         delivery,
         date(2026, 9, 18),
         product,
+        rule(product),
         terms(date(2024, 1, 1), maturity, product),
     )
 }
@@ -107,10 +113,33 @@ fn build(value: InputTuple) -> ficant_domain::DomainResult<FuturesDeliverableInp
         value.8,
         value.9,
         value.10,
+        value.11,
         fixed("101.25"),
         fixed("99.50"),
         fixed("0.018"),
     )
+}
+
+fn rule(product: CgbFuturesProduct) -> FuturesDeliveryRule {
+    let (original_term_max_months, residual_min_months, residual_max_months) = match product {
+        CgbFuturesProduct::TwoYear => (60, 18, Some(27)),
+        CgbFuturesProduct::FiveYear => (84, 48, Some(63)),
+        CgbFuturesProduct::TenYear => (120, 78, None),
+        CgbFuturesProduct::ThirtyYear => (360, 300, None),
+    };
+    FuturesDeliveryRule::new(FuturesDeliveryRuleInput {
+        original_term_max_months,
+        residual_min_months,
+        residual_max_months,
+        delivery_months: vec![3, 6, 9, 12],
+        nominal_coupon: fixed("0.03"),
+        face_quote_basis: fixed("100"),
+        accrued_interest_day_count: 1,
+        conversion_factor_rounding_places: 4,
+        accrued_interest_rounding_places: 7,
+        annual_day_basis: 365,
+    })
+    .unwrap()
 }
 
 fn terms(issue: NaiveDate, maturity: NaiveDate, product: CgbFuturesProduct) -> BondTerms {

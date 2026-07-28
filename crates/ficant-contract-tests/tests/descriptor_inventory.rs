@@ -14,7 +14,9 @@ use ficant_contracts::ficant::app::v1::AppRegistry;
 use ficant_contracts::ficant::core::v1::{
     DecimalValue, Subject, SubjectStateSnapshot, SubjectVersion,
 };
-use ficant_contracts::ficant::market::v1::{Instrument, InstrumentKind};
+use ficant_contracts::ficant::market::v1::{
+    CgbFuturesDeliveryRulePack, CgbFuturesProductRule, Instrument, InstrumentKind, MarketRulePack,
+};
 use ficant_contracts::ficant::rates::v1::AnalyzeBondRequest;
 use ficant_contracts::ficant::research::v1::{
     ExecutionInstanceIdentity, ExperimentRun, ReproducibilityIdentity, ResearchGraph, RunState,
@@ -58,6 +60,9 @@ fn generated_rust_consumer_exports_representative_contracts() {
     let subject = Subject::default();
     let subject_version = SubjectVersion::default();
     let subject_state = SubjectStateSnapshot::default();
+    let rule_pack = MarketRulePack::default();
+    let cgb_futures_rule_pack = CgbFuturesDeliveryRulePack::default();
+    let cgb_product_rule = CgbFuturesProductRule::default();
 
     assert!(instrument.instrument_id.is_none());
     assert_eq!(instrument.kind, InstrumentKind::Unspecified as i32);
@@ -71,6 +76,9 @@ fn generated_rust_consumer_exports_representative_contracts() {
     assert!(subject.subject_id.is_none());
     assert!(subject_version.subject_ref.is_none());
     assert!(subject_state.snapshot_id.is_none());
+    assert!(rule_pack.content.is_none());
+    assert!(cgb_futures_rule_pack.products.is_empty());
+    assert!(cgb_product_rule.product_code.is_none());
 }
 
 #[derive(Clone, Copy)]
@@ -207,6 +215,7 @@ fn descriptor_inventory_is_unique_and_preserves_phase1_semantics() {
     assert_shared_types(&messages);
     assert_subject_contracts(&messages);
     assert_phase1_objects(&messages);
+    assert_cgb_futures_rule_pack_contract(&messages);
     assert_service_inventory(descriptor_set);
 }
 
@@ -991,6 +1000,7 @@ fn assert_phase1_objects(messages: &BTreeMap<String, &DescriptorProto>) {
                     ".ficant.market.v1.VerificationStatus",
                 ),
                 ExpectedField::message("content_hash", hash),
+                ExpectedField::message("content", ".google.protobuf.Any"),
             ],
         ),
         (
@@ -1079,6 +1089,147 @@ fn assert_phase1_objects(messages: &BTreeMap<String, &DescriptorProto>) {
     for (message, fields) in specs {
         assert_fields(messages, message, fields);
     }
+}
+
+fn assert_cgb_futures_rule_pack_contract(messages: &BTreeMap<String, &DescriptorProto>) {
+    let pack = messages
+        .get("ficant.market.v1.CgbFuturesDeliveryRulePack")
+        .expect("CgbFuturesDeliveryRulePack must exist");
+    assert_exact_field(
+        pack,
+        "products",
+        1,
+        Type::Message,
+        Some(".ficant.market.v1.CgbFuturesProductRule"),
+        true,
+        false,
+    );
+    assert_exact_field(pack, "delivery_months", 2, Type::Uint32, None, true, false);
+    assert_exact_field(
+        pack,
+        "nominal_coupon",
+        3,
+        Type::Message,
+        Some(".ficant.core.v1.DecimalValue"),
+        false,
+        false,
+    );
+    assert_exact_field(
+        pack,
+        "face_quote_basis",
+        4,
+        Type::Message,
+        Some(".ficant.core.v1.DecimalValue"),
+        false,
+        false,
+    );
+    for (name, number) in [
+        ("accrued_interest_day_count", 5),
+        ("conversion_factor_rounding_places", 6),
+        ("accrued_interest_rounding_places", 7),
+        ("annual_day_basis", 8),
+    ] {
+        assert_exact_field(pack, name, number, Type::Uint32, None, false, true);
+    }
+    assert_eq!(
+        pack.field.len(),
+        8,
+        "CgbFuturesDeliveryRulePack field drift"
+    );
+
+    let product = messages
+        .get("ficant.market.v1.CgbFuturesProductRule")
+        .expect("CgbFuturesProductRule must exist");
+    for (name, number, field_type) in [
+        ("product_code", 1, Type::String),
+        ("original_term_max_months", 2, Type::Uint32),
+        ("residual_min_months", 3, Type::Uint32),
+    ] {
+        assert_exact_field(product, name, number, field_type, None, false, true);
+    }
+    assert_exact_field(
+        product,
+        "residual_max_months",
+        4,
+        Type::Uint32,
+        None,
+        false,
+        false,
+    );
+    assert_exact_field(
+        product,
+        "residual_max_months_unbounded",
+        5,
+        Type::Bool,
+        None,
+        false,
+        false,
+    );
+    assert_eq!(product.field.len(), 5, "CgbFuturesProductRule field drift");
+    let residual_oneof = product
+        .oneof_decl
+        .iter()
+        .position(|oneof| oneof.name() == "residual_upper_bound")
+        .expect("residual upper bound must be a real oneof") as i32;
+    for name in ["residual_max_months", "residual_max_months_unbounded"] {
+        let field = product
+            .field
+            .iter()
+            .find(|field| field.name() == name)
+            .expect("residual oneof field must exist");
+        assert_eq!(field.oneof_index, Some(residual_oneof));
+    }
+}
+
+fn assert_exact_field(
+    message: &DescriptorProto,
+    name: &str,
+    number: i32,
+    field_type: Type,
+    type_name: Option<&str>,
+    repeated: bool,
+    proto3_optional: bool,
+) {
+    let field = message
+        .field
+        .iter()
+        .find(|field| field.name() == name)
+        .unwrap_or_else(|| panic!("{}.{} must exist", message.name(), name));
+    assert_eq!(
+        field.number(),
+        number,
+        "{}.{} tag drift",
+        message.name(),
+        name
+    );
+    assert_eq!(
+        field.r#type(),
+        field_type,
+        "{}.{} type drift",
+        message.name(),
+        name
+    );
+    assert_eq!(
+        field.type_name.as_deref(),
+        type_name,
+        "{}.{} type target drift",
+        message.name(),
+        name
+    );
+    assert_eq!(
+        field.label() == Label::Repeated,
+        repeated,
+        "{}.{} cardinality drift",
+        message.name(),
+        name
+    );
+    assert_eq!(
+        field.proto3_optional(),
+        proto3_optional,
+        "{}.{} presence drift",
+        message.name(),
+        name
+    );
 }
 
 fn assert_platform_contracts(messages: &BTreeMap<String, &DescriptorProto>) {

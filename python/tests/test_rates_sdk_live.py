@@ -22,6 +22,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GOLDEN_ROOT = REPO_ROOT / "tests" / "golden-cases" / "china-rates"
+CGB_FUTURES_RULE_PACK = REPO_ROOT / "domain-packs" / "cgb-futures" / "cgb-futures-v1.bin"
 ULID_PREFIX = "01ARZ3NDEKTSV4RRFFQ69G5FA"
 TOKEN = "phase2e-python-sdk-test-token"
 KEY = "3031323334353637383961626364656630313233343536373839616263646566"
@@ -39,6 +40,15 @@ def _object(suffix: str) -> rates.ObjectBinding:
     return rates.ObjectBinding(
         object=common_pb2.VersionRef(id=_ulid(suffix), version=1),
         content_hash=_hash(f"object-{suffix}"),
+    )
+
+
+def _cgb_futures_rule_pack() -> rates.ObjectBinding:
+    return rates.ObjectBinding(
+        object=common_pb2.VersionRef(id=_ulid("X"), version=1),
+        content_hash=common_pb2.Sha256(
+            value=hashlib.sha256(CGB_FUTURES_RULE_PACK.read_bytes()).digest()
+        ),
     )
 
 
@@ -85,11 +95,16 @@ def _decimal_value(value: common_pb2.DecimalValue) -> Decimal:
 
 
 def _context(
-    algorithm_id: str, convention: str, *, rule_suffix: str, snapshot_suffix: str
+    algorithm_id: str,
+    convention: str,
+    *,
+    rule_suffix: str,
+    snapshot_suffix: str,
+    rule_pack: rates.ObjectBinding | None = None,
 ) -> rates.AnalysisContext:
     return rates.AnalysisContext(
         owner=common_pb2.OwnerRef(tenant_id=_ulid("0"), owner_id=_ulid("1")),
-        rule_pack=_object(rule_suffix),
+        rule_pack=rule_pack or _object(rule_suffix),
         data_snapshot=_object(snapshot_suffix),
         algorithm=rates.AlgorithmBinding(
             algorithm_id=algorithm_id,
@@ -312,6 +327,7 @@ def _assert_futures_delivery(client: RatesClient) -> None:
                 "cffex-cgb-futures-delivery-v1",
                 rule_suffix="X",
                 snapshot_suffix="Y",
+                rule_pack=_cgb_futures_rule_pack(),
             ),
             futures_contract=_object("Z"),
             valuation_at=_market_time("2026-07-20T15:00:00+08:00", "2026-07-20"),

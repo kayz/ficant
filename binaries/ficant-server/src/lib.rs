@@ -10,6 +10,7 @@ use ficant_application::ports::{
     SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobReader,
 };
 use ficant_application::{ApplicationError, map_runtime_error};
+use ficant_cgb_futures_pack::CgbFuturesDeliveryRulePackParser;
 use ficant_domain::primitives::{ContentHash, Ulid};
 use ficant_fixed_income_native::{
     NativeBondAnalyticsEngine, NativeCarryRollEngine, NativeFuturesDeliveryEngine,
@@ -260,16 +261,9 @@ pub fn build_grpc_services(
     let application = build_platform_application(settings)?;
     let platform =
         PlatformGrpcService::new(Arc::clone(&application), &settings.trace_key).map_err(config)?;
-    let rates = RatesGrpcService::new(
-        application,
-        Arc::new(NativeBondAnalyticsEngine),
-        Arc::new(NativeYieldCurveEngine),
-        Arc::new(NativeCarryRollEngine),
-        Arc::new(NativeFuturesDeliveryEngine),
-        Arc::new(NativeFuturesHedgeEngine),
-        &settings.trace_key,
-    )
-    .map_err(config)?;
+    let (repository, _, _) = build_repository(settings)?;
+    let definitions: Arc<dyn DefinitionRepository> = repository;
+    let rates = build_rates_service(application, definitions, settings)?;
     Ok((platform, rates))
 }
 
@@ -302,21 +296,10 @@ pub fn build_grpc_services_with_experiment_and_registry(
     ),
     ServerError,
 > {
-    let (platform, rates) = build_grpc_services(settings)?;
     let application = build_platform_application(settings)?;
-    let pool = PgPoolOptions::new()
-        .max_connections(10)
-        .connect_lazy(&settings.experiment_database_url)
-        .map_err(|_| config("FICANT_EXPERIMENT_DATABASE_URL is invalid"))?;
-    let cursor = Arc::new(
-        AeadCursorCodec::new(
-            CursorKey::new("server-active", settings.experiment_cursor_key)
-                .map_err(|_| config("experiment cursor key is invalid"))?,
-            Vec::new(),
-        )
-        .map_err(|_| config("experiment cursor configuration is invalid"))?,
-    );
-    let repository = Arc::new(PostgresRepository::new(pool.clone(), cursor.clone()));
+    let platform =
+        PlatformGrpcService::new(Arc::clone(&application), &settings.trace_key).map_err(config)?;
+    let (repository, pool, cursor) = build_repository(settings)?;
     let blob_store = Arc::new(
         S3BlobStore::new(
             &settings.experiment_s3_endpoint,
@@ -345,6 +328,7 @@ pub fn build_grpc_services_with_experiment_and_registry(
     let subjects: Arc<dyn SubjectRepository> = repository.clone();
     let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository;
     let blobs: Arc<dyn VerifiedBlobReader> = blob_store;
+    let rates = build_rates_service(Arc::clone(&application), definitions.clone(), settings)?;
     let registry_identity = Arc::clone(&application);
     let experiment = ExperimentGrpcService::new(
         application,
@@ -367,6 +351,47 @@ pub fn build_grpc_services_with_experiment_and_registry(
         SubjectRegistryGrpcService::new(registry_identity, subjects, &settings.trace_key)
             .map_err(config)?;
     Ok((platform, rates, experiment, registry))
+}
+
+fn build_rates_service(
+    application: Arc<dyn PlatformPort>,
+    definitions: Arc<dyn DefinitionRepository>,
+    settings: &ServerSettings,
+) -> Result<RatesGrpcService, ServerError> {
+    RatesGrpcService::new(
+        application,
+        Arc::new(NativeBondAnalyticsEngine),
+        Arc::new(NativeYieldCurveEngine),
+        Arc::new(NativeCarryRollEngine),
+        Arc::new(NativeFuturesDeliveryEngine),
+        definitions,
+        Arc::new(CgbFuturesDeliveryRulePackParser),
+        Arc::new(NativeFuturesHedgeEngine),
+        &settings.trace_key,
+    )
+    .map_err(config)
+}
+
+fn build_repository(
+    settings: &ServerSettings,
+) -> Result<(Arc<PostgresRepository>, sqlx::PgPool, Arc<AeadCursorCodec>), ServerError> {
+    let pool = PgPoolOptions::new()
+        .max_connections(10)
+        .connect_lazy(&settings.experiment_database_url)
+        .map_err(|_| config("FICANT_EXPERIMENT_DATABASE_URL is invalid"))?;
+    let cursor = Arc::new(
+        AeadCursorCodec::new(
+            CursorKey::new("server-active", settings.experiment_cursor_key)
+                .map_err(|_| config("experiment cursor key is invalid"))?,
+            Vec::new(),
+        )
+        .map_err(|_| config("experiment cursor configuration is invalid"))?,
+    );
+    Ok((
+        Arc::new(PostgresRepository::new(pool.clone(), Arc::clone(&cursor))),
+        pool,
+        cursor,
+    ))
 }
 
 struct ProductionNativeCatalog;

@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 namespace {
 
@@ -35,22 +36,53 @@ void zero_result(ficant_kernel_cgb_futures_delivery_result_v1* result) noexcept 
     result->delivery_profit = 0.0;
 }
 
-bool valid_product(uint32_t product) noexcept {
-    return product >= FICANT_KERNEL_CGB_FUTURES_TS
-        && product <= FICANT_KERNEL_CGB_FUTURES_TL;
-}
-
-bool valid_delivery_month(int32_t date) noexcept {
+bool valid_delivery_month(int32_t date,
+                          const uint32_t* delivery_months,
+                          uint32_t delivery_months_count) noexcept {
+    if (delivery_months == nullptr || delivery_months_count == 0U
+        || delivery_months_count > 12U) {
+        return false;
+    }
     int year = 0;
     unsigned month = 0;
     unsigned day = 0;
     ficant::date_utils::days_to_ymd(date, year, month, day);
     static_cast<void>(year);
-    return day == 1U && (month == 3U || month == 6U || month == 9U || month == 12U);
+    bool contains_month = false;
+    for (uint32_t index = 0; index < delivery_months_count; ++index) {
+        const uint32_t value = delivery_months[index];
+        if (value == 0U || value > 12U
+            || (index > 0U && delivery_months[index - 1U] >= value)) {
+            return false;
+        }
+        if (value == month) {
+            contains_month = true;
+        }
+    }
+    return day == 1U && contains_month;
+}
+
+bool valid_rule(const ficant_kernel_cgb_futures_delivery_input_v1& input) noexcept {
+    constexpr uint32_t maximum_months = static_cast<uint32_t>(std::numeric_limits<int>::max());
+    return input.original_term_max_months > 0U
+        && input.original_term_max_months <= maximum_months
+        && input.residual_min_months > 0U
+        && input.residual_min_months <= maximum_months
+        && input.residual_max_months_unbounded <= 1U
+        && (input.residual_max_months_unbounded == 1U
+            || (input.residual_max_months >= input.residual_min_months
+                && input.residual_max_months > 0U
+                && input.residual_max_months <= maximum_months))
+        && input.accrued_interest_day_count > 0U
+        && input.conversion_factor_rounding_places <= 12U
+        && input.accrued_interest_rounding_places <= 12U
+        && input.annual_day_basis > 0U;
 }
 
 bool all_finite(const ficant_kernel_cgb_futures_delivery_input_v1& input) noexcept {
-    return std::isfinite(input.coupon_rate)
+    return std::isfinite(input.nominal_coupon)
+        && std::isfinite(input.face_quote_basis)
+        && std::isfinite(input.coupon_rate)
         && std::isfinite(input.spot_clean_price)
         && std::isfinite(input.futures_clean_price)
         && std::isfinite(input.financing_rate);
@@ -78,10 +110,11 @@ extern "C" uint32_t ficant_kernel_analyze_cgb_futures_delivery_v1(
         return finish(result, FICANT_KERNEL_STATUS_ABI_MISMATCH);
     }
     if (input->struct_size != sizeof(ficant_kernel_cgb_futures_delivery_input_v1)
-        || input->reserved != 0 || !valid_product(input->product)
+        || input->reserved != 0 || !valid_rule(*input)
         || (input->frequency != FICANT_KERNEL_FREQUENCY_ANNUAL
             && input->frequency != FICANT_KERNEL_FREQUENCY_SEMIANNUAL)
-        || !valid_delivery_month(input->delivery_month_first)
+        || !valid_delivery_month(input->delivery_month_first, input->delivery_months,
+                                 input->delivery_months_count)
         || input->purchase_date >= input->delivery_date
         || input->delivery_date >= input->maturity_date) {
         return finish(result, FICANT_KERNEL_STATUS_INVALID_ARGUMENT);
@@ -89,27 +122,31 @@ extern "C" uint32_t ficant_kernel_analyze_cgb_futures_delivery_v1(
     if (!all_finite(*input)) {
         return finish(result, FICANT_KERNEL_STATUS_NON_FINITE);
     }
-    if (input->coupon_rate <= 0.0 || input->spot_clean_price <= 0.0
+    if (input->nominal_coupon <= 0.0 || input->face_quote_basis <= 0.0
+        || input->coupon_rate <= 0.0 || input->spot_clean_price <= 0.0
         || input->futures_clean_price <= 0.0 || input->financing_rate < 0.0) {
         return finish(result, FICANT_KERNEL_STATUS_INVALID_ARGUMENT);
     }
     try {
-        if (!ficant::futures_math::is_cffex_deliverable(
-                input->product, input->issue_date, input->maturity_date,
-                input->delivery_month_first)) {
+        if (!ficant::futures_math::is_deliverable(
+                input->original_term_max_months, input->residual_min_months,
+                input->residual_max_months, input->residual_max_months_unbounded == 1U,
+                input->issue_date, input->maturity_date, input->delivery_month_first)) {
             result->eligible = 0;
             return finish(result, FICANT_KERNEL_STATUS_OK);
         }
         ficant::futures_math::CouponScheduleMetrics schedule{};
         if (!ficant::futures_math::coupon_schedule_metrics(
                 input->issue_date, input->maturity_date, input->frequency,
-                input->coupon_rate, input->purchase_date, input->delivery_month_first,
-                input->delivery_date, schedule)) {
+                input->coupon_rate, input->face_quote_basis, input->accrued_interest_day_count,
+                input->accrued_interest_rounding_places, input->purchase_date,
+                input->delivery_month_first, input->delivery_date, schedule)) {
             return finish(result, FICANT_KERNEL_STATUS_INVALID_ARGUMENT);
         }
         const double conversion_factor = ficant::futures_math::cffex_conversion_factor(
-            input->coupon_rate, input->frequency, schedule.months_to_next_coupon,
-            schedule.remaining_coupon_count);
+            input->coupon_rate, input->nominal_coupon, input->frequency,
+            schedule.months_to_next_coupon, schedule.remaining_coupon_count,
+            input->conversion_factor_rounding_places);
         const double purchase_dirty =
             input->spot_clean_price + schedule.purchase_accrued_interest;
         const double actual_days = static_cast<double>(input->delivery_date - input->purchase_date);
@@ -118,12 +155,13 @@ extern "C" uint32_t ficant_kernel_analyze_cgb_futures_delivery_v1(
         const double gross_basis =
             input->spot_clean_price - input->futures_clean_price * conversion_factor;
         const double financing_cost =
-            purchase_dirty * input->financing_rate * actual_days / 365.0;
+            purchase_dirty * input->financing_rate * actual_days
+            / static_cast<double>(input->annual_day_basis);
         const double holding_carry = schedule.delivery_accrued_interest
             - schedule.purchase_accrued_interest + schedule.interim_coupons - financing_cost;
         const double net_basis = gross_basis - holding_carry;
         const double irr = ((invoice + schedule.interim_coupons) / purchase_dirty - 1.0)
-            * 365.0 / actual_days;
+            * static_cast<double>(input->annual_day_basis) / actual_days;
         if (!std::isfinite(conversion_factor) || !std::isfinite(invoice)
             || !std::isfinite(purchase_dirty) || !std::isfinite(gross_basis)
             || !std::isfinite(financing_cost) || !std::isfinite(holding_carry)

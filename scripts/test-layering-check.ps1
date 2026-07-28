@@ -50,22 +50,18 @@ function Invoke-GateExpect {
 }
 
 $countryCode = [string]::Concat([char]67, [char]78)
-$allowlist = @'
-[
-  {
-    "path": "crates/ficant-domain/src/futures_delivery.rs",
-    "violation": "market-rule-values",
-    "removal_round": "R2"
-  }
-]
-'@
+$allowlist = '[]'
 
 try {
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
     Write-FixtureFile -RelativePath 'scripts/layering-allowlist.json' -Content $allowlist | Out-Null
-    Write-FixtureFile -RelativePath 'crates/ficant-domain/src/futures_delivery.rs' -Content 'const PRODUCT_CODE: &str = "TS";' | Out-Null
+    Write-FixtureFile -RelativePath 'crates/ficant-domain/src/placeholder.rs' -Content 'pub const CLEAN: u32 = 1;' | Out-Null
+    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'empty allowlist and clean source pass'
 
-    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'allowlisted domain rule passes'
+    $domainRulePath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/market_rules.rs' -Content 'fn original_term_months() -> u32 { 120 }'
+    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'domain rule table is rejected'
+    Remove-Item -LiteralPath $domainRulePath
+    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'domain rule table removal restores pass'
 
     $comparison = 'let supported = market == "' + $countryCode + '";'
     $comparisonPath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/market_comparison.rs' -Content $comparison
@@ -97,6 +93,21 @@ try {
     Remove-Item -LiteralPath $cppPath
     Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'C++ market branch removal restores pass'
 
+    $cppRuleFixtures = @(
+        [pscustomobject]@{ Scenario = 'C++ delivery eligibility rule'; Content = 'static const uint32_t original_term_max_months = 120;' },
+        [pscustomobject]@{ Scenario = 'C++ delivery months rule'; Content = 'static const uint32_t delivery_months[] = {3, 6, 9, 12};' },
+        [pscustomobject]@{ Scenario = 'C++ standard coupon rule'; Content = 'static const double nominal_coupon = 0.03;' },
+        [pscustomobject]@{ Scenario = 'C++ face quote basis rule'; Content = 'static const double face_quote_basis = 100.0;' },
+        [pscustomobject]@{ Scenario = 'C++ rounding scale rule'; Content = 'static const uint32_t conversion_factor_rounding_places = 4;' },
+        [pscustomobject]@{ Scenario = 'C++ annual day basis rule'; Content = 'static const uint32_t annual_day_basis = 365;' }
+    )
+    foreach ($fixture in $cppRuleFixtures) {
+        $cppRulePath = Write-FixtureFile -RelativePath 'cpp/fixed-income-kernel/src/futures_rules.cpp' -Content $fixture.Content
+        Invoke-GateExpect -ExpectedExitCode 1 -Scenario ($fixture.Scenario + ' is rejected')
+        Remove-Item -LiteralPath $cppRulePath
+        Invoke-GateExpect -ExpectedExitCode 0 -Scenario ($fixture.Scenario + ' removal restores pass')
+    }
+
     $testPath = Write-FixtureFile -RelativePath 'tests/market_branch.rs' -Content ('match market { "' + $countryCode + '" => 1, _ => 0 }')
     Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'test source market branch is rejected'
     Remove-Item -LiteralPath $testPath
@@ -107,13 +118,15 @@ try {
     Remove-Item -LiteralPath $migrationPath
     Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'migration market branch removal restores pass'
 
-    $unallowlistedRulePath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/other_market_rules.rs' -Content 'const PRODUCT_CODE: &str = "TF";'
-    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'non-allowlisted domain rule is rejected'
+    $unallowlistedRulePath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/other_market_rules.rs' -Content 'fn residual_term_bounds() -> (u32, Option<u32>) { (48, Some(63)) }'
+    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'second domain rule table is rejected'
     Remove-Item -LiteralPath $unallowlistedRulePath
-    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'non-allowlisted rule removal restores pass'
+    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'second domain rule removal restores pass'
 
+    Write-FixtureFile -RelativePath 'scripts/layering-allowlist.json' -Content '[{"path":"crates/ficant-domain/src/futures_delivery.rs","violation":"market-rule-values","removal_round":"R2"}]' | Out-Null
+    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'nonempty allowlist is rejected'
     Write-FixtureFile -RelativePath 'scripts/layering-allowlist.json' -Content '[]' | Out-Null
-    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'removing allowlist before rule removal is rejected'
+    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'empty allowlist restores pass'
 
     Write-Host ("Layering gate fixture tests passed ({0} assertions)." -f $script:AssertionCount)
     exit 0

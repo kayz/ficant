@@ -21,12 +21,14 @@ SOURCE_MANIFEST = ROOT / "tests/golden-cases/china-rates/phase2c-cffex-source-ma
 ORACLE_SOURCE = ROOT / "tests/oracle/china-rates/phase2c_manual_oracle.py"
 
 EXPECTED_IDS = {f"P2C-{index:03d}" for index in range(1, 19)}
-EXPECTED_GUARDED = {
-    "tests/golden-cases/china-rates/phase2c-futures-delivery-inputs.json",
-    "tests/golden-cases/china-rates/expected/phase2c-futures-delivery-v1-expected.json",
-    "tests/golden-cases/china-rates/phase2c-cffex-source-manifest.json",
-    "tests/oracle/china-rates/phase2c_manual_oracle.py",
-    "tests/oracle/china-rates/test_phase2c_manual_oracle.py",
+EXPECTED_IMMUTABLE_FACTS = {
+    "tests/golden-cases/china-rates/phase2c-futures-delivery-inputs.json": "423f5631e10630179a481cd164d91ae4b146bc721fc025e53eaf3d9a11bb9e56",
+    "tests/golden-cases/china-rates/expected/phase2c-futures-delivery-v1-expected.json": "bbda9521f9dfd01c9e050ac5304dbe06cd52e68913b1be4aaaf2b4c25f874dfe",
+    "tests/golden-cases/china-rates/phase2c-cffex-source-manifest.json": "fd11e7437c63b840aceddfd82be128d0b31bb759b70aa069615abdf76469f78e",
+    "tests/oracle/china-rates/phase2c_manual_oracle.py": "71f155ee4e8116498c04412c81212914856d4480e8b3b9c6cd795b6fe89fc516",
+    "tests/oracle/china-rates/test_phase2c_manual_oracle.py": "cbdfa5d0f9efca5353e4fda59d8fb07ac2aa64da4098b5340d3d6fb9c8542c48",
+}
+EXPECTED_REBASELINED_TESTS = {
     "crates/ficant-domain/tests/futures_delivery_contracts.rs",
     "crates/ficant-fixed-income-native/tests/futures_delivery_acceptance.rs",
     "crates/ficant-storage/tests/futures_delivery_arrow.rs",
@@ -53,10 +55,18 @@ def load_oracle():
 
 
 def verify_hashes(matrix):
-    guarded = matrix.get("guarded_files")
-    assert isinstance(guarded, dict), "guarded_files must be an object"
-    assert set(guarded) == EXPECTED_GUARDED, "guarded file set drifted"
-    for relative, expected_hash in guarded.items():
+    immutable_facts = matrix.get("immutable_facts")
+    rebaselined_tests = matrix.get("rebaselined_tests")
+    assert isinstance(immutable_facts, dict), "immutable_facts must be an object"
+    assert isinstance(rebaselined_tests, dict), "rebaselined_tests must be an object"
+    assert immutable_facts == EXPECTED_IMMUTABLE_FACTS, "immutable facts drifted or moved"
+    assert set(rebaselined_tests) == EXPECTED_REBASELINED_TESTS, (
+        "rebaselined test set drifted"
+    )
+    assert not set(immutable_facts).intersection(rebaselined_tests), (
+        "immutable and rebaselined sets must be disjoint"
+    )
+    for relative, expected_hash in {**immutable_facts, **rebaselined_tests}.items():
         path = ROOT / relative
         assert path.is_file(), f"missing guarded file: {relative}"
         actual = sha256(path)
@@ -127,7 +137,7 @@ def verify_oracle_and_sources():
 
 def main():
     matrix = load_json(MATRIX)
-    assert matrix.get("schema") == "ficant.quality.phase2c.acceptance-matrix.v1"
+    assert matrix.get("schema") == "ficant.quality.phase2c.acceptance-matrix.v2"
     assert matrix.get("base_commit") == "93dcf1efa1ed842a0c114457f356557f310ed18a"
     verify_hashes(matrix)
     verify_automation(matrix)

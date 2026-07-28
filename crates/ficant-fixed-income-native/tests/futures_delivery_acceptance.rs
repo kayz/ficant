@@ -2,13 +2,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use chrono::{NaiveDate, TimeZone, Utc};
-use ficant_application::ports::FuturesDeliveryEngine;
+use ficant_application::ports::{FuturesDeliveryEngine, FuturesDeliveryRuleParser};
 use ficant_application::use_cases::futures_delivery::CalculateFuturesDeliveryBasket;
+use ficant_cgb_futures_pack::{CgbFuturesDeliveryRulePackParser, TYPE_URL};
 use ficant_domain::analytics::{
     AnalyticsObjectRef, BondTerms, BusinessDayConvention, CouponFrequency, DayCountConvention,
     FixedDecimal,
 };
-use ficant_domain::futures_delivery::{CgbFuturesProduct, FuturesDeliverableInput};
+use ficant_domain::futures_delivery::{
+    CgbFuturesProduct, FuturesDeliverableInput, FuturesDeliveryRule,
+};
+use ficant_domain::market::RulePackContent;
 use ficant_domain::primitives::{ContentHash, MarketTime, OwnerRef, Ulid, Version, VersionRef};
 use ficant_fixed_income_native::NativeFuturesDeliveryEngine;
 use rust_decimal::Decimal;
@@ -159,6 +163,7 @@ fn frozen_input(common: &Value, case: &Value, bond_suffix: char) -> FuturesDeliv
         date_value(common, "delivery_month_first"),
         date_value(common, "delivery_date"),
         product,
+        rule(product),
         BondTerms::new(
             date_value(case, "issue_date"),
             date_value(case, "maturity_date"),
@@ -212,6 +217,7 @@ fn with_bond_and_price(
         source.delivery_month_first(),
         source.delivery_date(),
         source.product(),
+        source.rule().clone(),
         source.terms().clone(),
         fixed(spot_clean_price),
         source.futures_clean_price(),
@@ -237,6 +243,7 @@ fn input() -> FuturesDeliverableInput {
         date(2026, 9, 1),
         date(2026, 9, 18),
         CgbFuturesProduct::TenYear,
+        rule(CgbFuturesProduct::TenYear),
         BondTerms::new(
             date(2024, 8, 15),
             date(2034, 8, 15),
@@ -252,6 +259,14 @@ fn input() -> FuturesDeliverableInput {
         fixed("0.018"),
     )
     .unwrap()
+}
+
+fn rule(product: CgbFuturesProduct) -> FuturesDeliveryRule {
+    let bytes = fs::read(repository_root().join("domain-packs/cgb-futures/cgb-futures-v1.bin"))
+        .expect("frozen CGB futures RulePack payload must exist");
+    CgbFuturesDeliveryRulePackParser
+        .parse(&RulePackContent::new(TYPE_URL, bytes).unwrap(), product)
+        .expect("frozen CGB futures RulePack must parse")
 }
 
 fn fixed(raw: &str) -> FixedDecimal {

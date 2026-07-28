@@ -114,14 +114,24 @@ pub struct CarryRollResultV1 {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct CgbFuturesDeliveryInputV1 {
-    pub product: u32,
+pub struct CgbFuturesDeliveryInputV1<'a> {
     pub frequency: u32,
+    pub original_term_max_months: u32,
+    pub residual_min_months: u32,
+    pub residual_max_months: u32,
+    pub residual_max_months_unbounded: bool,
+    pub delivery_months: &'a [u32],
     pub issue_date: i32,
     pub maturity_date: i32,
     pub delivery_month_first: i32,
     pub purchase_date: i32,
     pub delivery_date: i32,
+    pub accrued_interest_day_count: u32,
+    pub conversion_factor_rounding_places: u32,
+    pub accrued_interest_rounding_places: u32,
+    pub annual_day_basis: u32,
+    pub nominal_coupon: f64,
+    pub face_quote_basis: f64,
     pub coupon_rate: f64,
     pub spot_clean_price: f64,
     pub futures_clean_price: f64,
@@ -291,14 +301,25 @@ struct RawCarryRollResultV1 {
 struct RawCgbFuturesDeliveryInputV1 {
     struct_size: u32,
     abi_version: u32,
-    product: u32,
     frequency: u32,
+    original_term_max_months: u32,
+    residual_min_months: u32,
+    residual_max_months: u32,
+    residual_max_months_unbounded: u32,
+    delivery_months_count: u32,
+    delivery_months: *const u32,
     issue_date: i32,
     maturity_date: i32,
     delivery_month_first: i32,
     purchase_date: i32,
     delivery_date: i32,
+    accrued_interest_day_count: u32,
+    conversion_factor_rounding_places: u32,
+    accrued_interest_rounding_places: u32,
+    annual_day_basis: u32,
     reserved: u32,
+    nominal_coupon: f64,
+    face_quote_basis: f64,
     coupon_rate: f64,
     spot_clean_price: f64,
     futures_clean_price: f64,
@@ -568,19 +589,36 @@ pub fn decompose_carry_roll(input: &CarryRollInputV1) -> (u32, CarryRollResultV1
 
 #[must_use]
 pub fn analyze_cgb_futures_delivery(
-    input: &CgbFuturesDeliveryInputV1,
+    input: &CgbFuturesDeliveryInputV1<'_>,
 ) -> (u32, CgbFuturesDeliveryResultV1) {
+    let Ok(delivery_months_count) = u32::try_from(input.delivery_months.len()) else {
+        return (
+            STATUS_INVALID_ARGUMENT,
+            CgbFuturesDeliveryResultV1::default(),
+        );
+    };
     let raw_input = RawCgbFuturesDeliveryInputV1 {
         struct_size: size_of_u32::<RawCgbFuturesDeliveryInputV1>(),
         abi_version: ABI_VERSION,
-        product: input.product,
         frequency: input.frequency,
+        original_term_max_months: input.original_term_max_months,
+        residual_min_months: input.residual_min_months,
+        residual_max_months: input.residual_max_months,
+        residual_max_months_unbounded: u32::from(input.residual_max_months_unbounded),
+        delivery_months_count,
+        delivery_months: input.delivery_months.as_ptr(),
         issue_date: input.issue_date,
         maturity_date: input.maturity_date,
         delivery_month_first: input.delivery_month_first,
         purchase_date: input.purchase_date,
         delivery_date: input.delivery_date,
+        accrued_interest_day_count: input.accrued_interest_day_count,
+        conversion_factor_rounding_places: input.conversion_factor_rounding_places,
+        accrued_interest_rounding_places: input.accrued_interest_rounding_places,
+        annual_day_basis: input.annual_day_basis,
         reserved: 0,
+        nominal_coupon: input.nominal_coupon,
+        face_quote_basis: input.face_quote_basis,
         coupon_rate: input.coupon_rate,
         spot_clean_price: input.spot_clean_price,
         futures_clean_price: input.futures_clean_price,
@@ -723,7 +761,7 @@ mod tests {
         assert_eq!(core::mem::size_of::<RawYieldCurveResultV1>(), 24);
         assert_eq!(core::mem::size_of::<RawCarryRollInputV1>(), 40);
         assert_eq!(core::mem::size_of::<RawCarryRollResultV1>(), 40);
-        assert_eq!(core::mem::size_of::<RawCgbFuturesDeliveryInputV1>(), 72);
+        assert_eq!(core::mem::size_of::<RawCgbFuturesDeliveryInputV1>(), 128);
         assert_eq!(core::mem::size_of::<RawCgbFuturesDeliveryResultV1>(), 120);
         assert_eq!(core::mem::size_of::<RawCgbFuturesHedgeInputV1>(), 40);
         assert_eq!(core::mem::size_of::<RawCgbFuturesHedgeResultV1>(), 56);
@@ -746,7 +784,7 @@ mod tests {
         );
         assert_eq!(
             core::mem::offset_of!(RawCgbFuturesDeliveryInputV1, coupon_rate),
-            40
+            96
         );
         assert_eq!(
             core::mem::offset_of!(RawCgbFuturesDeliveryResultV1, conversion_factor),

@@ -7,8 +7,9 @@ use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_domain::market::{
     ArtifactInputKind, Bond, Calendar, CalendarInput, CalendarSession, Cashflow, CashflowInput,
     CashflowType, CurveSnapshot, CurveSnapshotInput, FactSource, FuturesContract, Instrument,
-    InstrumentInput, InstrumentKind, MarketRulePack, MarketRulePackInput, Quote, QuoteInput, Trade,
-    TradeInput, Unit, UnitInput, Valuation, ValuationInput, VerificationStatus,
+    InstrumentInput, InstrumentKind, MarketRulePack, MarketRulePackInput, Quote, QuoteInput,
+    RulePackContent, Trade, TradeInput, Unit, UnitInput, Valuation, ValuationInput,
+    VerificationStatus,
 };
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, EffectivePeriod, MarketTime, OwnerRef, Ulid, UnitRef, Version,
@@ -401,6 +402,14 @@ pub(crate) fn encode_definition(value: &DefinitionValue) -> Vec<u8> {
             encode_period(&mut encoder, value.effective());
             encoder.u8(verification_status_code(value.verification_status()));
             encoder.bytes(value.content_hash().as_bytes());
+            match value.content() {
+                Some(content) => {
+                    encoder.bool(true);
+                    encoder.string(content.type_url());
+                    encoder.bytes(content.value());
+                }
+                None => encoder.bool(false),
+            }
         }
     }
     encoder.finish()
@@ -485,24 +494,34 @@ pub(crate) fn decode_definition(bytes: &[u8]) -> CodecResult<DefinitionValue> {
             })
             .map_err(ficant_application::map_domain_error)?,
         ),
-        6 => DefinitionValue::MarketRulePack(
-            MarketRulePack::new(MarketRulePackInput {
-                rule_pack_id: decode_ulid(&mut decoder)?,
-                version: decode_version(&mut decoder)?,
-                owner: decode_owner(&mut decoder)?,
-                market: decoder.string()?,
-                rule_type: decoder.string()?,
-                source: decoder.string()?,
-                effective: decode_period(&mut decoder)?,
-                verification_status: decode_verification_status(decoder.u8()?)?,
-                content_hash: decode_hash(&mut decoder)?,
-            })
-            .map_err(ficant_application::map_domain_error)?,
-        ),
+        6 => DefinitionValue::MarketRulePack(decode_market_rule_pack(&mut decoder)?),
         _ => return Err(codec_error()),
     };
     decoder.end()?;
     Ok(value)
+}
+
+fn decode_market_rule_pack(decoder: &mut Decoder<'_>) -> CodecResult<MarketRulePack> {
+    let input = MarketRulePackInput {
+        rule_pack_id: decode_ulid(decoder)?,
+        version: decode_version(decoder)?,
+        owner: decode_owner(decoder)?,
+        market: decoder.string()?,
+        rule_type: decoder.string()?,
+        source: decoder.string()?,
+        effective: decode_period(decoder)?,
+        verification_status: decode_verification_status(decoder.u8()?)?,
+        content_hash: decode_hash(decoder)?,
+    };
+    if decoder.at_end() {
+        return MarketRulePack::new(input).map_err(ficant_application::map_domain_error);
+    }
+    if !decoder.bool()? {
+        return MarketRulePack::new(input).map_err(ficant_application::map_domain_error);
+    }
+    let content = RulePackContent::new(decoder.string()?, decoder.bytes()?)
+        .map_err(ficant_application::map_domain_error)?;
+    MarketRulePack::new_with_content(input, content).map_err(ficant_application::map_domain_error)
 }
 
 pub(crate) fn encode_fact(value: &MarketFact) -> Vec<u8> {
@@ -1366,8 +1385,12 @@ impl<'a> Decoder<'a> {
         String::from_utf8(self.bytes()?).map_err(|_| codec_error())
     }
 
+    fn at_end(&self) -> bool {
+        self.offset == self.bytes.len()
+    }
+
     fn end(&self) -> CodecResult<()> {
-        if self.offset == self.bytes.len() {
+        if self.at_end() {
             Ok(())
         } else {
             Err(codec_error())
@@ -1379,9 +1402,13 @@ impl<'a> Decoder<'a> {
 mod tests {
     use ficant_application::ports::{DefinitionValue, MarketFact};
     use ficant_domain::ContentAddressed;
-    use ficant_domain::market::{FactSource, Quote, QuoteInput, Unit, UnitInput};
+    use ficant_domain::market::{
+        FactSource, MarketRulePack, MarketRulePackInput, Quote, QuoteInput, RulePackContent, Unit,
+        UnitInput, VerificationStatus,
+    };
     use ficant_domain::primitives::{
-        ContentHash, DecimalValue, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
+        ContentHash, DecimalValue, EffectivePeriod, MarketTime, OwnerRef, Ulid, UnitRef, Version,
+        VersionRef,
     };
     use ficant_domain::research::{JournalEventType, RunJournal, RunJournalInput};
     use sqlx::types::chrono::{NaiveDate, TimeZone, Utc};
@@ -1412,6 +1439,72 @@ mod tests {
         let decoded = decode_definition(&encoded).unwrap();
 
         assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn market_rule_pack_codec_preserves_typed_content_and_reads_legacy_payload() {
+        let owner = OwnerRef::new(
+            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F01").unwrap(),
+            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F02").unwrap(),
+        );
+        let time = |day| {
+            MarketTime::new(
+                Utc.with_ymd_and_hms(2026, 7, day, 8, 0, 0).unwrap(),
+                "Asia/Shanghai",
+                NaiveDate::from_ymd_opt(2026, 7, day).unwrap(),
+            )
+            .unwrap()
+        };
+        let content = RulePackContent::new(
+            "type.googleapis.com/ficant.market.v1.CgbFuturesDeliveryRulePack",
+            vec![1, 2, 3, 4],
+        )
+        .unwrap();
+        let value = DefinitionValue::MarketRulePack(
+            MarketRulePack::new_with_content(
+                MarketRulePackInput {
+                    rule_pack_id: Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F10").unwrap(),
+                    version: Version::new(1).unwrap(),
+                    owner: owner.clone(),
+                    market: "CFFEX".to_owned(),
+                    rule_type: "cgb-futures".to_owned(),
+                    source: "fixture".to_owned(),
+                    effective: EffectivePeriod::new(time(1), time(2)).unwrap(),
+                    verification_status: VerificationStatus::Verified,
+                    content_hash: ContentHash::digest(content.value()),
+                },
+                content,
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            decode_definition(&encode_definition(&value)).unwrap(),
+            value
+        );
+
+        let legacy_hash = ContentHash::digest(b"legacy-content");
+        let legacy = DefinitionValue::MarketRulePack(
+            MarketRulePack::new(MarketRulePackInput {
+                rule_pack_id: Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F12").unwrap(),
+                version: Version::new(1).unwrap(),
+                owner,
+                market: "XSHG".to_owned(),
+                rule_type: "legacy".to_owned(),
+                source: "fixture".to_owned(),
+                effective: EffectivePeriod::new(time(1), time(2)).unwrap(),
+                verification_status: VerificationStatus::Verified,
+                content_hash: legacy_hash.clone(),
+            })
+            .unwrap(),
+        );
+        let mut legacy_payload = encode_definition(&legacy);
+        assert_eq!(legacy_payload.pop(), Some(0));
+        let DefinitionValue::MarketRulePack(decoded) = decode_definition(&legacy_payload).unwrap()
+        else {
+            panic!("legacy payload must decode as MarketRulePack");
+        };
+        assert!(decoded.content().is_none());
+        assert_eq!(decoded.content_hash(), &legacy_hash);
     }
 
     #[test]
