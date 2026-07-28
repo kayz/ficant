@@ -762,8 +762,10 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "ficant-application",
+ "ficant-cgb-futures-pack",
  "ficant-contracts",
  "ficant-domain",
+ "ficant-fixed-income-native",
  "ficant-runtime",
  "prost",
  "prost-types",
@@ -792,6 +794,16 @@ dependencies = [
  "httparse",
  "serde",
  "toml",
+]
+
+[[package]]
+name = "ficant-cgb-futures-pack"
+version = "0.1.0"
+dependencies = [
+ "ficant-application",
+ "ficant-contracts",
+ "ficant-domain",
+ "prost",
 ]
 
 [[package]]
@@ -853,6 +865,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "ficant-application",
+ "ficant-cgb-futures-pack",
  "ficant-domain",
  "ficant-kernel-sys",
  "rust_decimal",
@@ -897,6 +910,7 @@ dependencies = [
  "async-trait",
  "ficant-api",
  "ficant-application",
+ "ficant-cgb-futures-pack",
  "ficant-contracts",
  "ficant-domain",
  "ficant-fixed-income-native",

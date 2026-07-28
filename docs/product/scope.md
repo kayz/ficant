@@ -67,7 +67,7 @@ total_return = carry + roll_down
 
 ## 2026-07 / Phase 2C 已落地国债期货交割价值链
 
-当前实现覆盖中金所 `TS`、`TF`、`T`、`TL` 合约参数与可交割券期限资格，并由冻结债券日程推导转换因子、购入/交割应计利息和持有期票息，进而计算交割发票价、基差、融资成本、净基差、未再投资 IRR 与篮子 CTD。CTD 按 IRR 最大、净基差最小、稳定 bond ID 排序。
+当前实现以精确版本的 `cgb-futures` RulePack 解析中金所 `TS`、`TF`、`T`、`TL` 的期限资格、交割月份、票息、百元面值基准、舍入和年化日基准。RulePack 内容按确定性 Protobuf bytes 做 SHA-256 绑定；服务端在进入数值引擎前复核 owner、版本、有效区间、hash、market、rule type 与 type URL，缺项失败关闭。冻结债券日程随后推导转换因子、购入/交割应计利息和持有期票息，进而计算交割发票价、基差、融资成本、净基差、未再投资 IRR 与篮子 CTD。CTD 按 IRR 最大、净基差最小、稳定 bond ID 排序。
 
 该切片贯通 Rust 领域校验、C++20、加法式 C ABI、安全 Rust adapter、独立 Decimal Oracle、确定性 Arrow，以及真实 PostgreSQL 16 + Ceph RGW 发布、adapter 重建后重放和篡改检测。中金所规则以带来源和摘要的冻结 fixture 进入测试，不冒充实时交易所数据；保证金、手续费、真实交割流程和外部行情/篮子适配仍未实现。
 

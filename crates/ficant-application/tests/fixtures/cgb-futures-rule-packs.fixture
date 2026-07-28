@@ -1,0 +1,3 @@
+v1=nominal_coupon:0.0300
+v2=nominal_coupon:0.0400
+missing=products[product_code=T].residual_min_months

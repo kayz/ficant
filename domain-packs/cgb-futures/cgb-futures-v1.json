@@ -1,0 +1,53 @@
+{
+  "products": [
+    {
+      "productCode": "T",
+      "originalTermMaxMonths": 120,
+      "residualMinMonths": 78,
+      "residualMaxMonthsUnbounded": true
+    },
+    {
+      "productCode": "TF",
+      "originalTermMaxMonths": 84,
+      "residualMinMonths": 48,
+      "residualMaxMonths": 63
+    },
+    {
+      "productCode": "TL",
+      "originalTermMaxMonths": 360,
+      "residualMinMonths": 300,
+      "residualMaxMonthsUnbounded": true
+    },
+    {
+      "productCode": "TS",
+      "originalTermMaxMonths": 60,
+      "residualMinMonths": 18,
+      "residualMaxMonths": 27
+    }
+  ],
+  "deliveryMonths": [3, 6, 9, 12],
+  "nominalCoupon": {
+    "coefficient": "3",
+    "scale": 2,
+    "unit": {
+      "unitId": {
+        "value": "01ARZ3NDEKTSV4RRFFQ69G5FAP"
+      },
+      "version": "1"
+    }
+  },
+  "faceQuoteBasis": {
+    "coefficient": "100",
+    "scale": 0,
+    "unit": {
+      "unitId": {
+        "value": "01ARZ3NDEKTSV4RRFFQ69G5FAP"
+      },
+      "version": "1"
+    }
+  },
+  "accruedInterestDayCount": 1,
+  "conversionFactorRoundingPlaces": 4,
+  "accruedInterestRoundingPlaces": 7,
+  "annualDayBasis": 365
+}

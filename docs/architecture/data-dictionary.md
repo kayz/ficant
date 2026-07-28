@@ -90,7 +90,9 @@ effective_from <= subject_time < effective_to
 - ExperimentRun/Phase1 的 run market time 是所绑定 `DataSnapshot.as_of`。
 - 不使用执行时钟、Journal 时间、Snapshot `visible_at`、Signal `valid_from` 或某笔 Trade 时间代替。
 
-Application 在任何可变 I/O 前解析 exact version 并形成 opaque proof；Storage 在事务第一步复核真实持久 RulePack 与区间。coverage miss 返回不可重试的 `ValidationFailed`，身份/版本/tenant/proof 漂移返回不可重试的 `LineageIncomplete`。这里只验证绑定与生效区间，不执行规则内容，也不是 Phase 2 定价引擎。
+`MarketRulePack` 可携带一个带 `type_url` 的不透明内容载荷；只要载荷存在，`content_hash` 必须是其确定性 Protobuf bytes 的 SHA-256。Application 在任何可变 I/O 前解析 exact version 并形成 opaque proof；Storage 在事务第一步复核真实持久 RulePack 与区间。coverage miss 返回不可重试的 `ValidationFailed`，身份/版本/tenant/proof 漂移返回不可重试的 `LineageIncomplete`。
+
+一般 RulePack 绑定仍不在 core 中执行内容。Phase 2C 的 `AnalyzeFuturesDelivery` 是明确例外：它在进入数值引擎前，从精确、授权且处于半开生效区间内的 `cgb-futures` RulePack 读取内容，复核 hash、market、rule type 和 type URL，并由 L3 parser 解析完整交割规则。缺失项以不可重试的 `ValidationFailed` 失败关闭；规则数值不留在 domain 或 C++ 默认表中。
 
 ## Run 与 Journal
 
@@ -142,7 +144,7 @@ iteration-3 的小范围 Phase 2A 已实现固定利率和贴现国债的现金�
 
 2026-07 Phase 2B 新增内部 `YieldCurveBinding` / `CarryRollInput` / `CarryRollResult` 语义：曲线绑定独立 `CurveSnapshot`，按实际日数在冻结 YTM 节点间线性插值且不外推；持有期结果绑定 owner、Bond、CurveSnapshot、MarketRulePack、DataSnapshot、估值日、起止日、算法/约定/ABI 版本，并作为确定性 Arrow Artifact 发布。输入、血缘、hash 或 size 漂移均 fail closed。
 
-2026-07 Phase 2C 新增内部 `CgbFuturesProduct` / `FuturesDeliverableInput` / `FuturesDeliveryMeasures` / `FuturesDeliveryBasket` 语义：输入绑定 owner、FuturesContract、Bond、MarketRulePack、DataSnapshot、估值/购入/交割日期、算法/约定/ABI 版本；生产内核从债券日程推导转换因子、应计利息和持有期票息，并输出交割发票价、基差、融资成本、净基差、IRR 与 CTD。结果使用独立确定性 Arrow schema 作为内部 Artifact 发布，输入、血缘、hash 或 size 漂移均 fail closed。该类型不是外部行情事实，也不包含期现套保比例、保证金或交易所交割流程。
+2026-07 Phase 2C 新增内部 `CgbFuturesProduct` / `FuturesDeliveryRule` / `FuturesDeliverableInput` / `FuturesDeliveryMeasures` / `FuturesDeliveryBasket` 语义：输入绑定 owner、FuturesContract、Bond、MarketRulePack、DataSnapshot、估值/购入/交割日期、算法/约定/ABI 版本。交割专用 L3 parser 从精确 `cgb-futures` RulePack 解析期限资格、交割月份、标准票息、百元面值基准、舍入与年化日基准；这些规则进入输入 fingerprint，并由安全 Rust adapter 显式传递给 C ABI。生产内核从债券日程推导转换因子、应计利息和持有期票息，并输出交割发票价、基差、融资成本、净基差、IRR 与 CTD。结果使用独立确定性 Arrow schema 作为内部 Artifact 发布，输入、血缘、hash 或 size 漂移均 fail closed。该类型不是外部行情事实，也不包含期现套保比例、保证金或交易所交割流程。
 
 Storage adapter 通过 Apache `object_store 0.14.1` 访问 S3，并以 Ceph RGW 20.2.2 作为受支持的服务端实现；bucket、endpoint、access key 和 secret key 仍由运行环境注入。`minio` 与 `async-std` 已从锁文件和可达依赖图移除，旧 D-026 限时接受不再是活动风险处置。开发与 CI 的单节点 Ceph 只验证 S3 兼容性、内容完整性、重启和业务闭环，不代表生产高可用拓扑；选择依据和升级条件见 [ADR-0010](adr/0010-ceph-rgw-and-apache-object-store.md)。
 

@@ -14,7 +14,9 @@ use ficant_domain::analytics::{
     AnalyticsObjectRef, BondTerms, BusinessDayConvention, CouponFrequency, DayCountConvention,
     FixedDecimal,
 };
-use ficant_domain::futures_delivery::{CgbFuturesProduct, FuturesDeliverableInput};
+use ficant_domain::futures_delivery::{
+    CgbFuturesProduct, FuturesDeliverableInput, FuturesDeliveryRule, FuturesDeliveryRuleInput,
+};
 use ficant_domain::primitives::{ContentHash, MarketTime, OwnerRef, Ulid, Version, VersionRef};
 use ficant_fixed_income_native::NativeFuturesDeliveryEngine;
 use ficant_storage::futures_arrow::ArrowFuturesDeliveryCodec;
@@ -170,6 +172,7 @@ fn input(bond_suffix: char, spot_clean_price: FixedDecimal) -> FuturesDeliverabl
         date(2026, 9, 1),
         date(2026, 9, 18),
         CgbFuturesProduct::TenYear,
+        rule(),
         BondTerms::new(
             date(2024, 8, 15),
             date(2034, 8, 15),
@@ -184,6 +187,22 @@ fn input(bond_suffix: char, spot_clean_price: FixedDecimal) -> FuturesDeliverabl
         fixed(99_500_000_000_000),
         fixed(18_000_000_000),
     )
+    .unwrap()
+}
+
+fn rule() -> FuturesDeliveryRule {
+    FuturesDeliveryRule::new(FuturesDeliveryRuleInput {
+        original_term_max_months: 120,
+        residual_min_months: 78,
+        residual_max_months: None,
+        delivery_months: vec![3, 6, 9, 12],
+        nominal_coupon: fixed(30_000_000_000),
+        face_quote_basis: fixed(100_000_000_000_000),
+        accrued_interest_day_count: 1,
+        conversion_factor_rounding_places: 4,
+        accrued_interest_rounding_places: 7,
+        annual_day_basis: 365,
+    })
     .unwrap()
 }
 

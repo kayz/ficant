@@ -2,9 +2,9 @@
 
 > 本文是本迭代面向 Human 的唯一文档。Agent 交流、失败诊断、子循环 checkpoint 与命令原始输出保留在编排工具中，不另建状态页、子任务 brief 或治理 checklist。
 
-**迭代** R2 · **状态** 设计已审定，待控制面提交推送与执行冻结 · **依据** SPEC v1.1、ACCEPTANCE v0.1、[`../architecture/layering-refactor.md`](../architecture/layering-refactor.md)、[ADR-0013](../architecture/adr/0013-layering-law-shape-in-core-content-in-rulepack.md)
+**迭代** R2 · **状态** 本地自测候选完成 · **依据** SPEC v1.1、ACCEPTANCE v0.1、[`../architecture/layering-refactor.md`](../architecture/layering-refactor.md)、[ADR-0013](../architecture/adr/0013-layering-law-shape-in-core-content-in-rulepack.md)
 
-**执行 Base commit SHA：** 待本 brief 获确认、控制面提交推送且工作区恢复干净后冻结。当前设计锚点为 R1 候选 `625acf4536a4c8c8ac183e2cb6692e825adc2f21`，**不是**已冻结的 R2 execution base。
+**执行 Base commit SHA：** `29a941c1236dd17e93d7ae4f0745d82b071a4b47`（Root 于 2026-07-28 执行 `git fetch origin main` 后确认工作区干净且 `HEAD == origin/main`）。当前设计锚点为 R1 候选 `625acf4536a4c8c8ac183e2cb6692e825adc2f21`，**不是**R2 execution base。
 
 ---
 
@@ -196,55 +196,20 @@ git rev-parse origin/main
 
 ## 6. 最终真实测试证据
 
-**设计阶段尚无最终候选，也没有可记为“通过”的 R2 测试证据。** 以下只冻结执行后必须在同一最终候选上实际运行的命令与判据；实现结束时用真实 exit code、可得 test count 和垂直切片结果替换本段，不得预填成功。
+**执行结果（2026-07-28；base `29a941c1236dd17e93d7ae4f0745d82b071a4b47`）：** Acceptance sentence、AC01、AC02、AC03 与 AC26 的业务/结构判据均已取得真实证据；经校验的 Node `v22.17.0`、uv `0.7.13 (62ed17b23 2025-06-12)`、pnpm `10.12.4` 与 Buf `1.56.0` 工具链上，`scripts/check.ps1` 和 `scripts/check.ps1 -IncludeIntegration` 均返回 exit `0`。这是本轮本地自测候选。
 
-AC02 判据先行命令（测试与夹具加入后、任何 parser 生产代码之前先取得一次真实 RED；实现后同一命令必须转绿）：
-
-```powershell
-cargo test --offline --locked -p ficant-application --test futures_delivery_rule_resolution ac02_rule_pack_content_changes_result_and_missing_item_fails_closed -- --exact
-```
-
-针对性命令：
-
-```powershell
-.\scripts\check-layering.ps1
-.\scripts\test-layering-check.ps1
-cargo test --offline --locked -p ficant-cgb-futures-pack
-cargo test --offline --locked -p ficant-domain --test futures_delivery_contracts
-cargo test --offline --locked -p ficant-application --test futures_delivery_rule_resolution
-cargo test --offline --locked -p ficant-api --test rates_service
-cargo test --offline --locked -p ficant-fixed-income-native --test futures_delivery_acceptance
-ctest --test-dir build/local-cpp-vs-llvm-19 --output-on-failure
-uv run --offline --locked --project python python tests/phase2c/verify_acceptance_matrix.py
-uv run --offline --locked --project python python tests/phase2d/verify_acceptance_matrix.py
-uv run --offline --locked --project python python -m pytest tests/oracle/china-rates/test_phase2c_manual_oracle.py -q
-```
-
-本地候选门禁：
-
-```powershell
-.\scripts\check-fast.ps1
-.\scripts\check.ps1
-.\scripts\dev-up.ps1
-# 在本地 DefinitionRepository 中登记冻结 v1 pack、合成 v2 pack 与缺项 pack，
-# 经真实 gRPC-Web /ficant-api 调用 AnalyzeFuturesDelivery：
-#   v1/v2 同请求结果不同；
-#   缺项返回准确 field violation；
-#   v1 完整篮子返回既有 CTD 与全部 measures。
-.\scripts\dev-down.ps1
-.\scripts\check.ps1 -IncludeIntegration
-```
-
-最终候选还必须记录：
-
-- 分层门禁的真实 domain AC01、production C++/FFI AC01、AC03 与 allowlist 计数，以及 C++ 规则值负向 fixture 的 exit `1`。
-- 单独呈现 R2 base-to-candidate 的 `scripts/check-layering.ps1`、`scripts/test-layering-check.ps1`、`scripts/layering-allowlist.json` diff，说明每处变化为何只扩大覆盖或兑现 allowlist 删除。
-- AC02 判据在 parser 生产代码前的 RED 命令、非零 exit code、实际失败原因，以及实现后同一命令的绿色结果。
-- 两个内容版本的具体差异字段及至少一个不同结果字段。
-- 缺项错误的准确 path、category、retryable 与 engine call count。
-- Phase 2C matrix、独立 Oracle、C++ CTest、生成契约及真实 PostgreSQL/Ceph 测试的真实 count。
-- 绝对不可变 facts 与 canonical schema 的前后 SHA-256 相同；预期重取证 tests 的最终 hash rebaseline 是一个仅修改 Phase 2C/2D 两个 acceptance matrix 的独立可审阅提交，且 Phase 2D diff 只有共享 layout 测试的单个 hash 值。
-- `MANUAL.md` §3 与 §6 同 R2 实然一致：交割调用明确绑定并解析 RulePack，删除“规则硬编码、换版本不换结果”的旧限制；该事实由同一候选的 gRPC-Web 对照切片支撑。
+- AC02 RED-first：在任何 parser 生产代码出现前，`cargo test --offline --locked -p ficant-application --test futures_delivery_rule_resolution ac02_rule_pack_content_changes_result_and_missing_item_fails_closed -- --exact` 返回 exit `1`；原因是判据引用的 RulePack parser/resolver 生产契约尚不存在。实现后相同命令返回 exit `0`、`1 passed`。完整 application 直接测试同样为 `1 passed`。
+- 分层门禁：`scripts/check-layering.ps1` 返回 exit `0`，报告 `AC03=0 market branches; AC01=0 domain rule values; Phase2C production C++/FFI rule values=0; allowlist=0`。`scripts/test-layering-check.ps1` 返回 exit `0`、`33 assertions`；它逐项保留 domain 规则值、C++/FFI 规则值、市场分支与非空 allowlist 的真实违规 exit `1`，并新增六类 C++ 交割规则值 fixture。
+- 分层脚本的 base-to-current diff 已单独复核：`check-layering.ps1` 将通用 source inventory 覆盖仓库根，并新增独立、无 allowlist 的 Phase 2C C++/FFI 六类规则值扫描；`test-layering-check.ps1` 只扩大负向覆盖；`layering-allowlist.json` 只删除最后的 R2 特例并最终为 `[]`。没有缩小扫描根、增加排除项或弱化失败条件。
+- 契约与规则包：冻结 pack 漂移检查、Buf format/lint 均返回 exit `0`；descriptor inventory 为 `14 passed`。CGB parser crate 为 `1 passed`；domain delivery contracts 为 `2 passed`；Rates service 为 `3 passed`；native delivery acceptance 为 `3 passed`；Phase 2C deterministic Arrow 为 `1 passed`。Rust strict Clippy 返回 exit `0` 且无 warning。
+- Phase 2E live SDK：`scripts/check-phase2e-sdk.ps1` 返回 exit `0`、`1 passed`。它启动真实 API/gRPC-Web、native engines 与 CGB parser 的 live 测试组合；Python SDK 绑定冻结 pack 的实际 SHA-256 后完成全部 Phase 2 reference slices。该测试仅以只读 fixture DefinitionRepository 隔离普通离线门禁；持久化生产 DefinitionRepository 仍由下一条的真实拓扑与 Phase 2C SIT 覆盖。
+- Phase 2C/2D 回归：`ctest --test-dir build/local-cpp-vs-llvm-19 --output-on-failure` 为 `8/8 passed`。Phase 2C matrix 为 `18/18 PASS`、Phase 2D matrix 为 `18/18 PASS`；Phase 2C 与 Phase 2D 独立 Decimal Oracle 各为 `3 passed`。Python generated-contract 测试为 `1 passed, 1 skipped`。`scripts/check-fast.ps1` 返回 exit `0`。
+- 真实 PostgreSQL/Ceph：在脚本启动的可丢弃本地 PostgreSQL 16 + Ceph RGW 中，`cargo test --offline --locked -p ficant-storage --test futures_delivery_sit -- --test-threads=1` 返回 exit `0`、`1 passed`，覆盖发布、adapter 重建后的重放、metadata size 篡改的 HashMismatch、staging/orphan 清空。
+- 完整本地拓扑：`scripts/dev-up.ps1` 成功构建并启动 PostgreSQL、Ceph、server、worker、web 与 UI；在本地 PostgreSQL DefinitionRepository backing store 登记三个精确 RulePack 后，经 UI 的真实 gRPC-Web `/ficant-api/ficant.rates.v1.RatesAnalyticsService/AnalyzeFuturesDelivery` 验证：冻结 v1 RulePack 的 4/4 单券 Golden Case 与 3/3 T basket 逐项匹配 Phase 2C expected，`ctd_index=1`；仅将 v2 的 `nominal_coupon.coefficient` 从 `3` 改为 `4` 后，同一 T basket 的 conversion factor 从 `0.965` 变为 `0.8991`；删除 `products[product_code=T].residual_min_months` 后返回 non-retryable `VALIDATION_FAILED`，唯一 field violation 为 `context.rule_pack.content.products[product_code=T].residual_min_months`。API 直接测试的 spy 同时证明该缺项请求的 engine call count 为 `0`。每次拓扑验证后均由 `scripts/dev-down.ps1` 停止容器并保留命名开发卷。
+- 冻结事实：5 个 Phase 2C immutable facts 与 5 个 Phase 2D Golden/Oracle facts 的当前 SHA-256 均与 matrix 登记值一致；base-to-current 没有任何 Golden/Oracle 或 `crates/ficant-data/src/canonical.rs` diff，Canonical Quote Schema hash 仍为 `e804a0becec18e51dde1be4250384ffe667cf4149c34dc3d2cfc82a206d71502`。未出现 `position.proto`、`factor.proto`、`health.proto`、`constraint.proto` 或 `policy.proto`。PowerShell parser、tracked diff whitespace 与 R2 允许写路径审计也都通过。
+- Matrix rebaseline：Phase 2C 已从自管 `guarded_files` 拆为固定的 5 个 `immutable_facts` 与精确 6 个 `rebaselined_tests`；两个 matrix 已校验 shared layout hash 相同。Phase 2D base-to-current diff 只有 `test_constants_and_layout.cpp` 的一个 hash 替换。最终提交时，这两个 matrix 文件必须仍是一个仅含它们的独立 rebaseline commit。
+- 文档一致性：已逐项复核 `MANUAL.md` §3/§6；它已明确交割从精确 RulePack 内容解析、换内容会改变计算、缺项以 field violation 失败关闭，且不再声称规则硬编码或换版本不换结果。上述真实 gRPC-Web 对照切片是该表述的同一候选证据。
+- 完整本地门禁：`scripts/check.ps1` 返回 exit `0`；随后在脚本启动的可丢弃 PostgreSQL/Ceph RGW 拓扑中，`scripts/check.ps1 -IncludeIntegration` 亦返回 exit `0`。后者覆盖 migration `4 passed`、Phase 4 queue/execution/worker、Phase 1、13 个 negative invariants、Phase 2B、Phase 2C、Phase 2D 与 Phase 3A/3B 的真实集成切片；结束后 `scripts/dev-down.ps1` 已停止容器并保留命名开发卷。
 
 **允许写路径：**
 
@@ -255,16 +220,16 @@ uv run --offline --locked --project python python -m pytest tests/oracle/china-r
 - `crates/ficant-contracts/src/generated/ficant.market.v1.rs`、`crates/ficant-contracts/src/generated/ficant.market.v1.tonic.rs`
 - `python/node-contracts/src/ficant_contracts/generated/ficant/market/v1/rule_pb2.py`、同目录新增 `cgb_futures_rule_pb2.py`
 - `web-dm/packages/contracts-generated/src/ficant/market/v1/rule_pb.ts`、同目录新增 `cgb_futures_rule_pb.ts`
-- `crates/ficant-contract-tests/tests/descriptor_inventory.rs` 与三侧 market contract 直接导入/consumer 测试
+- `crates/ficant-contract-tests/tests/descriptor_inventory.rs` 与三侧 market contract 直接导入/consumer 测试，以及 `python/tests/test_rates_sdk_live.py` 的 R2 RulePack binding
 - `Cargo.toml`、`Cargo.lock`、`crates/ficant-cgb-futures-pack/**`
 - `crates/ficant-domain/src/market/market_rule_pack.rs`、`crates/ficant-domain/src/market/mod.rs`、`crates/ficant-domain/src/futures_delivery.rs` 与其直接测试
 - `crates/ficant-application/src/ports/rule_pack_parser.rs`、`crates/ficant-application/src/ports/definitions.rs`、`crates/ficant-application/src/ports/fingerprint.rs`、`crates/ficant-application/src/ports/mod.rs`、`crates/ficant-application/src/use_cases/futures_delivery.rs`、`crates/ficant-application/src/error.rs`、必要的 module export 与 R2 直接测试
-- `crates/ficant-api/src/rates.rs`、`crates/ficant-api/src/core_error.rs` 及 R2 直接测试
+- `crates/ficant-api/src/rates.rs`、`crates/ficant-api/src/core_error.rs` 及 R2 直接测试（包括 `crates/ficant-api/tests/phase2e_sdk_live.rs`）
 - `crates/ficant-storage/src/postgres/codec.rs`、`crates/ficant-storage/src/postgres/definitions.rs` 与 Phase 2C 直接测试夹具
 - `crates/ficant-fixed-income-native/**`、`crates/ficant-kernel-sys/**` 中仅交割 ABI/adapter 的直接文件
 - `cpp/fixed-income-kernel/include/ficant_kernel.h`、`cpp/fixed-income-kernel/src/futures_*`、对应 C++ tests
 - `binaries/ficant-server/Cargo.toml`、`binaries/ficant-server/src/lib.rs` 中仅 Rates 的生产 resolver 组合
-- `scripts/generate-cgb-futures-pack.ps1`、`scripts/check-layering.ps1`、`scripts/test-layering-check.ps1`、`scripts/layering-allowlist.json` 及现有本地检查入口中的 R2 测试登记
+- `scripts/generate-cgb-futures-pack.ps1`、`scripts/check-layering.ps1`、`scripts/test-layering-check.ps1`、`scripts/check-phase2e-sdk.ps1`、`scripts/layering-allowlist.json` 及现有本地检查入口中的 R2 测试登记
 - `tests/phase2c/acceptance-matrix.json`、`tests/phase2c/verify_acceptance_matrix.py`，仅用于拆分 immutable/rebaselined 集合、登记最终测试 hash 与校验该结构
 - `tests/phase2d/acceptance-matrix.json`，仅允许在独立 rebaseline 提交中更新 `cpp/fixed-income-kernel/tests/test_constants_and_layout.cpp` 的 hash
 - `docs/architecture/data-dictionary.md`、`docs/product/scope.md`、`docs/development.md`、`interface/README.md`、`README.md`、`MANUAL.md` 中仅 R2 事实同步
@@ -286,6 +251,7 @@ uv run --offline --locked --project python python -m pytest tests/oracle/china-r
 
 ## 7. 残余风险
 
+- **复现依赖精确工具版本。** 候选已经用 Node `v22.17.0`、uv `0.7.13 (62ed17b23 2025-06-12)`、pnpm `10.12.4` 与 Buf `1.56.0` 完成完整门禁；Human 重跑仍须提供同一版本或让 `check.ps1` 的版本断言失败关闭。这不是产品语义风险，也不应通过版本 shim、宽松 engine 或自动安装绕过。
 - **旧 RulePack 没有内联内容。** R2 保证它们仍可读取，但凡交割计算声明需要 `cgb-futures` 内容就会失败关闭；历史数据若要重算，必须显式登记带内容的新版本，不能把当前内容补写进旧版本。
 - **Domain Pack 的生产管理入口仍未交付。** R2 通过现有 DefinitionRepository 与本地受控登记完成真实解析/计算，不新增管理员 UI、外部抓取或白名单流程；这些属于 R6。正式环境导入仍受平台管理员边界约束。
 - **AC27、AC28 在 R2 后仍未点亮。** R2 不新增时点事实，也不证明当前清单历史回算或连续合约输入会被拒绝；Human 必须在后续入口语义工作中归属并实现，最迟在 R7 全量重取证前关闭，不能把 R2 的 RulePack 成功解析当作替代证据。

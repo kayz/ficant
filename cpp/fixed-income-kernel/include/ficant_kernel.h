@@ -181,14 +181,25 @@ typedef struct {
 typedef struct {
     uint32_t struct_size;
     uint32_t abi_version;
-    uint32_t product;
     uint32_t frequency;
+    uint32_t original_term_max_months;
+    uint32_t residual_min_months;
+    uint32_t residual_max_months;
+    uint32_t residual_max_months_unbounded;
+    uint32_t delivery_months_count;
+    const uint32_t* delivery_months;
     int32_t  issue_date;
     int32_t  maturity_date;
     int32_t  delivery_month_first;
     int32_t  purchase_date;
     int32_t  delivery_date;
+    uint32_t accrued_interest_day_count;
+    uint32_t conversion_factor_rounding_places;
+    uint32_t accrued_interest_rounding_places;
+    uint32_t annual_day_basis;
     uint32_t reserved;
+    double   nominal_coupon;
+    double   face_quote_basis;
     double   coupon_rate;
     double   spot_clean_price;
     double   futures_clean_price;

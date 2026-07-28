@@ -6,13 +6,15 @@ import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2"
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { MarketTime, OwnerRef, Sha256, Ulid } from "../../core/v1/common_pb";
 import { file_ficant_core_v1_common } from "../../core/v1/common_pb";
+import type { Any } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_any } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file ficant/market/v1/rule.proto.
  */
 export const file_ficant_market_v1_rule: GenFile = /*@__PURE__*/
-  fileDesc("ChtmaWNhbnQvbWFya2V0L3YxL3J1bGUucHJvdG8SEGZpY2FudC5tYXJrZXQudjEigAMKDk1hcmtldFJ1bGVQYWNrEioKDHJ1bGVfcGFja19pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSDwoHdmVyc2lvbhgCIAEoBBInCgVvd25lchgDIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEg4KBm1hcmtldBgEIAEoCRIRCglydWxlX3R5cGUYBSABKAkSDgoGc291cmNlGAYgASgJEjIKDmVmZmVjdGl2ZV9mcm9tGAcgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRIwCgxlZmZlY3RpdmVfdG8YCCABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEkEKE3ZlcmlmaWNhdGlvbl9zdGF0dXMYCSABKA4yJC5maWNhbnQubWFya2V0LnYxLlZlcmlmaWNhdGlvblN0YXR1cxIsCgxjb250ZW50X2hhc2gYCiABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYqoQEKElZlcmlmaWNhdGlvblN0YXR1cxIjCh9WRVJJRklDQVRJT05fU1RBVFVTX1VOU1BFQ0lGSUVEEAASIgoeVkVSSUZJQ0FUSU9OX1NUQVRVU19VTlZFUklGSUVEEAESIAocVkVSSUZJQ0FUSU9OX1NUQVRVU19WRVJJRklFRBACEiAKHFZFUklGSUNBVElPTl9TVEFUVVNfUkVKRUNURUQQA2IGcHJvdG8z", [file_ficant_core_v1_common]);
+  fileDesc("ChtmaWNhbnQvbWFya2V0L3YxL3J1bGUucHJvdG8SEGZpY2FudC5tYXJrZXQudjEipwMKDk1hcmtldFJ1bGVQYWNrEioKDHJ1bGVfcGFja19pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSDwoHdmVyc2lvbhgCIAEoBBInCgVvd25lchgDIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEg4KBm1hcmtldBgEIAEoCRIRCglydWxlX3R5cGUYBSABKAkSDgoGc291cmNlGAYgASgJEjIKDmVmZmVjdGl2ZV9mcm9tGAcgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRIwCgxlZmZlY3RpdmVfdG8YCCABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEkEKE3ZlcmlmaWNhdGlvbl9zdGF0dXMYCSABKA4yJC5maWNhbnQubWFya2V0LnYxLlZlcmlmaWNhdGlvblN0YXR1cxIsCgxjb250ZW50X2hhc2gYCiABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSJQoHY29udGVudBgLIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkqoQEKElZlcmlmaWNhdGlvblN0YXR1cxIjCh9WRVJJRklDQVRJT05fU1RBVFVTX1VOU1BFQ0lGSUVEEAASIgoeVkVSSUZJQ0FUSU9OX1NUQVRVU19VTlZFUklGSUVEEAESIAocVkVSSUZJQ0FUSU9OX1NUQVRVU19WRVJJRklFRBACEiAKHFZFUklGSUNBVElPTl9TVEFUVVNfUkVKRUNURUQQA2IGcHJvdG8z", [file_ficant_core_v1_common, file_google_protobuf_any]);
 
 /**
  * MarketRulePack records a verified external rule input. It does not execute
@@ -70,6 +72,11 @@ export type MarketRulePack = Message<"ficant.market.v1.MarketRulePack"> & {
    * @generated from field: ficant.core.v1.Sha256 content_hash = 10;
    */
   contentHash?: Sha256;
+
+  /**
+   * @generated from field: google.protobuf.Any content = 11;
+   */
+  content?: Any;
 };
 
 /**

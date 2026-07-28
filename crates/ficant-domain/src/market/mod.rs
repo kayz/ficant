@@ -19,7 +19,8 @@ pub use data_source::{DataSource, DataSourceInput, DataSourceKind};
 pub use futures_contract::FuturesContract;
 pub use instrument::{Instrument, InstrumentInput, InstrumentKind};
 pub use market_rule_pack::{
-    MarketRulePack, MarketRulePackInput, MarketRulePackTimesInput, VerificationStatus,
+    MarketRulePack, MarketRulePackInput, MarketRulePackTimesInput, RulePackContent,
+    VerificationStatus,
 };
 pub use quote::{Quote, QuoteInput};
 pub use trade::{Trade, TradeInput};

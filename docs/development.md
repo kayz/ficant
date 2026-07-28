@@ -59,7 +59,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 .\scripts\check.ps1
 ```
 
-它在不依赖目标服务器的前提下运行：严格 Rust format/Clippy/build/test、生成契约测试、C++ Release build 与当前 CMake/CTest catalog 中登记的全部测试、Phase 2A/2B/2C acceptance matrix 完整性、Phase 2C 独立 Oracle 与确定性 Artifact 测试、Python 生成契约测试，以及 Web typecheck/build/Vitest。默认不运行需要持久化服务的测试。CTest 数量由当前 catalog 决定，文档不另行硬编码一个会漂移的计数。
+它在不依赖目标服务器的前提下运行：严格 Rust format/Clippy/build/test、生成契约测试、冻结 `cgb-futures` RulePack 的确定性 payload 漂移检查、C++ Release build 与当前 CMake/CTest catalog 中登记的全部测试、Phase 2A/2B/2C acceptance matrix 完整性、Phase 2C 独立 Oracle 与确定性 Artifact 测试、Python 生成契约测试，以及 Web typecheck/build/Vitest。默认不运行需要持久化服务的测试。CTest 数量由当前 catalog 决定，文档不另行硬编码一个会漂移的计数。
 
 可选本地集成回归：
 

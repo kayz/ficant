@@ -14,6 +14,7 @@ mod futures_hedge;
 mod journal;
 mod phase4_execution;
 mod required_reads;
+mod rule_pack_parser;
 mod rule_pack_resolution;
 mod runs;
 mod signals;
@@ -67,6 +68,7 @@ pub use required_reads::{
     SnapshotVerifiedReadMetadata, SnapshotVerifiedReadMetadataRepository, VerifiedBlobPayload,
     VerifiedBlobReader, VerifiedBlobRole, VerifiedReadResourceKind,
 };
+pub use rule_pack_parser::FuturesDeliveryRuleParser;
 pub use rule_pack_resolution::{
     FullyValidatedMarketFact, MarketFactRulePackResolver, MarketFactRuleProof,
     MarketFactRuleProofKind, MarketRunRulePackResolver, Phase1ResolvedRunRuleProof,

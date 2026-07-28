@@ -3,6 +3,7 @@ syntax = "proto3";
 package ficant.market.v1;
 
 import "ficant/core/v1/common.proto";
+import "google/protobuf/any.proto";
 
 enum VerificationStatus {
   VERIFICATION_STATUS_UNSPECIFIED = 0;
@@ -24,4 +25,5 @@ message MarketRulePack {
   ficant.core.v1.MarketTime effective_to = 8;
   VerificationStatus verification_status = 9;
   ficant.core.v1.Sha256 content_hash = 10;
+  google.protobuf.Any content = 11;
 }

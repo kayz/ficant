@@ -10,6 +10,7 @@ version.workspace = true
 async-trait = { workspace = true }
 ficant-application = { path = "../../crates/ficant-application" }
 ficant-api = { path = "../../crates/ficant-api" }
+ficant-cgb-futures-pack = { path = "../../crates/ficant-cgb-futures-pack" }
 ficant-fixed-income-native = { path = "../../crates/ficant-fixed-income-native" }
 ficant-native-nodes = { path = "../../crates/ficant-native-nodes" }
 ficant-runtime = { path = "../../crates/ficant-runtime" }

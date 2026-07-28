@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <limits>
 
 namespace {
 int failures = 0;
@@ -18,12 +19,16 @@ int32_t date(int year, unsigned month, unsigned day) {
 }
 
 ficant_kernel_cgb_futures_delivery_input_v1 input() {
+    static const uint32_t delivery_months[] = {3U, 6U, 9U, 12U};
     return {
         sizeof(ficant_kernel_cgb_futures_delivery_input_v1), FICANT_KERNEL_ABI_VERSION,
-        FICANT_KERNEL_CGB_FUTURES_T, FICANT_KERNEL_FREQUENCY_SEMIANNUAL,
+        FICANT_KERNEL_FREQUENCY_SEMIANNUAL,
+        120U, 78U, 0U, 1U,
+        4U, delivery_months,
         date(2024, 8, 15), date(2034, 8, 15), date(2026, 9, 1),
-        date(2026, 7, 21), date(2026, 9, 18), 0,
-        0.025, 101.25, 99.50, 0.018
+        date(2026, 7, 21), date(2026, 9, 18),
+        FICANT_KERNEL_DAY_COUNT_ACT_ACT_BOND_ISMA, 4U, 7U, 365U, 0U,
+        0.03, 100.0, 0.025, 101.25, 99.50, 0.018
     };
 }
 
@@ -58,5 +63,12 @@ int main() {
     CHECK(ficant_kernel_analyze_cgb_futures_delivery_v1(&request, &output)
               == FICANT_KERNEL_STATUS_INVALID_ARGUMENT,
           "reserved drift fails closed");
+
+    request = input();
+    request.original_term_max_months = std::numeric_limits<uint32_t>::max();
+    output = result();
+    CHECK(ficant_kernel_analyze_cgb_futures_delivery_v1(&request, &output)
+              == FICANT_KERNEL_STATUS_INVALID_ARGUMENT,
+          "month rule values outside the C++ date range fail closed");
     return failures == 0 ? 0 : 1;
 }

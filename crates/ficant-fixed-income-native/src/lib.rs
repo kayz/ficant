@@ -75,23 +75,34 @@ impl FuturesDeliveryEngine for NativeFuturesDeliveryEngine {
             return Err(AnalyticsError::AbiMismatch);
         }
         let terms = input.terms();
+        let rule = input.rule();
+        let (residual_max_months, residual_max_months_unbounded) = match rule.residual_max_months()
+        {
+            Some(value) => (value, false),
+            None => (0, true),
+        };
         let (status, native) = ficant_kernel_sys::analyze_cgb_futures_delivery(
             &ficant_kernel_sys::CgbFuturesDeliveryInputV1 {
-                product: match input.product() {
-                    CgbFuturesProduct::TwoYear => ficant_kernel_sys::CGB_FUTURES_TS,
-                    CgbFuturesProduct::FiveYear => ficant_kernel_sys::CGB_FUTURES_TF,
-                    CgbFuturesProduct::TenYear => ficant_kernel_sys::CGB_FUTURES_T,
-                    CgbFuturesProduct::ThirtyYear => ficant_kernel_sys::CGB_FUTURES_TL,
-                },
                 frequency: match terms.frequency() {
                     CouponFrequency::Annual => ficant_kernel_sys::FREQUENCY_ANNUAL,
                     CouponFrequency::Semiannual => ficant_kernel_sys::FREQUENCY_SEMIANNUAL,
                 },
+                original_term_max_months: rule.original_term_max_months(),
+                residual_min_months: rule.residual_min_months(),
+                residual_max_months,
+                residual_max_months_unbounded,
+                delivery_months: rule.delivery_months(),
                 issue_date: epoch_days(terms.issue_date())?,
                 maturity_date: epoch_days(terms.maturity_date())?,
                 delivery_month_first: epoch_days(input.delivery_month_first())?,
                 purchase_date: epoch_days(input.purchase_date())?,
                 delivery_date: epoch_days(input.delivery_date())?,
+                accrued_interest_day_count: rule.accrued_interest_day_count(),
+                conversion_factor_rounding_places: rule.conversion_factor_rounding_places(),
+                accrued_interest_rounding_places: rule.accrued_interest_rounding_places(),
+                annual_day_basis: rule.annual_day_basis(),
+                nominal_coupon: decimal_to_f64(rule.nominal_coupon())?,
+                face_quote_basis: decimal_to_f64(rule.face_quote_basis())?,
                 coupon_rate: decimal_to_f64(terms.coupon_rate())?,
                 spot_clean_price: decimal_to_f64(input.spot_clean_price())?,
                 futures_clean_price: decimal_to_f64(input.futures_clean_price())?,

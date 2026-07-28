@@ -1,7 +1,1 @@
-[
-  {
-    "path": "crates/ficant-domain/src/futures_delivery.rs",
-    "violation": "market-rule-values",
-    "removal_round": "R2"
-  }
-]
+[]

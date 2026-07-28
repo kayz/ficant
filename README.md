@@ -466,10 +466,12 @@ MarketRulePack
   - content_hash
   - source_reference
   - verification_status
-  - content
+  - content: google.protobuf.Any { type_url, value }
 ```
 
 历史实验始终绑定运行时生效的规则包，不使用“当前最新规则”重算历史。
+
+带内容的 RulePack 以 `SHA-256(content.value)` 绑定 `content_hash`。通用 core 只保存内容信封；市场适配器按精确 `type_url` 失败关闭地解析其 L3 规则。首个实现 `cgb-futures` 在进入交割数值内核前解析完整交割规则，因此切换精确 RulePack 版本会进入计算与输入 fingerprint，而不是只停留在血缘。
 
 ---
 

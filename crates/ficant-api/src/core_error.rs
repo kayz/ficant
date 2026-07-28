@@ -1,5 +1,5 @@
-use ficant_application::{ApplicationError, ApplicationErrorCategory};
-use ficant_contracts::ficant::core::v1::{ErrorCode, ErrorDetail};
+use ficant_application::{ApplicationError, ApplicationErrorCategory, ApplicationErrorDetail};
+use ficant_contracts::ficant::core::v1::{ErrorCode, ErrorDetail, FieldViolation};
 use prost::Message;
 use ring::hmac;
 use tonic::{Code, Status};
@@ -50,13 +50,21 @@ impl CoreBusinessErrorMapper {
         );
         let trace = hmac::sign(&self.trace_key, trace_input.as_bytes());
 
+        let field_violations = match error.detail() {
+            Some(ApplicationErrorDetail::RulePackItemMissing { path }) => vec![FieldViolation {
+                field: path.clone(),
+                description: "规则包缺少计算所需项".to_owned(),
+            }],
+            None => Vec::new(),
+        };
+
         ErrorDetail {
             code: mapping.core_code as i32,
             message: mapping.safe_message.to_owned(),
             trace_id: format_trace_id(trace.as_ref()),
             retryable: error.retryable() && !mapping.force_non_retryable,
             resource_ref: String::new(),
-            field_violations: Vec::new(),
+            field_violations,
         }
     }
 

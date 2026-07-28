@@ -15,7 +15,12 @@ sys.path.insert(0, str(GENERATED_ROOT))
 
 from ficant.app.v1.registry_pb2 import AppRegistry  # noqa: E402
 from ficant.core.v1.common_pb2 import DecimalValue, Ulid  # noqa: E402
+from ficant.market.v1.cgb_futures_rule_pb2 import (  # noqa: E402
+    CgbFuturesDeliveryRulePack,
+    CgbFuturesProductRule,
+)
 from ficant.market.v1.instrument_pb2 import Instrument  # noqa: E402
+from ficant.market.v1.rule_pb2 import MarketRulePack  # noqa: E402
 from ficant.rates.v1.analytics_pb2 import AnalyzeBondRequest  # noqa: E402
 from ficant.rates.v1.analytics_pb2_grpc import RatesAnalyticsServiceStub  # noqa: E402
 from ficant.research.v1.experiment_pb2 import ExperimentRun  # noqa: E402
@@ -27,6 +32,9 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     run = ExperimentRun(seed=7)
     registry = AppRegistry()
     rates_request = AnalyzeBondRequest()
+    rule_pack = MarketRulePack()
+    cgb_pack = CgbFuturesDeliveryRulePack(delivery_months=[3, 6, 9, 12])
+    cgb_product = CgbFuturesProductRule(product_code="T")
 
     assert instrument.DESCRIPTOR.full_name == "ficant.market.v1.Instrument"
     assert decimal.DESCRIPTOR.full_name == "ficant.core.v1.DecimalValue"
@@ -34,3 +42,6 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert registry.DESCRIPTOR.full_name == "ficant.app.v1.AppRegistry"
     assert rates_request.DESCRIPTOR.full_name == "ficant.rates.v1.AnalyzeBondRequest"
     assert RatesAnalyticsServiceStub.__name__ == "RatesAnalyticsServiceStub"
+    assert rule_pack.DESCRIPTOR.fields_by_name["content"].message_type.full_name == "google.protobuf.Any"
+    assert cgb_pack.DESCRIPTOR.full_name == "ficant.market.v1.CgbFuturesDeliveryRulePack"
+    assert cgb_product.HasField("product_code")

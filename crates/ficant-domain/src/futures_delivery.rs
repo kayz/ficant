@@ -13,8 +13,6 @@ pub const FUTURES_DELIVERY_ALGORITHM_ID: &str = "ficant.cffex.cgb-futures-delive
 pub const FUTURES_DELIVERY_ALGORITHM_VERSION: u32 = 1;
 pub const FUTURES_DELIVERY_CONVENTION_PROFILE: &str = "cffex-cgb-futures-delivery-v1";
 
-const FACE_PER_HUNDRED_SCALED: i128 = 100_000_000_000_000;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum CgbFuturesProduct {
@@ -34,23 +32,137 @@ impl CgbFuturesProduct {
             Self::ThirtyYear => "TL",
         }
     }
+}
 
-    const fn original_term_months(self) -> u32 {
-        match self {
-            Self::TwoYear => 60,
-            Self::FiveYear => 84,
-            Self::TenYear => 120,
-            Self::ThirtyYear => 360,
+/// Provider-neutral delivery-rule shape injected from an exact `RulePack`.
+///
+/// It deliberately contains no market or product branch. The L3 parser selects this shape using
+/// the public product identity before L2/L0 calculation begins.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FuturesDeliveryRule {
+    original_term_max_months: u32,
+    residual_min_months: u32,
+    residual_max_months: Option<u32>,
+    delivery_months: Vec<u32>,
+    nominal_coupon: FixedDecimal,
+    face_quote_basis: FixedDecimal,
+    accrued_interest_day_count: u32,
+    conversion_factor_rounding_places: u32,
+    accrued_interest_rounding_places: u32,
+    annual_day_basis: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FuturesDeliveryRuleInput {
+    pub original_term_max_months: u32,
+    pub residual_min_months: u32,
+    pub residual_max_months: Option<u32>,
+    pub delivery_months: Vec<u32>,
+    pub nominal_coupon: FixedDecimal,
+    pub face_quote_basis: FixedDecimal,
+    pub accrued_interest_day_count: u32,
+    pub conversion_factor_rounding_places: u32,
+    pub accrued_interest_rounding_places: u32,
+    pub annual_day_basis: u32,
+}
+
+impl FuturesDeliveryRule {
+    /// Creates one complete set of already-parsed delivery rules.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation failure for missing, unordered, incompatible, or non-positive rules.
+    pub fn new(input: FuturesDeliveryRuleInput) -> DomainResult<Self> {
+        let FuturesDeliveryRuleInput {
+            original_term_max_months,
+            residual_min_months,
+            residual_max_months,
+            delivery_months,
+            nominal_coupon,
+            face_quote_basis,
+            accrued_interest_day_count,
+            conversion_factor_rounding_places,
+            accrued_interest_rounding_places,
+            annual_day_basis,
+        } = input;
+        let delivery_months_valid = !delivery_months.is_empty()
+            && delivery_months.iter().all(|month| (1..=12).contains(month))
+            && delivery_months.windows(2).all(|pair| pair[0] < pair[1]);
+        if original_term_max_months == 0
+            || residual_min_months == 0
+            || residual_max_months.is_some_and(|value| value < residual_min_months)
+            || !delivery_months_valid
+            || !nominal_coupon.is_positive()
+            || !face_quote_basis.is_positive()
+            || accrued_interest_day_count == 0
+            || conversion_factor_rounding_places > 12
+            || accrued_interest_rounding_places > 12
+            || annual_day_basis == 0
+        {
+            return Err(DomainErrorCode::InvalidValue);
         }
+        Ok(Self {
+            original_term_max_months,
+            residual_min_months,
+            residual_max_months,
+            delivery_months,
+            nominal_coupon,
+            face_quote_basis,
+            accrued_interest_day_count,
+            conversion_factor_rounding_places,
+            accrued_interest_rounding_places,
+            annual_day_basis,
+        })
     }
 
-    const fn residual_term_bounds(self) -> (u32, Option<u32>) {
-        match self {
-            Self::TwoYear => (18, Some(27)),
-            Self::FiveYear => (48, Some(63)),
-            Self::TenYear => (78, None),
-            Self::ThirtyYear => (300, None),
-        }
+    #[must_use]
+    pub const fn original_term_max_months(&self) -> u32 {
+        self.original_term_max_months
+    }
+
+    #[must_use]
+    pub const fn residual_min_months(&self) -> u32 {
+        self.residual_min_months
+    }
+
+    #[must_use]
+    pub const fn residual_max_months(&self) -> Option<u32> {
+        self.residual_max_months
+    }
+
+    #[must_use]
+    pub fn delivery_months(&self) -> &[u32] {
+        &self.delivery_months
+    }
+
+    #[must_use]
+    pub const fn nominal_coupon(&self) -> FixedDecimal {
+        self.nominal_coupon
+    }
+
+    #[must_use]
+    pub const fn face_quote_basis(&self) -> FixedDecimal {
+        self.face_quote_basis
+    }
+
+    #[must_use]
+    pub const fn accrued_interest_day_count(&self) -> u32 {
+        self.accrued_interest_day_count
+    }
+
+    #[must_use]
+    pub const fn conversion_factor_rounding_places(&self) -> u32 {
+        self.conversion_factor_rounding_places
+    }
+
+    #[must_use]
+    pub const fn accrued_interest_rounding_places(&self) -> u32 {
+        self.accrued_interest_rounding_places
+    }
+
+    #[must_use]
+    pub const fn annual_day_basis(&self) -> u32 {
+        self.annual_day_basis
     }
 }
 
@@ -66,6 +178,7 @@ pub struct FuturesDeliverableInput {
     delivery_month_first: NaiveDate,
     delivery_date: NaiveDate,
     product: CgbFuturesProduct,
+    rule: FuturesDeliveryRule,
     terms: BondTerms,
     spot_clean_price: FixedDecimal,
     futures_clean_price: FixedDecimal,
@@ -85,6 +198,7 @@ impl FuturesDeliverableInput {
         delivery_month_first: NaiveDate,
         delivery_date: NaiveDate,
         product: CgbFuturesProduct,
+        rule: FuturesDeliveryRule,
         terms: BondTerms,
         spot_clean_price: FixedDecimal,
         futures_clean_price: FixedDecimal,
@@ -96,18 +210,21 @@ impl FuturesDeliverableInput {
             || purchase_date >= delivery_date
             || delivery_date >= terms.maturity_date()
             || delivery_month_first.day() != 1
-            || !matches!(delivery_month_first.month(), 3 | 6 | 9 | 12)
+            || rule
+                .delivery_months()
+                .binary_search(&delivery_month_first.month())
+                .is_err()
             || delivery_date.year() != delivery_month_first.year()
             || delivery_date.month() != delivery_month_first.month()
             || !terms.coupon_rate().is_positive()
-            || terms.face_amount().scaled() != FACE_PER_HUNDRED_SCALED
+            || terms.face_amount() != rule.face_quote_basis()
             || !spot_clean_price.is_positive()
             || !futures_clean_price.is_positive()
             || !financing_rate.is_non_negative()
         {
             return Err(DomainErrorCode::InvalidValue);
         }
-        if !is_deliverable(product, &terms, delivery_month_first)? {
+        if !is_deliverable(&rule, &terms, delivery_month_first)? {
             return Err(DomainErrorCode::InvalidValue);
         }
         Ok(Self {
@@ -121,6 +238,7 @@ impl FuturesDeliverableInput {
             delivery_month_first,
             delivery_date,
             product,
+            rule,
             terms,
             spot_clean_price,
             futures_clean_price,
@@ -167,6 +285,10 @@ impl FuturesDeliverableInput {
     #[must_use]
     pub const fn product(&self) -> CgbFuturesProduct {
         self.product
+    }
+    #[must_use]
+    pub fn rule(&self) -> &FuturesDeliveryRule {
+        &self.rule
     }
     #[must_use]
     pub fn terms(&self) -> &BondTerms {
@@ -224,6 +346,38 @@ impl FuturesDeliverableInput {
             field(&mut bytes, value.to_string().as_bytes());
         }
         field(&mut bytes, &(self.product as u32).to_be_bytes());
+        field(
+            &mut bytes,
+            &self.rule.original_term_max_months().to_be_bytes(),
+        );
+        field(&mut bytes, &self.rule.residual_min_months().to_be_bytes());
+        match self.rule.residual_max_months() {
+            Some(value) => {
+                field(&mut bytes, &[1]);
+                field(&mut bytes, &value.to_be_bytes());
+            }
+            None => field(&mut bytes, &[0]),
+        }
+        field(
+            &mut bytes,
+            &u64::try_from(self.rule.delivery_months().len())
+                .unwrap_or(u64::MAX)
+                .to_be_bytes(),
+        );
+        for month in self.rule.delivery_months() {
+            field(&mut bytes, &month.to_be_bytes());
+        }
+        for value in [self.rule.nominal_coupon(), self.rule.face_quote_basis()] {
+            field(&mut bytes, &value.scaled().to_be_bytes());
+        }
+        for value in [
+            self.rule.accrued_interest_day_count(),
+            self.rule.conversion_factor_rounding_places(),
+            self.rule.accrued_interest_rounding_places(),
+            self.rule.annual_day_basis(),
+        ] {
+            field(&mut bytes, &value.to_be_bytes());
+        }
         field(&mut bytes, &(self.terms.frequency() as u32).to_be_bytes());
         for value in [
             self.terms.coupon_rate(),
@@ -244,19 +398,18 @@ fn field(target: &mut Vec<u8>, value: &[u8]) {
 }
 
 pub fn is_deliverable(
-    product: CgbFuturesProduct,
+    rule: &FuturesDeliveryRule,
     terms: &BondTerms,
     delivery_month_first: NaiveDate,
 ) -> DomainResult<bool> {
     let original_limit = terms
         .issue_date()
-        .checked_add_months(Months::new(product.original_term_months()))
+        .checked_add_months(Months::new(rule.original_term_max_months()))
         .ok_or(DomainErrorCode::InvalidValue)?;
-    let (minimum_months, maximum_months) = product.residual_term_bounds();
     let minimum_maturity = delivery_month_first
-        .checked_add_months(Months::new(minimum_months))
+        .checked_add_months(Months::new(rule.residual_min_months()))
         .ok_or(DomainErrorCode::InvalidValue)?;
-    let maximum_maturity = match maximum_months {
+    let maximum_maturity = match rule.residual_max_months() {
         Some(months) => Some(
             delivery_month_first
                 .checked_add_months(Months::new(months))

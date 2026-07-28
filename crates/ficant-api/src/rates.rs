@@ -4,12 +4,13 @@ use crate::grpc_web::request_credential;
 use crate::registry::PlatformPort;
 use chrono::{DateTime, NaiveDate, Utc};
 use ficant_application::ports::{
-    BondAnalyticsEngine, CarryRollEngine, FuturesDeliveryEngine, FuturesHedgeEngine,
-    YieldCurveEngine,
+    BondAnalyticsEngine, CarryRollEngine, DefinitionRepository, FuturesDeliveryEngine,
+    FuturesDeliveryRuleParser, FuturesHedgeEngine, YieldCurveEngine,
 };
 use ficant_application::{
-    ApplicationError, ApplicationErrorCategory, CalculateBondAnalytics, CalculateCarryRoll,
-    CalculateFuturesDeliveryBasket, CalculateFuturesHedge, map_analytics_error, map_domain_error,
+    AccessScope, ApplicationError, ApplicationErrorCategory, CalculateBondAnalytics,
+    CalculateCarryRoll, CalculateFuturesDeliveryBasket, CalculateFuturesHedge,
+    ResolveFuturesDeliveryRule, map_analytics_error, map_domain_error,
 };
 use ficant_contracts::ficant::core::v1::{
     DecimalValue, OwnerRef as ProtoOwnerRef, UnitRef as ProtoUnitRef,
@@ -54,6 +55,8 @@ pub struct RatesGrpcService {
     curve: Arc<dyn YieldCurveEngine>,
     carry_roll: Arc<dyn CarryRollEngine>,
     futures_delivery: Arc<dyn FuturesDeliveryEngine>,
+    definitions: Arc<dyn DefinitionRepository>,
+    futures_delivery_rule_parser: Arc<dyn FuturesDeliveryRuleParser>,
     futures_hedge: Arc<dyn FuturesHedgeEngine>,
     errors: CoreBusinessErrorMapper,
 }
@@ -71,6 +74,8 @@ impl RatesGrpcService {
         curve: Arc<dyn YieldCurveEngine>,
         carry_roll: Arc<dyn CarryRollEngine>,
         futures_delivery: Arc<dyn FuturesDeliveryEngine>,
+        definitions: Arc<dyn DefinitionRepository>,
+        futures_delivery_rule_parser: Arc<dyn FuturesDeliveryRuleParser>,
         futures_hedge: Arc<dyn FuturesHedgeEngine>,
         trace_key: &[u8],
     ) -> Result<Self, &'static str> {
@@ -80,6 +85,8 @@ impl RatesGrpcService {
             curve,
             carry_roll,
             futures_delivery,
+            definitions,
+            futures_delivery_rule_parser,
             futures_hedge,
             errors: CoreBusinessErrorMapper::new(trace_key)?,
         })
@@ -156,7 +163,7 @@ impl RatesGrpcService {
         Ok(carry_roll_result(&result, &context.units))
     }
 
-    fn analyze_futures_delivery_value(
+    async fn analyze_futures_delivery_value(
         &self,
         request: &pb::AnalyzeFuturesDeliveryRequest,
     ) -> Result<pb::AnalyzeFuturesDeliveryResult, ApplicationError> {
@@ -170,6 +177,22 @@ impl RatesGrpcService {
         let delivery_month_first = parse_date(&request.delivery_month_first)?;
         let delivery_date = parse_date(&request.delivery_date)?;
         let product = parse_product(request.product)?;
+        let access_scope = AccessScope::new(
+            context.owner.tenant_id().clone(),
+            context.owner.owner_id().clone(),
+            vec![context.owner.owner_id().clone()],
+        )?;
+        let rule = ResolveFuturesDeliveryRule::new(
+            self.definitions.as_ref(),
+            self.futures_delivery_rule_parser.as_ref(),
+        )
+        .execute(
+            &access_scope,
+            &context.rule_pack,
+            valuation_at.clone(),
+            product,
+        )
+        .await?;
         let futures_clean_price = parse_fixed_decimal(
             request.futures_clean_price.as_ref().ok_or_else(invalid)?,
             &context.units.price_per_100,
@@ -193,6 +216,7 @@ impl RatesGrpcService {
                     delivery_month_first,
                     delivery_date,
                     product,
+                    rule.clone(),
                     parse_bond_terms(candidate.terms.as_ref(), &context.units)?,
                     parse_fixed_decimal(
                         candidate.spot_clean_price.as_ref().ok_or_else(invalid)?,
@@ -408,9 +432,10 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::AnalyzeFuturesDeliveryRequest>,
     ) -> Result<Response<pb::AnalyzeFuturesDeliveryResponse>, Status> {
         const OPERATION: &str = "rates.analyze-futures-delivery";
-        let result = self
-            .authorize(&request)
-            .and_then(|()| self.analyze_futures_delivery_value(request.get_ref()));
+        let result = match self.authorize(&request) {
+            Ok(()) => self.analyze_futures_delivery_value(request.get_ref()).await,
+            Err(error) => Err(error),
+        };
         Ok(Response::new(pb::AnalyzeFuturesDeliveryResponse {
             result: Some(match result {
                 Ok(value) => pb::analyze_futures_delivery_response::Result::Analysis(value),

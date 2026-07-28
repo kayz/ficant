@@ -18,9 +18,15 @@ pub enum ApplicationErrorCategory {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ApplicationErrorDetail {
+    RulePackItemMissing { path: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ApplicationError {
     category: ApplicationErrorCategory,
     retryable: bool,
+    detail: Option<ApplicationErrorDetail>,
 }
 
 impl ApplicationError {
@@ -29,6 +35,20 @@ impl ApplicationError {
         Self {
             category,
             retryable,
+            detail: None,
+        }
+    }
+
+    /// Builds the one client-safe detail used for a missing parsed `RulePack` item.
+    #[must_use]
+    pub fn rule_pack_item_missing(path: impl Into<String>) -> Self {
+        let path = path.into();
+        let detail = is_safe_rule_pack_path(&path)
+            .then_some(ApplicationErrorDetail::RulePackItemMissing { path });
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail,
         }
     }
 
@@ -41,6 +61,19 @@ impl ApplicationError {
     pub fn retryable(&self) -> bool {
         self.retryable
     }
+
+    #[must_use]
+    pub fn detail(&self) -> Option<&ApplicationErrorDetail> {
+        self.detail.as_ref()
+    }
+}
+
+fn is_safe_rule_pack_path(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 256
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'[' | b']' | b'=' | b'-')
+        })
 }
 
 #[must_use]
