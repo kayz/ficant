@@ -178,6 +178,12 @@ description       = 规则包缺少计算所需项
 
 Human 已审定上述三项及 §2 的门禁/重取证保护，本轮不再有待决语义。实现证据若迫使改变任一项，Root 必须先停下并在本节提出 diff，不得在代码中自行细化。
 
+### 事后审计发现的流程偏差（非事前授权）
+
+2026-07-28 的事后审计发现，R2 实施期间 §6 的允许写路径被就地加入了 `python/tests/test_rates_sdk_live.py`、`crates/ficant-api/tests/phase2e_sdk_live.rs` 与 `scripts/check-phase2e-sdk.ps1`，但当时 §5 没有对应的 Human 扩权记录。这一发现是**事后审计记录，不是事前授权**；本条不追认该违反“不得先改后补”的流程偏差，也不以其实施必要性替代授权。
+
+该偏差的触发事实是：R2 引入精确 RulePack content hash 后，Phase 2E live SDK 测试需要绑定冻结 pack 的实际 SHA-256。经事后实质复核，变化是加法式、默认保持且仅限交割切片：`rule_pack: ObjectBinding | None = None` 与 `rule_pack or _object(rule_suffix)` 保留原默认绑定；只有交割切片选择新 pack，reference bond、curve、carry-roll 三个切片的绑定方式不变；Phase 2D hedge 仍使用原通用 `_object(rule_suffix)`，未接入 CGB pack。故未夹带 §3 禁止的 Phase 2A/2B/2D/2E 业务语义变更。这个实质结论不消除授权缺口；完整审计见 [`../review/r2-audit-2026-07-28.md`](../review/r2-audit-2026-07-28.md)。
+
 ### 执行冻结前置条件
 
 控制面提交、推送并恢复干净后，Root Orchestrator 必须重新执行：
@@ -207,7 +213,7 @@ git rev-parse origin/main
 - 真实 PostgreSQL/Ceph：在脚本启动的可丢弃本地 PostgreSQL 16 + Ceph RGW 中，`cargo test --offline --locked -p ficant-storage --test futures_delivery_sit -- --test-threads=1` 返回 exit `0`、`1 passed`，覆盖发布、adapter 重建后的重放、metadata size 篡改的 HashMismatch、staging/orphan 清空。
 - 完整本地拓扑：`scripts/dev-up.ps1` 成功构建并启动 PostgreSQL、Ceph、server、worker、web 与 UI；在本地 PostgreSQL DefinitionRepository backing store 登记三个精确 RulePack 后，经 UI 的真实 gRPC-Web `/ficant-api/ficant.rates.v1.RatesAnalyticsService/AnalyzeFuturesDelivery` 验证：冻结 v1 RulePack 的 4/4 单券 Golden Case 与 3/3 T basket 逐项匹配 Phase 2C expected，`ctd_index=1`；仅将 v2 的 `nominal_coupon.coefficient` 从 `3` 改为 `4` 后，同一 T basket 的 conversion factor 从 `0.965` 变为 `0.8991`；删除 `products[product_code=T].residual_min_months` 后返回 non-retryable `VALIDATION_FAILED`，唯一 field violation 为 `context.rule_pack.content.products[product_code=T].residual_min_months`。API 直接测试的 spy 同时证明该缺项请求的 engine call count 为 `0`。每次拓扑验证后均由 `scripts/dev-down.ps1` 停止容器并保留命名开发卷。
 - 冻结事实：5 个 Phase 2C immutable facts 与 5 个 Phase 2D Golden/Oracle facts 的当前 SHA-256 均与 matrix 登记值一致；base-to-current 没有任何 Golden/Oracle 或 `crates/ficant-data/src/canonical.rs` diff，Canonical Quote Schema hash 仍为 `e804a0becec18e51dde1be4250384ffe667cf4149c34dc3d2cfc82a206d71502`。未出现 `position.proto`、`factor.proto`、`health.proto`、`constraint.proto` 或 `policy.proto`。PowerShell parser、tracked diff whitespace 与 R2 允许写路径审计也都通过。
-- Matrix rebaseline：Phase 2C 已从自管 `guarded_files` 拆为固定的 5 个 `immutable_facts` 与精确 6 个 `rebaselined_tests`；两个 matrix 已校验 shared layout hash 相同。Phase 2D base-to-current diff 只有 `test_constants_and_layout.cpp` 的一个 hash 替换。最终提交时，这两个 matrix 文件必须仍是一个仅含它们的独立 rebaseline commit。
+- Matrix rebaseline：Phase 2C 已从自管 `guarded_files` 拆为固定的 5 个 `immutable_facts` 与精确 6 个 `rebaselined_tests`；两个 matrix 已校验 shared layout hash 相同。Phase 2D base-to-current diff 只有 `test_constants_and_layout.cpp` 的一个 hash 替换。该重取证已由独立提交 `df72d1cd06ca5f847e701de5ea48e52ac56229ca` 完成，且其 diff 仅含 `tests/phase2c/acceptance-matrix.json` 与 `tests/phase2d/acceptance-matrix.json`。
 - 文档一致性：已逐项复核 `MANUAL.md` §3/§6；它已明确交割从精确 RulePack 内容解析、换内容会改变计算、缺项以 field violation 失败关闭，且不再声称规则硬编码或换版本不换结果。上述真实 gRPC-Web 对照切片是该表述的同一候选证据。
 - 完整本地门禁：`scripts/check.ps1` 返回 exit `0`；随后在脚本启动的可丢弃 PostgreSQL/Ceph RGW 拓扑中，`scripts/check.ps1 -IncludeIntegration` 亦返回 exit `0`。后者覆盖 migration `4 passed`、Phase 4 queue/execution/worker、Phase 1、13 个 negative invariants、Phase 2B、Phase 2C、Phase 2D 与 Phase 3A/3B 的真实集成切片；结束后 `scripts/dev-down.ps1` 已停止容器并保留命名开发卷。
 
