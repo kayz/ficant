@@ -30,6 +30,7 @@
 !/deploy/**
 !/docs/
 !/docs/**
+/docs/review/r1-acceptance-2026-07-27.md
 !/domain-packs/
 !/domain-packs/**
 !/interface/
