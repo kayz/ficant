@@ -1,18 +1,20 @@
 {
-  "schema": "ficant.quality.phase2c.acceptance-matrix.v1",
+  "schema": "ficant.quality.phase2c.acceptance-matrix.v2",
   "base_commit": "93dcf1efa1ed842a0c114457f356557f310ed18a",
-  "guarded_files": {
+  "immutable_facts": {
     "tests/golden-cases/china-rates/phase2c-futures-delivery-inputs.json": "423f5631e10630179a481cd164d91ae4b146bc721fc025e53eaf3d9a11bb9e56",
     "tests/golden-cases/china-rates/expected/phase2c-futures-delivery-v1-expected.json": "bbda9521f9dfd01c9e050ac5304dbe06cd52e68913b1be4aaaf2b4c25f874dfe",
     "tests/golden-cases/china-rates/phase2c-cffex-source-manifest.json": "fd11e7437c63b840aceddfd82be128d0b31bb759b70aa069615abdf76469f78e",
     "tests/oracle/china-rates/phase2c_manual_oracle.py": "71f155ee4e8116498c04412c81212914856d4480e8b3b9c6cd795b6fe89fc516",
-    "tests/oracle/china-rates/test_phase2c_manual_oracle.py": "cbdfa5d0f9efca5353e4fda59d8fb07ac2aa64da4098b5340d3d6fb9c8542c48",
-    "crates/ficant-domain/tests/futures_delivery_contracts.rs": "ab117b753778db8389a8f22301191a87a74f7296131cc4591517e60b949e5efc",
-    "crates/ficant-fixed-income-native/tests/futures_delivery_acceptance.rs": "1ff7838e2800d7f88d4951e9dc0ebf5701adc3a21d377c13e8ca552e368c63f3",
-    "crates/ficant-storage/tests/futures_delivery_arrow.rs": "1b1d39ff59fe662a0f56e9191cd6f41b850e000a9eb4ac352e63700bc816b073",
-    "crates/ficant-storage/tests/futures_delivery_sit.rs": "14f37e4c2849b605a5023c80e5efa2c670e9a84031a6ef09b005402665878a8d",
-    "cpp/fixed-income-kernel/tests/test_futures_delivery.cpp": "b6babf4ade9d24393c69e453239c19e1c88bdab5515d93ef155cc4fd0bb23e1d",
-    "cpp/fixed-income-kernel/tests/test_constants_and_layout.cpp": "02aba54e8d4879de5be639a62a27ca34fc5e0a83e30001882ae4537716042def"
+    "tests/oracle/china-rates/test_phase2c_manual_oracle.py": "cbdfa5d0f9efca5353e4fda59d8fb07ac2aa64da4098b5340d3d6fb9c8542c48"
+  },
+  "rebaselined_tests": {
+    "crates/ficant-domain/tests/futures_delivery_contracts.rs": "30e4b4d1e001b2f595b32fb75b56f14b633dab5813fe3885b054fd7bc5afd4ae",
+    "crates/ficant-fixed-income-native/tests/futures_delivery_acceptance.rs": "9c842aaa2fe77dc7aaf5c1fcab7f17703cf3d08f754a2811cd88a4f1d26aa211",
+    "crates/ficant-storage/tests/futures_delivery_arrow.rs": "bd29046e145ea478cb1c4e668feaea04361f8e48e98ecc7b668f11842d1986f3",
+    "crates/ficant-storage/tests/futures_delivery_sit.rs": "3e51cbd6400920812e795580b5459923c5770b8b8cf1ae035981238374508ef7",
+    "cpp/fixed-income-kernel/tests/test_futures_delivery.cpp": "1536bf6b96048c365111fd30f601c4d0235ea93451494c54cdbfce00721c2a04",
+    "cpp/fixed-income-kernel/tests/test_constants_and_layout.cpp": "86f7f56906262dc9e9cf199afd2cc01db4fc26e62ff494c41cf2976cc1cb16f6"
   },
   "acceptance": [
     {
@@ -38,7 +40,7 @@
       "category": "c-abi-layout",
       "automation": [{
         "source": "cpp/fixed-income-kernel/tests/test_constants_and_layout.cpp",
-        "selector": "sizeof(cgb_futures_delivery_input_v1) == 72",
+        "selector": "sizeof(cgb_futures_delivery_input_v1) == 128",
         "command": "ctest --test-dir build/local-cpp-vs-llvm-19 --output-on-failure"
       }]
     },
