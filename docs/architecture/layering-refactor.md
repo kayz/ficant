@@ -155,9 +155,9 @@
 | 轮 | 名称 | 交付 | 点亮 |
 |---|---|---|---|
 | **R1** | **分层门禁与主体契约** | 分层检查脚本 + 递减式 allowlist；`subject.proto` / `subject_state.proto`；`RegistryService` 注册与查询；ADR 0011–0018 批准；文档权威交接。**垂直切片：注册一个主体、查回、并让主体版本出现在一次 `AnalyzeBond` 的血缘中（只携带，不参与计算）** | AC03 |
-| **R2** | 规则包必须被解析 | CFFEX 规则移入 `cgb-futures` pack；解析器与 fail-closed；从 allowlist 移除 `futures_delivery`；重跑 Phase 2C 取证 | AC01 AC02 AC26 AC27 AC28 |
+| **R2** | 规则包必须被解析 | CFFEX 规则移入 `cgb-futures` pack；解析器与 fail-closed；从 allowlist 移除 `futures_delivery`；重跑 Phase 2C 取证 | AC01 AC02 AC26 |
 | **R3** | 主体语义与税收 | 主体解析资金成本与税收待遇；`Bond` 拆首发/本期 + 累计发行量；券级税收属性；税后现金流；全部 rates 调用绑定主体 | AC06–AC10 AC29 |
-| **R4** | 持仓与因子 | `PositionSnapshot` 走双时间通道；会计三态与 fail-closed；`FactorId` 注册与双向索引；组合 KRD 聚合 | AC05 AC14 AC16–AC19 |
+| **R4** | 持仓与因子 | `PositionSnapshot` 走双时间通道；会计三态与 fail-closed；`FactorId` 注册与双向索引；组合 KRD 聚合；以双时间事实补齐 CTD 的当日清单/价格与具体合约输入拒绝语义 | AC05 AC14 AC16–AC19 AC27 AC28 |
 | **R5** | 可信度与覆盖度 | canonical quote 加来源类型与可信度；`CoverageDeclaration` 成为组合级结果的必带元数据；`DataHealthReport` 以 AnalyticsService 形态落地；重跑 Phase 3A/3B 取证 | AC15 AC35 AC36 |
 | **R6** | 角色与白名单 | 平台管理员与研究用户分离；数据源导入白名单；基础数据变更留痕 | AC37 |
 | **R7** | 一期收口 | **虚构市场零核心改动验证**（健康度指标）；全量重取证；MANUAL 走查 | AC04 AC11–AC13 AC30–AC33 |
