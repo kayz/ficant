@@ -14,7 +14,8 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from ficant.core.v1 import common_pb2
+from ficant.core.v1 import common_pb2, subject_pb2
+from ficant.market.v1 import funding_rule_pb2
 from ficant.rates.v1 import analytics_pb2 as rates
 from ficant_sdk import RatesClient
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -48,6 +49,31 @@ def _cgb_futures_rule_pack() -> rates.ObjectBinding:
         object=common_pb2.VersionRef(id=_ulid("X"), version=1),
         content_hash=common_pb2.Sha256(
             value=hashlib.sha256(CGB_FUTURES_RULE_PACK.read_bytes()).digest()
+        ),
+    )
+
+
+def _subject_ref() -> common_pb2.VersionRef:
+    return common_pb2.VersionRef(id=_ulid("S"), version=1)
+
+
+def _funding_rule_pack() -> rates.ObjectBinding:
+    payload = funding_rule_pb2.FundingRulePack(
+        rates=[
+            funding_rule_pb2.FundingTierRate(
+                funding_tier=subject_pb2.FUNDING_TIER_DR_AVAILABLE,
+                annual_financing_rate=_decimal("0.018", UNITS.rate),
+            ),
+            funding_rule_pb2.FundingTierRate(
+                funding_tier=subject_pb2.FUNDING_TIER_R_ONLY,
+                annual_financing_rate=_decimal("0.025", UNITS.rate),
+            ),
+        ]
+    )
+    return rates.ObjectBinding(
+        object=common_pb2.VersionRef(id=_ulid("F"), version=1),
+        content_hash=common_pb2.Sha256(
+            value=hashlib.sha256(payload.SerializeToString(deterministic=True)).digest()
         ),
     )
 
@@ -101,6 +127,7 @@ def _context(
     rule_suffix: str,
     snapshot_suffix: str,
     rule_pack: rates.ObjectBinding | None = None,
+    funding_rule_pack: rates.ObjectBinding | None = None,
 ) -> rates.AnalysisContext:
     return rates.AnalysisContext(
         owner=common_pb2.OwnerRef(tenant_id=_ulid("0"), owner_id=_ulid("1")),
@@ -113,6 +140,8 @@ def _context(
             abi_version=1,
         ),
         units=UNITS,
+        subject_ref=_subject_ref(),
+        funding_rule_pack=funding_rule_pack,
     )
 
 
@@ -328,6 +357,7 @@ def _assert_futures_delivery(client: RatesClient) -> None:
                 rule_suffix="X",
                 snapshot_suffix="Y",
                 rule_pack=_cgb_futures_rule_pack(),
+                funding_rule_pack=_funding_rule_pack(),
             ),
             futures_contract=_object("Z"),
             valuation_at=_market_time("2026-07-20T15:00:00+08:00", "2026-07-20"),
@@ -336,7 +366,6 @@ def _assert_futures_delivery(client: RatesClient) -> None:
             delivery_date=source["delivery_date"],
             product=rates.CGB_FUTURES_PRODUCT_T,
             futures_clean_price=_decimal(source["futures_clean_price"], UNITS.price_per_100),
-            financing_rate=_decimal(source["financing_rate"], UNITS.rate),
             candidates=[
                 rates.FuturesDeliverableCandidate(
                     bond=_object(suffix),

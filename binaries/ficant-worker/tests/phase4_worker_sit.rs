@@ -126,6 +126,11 @@ fn golden_request() -> AnalyzeBondRequest {
                 abi_version: 1,
             }),
             units: Some(units.clone()),
+            subject_ref: Some(VersionRef {
+                id: Some(proto_id('S')),
+                version: 1,
+            }),
+            funding_rule_pack: None,
         }),
         bond: Some(object('N')),
         valuation_at: Some(MarketTime {
@@ -159,7 +164,6 @@ fn golden_request() -> AnalyzeBondRequest {
             4,
             unit('C'),
         ))),
-        subject_ref: None,
     }
 }
 

@@ -4,10 +4,15 @@ use ficant_api::{
     SessionPolicy, SystemClock, TrustedIdentity, serve_grpc_web_with_rates,
 };
 use ficant_application::ports::{
-    AccessScope, AppendDefinitionVersion, DefinitionIdentity, DefinitionRepository, DefinitionValue,
+    AccessScope, AppendDefinitionVersion, DefinitionIdentity, DefinitionRepository,
+    DefinitionValue, SubjectRepository,
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_cgb_futures_pack::{CgbFuturesDeliveryRulePackParser, MARKET, RULE_TYPE, TYPE_URL};
+use ficant_contracts::ficant::core::v1::{
+    DecimalValue, FundingTier as ProtoFundingTier, Ulid as ProtoUlid, UnitRef as ProtoUnitRef,
+};
+use ficant_contracts::ficant::market::v1::{FundingRulePack, FundingTierRate};
 use ficant_domain::VersionedDefinition;
 use ficant_domain::market::{
     MarketRulePack, MarketRulePackInput, RulePackContent, VerificationStatus,
@@ -15,10 +20,19 @@ use ficant_domain::market::{
 use ficant_domain::primitives::{
     ContentHash, EffectivePeriod, MarketTime, OwnerRef, Ulid, Version,
 };
+use ficant_domain::subject::{
+    AccessSet, FundingTier, Subject, SubjectRecord, SubjectStateSnapshot, SubjectVersion,
+    TaxTreatment,
+};
 use ficant_fixed_income_native::{
     NativeBondAnalyticsEngine, NativeCarryRollEngine, NativeFuturesDeliveryEngine,
     NativeFuturesHedgeEngine, NativeYieldCurveEngine,
 };
+use ficant_funding_pack::{
+    FundingRulePackV1Parser, MARKET as FUNDING_MARKET, RULE_TYPE as FUNDING_RULE_TYPE,
+    TYPE_URL as FUNDING_TYPE_URL,
+};
+use prost::Message;
 use std::net::{Ipv4Addr, SocketAddr, TcpListener};
 use std::path::PathBuf;
 use std::process::Command;
@@ -31,7 +45,7 @@ const CGB_FUTURES_PACK: &[u8] =
 
 #[derive(Clone)]
 struct FixtureDefinitions {
-    value: MarketRulePack,
+    values: Vec<MarketRulePack>,
 }
 
 #[tonic::async_trait]
@@ -53,12 +67,14 @@ impl DefinitionRepository for FixtureDefinitions {
         definition_id: Ulid,
         version: Version,
     ) -> Result<Option<DefinitionValue>, ApplicationError> {
-        if self.value.identity() == definition_id.as_str() && self.value.version() == version.get()
-        {
-            Ok(Some(DefinitionValue::MarketRulePack(self.value.clone())))
-        } else {
-            Ok(None)
-        }
+        Ok(self
+            .values
+            .iter()
+            .find(|value| {
+                value.identity() == definition_id.as_str() && value.version() == version.get()
+            })
+            .cloned()
+            .map(DefinitionValue::MarketRulePack))
     }
 
     async fn resolve_as_of(
@@ -67,6 +83,40 @@ impl DefinitionRepository for FixtureDefinitions {
         _: Ulid,
         _: MarketTime,
     ) -> Result<Option<DefinitionValue>, ApplicationError> {
+        Err(storage_unavailable())
+    }
+}
+
+#[derive(Clone)]
+struct FixtureSubjects {
+    value: SubjectRecord,
+}
+
+#[tonic::async_trait]
+impl SubjectRepository for FixtureSubjects {
+    async fn register_subject(&self, _: SubjectRecord) -> Result<SubjectRecord, ApplicationError> {
+        Err(storage_unavailable())
+    }
+
+    async fn get_subject(
+        &self,
+        reference: ficant_domain::primitives::VersionRef,
+    ) -> Result<Option<SubjectRecord>, ApplicationError> {
+        Ok((self.value.version().reference() == &reference).then(|| self.value.clone()))
+    }
+
+    async fn register_subject_state(
+        &self,
+        _: SubjectStateSnapshot,
+    ) -> Result<SubjectStateSnapshot, ApplicationError> {
+        Err(storage_unavailable())
+    }
+
+    async fn get_subject_state(
+        &self,
+        _: Ulid,
+        _: chrono::DateTime<Utc>,
+    ) -> Result<Option<SubjectStateSnapshot>, ApplicationError> {
         Err(storage_unavailable())
     }
 }
@@ -85,9 +135,13 @@ async fn python_sdk_matches_phase2_reference_slices_through_live_rule_pack_compo
         Arc::new(NativeCarryRollEngine),
         Arc::new(NativeFuturesDeliveryEngine),
         Arc::new(FixtureDefinitions {
-            value: frozen_cgb_futures_pack(),
+            values: vec![frozen_cgb_futures_pack(), synthetic_funding_pack()],
+        }),
+        Arc::new(FixtureSubjects {
+            value: fixture_subject(),
         }),
         Arc::new(CgbFuturesDeliveryRulePackParser),
+        Arc::new(FundingRulePackV1Parser),
         Arc::new(NativeFuturesHedgeEngine),
         KEY,
     )
@@ -177,6 +231,83 @@ fn frozen_cgb_futures_pack() -> MarketRulePack {
         content,
     )
     .expect("frozen CGB futures RulePack is valid")
+}
+
+fn synthetic_funding_pack() -> MarketRulePack {
+    let content = RulePackContent::new(
+        FUNDING_TYPE_URL,
+        FundingRulePack {
+            rates: vec![
+                FundingTierRate {
+                    funding_tier: ProtoFundingTier::DrAvailable as i32,
+                    annual_financing_rate: Some(decimal("18", 3)),
+                },
+                FundingTierRate {
+                    funding_tier: ProtoFundingTier::ROnly as i32,
+                    annual_financing_rate: Some(decimal("25", 3)),
+                },
+            ],
+        }
+        .encode_to_vec(),
+    )
+    .expect("synthetic funding payload is valid");
+    MarketRulePack::new_with_content(
+        MarketRulePackInput {
+            rule_pack_id: id('F'),
+            version: Version::new(1).expect("fixture version is valid"),
+            owner: OwnerRef::new(id('0'), id('1')),
+            market: FUNDING_MARKET.to_owned(),
+            rule_type: FUNDING_RULE_TYPE.to_owned(),
+            source: "synthetic-r3a-fixture".to_owned(),
+            effective: EffectivePeriod::new(domain_time(2026, 1, 1), domain_time(2027, 1, 1))
+                .expect("fixture effective period is valid"),
+            verification_status: VerificationStatus::Verified,
+            content_hash: ContentHash::digest(content.value()),
+        },
+        content,
+    )
+    .expect("synthetic funding RulePack is valid")
+}
+
+fn fixture_subject() -> SubjectRecord {
+    let subject = Subject::new(id('S'), "Phase 2E fixture Subject").expect("fixture Subject");
+    let version = SubjectVersion::new(
+        ficant_domain::primitives::VersionRef::new(
+            subject.id().clone(),
+            Version::new(1).expect("fixture version is valid"),
+        ),
+        AccessSet::new(
+            ["CN", "CFFEX"],
+            [
+                "bond-analytics",
+                "yield-curve",
+                "carry-roll",
+                "futures-delivery",
+                "futures-hedge",
+            ],
+        )
+        .expect("fixture access is valid"),
+        FundingTier::DrAvailable,
+        TaxTreatment::new("synthetic-vat", "synthetic-income").expect("fixture tax"),
+        "synthetic-assessment",
+        "synthetic-liability",
+        None,
+    )
+    .expect("fixture Subject version is valid");
+    SubjectRecord::new(subject, version).expect("fixture Subject record is valid")
+}
+
+fn decimal(coefficient: &str, scale: u32) -> DecimalValue {
+    DecimalValue {
+        coefficient: coefficient.to_owned(),
+        scale,
+        unit: Some(ProtoUnitRef {
+            unit_id: Some(ProtoUlid {
+                value: id('C').as_str().to_owned(),
+            }),
+            version: 1,
+        }),
+    }
 }
 
 fn free_loopback_address() -> SocketAddr {

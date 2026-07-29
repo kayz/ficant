@@ -38,6 +38,8 @@ message AnalysisContext {
   ObjectBinding data_snapshot = 3;
   AlgorithmBinding algorithm = 4;
   AnalysisUnits units = 5;
+  ficant.core.v1.VersionRef subject_ref = 6;
+  ObjectBinding funding_rule_pack = 7;
 }
 
 message ResultMetadata {
@@ -46,6 +48,7 @@ message ResultMetadata {
   string engine_version = 3;
   AlgorithmBinding algorithm = 4;
   ficant.core.v1.VersionRef subject_ref = 5;
+  ObjectBinding funding_rule_pack = 6;
 }
 
 enum CouponFrequency {
@@ -135,7 +138,7 @@ message AnalyzeBondRequest {
     ficant.core.v1.DecimalValue yield_to_maturity = 8;
     ficant.core.v1.DecimalValue clean_price = 9;
   }
-  ficant.core.v1.VersionRef subject_ref = 10;
+  reserved 10;
 }
 
 message AnalyzeBondResult {
@@ -231,7 +234,7 @@ message AnalyzeFuturesDeliveryRequest {
   string delivery_date = 6;
   CgbFuturesProduct product = 7;
   ficant.core.v1.DecimalValue futures_clean_price = 8;
-  ficant.core.v1.DecimalValue financing_rate = 9;
+  reserved 9;
   repeated FuturesDeliverableCandidate candidates = 10;
 }
 
@@ -250,6 +253,7 @@ message FuturesDeliveryMeasures {
   ficant.core.v1.DecimalValue net_basis = 12;
   ficant.core.v1.DecimalValue implied_repo_rate = 13;
   ficant.core.v1.DecimalValue delivery_profit = 14;
+  ficant.core.v1.DecimalValue funding_adjusted_irr = 15;
 }
 
 message FuturesDeliveryCandidateResult {

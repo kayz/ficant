@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package ficant.market.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/subject.proto";
+
+// FundingRulePack is L3 content selected by an exact Subject FundingTier.
+// It contains no Subject identity and must be parsed before a delivery calculation.
+message FundingRulePack {
+  repeated FundingTierRate rates = 1;
+}
+
+message FundingTierRate {
+  ficant.core.v1.FundingTier funding_tier = 1;
+  ficant.core.v1.DecimalValue annual_financing_rate = 2;
+}

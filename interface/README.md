@@ -12,7 +12,7 @@
 
 `DecimalValue` 的唯一表示是 `coefficient(string) + scale(uint32) + UnitRef`。时间 instant 使用 Protobuf `Timestamp`，并显式携带 IANA 市场时区和本地交易日期。Valuation、CurveSnapshot 与 Cashflow 只登记外部输入事实和来源，不提供定价、曲线、现金流生成、久期、DV01 或其他 Phase 2 算法。
 
-`MarketRulePack.content` 是加法式 `google.protobuf.Any`：`content_hash` 绑定其确定性 `value` bytes，而 `type_url` 只标识 L3 内容 schema。首个内容为 `CgbFuturesDeliveryRulePack`；它由 `cgb-futures` adapter 解析，core 与通用 market 合同不解释其中的市场规则数值。
+`MarketRulePack.content` 是加法式 `google.protobuf.Any`：`content_hash` 绑定其确定性 `value` bytes，而 `type_url` 只标识 L3 内容 schema。现有内容为 `CgbFuturesDeliveryRulePack` 与 `FundingRulePack`：前者由 `cgb-futures` adapter 解析，后者由 `funding` adapter 按精确 Subject 的 `FundingTier` 解析；core 与通用 market 合同不解释其中的市场规则数值。
 
 iteration-3 Phase 2A 生成的现金流、估值和风险结果保持内部 `BondAnalyticsResult` 语义，并以内容寻址 Artifact 绑定输入与算法版本；本小迭代不扩展公共 Protobuf，也不得将派生结果写入上述外部事实消息。依据见 `docs/architecture/adr/0002-fixed-income-kernel-and-ffi-safety-boundary.md`。
 

@@ -595,4 +595,18 @@ pub struct GetCurveSnapshotResponse {
     #[prost(message, optional, tag="1")]
     pub curve_snapshot: ::core::option::Option<CurveSnapshot>,
 }
+/// FundingRulePack is L3 content selected by an exact Subject FundingTier.
+/// It contains no Subject identity and must be parsed before a delivery calculation.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FundingRulePack {
+    #[prost(message, repeated, tag="1")]
+    pub rates: ::prost::alloc::vec::Vec<FundingTierRate>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FundingTierRate {
+    #[prost(enumeration="super::super::core::v1::FundingTier", tag="1")]
+    pub funding_tier: i32,
+    #[prost(message, optional, tag="2")]
+    pub annual_financing_rate: ::core::option::Option<super::super::core::v1::DecimalValue>,
+}
 // @@protoc_insertion_point(module)

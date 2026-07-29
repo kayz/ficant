@@ -766,10 +766,12 @@ dependencies = [
  "ficant-contracts",
  "ficant-domain",
  "ficant-fixed-income-native",
+ "ficant-funding-pack",
  "ficant-runtime",
  "prost",
  "prost-types",
  "ring",
+ "rust_decimal",
  "tokio",
  "tonic",
  "tonic-web",
@@ -873,6 +875,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ficant-funding-pack"
+version = "0.1.0"
+dependencies = [
+ "ficant-application",
+ "ficant-contracts",
+ "ficant-domain",
+ "prost",
+]
+
+[[package]]
 name = "ficant-kernel-sys"
 version = "0.1.0"
 dependencies = [
@@ -914,6 +926,7 @@ dependencies = [
  "ficant-contracts",
  "ficant-domain",
  "ficant-fixed-income-native",
+ "ficant-funding-pack",
  "ficant-native-nodes",
  "ficant-runtime",
  "ficant-storage",

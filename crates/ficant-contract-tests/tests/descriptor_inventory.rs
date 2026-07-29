@@ -15,7 +15,8 @@ use ficant_contracts::ficant::core::v1::{
     DecimalValue, Subject, SubjectStateSnapshot, SubjectVersion,
 };
 use ficant_contracts::ficant::market::v1::{
-    CgbFuturesDeliveryRulePack, CgbFuturesProductRule, Instrument, InstrumentKind, MarketRulePack,
+    CgbFuturesDeliveryRulePack, CgbFuturesProductRule, FundingRulePack, FundingTierRate,
+    Instrument, InstrumentKind, MarketRulePack,
 };
 use ficant_contracts::ficant::rates::v1::AnalyzeBondRequest;
 use ficant_contracts::ficant::research::v1::{
@@ -63,6 +64,8 @@ fn generated_rust_consumer_exports_representative_contracts() {
     let rule_pack = MarketRulePack::default();
     let cgb_futures_rule_pack = CgbFuturesDeliveryRulePack::default();
     let cgb_product_rule = CgbFuturesProductRule::default();
+    let funding_rule_pack = FundingRulePack::default();
+    let funding_tier_rate = FundingTierRate::default();
 
     assert!(instrument.instrument_id.is_none());
     assert_eq!(instrument.kind, InstrumentKind::Unspecified as i32);
@@ -79,6 +82,8 @@ fn generated_rust_consumer_exports_representative_contracts() {
     assert!(rule_pack.content.is_none());
     assert!(cgb_futures_rule_pack.products.is_empty());
     assert!(cgb_product_rule.product_code.is_none());
+    assert!(funding_rule_pack.rates.is_empty());
+    assert!(funding_tier_rate.annual_financing_rate.is_none());
 }
 
 #[derive(Clone, Copy)]
@@ -216,6 +221,7 @@ fn descriptor_inventory_is_unique_and_preserves_phase1_semantics() {
     assert_subject_contracts(&messages);
     assert_phase1_objects(&messages);
     assert_cgb_futures_rule_pack_contract(&messages);
+    assert_funding_rule_pack_contract(&messages);
     assert_service_inventory(descriptor_set);
 }
 
@@ -669,6 +675,8 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     let decimal = ".ficant.core.v1.DecimalValue";
     let timestamp = ".google.protobuf.Timestamp";
     let error = ".ficant.core.v1.ErrorDetail";
+    let owner = ".ficant.core.v1.OwnerRef";
+    let binding = ".ficant.rates.v1.ObjectBinding";
 
     assert_fields(
         messages,
@@ -819,6 +827,20 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
             ExpectedField::scalar("engine_version", Type::String),
             ExpectedField::message("algorithm", ".ficant.rates.v1.AlgorithmBinding"),
             ExpectedField::message("subject_ref", version),
+            ExpectedField::message("funding_rule_pack", binding),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.rates.v1.AnalysisContext",
+        &[
+            ExpectedField::message("owner", owner),
+            ExpectedField::message("rule_pack", binding),
+            ExpectedField::message("data_snapshot", binding),
+            ExpectedField::message("algorithm", ".ficant.rates.v1.AlgorithmBinding"),
+            ExpectedField::message("units", ".ficant.rates.v1.AnalysisUnits"),
+            ExpectedField::message("subject_ref", version),
+            ExpectedField::message("funding_rule_pack", binding),
         ],
     );
     assert_fields(
@@ -841,8 +863,63 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
                 "input",
             ),
             ExpectedField::oneof_message("clean_price", ".ficant.core.v1.DecimalValue", "input"),
-            ExpectedField::message("subject_ref", version),
         ],
+    );
+    assert_reserved_tag(messages, "ficant.rates.v1.AnalyzeBondRequest", 10);
+
+    let delivery_request = messages
+        .get("ficant.rates.v1.AnalyzeFuturesDeliveryRequest")
+        .expect("AnalyzeFuturesDeliveryRequest must exist");
+    assert_exact_field(
+        delivery_request,
+        "context",
+        1,
+        Type::Message,
+        Some(".ficant.rates.v1.AnalysisContext"),
+        false,
+        false,
+    );
+    assert_exact_field(
+        delivery_request,
+        "futures_clean_price",
+        8,
+        Type::Message,
+        Some(decimal),
+        false,
+        false,
+    );
+    assert_exact_field(
+        delivery_request,
+        "candidates",
+        10,
+        Type::Message,
+        Some(".ficant.rates.v1.FuturesDeliverableCandidate"),
+        true,
+        false,
+    );
+    assert_eq!(
+        delivery_request.field.len(),
+        9,
+        "AnalyzeFuturesDeliveryRequest must not retain the caller financing-rate field"
+    );
+    assert_reserved_tag(messages, "ficant.rates.v1.AnalyzeFuturesDeliveryRequest", 9);
+
+    let delivery_measures = messages
+        .get("ficant.rates.v1.FuturesDeliveryMeasures")
+        .expect("FuturesDeliveryMeasures must exist");
+    assert_exact_field(
+        delivery_measures,
+        "funding_adjusted_irr",
+        15,
+        Type::Message,
+        Some(decimal),
+        false,
+        false,
+    );
+    assert_eq!(
+        delivery_measures.field.len(),
+        15,
+        "FuturesDeliveryMeasures must add only the subject-adjusted IRR field"
     );
 }
 
@@ -1179,6 +1256,62 @@ fn assert_cgb_futures_rule_pack_contract(messages: &BTreeMap<String, &Descriptor
             .expect("residual oneof field must exist");
         assert_eq!(field.oneof_index, Some(residual_oneof));
     }
+}
+
+fn assert_funding_rule_pack_contract(messages: &BTreeMap<String, &DescriptorProto>) {
+    let pack = messages
+        .get("ficant.market.v1.FundingRulePack")
+        .expect("FundingRulePack must exist");
+    assert_exact_field(
+        pack,
+        "rates",
+        1,
+        Type::Message,
+        Some(".ficant.market.v1.FundingTierRate"),
+        true,
+        false,
+    );
+    assert_eq!(pack.field.len(), 1, "FundingRulePack field drift");
+
+    let rate = messages
+        .get("ficant.market.v1.FundingTierRate")
+        .expect("FundingTierRate must exist");
+    assert_exact_field(
+        rate,
+        "funding_tier",
+        1,
+        Type::Enum,
+        Some(".ficant.core.v1.FundingTier"),
+        false,
+        false,
+    );
+    assert_exact_field(
+        rate,
+        "annual_financing_rate",
+        2,
+        Type::Message,
+        Some(".ficant.core.v1.DecimalValue"),
+        false,
+        false,
+    );
+    assert_eq!(rate.field.len(), 2, "FundingTierRate field drift");
+}
+
+fn assert_reserved_tag(
+    messages: &BTreeMap<String, &DescriptorProto>,
+    message_name: &str,
+    tag: i32,
+) {
+    let message = messages
+        .get(message_name)
+        .unwrap_or_else(|| panic!("missing message {message_name}"));
+    assert!(
+        message
+            .reserved_range
+            .iter()
+            .any(|range| range.start() == tag && range.end() == tag + 1),
+        "{message_name} must reserve removed tag {tag}"
+    );
 }
 
 fn assert_exact_field(

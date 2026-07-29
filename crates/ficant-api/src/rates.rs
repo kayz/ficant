@@ -4,8 +4,12 @@ use crate::grpc_web::request_credential;
 use crate::registry::PlatformPort;
 use chrono::{DateTime, NaiveDate, Utc};
 use ficant_application::ports::{
-    BondAnalyticsEngine, CarryRollEngine, DefinitionRepository, FuturesDeliveryEngine,
-    FuturesDeliveryRuleParser, FuturesHedgeEngine, YieldCurveEngine,
+    BondAnalyticsEngine, CarryRollEngine, DefinitionRepository, FundingRulePackParser,
+    FuturesDeliveryEngine, FuturesDeliveryRuleParser, FuturesHedgeEngine, SubjectRepository,
+    YieldCurveEngine,
+};
+use ficant_application::use_cases::{
+    funding_rule::ResolveFundingRule, subject_resolution::ResolveSubject,
 };
 use ficant_application::{
     AccessScope, ApplicationError, ApplicationErrorCategory, CalculateBondAnalytics,
@@ -47,6 +51,12 @@ use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
 const REQUIRED_SCOPE: &str = "rates:analyze";
+const CN_MARKET: &str = "CN";
+const BOND_TOOL: &str = "bond-analytics";
+const CURVE_TOOL: &str = "yield-curve";
+const CARRY_ROLL_TOOL: &str = "carry-roll";
+const FUTURES_DELIVERY_TOOL: &str = "futures-delivery";
+const FUTURES_HEDGE_TOOL: &str = "futures-hedge";
 
 #[derive(Clone)]
 pub struct RatesGrpcService {
@@ -56,7 +66,9 @@ pub struct RatesGrpcService {
     carry_roll: Arc<dyn CarryRollEngine>,
     futures_delivery: Arc<dyn FuturesDeliveryEngine>,
     definitions: Arc<dyn DefinitionRepository>,
+    subjects: Arc<dyn SubjectRepository>,
     futures_delivery_rule_parser: Arc<dyn FuturesDeliveryRuleParser>,
+    funding_rule_pack_parser: Arc<dyn FundingRulePackParser>,
     futures_hedge: Arc<dyn FuturesHedgeEngine>,
     errors: CoreBusinessErrorMapper,
 }
@@ -75,7 +87,9 @@ impl RatesGrpcService {
         carry_roll: Arc<dyn CarryRollEngine>,
         futures_delivery: Arc<dyn FuturesDeliveryEngine>,
         definitions: Arc<dyn DefinitionRepository>,
+        subjects: Arc<dyn SubjectRepository>,
         futures_delivery_rule_parser: Arc<dyn FuturesDeliveryRuleParser>,
+        funding_rule_pack_parser: Arc<dyn FundingRulePackParser>,
         futures_hedge: Arc<dyn FuturesHedgeEngine>,
         trace_key: &[u8],
     ) -> Result<Self, &'static str> {
@@ -86,7 +100,9 @@ impl RatesGrpcService {
             carry_roll,
             futures_delivery,
             definitions,
+            subjects,
             futures_delivery_rule_parser,
+            funding_rule_pack_parser,
             futures_hedge,
             errors: CoreBusinessErrorMapper::new(trace_key)?,
         })
@@ -115,18 +131,28 @@ impl RatesGrpcService {
         self.errors.map(operation, "rates-application", error)
     }
 
-    fn analyze_bond_value(
+    async fn analyze_bond_value(
         &self,
         request: &pb::AnalyzeBondRequest,
     ) -> Result<pb::AnalyzeBondResult, ApplicationError> {
-        analyze_bond_request(self.bond.as_ref(), request)
+        let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::bond())?;
+        reject_funding_rule_pack(&context)?;
+        ResolveSubject::new(self.subjects.as_ref())
+            .execute(&context.subject_ref, CN_MARKET, BOND_TOOL)
+            .await?;
+        let parsed = parse_analyze_bond_request(request)?;
+        execute_parsed_bond_request(self.bond.as_ref(), &parsed)
     }
 
-    fn interpolate_curve_value(
+    async fn interpolate_curve_value(
         &self,
         request: &pb::InterpolateYieldCurveRequest,
     ) -> Result<pb::InterpolateYieldCurveResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::curve())?;
+        reject_funding_rule_pack(&context)?;
+        ResolveSubject::new(self.subjects.as_ref())
+            .execute(&context.subject_ref, CN_MARKET, CURVE_TOOL)
+            .await?;
         let query = YieldCurveQuery::new(
             parse_curve(request.curve.as_ref(), &context.units)?,
             parse_date(&request.query_date)?,
@@ -137,14 +163,18 @@ impl RatesGrpcService {
             .interpolate(&query)
             .map_err(map_analytics_error)?;
         point.validate_against(&query).map_err(map_domain_error)?;
-        Ok(curve_result(&point, &context.units))
+        Ok(curve_result(&point, &context.units, &context.subject_ref))
     }
 
-    fn analyze_carry_roll_value(
+    async fn analyze_carry_roll_value(
         &self,
         request: &pb::AnalyzeCarryRollRequest,
     ) -> Result<pb::AnalyzeCarryRollResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::carry_roll())?;
+        reject_funding_rule_pack(&context)?;
+        ResolveSubject::new(self.subjects.as_ref())
+            .execute(&context.subject_ref, CN_MARKET, CARRY_ROLL_TOOL)
+            .await?;
         let input = CarryRollInput::new(
             context.owner,
             parse_object(request.bond.as_ref())?,
@@ -160,7 +190,11 @@ impl RatesGrpcService {
         )
         .map_err(map_domain_error)?;
         let result = CalculateCarryRoll::new(self.carry_roll.as_ref()).execute(&input)?;
-        Ok(carry_roll_result(&result, &context.units))
+        Ok(carry_roll_result(
+            &result,
+            &context.units,
+            &context.subject_ref,
+        ))
     }
 
     async fn analyze_futures_delivery_value(
@@ -171,6 +205,14 @@ impl RatesGrpcService {
             request.context.as_ref(),
             ExpectedAlgorithm::futures_delivery(),
         )?;
+        let subject = ResolveSubject::new(self.subjects.as_ref())
+            .execute(
+                &context.subject_ref,
+                self.futures_delivery_rule_parser.market(),
+                FUTURES_DELIVERY_TOOL,
+            )
+            .await?;
+        let funding_rule_pack = context.funding_rule_pack.as_ref().ok_or_else(invalid)?;
         let futures_contract = parse_object(request.futures_contract.as_ref())?;
         let valuation_at = parse_market_time(request.valuation_at.as_ref())?;
         let purchase_date = parse_date(&request.purchase_date)?;
@@ -193,14 +235,25 @@ impl RatesGrpcService {
             product,
         )
         .await?;
+        let funding_rate = ResolveFundingRule::new(
+            self.definitions.as_ref(),
+            self.funding_rule_pack_parser.as_ref(),
+        )
+        .execute(
+            &access_scope,
+            funding_rule_pack,
+            valuation_at.clone(),
+            subject.funding_tier(),
+        )
+        .await?;
+        if funding_rate.unit() != &parse_unit(&context.units.rate)? {
+            return Err(map_domain_error(DomainErrorCode::InvalidUnit));
+        }
         let futures_clean_price = parse_fixed_decimal(
             request.futures_clean_price.as_ref().ok_or_else(invalid)?,
             &context.units.price_per_100,
         )?;
-        let financing_rate = parse_fixed_decimal(
-            request.financing_rate.as_ref().ok_or_else(invalid)?,
-            &context.units.rate,
-        )?;
+        let financing_rate = funding_rate.annual_financing_rate();
         let inputs = request
             .candidates
             .iter()
@@ -230,14 +283,28 @@ impl RatesGrpcService {
             .collect::<Result<Vec<_>, _>>()?;
         let result =
             CalculateFuturesDeliveryBasket::new(self.futures_delivery.as_ref()).execute(&inputs)?;
-        futures_delivery_result(&result, &context.units)
+        futures_delivery_result(
+            &result,
+            &context.units,
+            &context.subject_ref,
+            funding_rule_pack,
+            financing_rate,
+        )
     }
 
-    fn analyze_futures_hedge_value(
+    async fn analyze_futures_hedge_value(
         &self,
         request: &pb::AnalyzeFuturesHedgeRequest,
     ) -> Result<pb::AnalyzeFuturesHedgeResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::futures_hedge())?;
+        reject_funding_rule_pack(&context)?;
+        ResolveSubject::new(self.subjects.as_ref())
+            .execute(
+                &context.subject_ref,
+                self.futures_delivery_rule_parser.market(),
+                FUTURES_HEDGE_TOOL,
+            )
+            .await?;
         let input = FuturesHedgeInput::new(
             context.owner,
             parse_object(request.target_risk_artifact.as_ref())?,
@@ -264,7 +331,11 @@ impl RatesGrpcService {
         )
         .map_err(map_domain_error)?;
         let result = CalculateFuturesHedge::new(self.futures_hedge.as_ref()).execute(&input)?;
-        Ok(futures_hedge_result(&result, &context.units))
+        Ok(futures_hedge_result(
+            &result,
+            &context.units,
+            &context.subject_ref,
+        ))
     }
 }
 
@@ -272,7 +343,7 @@ impl RatesGrpcService {
 pub struct ParsedBondAnalyticsRequest {
     input: BondAnalyticsInput,
     units: UnitBindings,
-    subject_ref: Option<VersionRef>,
+    subject_ref: VersionRef,
 }
 
 impl ParsedBondAnalyticsRequest {
@@ -282,8 +353,8 @@ impl ParsedBondAnalyticsRequest {
     }
 
     #[must_use]
-    pub fn subject_ref(&self) -> Option<&VersionRef> {
-        self.subject_ref.as_ref()
+    pub fn subject_ref(&self) -> &VersionRef {
+        &self.subject_ref
     }
 }
 
@@ -297,16 +368,6 @@ pub fn parse_analyze_bond_request(
 ) -> Result<ParsedBondAnalyticsRequest, ApplicationError> {
     let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::bond())?;
     let terms = parse_bond_terms(request.terms.as_ref(), &context.units)?;
-    let subject_ref = request
-        .subject_ref
-        .as_ref()
-        .map(|reference| {
-            Ok::<_, ApplicationError>(VersionRef::new(
-                parse_ulid(reference.id.as_ref())?,
-                Version::new(reference.version).map_err(map_domain_error)?,
-            ))
-        })
-        .transpose()?;
     let (mode, input_value) = match request.input.as_ref() {
         Some(pb::analyze_bond_request::Input::YieldToMaturity(value)) => (
             AnalyticsMode::YieldIn,
@@ -335,7 +396,7 @@ pub fn parse_analyze_bond_request(
     Ok(ParsedBondAnalyticsRequest {
         input,
         units: context.units,
-        subject_ref,
+        subject_ref: context.subject_ref,
     })
 }
 
@@ -349,13 +410,7 @@ pub fn execute_parsed_bond_request(
     request: &ParsedBondAnalyticsRequest,
 ) -> Result<pb::AnalyzeBondResult, ApplicationError> {
     let result = CalculateBondAnalytics::new(engine).execute(&request.input)?;
-    let mut mapped = bond_result(&result, &request.units);
-    if let Some(subject_ref) = request.subject_ref()
-        && let Some(metadata) = mapped.metadata.as_mut()
-    {
-        metadata.subject_ref = Some(proto_version_ref(subject_ref));
-    }
-    Ok(mapped)
+    Ok(bond_result(&result, &request.units, request.subject_ref()))
 }
 
 /// Runs the shared pure parse, native calculation, and protobuf result mapping path.
@@ -378,9 +433,10 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::AnalyzeBondRequest>,
     ) -> Result<Response<pb::AnalyzeBondResponse>, Status> {
         const OPERATION: &str = "rates.analyze-bond";
-        let result = self
-            .authorize(&request)
-            .and_then(|()| self.analyze_bond_value(request.get_ref()));
+        let result = match self.authorize(&request) {
+            Ok(()) => self.analyze_bond_value(request.get_ref()).await,
+            Err(error) => Err(error),
+        };
         Ok(Response::new(pb::AnalyzeBondResponse {
             result: Some(match result {
                 Ok(value) => pb::analyze_bond_response::Result::Analysis(value),
@@ -396,9 +452,10 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::InterpolateYieldCurveRequest>,
     ) -> Result<Response<pb::InterpolateYieldCurveResponse>, Status> {
         const OPERATION: &str = "rates.interpolate-yield-curve";
-        let result = self
-            .authorize(&request)
-            .and_then(|()| self.interpolate_curve_value(request.get_ref()));
+        let result = match self.authorize(&request) {
+            Ok(()) => self.interpolate_curve_value(request.get_ref()).await,
+            Err(error) => Err(error),
+        };
         Ok(Response::new(pb::InterpolateYieldCurveResponse {
             result: Some(match result {
                 Ok(value) => pb::interpolate_yield_curve_response::Result::Point(value),
@@ -414,9 +471,10 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::AnalyzeCarryRollRequest>,
     ) -> Result<Response<pb::AnalyzeCarryRollResponse>, Status> {
         const OPERATION: &str = "rates.analyze-carry-roll";
-        let result = self
-            .authorize(&request)
-            .and_then(|()| self.analyze_carry_roll_value(request.get_ref()));
+        let result = match self.authorize(&request) {
+            Ok(()) => self.analyze_carry_roll_value(request.get_ref()).await,
+            Err(error) => Err(error),
+        };
         Ok(Response::new(pb::AnalyzeCarryRollResponse {
             result: Some(match result {
                 Ok(value) => pb::analyze_carry_roll_response::Result::Analysis(value),
@@ -451,9 +509,10 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::AnalyzeFuturesHedgeRequest>,
     ) -> Result<Response<pb::AnalyzeFuturesHedgeResponse>, Status> {
         const OPERATION: &str = "rates.analyze-futures-hedge";
-        let result = self
-            .authorize(&request)
-            .and_then(|()| self.analyze_futures_hedge_value(request.get_ref()));
+        let result = match self.authorize(&request) {
+            Ok(()) => self.analyze_futures_hedge_value(request.get_ref()).await,
+            Err(error) => Err(error),
+        };
         Ok(Response::new(pb::AnalyzeFuturesHedgeResponse {
             result: Some(match result {
                 Ok(value) => pb::analyze_futures_hedge_response::Result::Analysis(value),
@@ -471,6 +530,8 @@ struct ParsedContext {
     rule_pack: AnalyticsObjectRef,
     data_snapshot: AnalyticsObjectRef,
     units: UnitBindings,
+    subject_ref: VersionRef,
+    funding_rule_pack: Option<AnalyticsObjectRef>,
 }
 
 #[derive(Clone)]
@@ -559,7 +620,20 @@ fn parse_context(
         rule_pack: parse_object(value.rule_pack.as_ref())?,
         data_snapshot: parse_object(value.data_snapshot.as_ref())?,
         units: UnitBindings::parse(value.units.as_ref())?,
+        subject_ref: parse_subject_ref(value.subject_ref.as_ref())?,
+        funding_rule_pack: value
+            .funding_rule_pack
+            .as_ref()
+            .map(|binding| parse_object(Some(binding)))
+            .transpose()?,
     })
+}
+
+fn reject_funding_rule_pack(context: &ParsedContext) -> Result<(), ApplicationError> {
+    if context.funding_rule_pack.is_some() {
+        return Err(invalid());
+    }
+    Ok(())
 }
 
 fn validate_algorithm(
@@ -595,6 +669,22 @@ fn parse_object(value: Option<&pb::ObjectBinding>) -> Result<AnalyticsObjectRef,
         ),
         parse_hash(value.content_hash.as_ref())?,
     ))
+}
+
+fn parse_subject_ref(
+    value: Option<&ficant_contracts::ficant::core::v1::VersionRef>,
+) -> Result<VersionRef, ApplicationError> {
+    let value = value.ok_or_else(ApplicationError::subject_binding_invalid)?;
+    let id = value
+        .id
+        .as_ref()
+        .ok_or_else(ApplicationError::subject_binding_invalid)
+        .and_then(|value| {
+            Ulid::new(value.value.clone()).map_err(|_| ApplicationError::subject_binding_invalid())
+        })?;
+    let version =
+        Version::new(value.version).map_err(|_| ApplicationError::subject_binding_invalid())?;
+    Ok(VersionRef::new(id, version))
 }
 
 fn parse_ulid(
@@ -779,7 +869,11 @@ fn parse_product(value: i32) -> Result<CgbFuturesProduct, ApplicationError> {
     }
 }
 
-fn bond_result(result: &BondAnalyticsResult, units: &UnitBindings) -> pb::AnalyzeBondResult {
+fn bond_result(
+    result: &BondAnalyticsResult,
+    units: &UnitBindings,
+    subject_ref: &VersionRef,
+) -> pb::AnalyzeBondResult {
     let measures = result.measures();
     pb::AnalyzeBondResult {
         cashflows: result
@@ -804,19 +898,37 @@ fn bond_result(result: &BondAnalyticsResult, units: &UnitBindings) -> pb::Analyz
             convexity: Some(decimal(measures.convexity(), &units.years_squared)),
             dv01: Some(decimal(measures.dv01(), &units.dv01_per_100)),
         }),
-        metadata: Some(metadata(result.schema_id(), ExpectedAlgorithm::bond())),
+        metadata: Some(metadata(
+            result.schema_id(),
+            ExpectedAlgorithm::bond(),
+            subject_ref,
+            None,
+        )),
     }
 }
 
-fn curve_result(point: &YieldCurvePoint, units: &UnitBindings) -> pb::InterpolateYieldCurveResult {
+fn curve_result(
+    point: &YieldCurvePoint,
+    units: &UnitBindings,
+    subject_ref: &VersionRef,
+) -> pb::InterpolateYieldCurveResult {
     pb::InterpolateYieldCurveResult {
         query_date: point.query().query_date().to_string(),
         yield_to_maturity: Some(decimal(point.yield_to_maturity(), &units.rate)),
-        metadata: Some(metadata(point.schema_id(), ExpectedAlgorithm::curve())),
+        metadata: Some(metadata(
+            point.schema_id(),
+            ExpectedAlgorithm::curve(),
+            subject_ref,
+            None,
+        )),
     }
 }
 
-fn carry_roll_result(result: &CarryRollResult, units: &UnitBindings) -> pb::AnalyzeCarryRollResult {
+fn carry_roll_result(
+    result: &CarryRollResult,
+    units: &UnitBindings,
+    subject_ref: &VersionRef,
+) -> pb::AnalyzeCarryRollResult {
     let value = result.measures();
     pb::AnalyzeCarryRollResult {
         measures: Some(pb::CarryRollMeasures {
@@ -839,6 +951,8 @@ fn carry_roll_result(result: &CarryRollResult, units: &UnitBindings) -> pb::Anal
         metadata: Some(metadata(
             result.schema_id(),
             ExpectedAlgorithm::carry_roll(),
+            subject_ref,
+            None,
         )),
     }
 }
@@ -846,20 +960,31 @@ fn carry_roll_result(result: &CarryRollResult, units: &UnitBindings) -> pb::Anal
 fn futures_delivery_result(
     result: &FuturesDeliveryBasketResult,
     units: &UnitBindings,
+    subject_ref: &VersionRef,
+    funding_rule_pack: &AnalyticsObjectRef,
+    annual_financing_rate: FixedDecimal,
 ) -> Result<pb::AnalyzeFuturesDeliveryResult, ApplicationError> {
     Ok(pb::AnalyzeFuturesDeliveryResult {
         candidates: result
             .candidates()
             .iter()
-            .map(|candidate| pb::FuturesDeliveryCandidateResult {
-                bond: Some(object_binding(candidate.input().bond())),
-                measures: Some(delivery_measures(candidate.measures(), units)),
+            .map(|candidate| {
+                Ok(pb::FuturesDeliveryCandidateResult {
+                    bond: Some(object_binding(candidate.input().bond())),
+                    measures: Some(delivery_measures(
+                        candidate.measures(),
+                        units,
+                        annual_financing_rate,
+                    )?),
+                })
             })
-            .collect(),
+            .collect::<Result<Vec<_>, ApplicationError>>()?,
         ctd_index: u32::try_from(result.ctd_index()).map_err(|_| invalid())?,
         metadata: Some(metadata(
             result.ctd().schema_id(),
             ExpectedAlgorithm::futures_delivery(),
+            subject_ref,
+            Some(funding_rule_pack),
         )),
     })
 }
@@ -867,8 +992,13 @@ fn futures_delivery_result(
 fn delivery_measures(
     value: FuturesDeliveryMeasures,
     units: &UnitBindings,
-) -> pb::FuturesDeliveryMeasures {
-    pb::FuturesDeliveryMeasures {
+    annual_financing_rate: FixedDecimal,
+) -> Result<pb::FuturesDeliveryMeasures, ApplicationError> {
+    let funding_adjusted_irr = value
+        .implied_repo_rate()
+        .checked_sub(annual_financing_rate)
+        .map_err(map_domain_error)?;
+    Ok(pb::FuturesDeliveryMeasures {
         months_to_next_coupon: value.months_to_next_coupon(),
         remaining_coupon_count: value.remaining_coupon_count(),
         conversion_factor: Some(decimal(value.conversion_factor(), &units.dimensionless)),
@@ -889,12 +1019,14 @@ fn delivery_measures(
         net_basis: Some(decimal(value.net_basis(), &units.price_per_100)),
         implied_repo_rate: Some(decimal(value.implied_repo_rate(), &units.rate)),
         delivery_profit: Some(decimal(value.delivery_profit(), &units.price_per_100)),
-    }
+        funding_adjusted_irr: Some(decimal(funding_adjusted_irr, &units.rate)),
+    })
 }
 
 fn futures_hedge_result(
     result: &FuturesHedgeResult,
     units: &UnitBindings,
+    subject_ref: &VersionRef,
 ) -> pb::AnalyzeFuturesHedgeResult {
     let value = result.measures();
     pb::AnalyzeFuturesHedgeResult {
@@ -908,6 +1040,8 @@ fn futures_hedge_result(
         metadata: Some(metadata(
             result.schema_id(),
             ExpectedAlgorithm::futures_hedge(),
+            subject_ref,
+            None,
         )),
     }
 }
@@ -926,7 +1060,12 @@ fn object_binding(value: &AnalyticsObjectRef) -> pb::ObjectBinding {
     }
 }
 
-fn metadata(schema_id: &str, algorithm: ExpectedAlgorithm) -> pb::ResultMetadata {
+fn metadata(
+    schema_id: &str,
+    algorithm: ExpectedAlgorithm,
+    subject_ref: &VersionRef,
+    funding_rule_pack: Option<&AnalyticsObjectRef>,
+) -> pb::ResultMetadata {
     pb::ResultMetadata {
         schema_id: schema_id.to_owned(),
         engine_id: ENGINE_ID.to_owned(),
@@ -937,7 +1076,8 @@ fn metadata(schema_id: &str, algorithm: ExpectedAlgorithm) -> pb::ResultMetadata
             convention_profile: algorithm.convention.to_owned(),
             abi_version: ABI_VERSION,
         }),
-        subject_ref: None,
+        subject_ref: Some(proto_version_ref(subject_ref)),
+        funding_rule_pack: funding_rule_pack.map(object_binding),
     }
 }
 

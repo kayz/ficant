@@ -8,6 +8,10 @@ import {
   CgbFuturesDeliveryRulePackSchema,
   CgbFuturesProductRuleSchema,
 } from "../../packages/contracts-generated/src/ficant/market/v1/cgb_futures_rule_pb";
+import {
+  FundingRulePackSchema,
+  FundingTierRateSchema,
+} from "../../packages/contracts-generated/src/ficant/market/v1/funding_rule_pb";
 import { MarketRulePackSchema } from "../../packages/contracts-generated/src/ficant/market/v1/rule_pb";
 import { describe, expect, it } from "vitest";
 
@@ -31,6 +35,8 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
       deliveryMonths: [3, 6, 9, 12],
       accruedInterestDayCount: 1,
     });
+    const fundingRate = create(FundingTierRateSchema, {});
+    const fundingPack = create(FundingRulePackSchema, { rates: [fundingRate] });
     const rulePack = create(MarketRulePackSchema, {
       market: "CFFEX",
       ruleType: "cgb-futures",
@@ -45,6 +51,8 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
     expect(PlatformService.typeName).toBe("ficant.app.v1.PlatformService");
     expect(cgbPack.$typeName).toBe("ficant.market.v1.CgbFuturesDeliveryRulePack");
     expect(cgbRule.residualUpperBound.case).toBe("residualMaxMonthsUnbounded");
+    expect(fundingPack.$typeName).toBe("ficant.market.v1.FundingRulePack");
+    expect(fundingRate.$typeName).toBe("ficant.market.v1.FundingTierRate");
     expect(rulePack.content?.typeUrl).toBe(
       "type.googleapis.com/ficant.market.v1.CgbFuturesDeliveryRulePack",
     );
