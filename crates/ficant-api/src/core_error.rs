@@ -55,6 +55,10 @@ impl CoreBusinessErrorMapper {
                 field: path.clone(),
                 description: "规则包缺少计算所需项".to_owned(),
             }],
+            Some(ApplicationErrorDetail::SubjectBindingInvalid) => vec![FieldViolation {
+                field: "context.subject_ref".to_owned(),
+                description: "主体版本缺失或无效".to_owned(),
+            }],
             None => Vec::new(),
         };
 

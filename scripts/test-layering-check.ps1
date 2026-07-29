@@ -108,6 +108,20 @@ try {
         Invoke-GateExpect -ExpectedExitCode 0 -Scenario ($fixture.Scenario + ' removal restores pass')
     }
 
+    $fundingRuleFixtures = @(
+        [pscustomobject]@{ Scenario = 'Subject funding rate'; Path = 'interface/proto/ficant/core/v1/subject.proto'; Content = 'double annual_financing_rate = 0.018;' },
+        [pscustomobject]@{ Scenario = 'SubjectState funding rate'; Path = 'interface/proto/ficant/core/v1/subject_state.proto'; Content = 'double financing_rate = 0.018;' },
+        [pscustomobject]@{ Scenario = 'domain funding rate'; Path = 'crates/ficant-domain/src/subject.rs'; Content = 'let funding_rate = 0.018;' },
+        [pscustomobject]@{ Scenario = 'C++ funding rate'; Path = 'cpp/fixed-income-kernel/src/funding.cpp'; Content = 'const double financing_rate = 0.018;' },
+        [pscustomobject]@{ Scenario = 'FFI funding rate'; Path = 'crates/ficant-kernel-sys/src/lib.rs'; Content = 'let annual_financing_rate = 0.018;' }
+    )
+    foreach ($fixture in $fundingRuleFixtures) {
+        $fundingRulePath = Write-FixtureFile -RelativePath $fixture.Path -Content $fixture.Content
+        Invoke-GateExpect -ExpectedExitCode 1 -Scenario ($fixture.Scenario + ' is rejected')
+        Remove-Item -LiteralPath $fundingRulePath
+        Invoke-GateExpect -ExpectedExitCode 0 -Scenario ($fixture.Scenario + ' removal restores pass')
+    }
+
     $testPath = Write-FixtureFile -RelativePath 'tests/market_branch.rs' -Content ('match market { "' + $countryCode + '" => 1, _ => 0 }')
     Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'test source market branch is rejected'
     Remove-Item -LiteralPath $testPath

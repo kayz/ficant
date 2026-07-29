@@ -16,6 +16,7 @@ use ficant_fixed_income_native::{
     NativeBondAnalyticsEngine, NativeCarryRollEngine, NativeFuturesDeliveryEngine,
     NativeFuturesHedgeEngine, NativeYieldCurveEngine,
 };
+use ficant_funding_pack::FundingRulePackV1Parser;
 use ficant_native_nodes::{native_node_source_digest, trusted_native_node};
 use ficant_runtime::NativeNode;
 use ficant_storage::postgres::PostgresRepository;
@@ -262,8 +263,9 @@ pub fn build_grpc_services(
     let platform =
         PlatformGrpcService::new(Arc::clone(&application), &settings.trace_key).map_err(config)?;
     let (repository, _, _) = build_repository(settings)?;
-    let definitions: Arc<dyn DefinitionRepository> = repository;
-    let rates = build_rates_service(application, definitions, settings)?;
+    let definitions: Arc<dyn DefinitionRepository> = repository.clone();
+    let subjects: Arc<dyn SubjectRepository> = repository;
+    let rates = build_rates_service(application, definitions, subjects, settings)?;
     Ok((platform, rates))
 }
 
@@ -328,7 +330,12 @@ pub fn build_grpc_services_with_experiment_and_registry(
     let subjects: Arc<dyn SubjectRepository> = repository.clone();
     let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository;
     let blobs: Arc<dyn VerifiedBlobReader> = blob_store;
-    let rates = build_rates_service(Arc::clone(&application), definitions.clone(), settings)?;
+    let rates = build_rates_service(
+        Arc::clone(&application),
+        definitions.clone(),
+        subjects.clone(),
+        settings,
+    )?;
     let registry_identity = Arc::clone(&application);
     let experiment = ExperimentGrpcService::new(
         application,
@@ -356,6 +363,7 @@ pub fn build_grpc_services_with_experiment_and_registry(
 fn build_rates_service(
     application: Arc<dyn PlatformPort>,
     definitions: Arc<dyn DefinitionRepository>,
+    subjects: Arc<dyn SubjectRepository>,
     settings: &ServerSettings,
 ) -> Result<RatesGrpcService, ServerError> {
     RatesGrpcService::new(
@@ -365,7 +373,9 @@ fn build_rates_service(
         Arc::new(NativeCarryRollEngine),
         Arc::new(NativeFuturesDeliveryEngine),
         definitions,
+        subjects,
         Arc::new(CgbFuturesDeliveryRulePackParser),
+        Arc::new(FundingRulePackV1Parser),
         Arc::new(NativeFuturesHedgeEngine),
         &settings.trace_key,
     )

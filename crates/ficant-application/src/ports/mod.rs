@@ -9,6 +9,7 @@ mod definitions;
 mod execution;
 mod facts;
 mod fingerprint;
+mod funding_rule_parser;
 mod futures_delivery;
 mod futures_hedge;
 mod journal;
@@ -45,6 +46,7 @@ pub use facts::{
     PublishCurveSnapshot,
 };
 pub use fingerprint::OperationFingerprint;
+pub use funding_rule_parser::{FundingRate, FundingRulePackParser};
 pub use futures_delivery::{
     EncodedFuturesDeliveryArtifact, FuturesDeliveryArtifactCodec, FuturesDeliveryEngine,
 };

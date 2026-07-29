@@ -209,6 +209,50 @@ function Get-Phase2CProductionRuleValueViolations {
     return @($violations)
 }
 
+function Get-FundingRuleValueViolations {
+    $candidatePaths = [System.Collections.Generic.List[string]]::new()
+    foreach ($relativePath in @(
+            'interface/proto/ficant/core/v1/subject.proto',
+            'interface/proto/ficant/core/v1/subject_state.proto',
+            'crates/ficant-domain/src/subject.rs',
+            'crates/ficant-domain/src/subject_state.rs',
+            'crates/ficant-kernel-sys/src/lib.rs',
+            'crates/ficant-fixed-income-native/src/lib.rs'
+        )) {
+        $candidatePaths.Add($relativePath)
+    }
+    $cppRoot = Join-Path $script:RepositoryRoot 'cpp\fixed-income-kernel'
+    if (Test-Path -LiteralPath $cppRoot -PathType Container) {
+        Get-ChildItem -LiteralPath $cppRoot -File -Recurse | Where-Object {
+            $_.Extension.ToLowerInvariant() -in @('.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx')
+        } | ForEach-Object {
+            $candidatePaths.Add((Get-RepositoryRelativePath -Path $_.FullName))
+        }
+    }
+
+    $pattern = '(?i)\b(?:annual_)?(?:funding|financing)[A-Za-z_]*rate\b\s*(?:=|:)\s*[-+]?(?:\d+\.\d+|\.\d+|\d+)'
+    $violations = foreach ($relativePath in $candidatePaths | Sort-Object -Unique) {
+        $path = Join-Path $script:RepositoryRoot ($relativePath.Replace('/', '\\'))
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            continue
+        }
+        $lineNumber = 0
+        foreach ($line in Get-Content -LiteralPath $path) {
+            $lineNumber++
+            if ($line -match $pattern) {
+                [pscustomobject]@{
+                    Path = $relativePath
+                    Line = $lineNumber
+                    Category = 'funding-rate-value'
+                    Text = $line.Trim()
+                }
+            }
+        }
+    }
+
+    return @($violations)
+}
+
 try {
     if (-not (Test-Path -LiteralPath $script:RepositoryRoot -PathType Container)) {
         throw "Repository root is missing: $script:RepositoryRoot"
@@ -239,7 +283,15 @@ try {
         throw "Layering gate failed AC01 with $($productionRuleViolations.Count) Phase 2C production C++/FFI rule value violation(s)."
     }
 
-    Write-Host ("Layering gate passed: AC03=0 market branches; AC01=0 domain rule values; Phase2C production C++/FFI rule values=0; allowlist=$($allowlist.Count).")
+    $fundingRuleViolations = @(Get-FundingRuleValueViolations)
+    if ($fundingRuleViolations.Count -gt 0) {
+        foreach ($violation in $fundingRuleViolations) {
+            Write-Error ("R3a funding rule value at {0}:{1} ({2}): {3}" -f $violation.Path, $violation.Line, $violation.Category, $violation.Text)
+        }
+        throw "Layering gate failed R3a with $($fundingRuleViolations.Count) Funding rule value violation(s)."
+    }
+
+    Write-Host ("Layering gate passed: AC03=0 market branches; AC01=0 domain rule values; Phase2C production C++/FFI rule values=0; R3a Funding rule values=0; allowlist=$($allowlist.Count).")
     exit 0
 }
 catch {

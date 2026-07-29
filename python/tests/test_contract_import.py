@@ -19,6 +19,7 @@ from ficant.market.v1.cgb_futures_rule_pb2 import (  # noqa: E402
     CgbFuturesDeliveryRulePack,
     CgbFuturesProductRule,
 )
+from ficant.market.v1.funding_rule_pb2 import FundingRulePack, FundingTierRate  # noqa: E402
 from ficant.market.v1.instrument_pb2 import Instrument  # noqa: E402
 from ficant.market.v1.rule_pb2 import MarketRulePack  # noqa: E402
 from ficant.rates.v1.analytics_pb2 import AnalyzeBondRequest  # noqa: E402
@@ -35,6 +36,7 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     rule_pack = MarketRulePack()
     cgb_pack = CgbFuturesDeliveryRulePack(delivery_months=[3, 6, 9, 12])
     cgb_product = CgbFuturesProductRule(product_code="T")
+    funding_pack = FundingRulePack(rates=[FundingTierRate()])
 
     assert instrument.DESCRIPTOR.full_name == "ficant.market.v1.Instrument"
     assert decimal.DESCRIPTOR.full_name == "ficant.core.v1.DecimalValue"
@@ -45,3 +47,5 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert rule_pack.DESCRIPTOR.fields_by_name["content"].message_type.full_name == "google.protobuf.Any"
     assert cgb_pack.DESCRIPTOR.full_name == "ficant.market.v1.CgbFuturesDeliveryRulePack"
     assert cgb_product.HasField("product_code")
+    assert funding_pack.DESCRIPTOR.full_name == "ficant.market.v1.FundingRulePack"
+    assert funding_pack.rates[0].DESCRIPTOR.full_name == "ficant.market.v1.FundingTierRate"

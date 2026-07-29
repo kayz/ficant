@@ -6,38 +6,60 @@ use ficant_api::{
 use ficant_application::ports::{
     AccessScope, AppendDefinitionVersion, BondAnalyticsEngine, CarryRollEngine, DefinitionIdentity,
     DefinitionRepository, DefinitionValue, FuturesDeliveryEngine, FuturesDeliveryRuleParser,
-    FuturesHedgeEngine, YieldCurveEngine,
+    FuturesHedgeEngine, SubjectRepository, YieldCurveEngine,
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_cgb_futures_pack::CgbFuturesDeliveryRulePackParser;
 use ficant_contracts::ficant::core::v1::{
-    DecimalValue, ErrorCode, MarketTime as ProtoMarketTime, OwnerRef as ProtoOwnerRef, Sha256,
-    Ulid as ProtoUlid, UnitRef as ProtoUnitRef, VersionRef as ProtoVersionRef,
+    DecimalValue, ErrorCode, FundingTier as ProtoFundingTier, MarketTime as ProtoMarketTime,
+    OwnerRef as ProtoOwnerRef, Sha256, Ulid as ProtoUlid, UnitRef as ProtoUnitRef,
+    VersionRef as ProtoVersionRef,
 };
 use ficant_contracts::ficant::market::v1::{
-    CgbFuturesDeliveryRulePack, CgbFuturesProductRule, cgb_futures_product_rule::ResidualUpperBound,
+    CgbFuturesDeliveryRulePack, CgbFuturesProductRule, FundingRulePack, FundingTierRate,
+    cgb_futures_product_rule::ResidualUpperBound,
 };
 use ficant_contracts::ficant::rates::v1::{
-    AlgorithmBinding, AnalysisContext, AnalysisUnits, AnalyzeBondRequest,
-    AnalyzeFuturesDeliveryRequest, BondTerms, CgbFuturesProduct as ProtoCgbFuturesProduct,
-    CouponFrequency, FuturesDeliverableCandidate, ObjectBinding, analyze_bond_response,
-    analyze_futures_delivery_response, rates_analytics_service_server::RatesAnalyticsService,
+    AlgorithmBinding, AnalysisContext, AnalysisUnits, AnalyzeBondRequest, AnalyzeCarryRollRequest,
+    AnalyzeFuturesDeliveryRequest, AnalyzeFuturesHedgeRequest, BondTerms,
+    CgbFuturesProduct as ProtoCgbFuturesProduct, CouponFrequency, FuturesDeliverableCandidate,
+    InterpolateYieldCurveRequest, ObjectBinding, analyze_bond_response,
+    analyze_carry_roll_response, analyze_futures_delivery_response, analyze_futures_hedge_response,
+    interpolate_yield_curve_response, rates_analytics_service_server::RatesAnalyticsService,
 };
-use ficant_domain::analytics::{AnalyticsError, BondAnalyticsInput, BondAnalyticsResult};
-use ficant_domain::curves::{CarryRollInput, CarryRollResult, YieldCurvePoint, YieldCurveQuery};
+use ficant_domain::analytics::{
+    ALGORITHM_ID, AnalyticsError, BondAnalyticsInput, BondAnalyticsResult, CONVENTION_PROFILE,
+};
+use ficant_domain::curves::{
+    CARRY_ROLL_ALGORITHM_ID, CARRY_ROLL_CONVENTION_PROFILE, CURVE_ALGORITHM_ID,
+    CURVE_CONVENTION_PROFILE, CarryRollInput, CarryRollResult, YieldCurvePoint, YieldCurveQuery,
+};
 use ficant_domain::futures_delivery::{
-    CgbFuturesProduct, FuturesDeliverableInput, FuturesDeliveryResult, FuturesDeliveryRule,
+    CgbFuturesProduct, FUTURES_DELIVERY_ALGORITHM_ID, FUTURES_DELIVERY_CONVENTION_PROFILE,
+    FuturesDeliverableInput, FuturesDeliveryResult, FuturesDeliveryRule,
 };
-use ficant_domain::futures_hedge::{FuturesHedgeInput, FuturesHedgeResult};
+use ficant_domain::futures_hedge::{
+    FUTURES_HEDGE_ALGORITHM_ID, FUTURES_HEDGE_CONVENTION_PROFILE, FuturesHedgeInput,
+    FuturesHedgeResult,
+};
 use ficant_domain::market::{
     MarketRulePack, MarketRulePackInput, RulePackContent, VerificationStatus,
 };
 use ficant_domain::primitives::{
     ContentHash, EffectivePeriod, MarketTime, OwnerRef, Ulid, Version,
 };
+use ficant_domain::subject::{
+    AccessSet, FundingTier, Subject, SubjectRecord, SubjectStateSnapshot, SubjectVersion,
+    TaxTreatment,
+};
 use ficant_domain::{ContentAddressed, VersionedDefinition};
-use ficant_fixed_income_native::NativeFuturesDeliveryEngine;
+use ficant_fixed_income_native::{NativeFuturesDeliveryEngine, NativeFuturesHedgeEngine};
+use ficant_funding_pack::{
+    FundingRulePackV1Parser, MARKET as FUNDING_MARKET, RULE_TYPE as FUNDING_RULE_TYPE,
+    TYPE_URL as FUNDING_TYPE_URL,
+};
 use prost::Message;
+use rust_decimal::{Decimal as ExactDecimal, RoundingStrategy};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tonic::Request;
@@ -160,6 +182,75 @@ impl FuturesDeliveryRuleParser for NoFuturesDeliveryRuleParser {
     }
 }
 
+struct NoSubjects;
+
+#[tonic::async_trait]
+impl SubjectRepository for NoSubjects {
+    async fn register_subject(&self, _: SubjectRecord) -> Result<SubjectRecord, ApplicationError> {
+        Err(storage_unavailable())
+    }
+
+    async fn get_subject(
+        &self,
+        _: ficant_domain::primitives::VersionRef,
+    ) -> Result<Option<SubjectRecord>, ApplicationError> {
+        Ok(None)
+    }
+
+    async fn register_subject_state(
+        &self,
+        _: SubjectStateSnapshot,
+    ) -> Result<SubjectStateSnapshot, ApplicationError> {
+        Err(storage_unavailable())
+    }
+
+    async fn get_subject_state(
+        &self,
+        _: Ulid,
+        _: chrono::DateTime<Utc>,
+    ) -> Result<Option<SubjectStateSnapshot>, ApplicationError> {
+        Err(storage_unavailable())
+    }
+}
+
+#[derive(Clone)]
+struct FixtureSubjects {
+    values: Vec<SubjectRecord>,
+}
+
+#[tonic::async_trait]
+impl SubjectRepository for FixtureSubjects {
+    async fn register_subject(&self, _: SubjectRecord) -> Result<SubjectRecord, ApplicationError> {
+        Err(storage_unavailable())
+    }
+
+    async fn get_subject(
+        &self,
+        reference: ficant_domain::primitives::VersionRef,
+    ) -> Result<Option<SubjectRecord>, ApplicationError> {
+        Ok(self
+            .values
+            .iter()
+            .find(|value| value.version().reference() == &reference)
+            .cloned())
+    }
+
+    async fn register_subject_state(
+        &self,
+        _: SubjectStateSnapshot,
+    ) -> Result<SubjectStateSnapshot, ApplicationError> {
+        Err(storage_unavailable())
+    }
+
+    async fn get_subject_state(
+        &self,
+        _: Ulid,
+        _: chrono::DateTime<Utc>,
+    ) -> Result<Option<SubjectStateSnapshot>, ApplicationError> {
+        Err(storage_unavailable())
+    }
+}
+
 #[derive(Clone)]
 struct FixtureDefinitions {
     values: Vec<DefinitionValue>,
@@ -216,6 +307,16 @@ impl FuturesDeliveryEngine for RecordingNativeDeliveryEngine {
     }
 }
 
+#[derive(Clone)]
+struct RecordingNativeHedgeEngine(Arc<AtomicUsize>);
+
+impl FuturesHedgeEngine for RecordingNativeHedgeEngine {
+    fn calculate(&self, input: &FuturesHedgeInput) -> Result<FuturesHedgeResult, AnalyticsError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        NativeFuturesHedgeEngine.calculate(input)
+    }
+}
+
 fn storage_unavailable() -> ApplicationError {
     ApplicationError::new(ApplicationErrorCategory::StorageUnavailable, false)
 }
@@ -242,7 +343,9 @@ fn service(scopes: &[&str], calls: Arc<AtomicUsize>) -> RatesGrpcService {
         Arc::new(engine.clone()),
         Arc::new(engine.clone()),
         Arc::new(NoDefinitionRepository),
+        Arc::new(NoSubjects),
         Arc::new(NoFuturesDeliveryRuleParser),
+        Arc::new(FundingRulePackV1Parser),
         Arc::new(engine),
         KEY,
     )
@@ -251,6 +354,7 @@ fn service(scopes: &[&str], calls: Arc<AtomicUsize>) -> RatesGrpcService {
 
 fn delivery_service(
     values: Vec<DefinitionValue>,
+    subjects: Vec<SubjectRecord>,
     delivery_calls: Arc<AtomicUsize>,
 ) -> RatesGrpcService {
     let identity = TrustedIdentity::implicit("rates-delivery-test", ["rates:analyze"])
@@ -274,12 +378,53 @@ fn delivery_service(
         Arc::new(fallback.clone()),
         Arc::new(fallback.clone()),
         Arc::new(RecordingNativeDeliveryEngine(delivery_calls)),
-        Arc::new(FixtureDefinitions { values }),
+        Arc::new(FixtureDefinitions {
+            values: values
+                .into_iter()
+                .chain(std::iter::once(DefinitionValue::MarketRulePack(
+                    funding_pack(),
+                )))
+                .collect(),
+        }),
+        Arc::new(FixtureSubjects { values: subjects }),
         Arc::new(CgbFuturesDeliveryRulePackParser),
+        Arc::new(FundingRulePackV1Parser),
         Arc::new(fallback),
         KEY,
     )
     .expect("rates delivery service is valid")
+}
+
+fn hedge_service(subjects: Vec<SubjectRecord>, hedge_calls: Arc<AtomicUsize>) -> RatesGrpcService {
+    let identity = TrustedIdentity::implicit("rates-hedge-test", ["rates:analyze"])
+        .expect("test identity is valid");
+    let application: Arc<dyn PlatformPort> = Arc::new(
+        PlatformApplication::try_new(
+            Arc::new(SystemClock),
+            SessionPolicy::new(900, 60).expect("test session policy is valid"),
+            KEY,
+            Vec::new(),
+            Some(identity),
+            Vec::new(),
+        )
+        .expect("test platform application is valid"),
+    );
+    let unused_calls = Arc::new(AtomicUsize::new(0));
+    let fallback = CountingFailureEngine(unused_calls);
+    RatesGrpcService::new(
+        application,
+        Arc::new(fallback.clone()),
+        Arc::new(fallback.clone()),
+        Arc::new(fallback.clone()),
+        Arc::new(fallback.clone()),
+        Arc::new(NoDefinitionRepository),
+        Arc::new(FixtureSubjects { values: subjects }),
+        Arc::new(NoFuturesDeliveryRuleParser),
+        Arc::new(FundingRulePackV1Parser),
+        Arc::new(RecordingNativeHedgeEngine(hedge_calls)),
+        KEY,
+    )
+    .expect("rates hedge service is valid")
 }
 
 #[tokio::test]
@@ -318,6 +463,280 @@ async fn invalid_request_with_scope_fails_closed_before_provider() {
 }
 
 #[tokio::test]
+async fn ac07_all_rates_rpcs_reject_missing_subject_before_engines() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let service = service(&["rates:analyze"], Arc::clone(&calls));
+
+    let missing_bond = service
+        .analyze_bond(Request::new(AnalyzeBondRequest {
+            context: Some(analysis_context(ALGORITHM_ID, CONVENTION_PROFILE, None)),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_subject_error(match missing_bond.result.unwrap() {
+        analyze_bond_response::Result::Error(error) => error,
+        analyze_bond_response::Result::Analysis(_) => {
+            panic!("missing Subject must fail before bond engine")
+        }
+    });
+    let missing_curve = service
+        .interpolate_yield_curve(Request::new(InterpolateYieldCurveRequest {
+            context: Some(analysis_context(
+                CURVE_ALGORITHM_ID,
+                CURVE_CONVENTION_PROFILE,
+                None,
+            )),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_subject_error(match missing_curve.result.unwrap() {
+        interpolate_yield_curve_response::Result::Error(error) => error,
+        interpolate_yield_curve_response::Result::Point(_) => {
+            panic!("missing Subject must fail before curve engine")
+        }
+    });
+    let missing_carry = service
+        .analyze_carry_roll(Request::new(AnalyzeCarryRollRequest {
+            context: Some(analysis_context(
+                CARRY_ROLL_ALGORITHM_ID,
+                CARRY_ROLL_CONVENTION_PROFILE,
+                None,
+            )),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_subject_error(match missing_carry.result.unwrap() {
+        analyze_carry_roll_response::Result::Error(error) => error,
+        analyze_carry_roll_response::Result::Analysis(_) => {
+            panic!("missing Subject must fail before carry engine")
+        }
+    });
+    let missing_delivery = service
+        .analyze_futures_delivery(Request::new(AnalyzeFuturesDeliveryRequest {
+            context: Some(analysis_context(
+                FUTURES_DELIVERY_ALGORITHM_ID,
+                FUTURES_DELIVERY_CONVENTION_PROFILE,
+                None,
+            )),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_subject_error(match missing_delivery.result.unwrap() {
+        analyze_futures_delivery_response::Result::Error(error) => error,
+        analyze_futures_delivery_response::Result::Analysis(_) => {
+            panic!("missing Subject must fail before delivery engine")
+        }
+    });
+    let missing_hedge = service
+        .analyze_futures_hedge(Request::new(AnalyzeFuturesHedgeRequest {
+            context: Some(analysis_context(
+                FUTURES_HEDGE_ALGORITHM_ID,
+                FUTURES_HEDGE_CONVENTION_PROFILE,
+                None,
+            )),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_subject_error(match missing_hedge.result.unwrap() {
+        analyze_futures_hedge_response::Result::Error(error) => error,
+        analyze_futures_hedge_response::Result::Analysis(_) => {
+            panic!("missing Subject must fail before hedge engine")
+        }
+    });
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn ac07_all_rates_rpcs_reject_unresolved_subject_before_engines() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let service = service(&["rates:analyze"], Arc::clone(&calls));
+    let absent = Some(ProtoVersionRef {
+        id: Some(proto_ulid('S')),
+        version: 1,
+    });
+    let absent_bond = service
+        .analyze_bond(Request::new(AnalyzeBondRequest {
+            context: Some(analysis_context(
+                ALGORITHM_ID,
+                CONVENTION_PROFILE,
+                absent.clone(),
+            )),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_subject_error(match absent_bond.result.unwrap() {
+        analyze_bond_response::Result::Error(error) => error,
+        analyze_bond_response::Result::Analysis(_) => {
+            panic!("unresolved Subject must fail before bond engine")
+        }
+    });
+    let absent_curve = service
+        .interpolate_yield_curve(Request::new(InterpolateYieldCurveRequest {
+            context: Some(analysis_context(
+                CURVE_ALGORITHM_ID,
+                CURVE_CONVENTION_PROFILE,
+                absent.clone(),
+            )),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_subject_error(match absent_curve.result.unwrap() {
+        interpolate_yield_curve_response::Result::Error(error) => error,
+        interpolate_yield_curve_response::Result::Point(_) => {
+            panic!("unresolved Subject must fail before curve engine")
+        }
+    });
+    let absent_carry = service
+        .analyze_carry_roll(Request::new(AnalyzeCarryRollRequest {
+            context: Some(analysis_context(
+                CARRY_ROLL_ALGORITHM_ID,
+                CARRY_ROLL_CONVENTION_PROFILE,
+                absent.clone(),
+            )),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_subject_error(match absent_carry.result.unwrap() {
+        analyze_carry_roll_response::Result::Error(error) => error,
+        analyze_carry_roll_response::Result::Analysis(_) => {
+            panic!("unresolved Subject must fail before carry engine")
+        }
+    });
+    let absent_delivery = service
+        .analyze_futures_delivery(Request::new(AnalyzeFuturesDeliveryRequest {
+            context: Some(analysis_context(
+                FUTURES_DELIVERY_ALGORITHM_ID,
+                FUTURES_DELIVERY_CONVENTION_PROFILE,
+                absent.clone(),
+            )),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_subject_error(match absent_delivery.result.unwrap() {
+        analyze_futures_delivery_response::Result::Error(error) => error,
+        analyze_futures_delivery_response::Result::Analysis(_) => {
+            panic!("unresolved Subject must fail before delivery engine")
+        }
+    });
+    let absent_hedge = service
+        .analyze_futures_hedge(Request::new(AnalyzeFuturesHedgeRequest {
+            context: Some(analysis_context(
+                FUTURES_HEDGE_ALGORITHM_ID,
+                FUTURES_HEDGE_CONVENTION_PROFILE,
+                absent,
+            )),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_subject_error(match absent_hedge.result.unwrap() {
+        analyze_futures_hedge_response::Result::Error(error) => error,
+        analyze_futures_hedge_response::Result::Analysis(_) => {
+            panic!("unresolved Subject must fail before hedge engine")
+        }
+    });
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn non_delivery_rpcs_reject_an_unconsumed_funding_rule_pack_before_engines() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let service = service(&["rates:analyze"], Arc::clone(&calls));
+
+    let rejected_bond = service
+        .analyze_bond(Request::new(AnalyzeBondRequest {
+            context: Some(context_with_unconsumed_funding(
+                ALGORITHM_ID,
+                CONVENTION_PROFILE,
+            )),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_unconsumed_funding_error(match rejected_bond.result.unwrap() {
+        analyze_bond_response::Result::Error(error) => error,
+        analyze_bond_response::Result::Analysis(_) => {
+            panic!("bond must reject a FundingRulePack it does not consume")
+        }
+    });
+
+    let rejected_curve = service
+        .interpolate_yield_curve(Request::new(InterpolateYieldCurveRequest {
+            context: Some(context_with_unconsumed_funding(
+                CURVE_ALGORITHM_ID,
+                CURVE_CONVENTION_PROFILE,
+            )),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_unconsumed_funding_error(match rejected_curve.result.unwrap() {
+        interpolate_yield_curve_response::Result::Error(error) => error,
+        interpolate_yield_curve_response::Result::Point(_) => {
+            panic!("curve must reject a FundingRulePack it does not consume")
+        }
+    });
+
+    let rejected_carry = service
+        .analyze_carry_roll(Request::new(AnalyzeCarryRollRequest {
+            context: Some(context_with_unconsumed_funding(
+                CARRY_ROLL_ALGORITHM_ID,
+                CARRY_ROLL_CONVENTION_PROFILE,
+            )),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_unconsumed_funding_error(match rejected_carry.result.unwrap() {
+        analyze_carry_roll_response::Result::Error(error) => error,
+        analyze_carry_roll_response::Result::Analysis(_) => {
+            panic!("carry must reject a FundingRulePack it does not consume")
+        }
+    });
+
+    let rejected_hedge = service
+        .analyze_futures_hedge(Request::new(AnalyzeFuturesHedgeRequest {
+            context: Some(context_with_unconsumed_funding(
+                FUTURES_HEDGE_ALGORITHM_ID,
+                FUTURES_HEDGE_CONVENTION_PROFILE,
+            )),
+            ..Default::default()
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_unconsumed_funding_error(match rejected_hedge.result.unwrap() {
+        analyze_futures_hedge_response::Result::Error(error) => error,
+        analyze_futures_hedge_response::Result::Analysis(_) => {
+            panic!("hedge must reject a FundingRulePack it does not consume")
+        }
+    });
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn ac02_grpc_parses_exact_rule_pack_versions_and_reports_missing_item_before_engine() {
     let first = delivery_pack(1, "3", false);
     let second = delivery_pack(2, "4", false);
@@ -329,6 +748,12 @@ async fn ac02_grpc_parses_exact_rule_pack_versions_and_reports_missing_item_befo
             DefinitionValue::MarketRulePack(second.clone()),
             DefinitionValue::MarketRulePack(missing.clone()),
         ],
+        vec![fixture_subject(
+            'S',
+            FundingTier::DrAvailable,
+            &["CFFEX"],
+            &["futures-delivery"],
+        )],
         Arc::clone(&calls),
     );
 
@@ -373,6 +798,246 @@ async fn ac02_grpc_parses_exact_rule_pack_versions_and_reports_missing_item_befo
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
+#[tokio::test]
+async fn ac07_missing_subject_is_rejected_before_delivery_engine() {
+    let pack = delivery_pack(1, "3", false);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let service = delivery_service(
+        vec![DefinitionValue::MarketRulePack(pack.clone())],
+        Vec::new(),
+        Arc::clone(&calls),
+    );
+
+    let mut request = delivery_request(&pack);
+    request.context.as_mut().unwrap().subject_ref = None;
+    let response = service
+        .analyze_futures_delivery(Request::new(request))
+        .await
+        .expect("business error is transported")
+        .into_inner();
+    let Some(analyze_futures_delivery_response::Result::Error(error)) = response.result else {
+        panic!("an unbound Subject must fail closed before the delivery engine");
+    };
+    assert_eq!(error.code, ErrorCode::ValidationFailed as i32);
+    assert!(!error.retryable);
+    assert_eq!(error.field_violations.len(), 1);
+    assert_eq!(error.field_violations[0].field, "context.subject_ref");
+    assert_eq!(error.field_violations[0].description, "主体版本缺失或无效");
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn ac06_subject_funding_tier_selects_pack_rate_and_changes_delivery_amounts() {
+    let pack = delivery_pack(1, "3", false);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let service = delivery_service(
+        vec![DefinitionValue::MarketRulePack(pack.clone())],
+        vec![
+            fixture_subject(
+                'S',
+                FundingTier::DrAvailable,
+                &["CFFEX"],
+                &["futures-delivery"],
+            ),
+            fixture_subject('T', FundingTier::ROnly, &["CFFEX"], &["futures-delivery"]),
+        ],
+        Arc::clone(&calls),
+    );
+
+    let dr_response = service
+        .analyze_futures_delivery(Request::new(delivery_request(&pack)))
+        .await
+        .expect("DR request is transported")
+        .into_inner();
+    let mut r_request = delivery_request(&pack);
+    r_request.context.as_mut().unwrap().subject_ref = Some(ProtoVersionRef {
+        id: Some(proto_ulid('T')),
+        version: 1,
+    });
+    let r_response = service
+        .analyze_futures_delivery(Request::new(r_request))
+        .await
+        .expect("R-only request is transported")
+        .into_inner();
+
+    let dr = delivery_result(&dr_response);
+    let r_only = delivery_result(&r_response);
+    let dr_measures = dr.candidates[0].measures.as_ref().unwrap();
+    let r_measures = r_only.candidates[0].measures.as_ref().unwrap();
+    let rate_delta = ExactDecimal::new(7, 3);
+    let actual_days = ExactDecimal::from(59_u32);
+    let annual_day_basis = ExactDecimal::from(365_u32);
+    let expected_financing_delta =
+        (decimal_value(dr_measures.purchase_dirty_price.as_ref().unwrap())
+            * rate_delta
+            * actual_days
+            / annual_day_basis)
+            .round_dp_with_strategy(12, RoundingStrategy::MidpointNearestEven);
+    let actual_financing_delta = decimal_value(r_measures.financing_cost.as_ref().unwrap())
+        - decimal_value(dr_measures.financing_cost.as_ref().unwrap());
+    assert_within_one_fixed_decimal_tick(actual_financing_delta, expected_financing_delta);
+    let actual_carry_delta = decimal_value(r_measures.holding_carry.as_ref().unwrap())
+        - decimal_value(dr_measures.holding_carry.as_ref().unwrap());
+    assert_within_one_fixed_decimal_tick(actual_carry_delta, -expected_financing_delta);
+    assert_eq!(
+        decimal_value(r_measures.funding_adjusted_irr.as_ref().unwrap())
+            - decimal_value(dr_measures.funding_adjusted_irr.as_ref().unwrap()),
+        -rate_delta
+    );
+    assert_eq!(
+        decimal_value(r_measures.implied_repo_rate.as_ref().unwrap()),
+        decimal_value(dr_measures.implied_repo_rate.as_ref().unwrap())
+    );
+    assert_eq!(
+        dr.metadata
+            .as_ref()
+            .and_then(|metadata| metadata.subject_ref.as_ref())
+            .and_then(|reference| reference.id.as_ref())
+            .map(|id| id.value.as_str()),
+        Some(id('S').as_str())
+    );
+    assert_eq!(
+        dr.metadata
+            .as_ref()
+            .and_then(|metadata| metadata.funding_rule_pack.as_ref()),
+        Some(&object_binding(
+            'F',
+            funding_pack().content_hash(),
+            funding_pack().version(),
+        ))
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn delivery_rejects_funding_rule_pack_rate_unit_mismatch_before_engine() {
+    let pack = delivery_pack(1, "3", false);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let service = delivery_service(
+        vec![DefinitionValue::MarketRulePack(pack.clone())],
+        vec![fixture_subject(
+            'S',
+            FundingTier::DrAvailable,
+            &["CFFEX"],
+            &["futures-delivery"],
+        )],
+        Arc::clone(&calls),
+    );
+    let mut request = delivery_request(&pack);
+    request
+        .context
+        .as_mut()
+        .unwrap()
+        .units
+        .as_mut()
+        .unwrap()
+        .rate = Some(unit('Q'));
+
+    let rejected = service
+        .analyze_futures_delivery(Request::new(request))
+        .await
+        .expect("business error is transported")
+        .into_inner();
+    let error = match rejected.result.unwrap() {
+        analyze_futures_delivery_response::Result::Error(error) => error,
+        analyze_futures_delivery_response::Result::Analysis(_) => {
+            panic!("a FundingRulePack rate unit mismatch must fail before delivery engine")
+        }
+    };
+    assert_eq!(error.code, ErrorCode::ValidationFailed as i32);
+    assert!(!error.retryable);
+    assert!(error.field_violations.is_empty());
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn ac29_hedge_requires_exact_subject_access_and_preserves_hand_formula() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let service = hedge_service(
+        vec![
+            fixture_subject(
+                'S',
+                FundingTier::DrAvailable,
+                &["CFFEX"],
+                &["futures-hedge"],
+            ),
+            fixture_subject('M', FundingTier::DrAvailable, &["CN"], &["futures-hedge"]),
+            fixture_subject(
+                'T',
+                FundingTier::DrAvailable,
+                &["CFFEX"],
+                &["futures-delivery"],
+            ),
+        ],
+        Arc::clone(&calls),
+    );
+
+    let permitted = service
+        .analyze_futures_hedge(Request::new(hedge_request('S')))
+        .await
+        .expect("permitted hedge is transported")
+        .into_inner();
+    let Some(analyze_futures_hedge_response::Result::Analysis(result)) = permitted.result else {
+        panic!("permitted Subject must reach the hedge engine");
+    };
+    let measures = result
+        .measures
+        .as_ref()
+        .expect("hedge measures are present");
+    // 0.045 * (1,000,000 / 100) / 0.9 = 500; -500 / 500 = -1.
+    assert_eq!(
+        decimal_value(measures.futures_contract_dv01.as_ref().unwrap()),
+        ExactDecimal::from(500_i64)
+    );
+    assert_eq!(
+        decimal_value(measures.raw_contracts.as_ref().unwrap()),
+        ExactDecimal::from(-1_i64)
+    );
+    assert_eq!(measures.recommended_contracts, -1);
+    assert_eq!(
+        decimal_value(measures.residual_dv01.as_ref().unwrap()),
+        ExactDecimal::ZERO
+    );
+    assert_eq!(
+        decimal_value(measures.hedge_effectiveness.as_ref().unwrap()),
+        ExactDecimal::ONE
+    );
+    assert_eq!(
+        result
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.subject_ref.as_ref())
+            .and_then(|reference| reference.id.as_ref())
+            .map(|id| id.value.as_str()),
+        Some(id('S').as_str())
+    );
+    assert!(
+        result
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.funding_rule_pack.as_ref())
+            .is_none(),
+        "only delivery may carry a consumed FundingRulePack"
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    calls.store(0, Ordering::SeqCst);
+
+    for subject in ['M', 'T'] {
+        let rejected = service
+            .analyze_futures_hedge(Request::new(hedge_request(subject)))
+            .await
+            .expect("business error is transported")
+            .into_inner();
+        assert_subject_error(match rejected.result.unwrap() {
+            analyze_futures_hedge_response::Result::Error(error) => error,
+            analyze_futures_hedge_response::Result::Analysis(_) => {
+                panic!("missing market or tool access must fail before hedge engine")
+            }
+        });
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+}
+
 fn delivery_pack(version: u64, nominal_coupon: &str, missing_residual_min: bool) -> MarketRulePack {
     let payload = CgbFuturesDeliveryRulePack {
         products: vec![CgbFuturesProductRule {
@@ -414,6 +1079,7 @@ fn delivery_pack(version: u64, nominal_coupon: &str, missing_residual_min: bool)
 fn delivery_request(pack: &MarketRulePack) -> AnalyzeFuturesDeliveryRequest {
     let rate = unit('P');
     let price = unit('P');
+    let funding = funding_pack();
     AnalyzeFuturesDeliveryRequest {
         context: Some(AnalysisContext {
             owner: Some(proto_owner()),
@@ -436,6 +1102,15 @@ fn delivery_request(pack: &MarketRulePack) -> AnalyzeFuturesDeliveryRequest {
                 dimensionless: Some(rate.clone()),
                 contract_count: Some(rate.clone()),
             }),
+            subject_ref: Some(ProtoVersionRef {
+                id: Some(proto_ulid('S')),
+                version: 1,
+            }),
+            funding_rule_pack: Some(object_binding(
+                'F',
+                funding.content_hash(),
+                funding.version(),
+            )),
         }),
         futures_contract: Some(object_binding('C', &ContentHash::digest(b"contract"), 1)),
         valuation_at: Some(proto_time(20)),
@@ -444,7 +1119,6 @@ fn delivery_request(pack: &MarketRulePack) -> AnalyzeFuturesDeliveryRequest {
         delivery_date: "2026-09-18".to_owned(),
         product: ProtoCgbFuturesProduct::T as i32,
         futures_clean_price: Some(decimal("995", 1, &price)),
-        financing_rate: Some(decimal("18", 3, &rate)),
         candidates: vec![FuturesDeliverableCandidate {
             bond: Some(object_binding('D', &ContentHash::digest(b"bond"), 1)),
             terms: Some(BondTerms {
@@ -457,6 +1131,165 @@ fn delivery_request(pack: &MarketRulePack) -> AnalyzeFuturesDeliveryRequest {
             spot_clean_price: Some(decimal("10125", 2, &price)),
         }],
     }
+}
+
+fn hedge_request(subject_suffix: char) -> AnalyzeFuturesHedgeRequest {
+    let rate = unit('P');
+    AnalyzeFuturesHedgeRequest {
+        context: Some(analysis_context(
+            FUTURES_HEDGE_ALGORITHM_ID,
+            FUTURES_HEDGE_CONVENTION_PROFILE,
+            Some(ProtoVersionRef {
+                id: Some(proto_ulid(subject_suffix)),
+                version: 1,
+            }),
+        )),
+        target_risk_artifact: Some(object_binding('Q', &ContentHash::digest(b"risk"), 1)),
+        delivery_artifact: Some(object_binding('V', &ContentHash::digest(b"delivery"), 1)),
+        ctd_analytics_artifact: Some(object_binding('W', &ContentHash::digest(b"ctd"), 1)),
+        futures_contract: Some(object_binding('C', &ContentHash::digest(b"contract"), 1)),
+        ctd_bond: Some(object_binding('D', &ContentHash::digest(b"bond"), 1)),
+        valuation_at: Some(proto_time(20)),
+        product: ProtoCgbFuturesProduct::T as i32,
+        target_dv01: Some(decimal("500", 0, &rate)),
+        ctd_dv01_per_100: Some(decimal("45", 3, &rate)),
+        conversion_factor: Some(decimal("9", 1, &rate)),
+    }
+}
+
+fn analysis_context(
+    algorithm_id: &str,
+    convention_profile: &str,
+    subject_ref: Option<ProtoVersionRef>,
+) -> AnalysisContext {
+    let rate = unit('P');
+    AnalysisContext {
+        owner: Some(proto_owner()),
+        rule_pack: Some(object_binding('R', &ContentHash::digest(b"rule"), 1)),
+        data_snapshot: Some(object_binding('E', &ContentHash::digest(b"snapshot"), 1)),
+        algorithm: Some(AlgorithmBinding {
+            algorithm_id: algorithm_id.to_owned(),
+            algorithm_version: 1,
+            convention_profile: convention_profile.to_owned(),
+            abi_version: 1,
+        }),
+        units: Some(AnalysisUnits {
+            currency_amount: Some(rate.clone()),
+            price_per_100: Some(rate.clone()),
+            rate: Some(rate.clone()),
+            years: Some(rate.clone()),
+            years_squared: Some(rate.clone()),
+            dv01_per_100: Some(rate.clone()),
+            dv01: Some(rate.clone()),
+            dimensionless: Some(rate.clone()),
+            contract_count: Some(rate),
+        }),
+        subject_ref,
+        funding_rule_pack: None,
+    }
+}
+
+fn context_with_unconsumed_funding(
+    algorithm_id: &str,
+    convention_profile: &str,
+) -> AnalysisContext {
+    let mut context = analysis_context(
+        algorithm_id,
+        convention_profile,
+        Some(ProtoVersionRef {
+            id: Some(proto_ulid('S')),
+            version: 1,
+        }),
+    );
+    context.funding_rule_pack = Some(object_binding(
+        'F',
+        &ContentHash::digest(b"unconsumed-funding-pack"),
+        1,
+    ));
+    context
+}
+
+fn assert_subject_error(error: ficant_contracts::ficant::core::v1::ErrorDetail) {
+    let ficant_contracts::ficant::core::v1::ErrorDetail {
+        code,
+        retryable,
+        field_violations,
+        ..
+    } = error;
+    assert_eq!(code, ErrorCode::ValidationFailed as i32);
+    assert!(!retryable);
+    assert_eq!(field_violations.len(), 1);
+    assert_eq!(field_violations[0].field, "context.subject_ref");
+    assert_eq!(field_violations[0].description, "主体版本缺失或无效");
+}
+
+fn assert_unconsumed_funding_error(error: ficant_contracts::ficant::core::v1::ErrorDetail) {
+    let ficant_contracts::ficant::core::v1::ErrorDetail {
+        code,
+        retryable,
+        field_violations,
+        ..
+    } = error;
+    assert_eq!(code, ErrorCode::ValidationFailed as i32);
+    assert!(!retryable);
+    assert!(
+        field_violations.is_empty(),
+        "an unconsumed pack is rejected as an invalid request without pretending it was read"
+    );
+}
+
+fn funding_pack() -> MarketRulePack {
+    let rate = unit('P');
+    let payload = FundingRulePack {
+        rates: vec![
+            FundingTierRate {
+                funding_tier: ProtoFundingTier::DrAvailable as i32,
+                annual_financing_rate: Some(decimal("18", 3, &rate)),
+            },
+            FundingTierRate {
+                funding_tier: ProtoFundingTier::ROnly as i32,
+                annual_financing_rate: Some(decimal("25", 3, &rate)),
+            },
+        ],
+    };
+    let content = RulePackContent::new(FUNDING_TYPE_URL, payload.encode_to_vec()).unwrap();
+    MarketRulePack::new_with_content(
+        MarketRulePackInput {
+            rule_pack_id: id('F'),
+            version: Version::new(1).unwrap(),
+            owner: owner(),
+            market: FUNDING_MARKET.to_owned(),
+            rule_type: FUNDING_RULE_TYPE.to_owned(),
+            source: "synthetic-r3a-fixture".to_owned(),
+            effective: EffectivePeriod::new(domain_time(1), domain_time(31)).unwrap(),
+            verification_status: VerificationStatus::Verified,
+            content_hash: ContentHash::digest(content.value()),
+        },
+        content,
+    )
+    .unwrap()
+}
+
+fn fixture_subject(
+    suffix: char,
+    funding_tier: FundingTier,
+    markets: &[&str],
+    tools: &[&str],
+) -> SubjectRecord {
+    let subject = Subject::new(id(suffix), "R3a fixture Subject").unwrap();
+    let reference =
+        ficant_domain::primitives::VersionRef::new(subject.id().clone(), Version::new(1).unwrap());
+    let version = SubjectVersion::new(
+        reference,
+        AccessSet::new(markets.iter().copied(), tools.iter().copied()).unwrap(),
+        funding_tier,
+        TaxTreatment::new("synthetic-vat", "synthetic-income").unwrap(),
+        "synthetic-assessment",
+        "synthetic-liability",
+        None,
+    )
+    .unwrap();
+    SubjectRecord::new(subject, version).unwrap()
 }
 
 fn conversion_factor_coefficient(
@@ -472,6 +1305,27 @@ fn conversion_factor_coefficient(
         .expect("conversion factor must be present")
         .coefficient
         .clone()
+}
+
+fn delivery_result(
+    response: &ficant_contracts::ficant::rates::v1::AnalyzeFuturesDeliveryResponse,
+) -> &ficant_contracts::ficant::rates::v1::AnalyzeFuturesDeliveryResult {
+    let Some(analyze_futures_delivery_response::Result::Analysis(result)) = &response.result else {
+        panic!("complete RulePack must produce an analysis");
+    };
+    result
+}
+
+fn decimal_value(value: &DecimalValue) -> ExactDecimal {
+    ExactDecimal::from_i128_with_scale(value.coefficient.parse().unwrap(), value.scale)
+}
+
+fn assert_within_one_fixed_decimal_tick(actual: ExactDecimal, expected: ExactDecimal) {
+    let one_tick = ExactDecimal::new(1, 12);
+    assert!(
+        (actual - expected).abs() <= one_tick,
+        "actual {actual} differs from Decimal hand calculation {expected} by more than one native fixed-Decimal tick"
+    );
 }
 
 fn owner() -> OwnerRef {

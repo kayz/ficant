@@ -54,6 +54,10 @@ pub struct AnalysisContext {
     pub algorithm: ::core::option::Option<AlgorithmBinding>,
     #[prost(message, optional, tag="5")]
     pub units: ::core::option::Option<AnalysisUnits>,
+    #[prost(message, optional, tag="6")]
+    pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="7")]
+    pub funding_rule_pack: ::core::option::Option<ObjectBinding>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResultMetadata {
@@ -67,6 +71,8 @@ pub struct ResultMetadata {
     pub algorithm: ::core::option::Option<AlgorithmBinding>,
     #[prost(message, optional, tag="5")]
     pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="6")]
+    pub funding_rule_pack: ::core::option::Option<ObjectBinding>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BondTerms {
@@ -166,8 +172,6 @@ pub struct AnalyzeBondRequest {
     pub calendar: ::core::option::Option<CalendarBinding>,
     #[prost(message, optional, tag="7")]
     pub terms: ::core::option::Option<BondTerms>,
-    #[prost(message, optional, tag="10")]
-    pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
     #[prost(oneof="analyze_bond_request::Input", tags="8, 9")]
     pub input: ::core::option::Option<analyze_bond_request::Input>,
 }
@@ -343,8 +347,6 @@ pub struct AnalyzeFuturesDeliveryRequest {
     pub product: i32,
     #[prost(message, optional, tag="8")]
     pub futures_clean_price: ::core::option::Option<super::super::core::v1::DecimalValue>,
-    #[prost(message, optional, tag="9")]
-    pub financing_rate: ::core::option::Option<super::super::core::v1::DecimalValue>,
     #[prost(message, repeated, tag="10")]
     pub candidates: ::prost::alloc::vec::Vec<FuturesDeliverableCandidate>,
 }
@@ -378,6 +380,8 @@ pub struct FuturesDeliveryMeasures {
     pub implied_repo_rate: ::core::option::Option<super::super::core::v1::DecimalValue>,
     #[prost(message, optional, tag="14")]
     pub delivery_profit: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="15")]
+    pub funding_adjusted_irr: ::core::option::Option<super::super::core::v1::DecimalValue>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FuturesDeliveryCandidateResult {

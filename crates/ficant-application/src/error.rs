@@ -20,6 +20,7 @@ pub enum ApplicationErrorCategory {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ApplicationErrorDetail {
     RulePackItemMissing { path: String },
+    SubjectBindingInvalid,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -49,6 +50,17 @@ impl ApplicationError {
             category: ApplicationErrorCategory::ValidationFailed,
             retryable: false,
             detail,
+        }
+    }
+
+    /// Builds the one client-safe detail used when a required exact Subject binding is absent,
+    /// cannot be read, drifts from the requested reference, or lacks the requested access.
+    #[must_use]
+    pub const fn subject_binding_invalid() -> Self {
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail: Some(ApplicationErrorDetail::SubjectBindingInvalid),
         }
     }
 
