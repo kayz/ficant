@@ -6,7 +6,7 @@ use ficant_data::{
     CANONICAL_QUOTE_SCHEMA_ID, CanonicalIngestRequest, CanonicalQuoteIngestor,
     CanonicalSnapshotCodec, DataError, DataResult, InstrumentMapping, InstrumentMappingEntry,
     PARQUET_CREATED_BY, PointInTimeWindow, RawDecimal, RawQuoteRow, RawQuoteSource,
-    SNAPSHOT_MANIFEST_SCHEMA_ID, canonical_quote_schema_hash,
+    SNAPSHOT_MANIFEST_SCHEMA_ID, VerifiedCanonicalSnapshot, canonical_quote_schema_hash,
 };
 use ficant_domain::market::{
     Calendar, CalendarInput, CalendarSession, DataSource, DataSourceInput, DataSourceKind, Unit,
@@ -86,6 +86,39 @@ async fn deterministic_parquet_manifest_and_verified_round_trip_are_exact() {
         .decode_verified(first.snapshot().clone(), first.parquet(), first.manifest())
         .unwrap();
     assert_eq!(decoded.batch(), canonical.batch());
+    assert_exact_quote_projection(&decoded);
+    assert_eq!(decoded.manifest().row_count(), 2);
+    assert_eq!(
+        decoded.manifest().data_source_id(),
+        request.source().id().as_str()
+    );
+    assert_eq!(
+        decoded.manifest().instrument_mapping_digest(),
+        "8ec7f1016e6b00a9649e4c86202fbb90381948fec31bd12a7750b511c0d5e61e"
+    );
+    let ids = decoded
+        .batch()
+        .column(4)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .unwrap();
+    assert_eq!([ids.value(0), ids.value(1)], ["record-1", "record-2"]);
+
+    let schema_hash = canonical_quote_schema_hash().as_bytes().iter().fold(
+        String::with_capacity(64),
+        |mut encoded, byte| {
+            use std::fmt::Write as _;
+            write!(encoded, "{byte:02x}").unwrap();
+            encoded
+        },
+    );
+    assert_eq!(
+        schema_hash,
+        "e804a0becec18e51dde1be4250384ffe667cf4149c34dc3d2cfc82a206d71502"
+    );
+}
+
+fn assert_exact_quote_projection(decoded: &VerifiedCanonicalSnapshot) {
     let quotes = decoded.quotes().unwrap();
     assert_eq!(quotes.len(), 2);
     assert_eq!(
@@ -118,35 +151,6 @@ async fn deterministic_parquet_manifest_and_verified_round_trip_are_exact() {
     assert_eq!(quotes[0].unit().version(), Version::new(2).unwrap());
     assert_eq!(quotes[0].bid().unwrap().unit(), quotes[0].unit());
     assert_eq!(quotes[0].ask().unwrap().unit(), quotes[0].unit());
-    assert_eq!(decoded.manifest().row_count(), 2);
-    assert_eq!(
-        decoded.manifest().data_source_id(),
-        request.source().id().as_str()
-    );
-    assert_eq!(
-        decoded.manifest().instrument_mapping_digest(),
-        "8ec7f1016e6b00a9649e4c86202fbb90381948fec31bd12a7750b511c0d5e61e"
-    );
-    let ids = decoded
-        .batch()
-        .column(4)
-        .as_any()
-        .downcast_ref::<StringArray>()
-        .unwrap();
-    assert_eq!([ids.value(0), ids.value(1)], ["record-1", "record-2"]);
-
-    let schema_hash = canonical_quote_schema_hash().as_bytes().iter().fold(
-        String::with_capacity(64),
-        |mut encoded, byte| {
-            use std::fmt::Write as _;
-            write!(encoded, "{byte:02x}").unwrap();
-            encoded
-        },
-    );
-    assert_eq!(
-        schema_hash,
-        "e804a0becec18e51dde1be4250384ffe667cf4149c34dc3d2cfc82a206d71502"
-    );
 }
 
 #[tokio::test]
