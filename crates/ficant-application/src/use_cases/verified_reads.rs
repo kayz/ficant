@@ -65,6 +65,115 @@ pub enum VerifiedSnapshotRead {
     },
 }
 
+/// Minimal reusable verified snapshot reader.
+///
+/// It consumes metadata and every role declared by that metadata as one application operation.
+/// No caller can receive a partial Data snapshot after only Parquet or Manifest succeeds.
+pub struct VerifiedSnapshotReader<'a> {
+    snapshots: &'a dyn SnapshotVerifiedReadMetadataRepository,
+    reader: &'a dyn VerifiedBlobReader,
+    integrity_events: &'a dyn IntegrityEventSink,
+}
+
+impl<'a> VerifiedSnapshotReader<'a> {
+    #[must_use]
+    pub const fn new(
+        snapshots: &'a dyn SnapshotVerifiedReadMetadataRepository,
+        reader: &'a dyn VerifiedBlobReader,
+        integrity_events: &'a dyn IntegrityEventSink,
+    ) -> Self {
+        Self {
+            snapshots,
+            reader,
+            integrity_events,
+        }
+    }
+
+    /// Requires every immutable blob role declared by exact snapshot metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NotFound` only for absent metadata and never returns a partial Data snapshot.
+    pub async fn read(
+        &self,
+        scope: &AccessScope,
+        snapshot_id: Ulid,
+        trace: SafeTraceContext,
+    ) -> ApplicationResult<VerifiedSnapshotRead> {
+        let metadata = self
+            .snapshots
+            .get_verified_read_metadata(scope, snapshot_id.clone())
+            .await?
+            .ok_or_else(not_found)?;
+        match metadata.into_parts() {
+            SnapshotVerifiedReadMetadataParts::Data {
+                snapshot,
+                parquet_size,
+                manifest_size,
+            } => {
+                validate_snapshot_identity(scope, &snapshot_id, snapshot.id(), snapshot.owner())?;
+                let parquet_request = RequiredVerifiedBlobRead::new(
+                    scope.clone(),
+                    snapshot.owner().clone(),
+                    VerifiedReadResourceKind::DataSnapshot,
+                    snapshot.id().clone(),
+                    VerifiedBlobRole::DataParquet,
+                    snapshot.content_hash().clone(),
+                    parquet_size,
+                    trace.clone(),
+                )?;
+                let manifest_request = RequiredVerifiedBlobRead::new(
+                    scope.clone(),
+                    snapshot.owner().clone(),
+                    VerifiedReadResourceKind::DataSnapshot,
+                    snapshot.id().clone(),
+                    VerifiedBlobRole::DataManifest,
+                    snapshot.manifest_hash().clone(),
+                    manifest_size,
+                    trace,
+                )?;
+                let parquet = self
+                    .reader
+                    .read_required(&parquet_request, self.integrity_events)
+                    .await?;
+                let manifest = self
+                    .reader
+                    .read_required(&manifest_request, self.integrity_events)
+                    .await?;
+                Ok(VerifiedSnapshotRead::Data {
+                    snapshot,
+                    parquet,
+                    manifest,
+                })
+            }
+            SnapshotVerifiedReadMetadataParts::Universe {
+                snapshot,
+                members_manifest_size,
+            } => {
+                validate_snapshot_identity(scope, &snapshot_id, snapshot.id(), snapshot.owner())?;
+                let request = RequiredVerifiedBlobRead::new(
+                    scope.clone(),
+                    snapshot.owner().clone(),
+                    VerifiedReadResourceKind::UniverseSnapshot,
+                    snapshot.id().clone(),
+                    VerifiedBlobRole::UniverseMembersManifest,
+                    snapshot.content_hash().clone(),
+                    members_manifest_size,
+                    trace,
+                )?;
+                let members_manifest = self
+                    .reader
+                    .read_required(&request, self.integrity_events)
+                    .await?;
+                Ok(VerifiedSnapshotRead::Universe {
+                    snapshot,
+                    members_manifest,
+                })
+            }
+        }
+    }
+}
+
 /// Required verified-read facade. Existing repository `get` methods remain metadata-only.
 pub struct VerifiedReadFacade<'a> {
     artifacts: &'a dyn ArtifactRepository,
@@ -189,77 +298,9 @@ impl<'a> VerifiedReadFacade<'a> {
         snapshot_id: Ulid,
         trace: SafeTraceContext,
     ) -> ApplicationResult<VerifiedSnapshotRead> {
-        let metadata = self
-            .snapshots
-            .get_verified_read_metadata(scope, snapshot_id.clone())
-            .await?
-            .ok_or_else(not_found)?;
-        match metadata.into_parts() {
-            SnapshotVerifiedReadMetadataParts::Data {
-                snapshot,
-                parquet_size,
-                manifest_size,
-            } => {
-                validate_snapshot_identity(scope, &snapshot_id, snapshot.id(), snapshot.owner())?;
-                let parquet_request = RequiredVerifiedBlobRead::new(
-                    scope.clone(),
-                    snapshot.owner().clone(),
-                    VerifiedReadResourceKind::DataSnapshot,
-                    snapshot.id().clone(),
-                    VerifiedBlobRole::DataParquet,
-                    snapshot.content_hash().clone(),
-                    parquet_size,
-                    trace.clone(),
-                )?;
-                let manifest_request = RequiredVerifiedBlobRead::new(
-                    scope.clone(),
-                    snapshot.owner().clone(),
-                    VerifiedReadResourceKind::DataSnapshot,
-                    snapshot.id().clone(),
-                    VerifiedBlobRole::DataManifest,
-                    snapshot.manifest_hash().clone(),
-                    manifest_size,
-                    trace,
-                )?;
-                let parquet = self
-                    .reader
-                    .read_required(&parquet_request, self.integrity_events)
-                    .await?;
-                let manifest = self
-                    .reader
-                    .read_required(&manifest_request, self.integrity_events)
-                    .await?;
-                Ok(VerifiedSnapshotRead::Data {
-                    snapshot,
-                    parquet,
-                    manifest,
-                })
-            }
-            SnapshotVerifiedReadMetadataParts::Universe {
-                snapshot,
-                members_manifest_size,
-            } => {
-                validate_snapshot_identity(scope, &snapshot_id, snapshot.id(), snapshot.owner())?;
-                let request = RequiredVerifiedBlobRead::new(
-                    scope.clone(),
-                    snapshot.owner().clone(),
-                    VerifiedReadResourceKind::UniverseSnapshot,
-                    snapshot.id().clone(),
-                    VerifiedBlobRole::UniverseMembersManifest,
-                    snapshot.content_hash().clone(),
-                    members_manifest_size,
-                    trace,
-                )?;
-                let members_manifest = self
-                    .reader
-                    .read_required(&request, self.integrity_events)
-                    .await?;
-                Ok(VerifiedSnapshotRead::Universe {
-                    snapshot,
-                    members_manifest,
-                })
-            }
-        }
+        VerifiedSnapshotReader::new(self.snapshots, self.reader, self.integrity_events)
+            .read(scope, snapshot_id, trace)
+            .await
     }
 }
 
