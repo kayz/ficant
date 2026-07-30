@@ -4,9 +4,12 @@ use ficant_api::{
     TrustedIdentity,
 };
 use ficant_application::ports::{
-    AccessScope, AppendDefinitionVersion, BondAnalyticsEngine, CarryRollEngine, DefinitionIdentity,
-    DefinitionRepository, DefinitionValue, FuturesDeliveryEngine, FuturesDeliveryRuleParser,
-    FuturesHedgeEngine, SubjectRepository, YieldCurveEngine,
+    AccessScope, AppendDefinitionVersion, BondAnalyticsEngine, CanonicalQuote,
+    CanonicalSnapshotDecoder, CarryRollEngine, DefinitionIdentity, DefinitionRepository,
+    DefinitionValue, FuturesDeliveryEngine, FuturesDeliveryRuleParser, FuturesHedgeEngine,
+    InstrumentDefinition, InstrumentSubtype, IntegrityEvent, IntegrityEventSink,
+    RequiredVerifiedBlobRead, SnapshotVerifiedReadMetadata, SnapshotVerifiedReadMetadataRepository,
+    SubjectRepository, VerifiedBlobPayload, VerifiedBlobReader, VerifiedBlobRole, YieldCurveEngine,
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_cgb_futures_pack::CgbFuturesDeliveryRulePackParser;
@@ -32,6 +35,7 @@ use ficant_contracts::ficant::rates::v1::{
 };
 use ficant_domain::analytics::{
     ALGORITHM_ID, AnalyticsError, BondAnalyticsInput, BondAnalyticsResult, CONVENTION_PROFILE,
+    FixedDecimal,
 };
 use ficant_domain::curves::{
     CARRY_ROLL_ALGORITHM_ID, CARRY_ROLL_CONVENTION_PROFILE, CURVE_ALGORITHM_ID,
@@ -46,11 +50,14 @@ use ficant_domain::futures_hedge::{
     FuturesHedgeResult,
 };
 use ficant_domain::market::{
-    MarketRulePack, MarketRulePackInput, RulePackContent, VerificationStatus,
+    Bond, FuturesContract, Instrument, InstrumentInput, InstrumentKind, MarketRulePack,
+    MarketRulePackInput, RulePackContent, VerificationStatus,
 };
 use ficant_domain::primitives::{
-    ContentHash, EffectivePeriod, MarketTime, OwnerRef, Ulid, Version,
+    ContentHash, DecimalValue as DomainDecimalValue, EffectivePeriod, MarketTime, OwnerRef, Ulid,
+    UnitRef, Version, VersionRef,
 };
+use ficant_domain::research::{DataSnapshot, DataSnapshotInput};
 use ficant_domain::subject::{
     AccessSet, FundingTier, Subject, SubjectRecord, SubjectStateSnapshot, SubjectVersion,
     TaxTreatment,
@@ -188,6 +195,145 @@ impl FuturesDeliveryRuleParser for NoFuturesDeliveryRuleParser {
             false,
         ))
     }
+}
+
+struct CountingDeliveryRuleParser(Arc<AtomicUsize>);
+
+impl FuturesDeliveryRuleParser for CountingDeliveryRuleParser {
+    fn market(&self) -> &'static str {
+        "CFFEX"
+    }
+
+    fn rule_type(&self) -> &'static str {
+        "cgb-futures"
+    }
+
+    fn type_url(&self) -> &'static str {
+        "type.googleapis.com/ficant.market.v1.CgbFuturesDeliveryRulePack"
+    }
+
+    fn parse(
+        &self,
+        content: &RulePackContent,
+        product: CgbFuturesProduct,
+    ) -> Result<FuturesDeliveryRule, ApplicationError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        CgbFuturesDeliveryRulePackParser.parse(content, product)
+    }
+}
+
+struct FixtureSnapshotMetadata;
+
+#[tonic::async_trait]
+impl SnapshotVerifiedReadMetadataRepository for FixtureSnapshotMetadata {
+    async fn get_verified_read_metadata(
+        &self,
+        _scope: &AccessScope,
+        snapshot_id: Ulid,
+    ) -> Result<Option<SnapshotVerifiedReadMetadata>, ApplicationError> {
+        if snapshot_id != id('E') {
+            return Ok(None);
+        }
+        let snapshot = DataSnapshot::new(DataSnapshotInput {
+            data_snapshot_id: id('E'),
+            owner: owner(),
+            visible_at: domain_time(20),
+            as_of: domain_time(20),
+            schema_hash: ContentHash::digest(b"canonical-schema"),
+            manifest_hash: ContentHash::digest(b"manifest"),
+            blob_content_hash: ContentHash::digest(b"snapshot"),
+            lineage: vec![ficant_domain::primitives::LineageRef::content_addressed(
+                id('Q'),
+                ContentHash::digest(b"source"),
+            )],
+        })
+        .unwrap();
+        SnapshotVerifiedReadMetadata::data(
+            snapshot,
+            b"snapshot".len() as u64,
+            b"manifest".len() as u64,
+        )
+        .map(Some)
+    }
+}
+
+struct FixtureBlobReader;
+
+#[tonic::async_trait]
+impl VerifiedBlobReader for FixtureBlobReader {
+    async fn read_required(
+        &self,
+        request: &RequiredVerifiedBlobRead,
+        sink: &dyn IntegrityEventSink,
+    ) -> Result<VerifiedBlobPayload, ApplicationError> {
+        let bytes = match request.blob_role() {
+            VerifiedBlobRole::DataParquet => b"snapshot".as_slice(),
+            VerifiedBlobRole::DataManifest => b"manifest".as_slice(),
+            _ => unreachable!("rates delivery reads only DataSnapshot roles"),
+        };
+        request.verify_bytes(sink, bytes.to_vec()).await
+    }
+}
+
+struct FixtureIntegrityEvents;
+
+#[tonic::async_trait]
+impl IntegrityEventSink for FixtureIntegrityEvents {
+    async fn emit(&self, _event: IntegrityEvent) -> Result<(), ApplicationError> {
+        unreachable!("fixture payload hashes and sizes are exact")
+    }
+}
+
+struct FixtureCanonicalSnapshotDecoder;
+
+#[tonic::async_trait]
+impl CanonicalSnapshotDecoder for FixtureCanonicalSnapshotDecoder {
+    async fn decode_quotes(
+        &self,
+        snapshot: &DataSnapshot,
+        parquet: &[u8],
+        manifest: &[u8],
+    ) -> Result<Vec<CanonicalQuote>, ApplicationError> {
+        assert_eq!(snapshot.id(), &id('E'));
+        assert_eq!(parquet, b"snapshot");
+        assert_eq!(manifest, b"manifest");
+        Ok(vec![
+            CanonicalQuote::new(
+                VersionRef::new(id('D'), version(1)),
+                domain_time(20),
+                domain_time(20),
+                NaiveDate::from_ymd_opt(2026, 7, 20).unwrap(),
+                Some(fixed_decimal("10125", 2)),
+                None,
+                UnitRef::new(id('P'), version(1)),
+            ),
+            CanonicalQuote::new(
+                VersionRef::new(id('C'), version(1)),
+                domain_time(20),
+                domain_time(20),
+                NaiveDate::from_ymd_opt(2026, 7, 20).unwrap(),
+                None,
+                Some(fixed_decimal("995", 1)),
+                UnitRef::new(id('P'), version(1)),
+            ),
+        ])
+    }
+}
+
+type SnapshotDependencies = (
+    Arc<dyn SnapshotVerifiedReadMetadataRepository>,
+    Arc<dyn VerifiedBlobReader>,
+    Arc<dyn IntegrityEventSink>,
+    Arc<dyn CanonicalSnapshotDecoder>,
+);
+
+fn snapshot_dependencies() -> SnapshotDependencies {
+    (
+        Arc::new(FixtureSnapshotMetadata),
+        Arc::new(FixtureBlobReader),
+        Arc::new(FixtureIntegrityEvents),
+        Arc::new(FixtureCanonicalSnapshotDecoder),
+    )
 }
 
 struct NoSubjects;
@@ -354,6 +500,8 @@ fn service(scopes: &[&str], calls: Arc<AtomicUsize>) -> RatesGrpcService {
         .expect("test platform application is valid"),
     );
     let engine = CountingFailureEngine(calls);
+    let (snapshot_metadata, blob_reader, integrity_events, snapshot_decoder) =
+        snapshot_dependencies();
     RatesGrpcService::new(
         application,
         Arc::new(engine.clone()),
@@ -363,6 +511,10 @@ fn service(scopes: &[&str], calls: Arc<AtomicUsize>) -> RatesGrpcService {
         Arc::new(NoDefinitionRepository),
         Arc::new(NoSubjects),
         Arc::new(NoFuturesDeliveryRuleParser),
+        snapshot_metadata,
+        blob_reader,
+        integrity_events,
+        snapshot_decoder,
         Arc::new(FundingRulePackV1Parser),
         Arc::new(TaxRulePackV1Parser),
         Arc::new(engine),
@@ -374,6 +526,20 @@ fn service(scopes: &[&str], calls: Arc<AtomicUsize>) -> RatesGrpcService {
 fn delivery_service(
     values: Vec<DefinitionValue>,
     subjects: Vec<SubjectRecord>,
+    delivery_calls: Arc<AtomicUsize>,
+) -> RatesGrpcService {
+    delivery_service_with_parser_calls(
+        values,
+        subjects,
+        Arc::new(AtomicUsize::new(0)),
+        delivery_calls,
+    )
+}
+
+fn delivery_service_with_parser_calls(
+    values: Vec<DefinitionValue>,
+    subjects: Vec<SubjectRecord>,
+    parser_calls: Arc<AtomicUsize>,
     delivery_calls: Arc<AtomicUsize>,
 ) -> RatesGrpcService {
     let identity = TrustedIdentity::implicit("rates-delivery-test", ["rates:analyze"])
@@ -391,6 +557,34 @@ fn delivery_service(
     );
     let unused_calls = Arc::new(AtomicUsize::new(0));
     let fallback = CountingFailureEngine(unused_calls);
+    let rule_pack_version = values
+        .iter()
+        .find_map(|value| match value {
+            DefinitionValue::MarketRulePack(pack) if pack.identity() == id('R').as_str() => {
+                Some(pack.version())
+            }
+            _ => None,
+        })
+        .unwrap_or(1);
+    let has_contract = values
+        .iter()
+        .any(|value| value.identity() == id('C').as_str());
+    let has_bond = values
+        .iter()
+        .any(|value| value.identity() == id('D').as_str());
+    let values = values
+        .into_iter()
+        .chain((!has_contract).then(|| {
+            futures_contract_definition(
+                1,
+                owner(),
+                VersionRef::new(id('R'), version(rule_pack_version)),
+            )
+        }))
+        .chain((!has_bond).then(delivery_bond_definition))
+        .collect::<Vec<_>>();
+    let (snapshot_metadata, blob_reader, integrity_events, snapshot_decoder) =
+        snapshot_dependencies();
     RatesGrpcService::new(
         application,
         Arc::new(fallback.clone()),
@@ -406,7 +600,11 @@ fn delivery_service(
                 .collect(),
         }),
         Arc::new(FixtureSubjects { values: subjects }),
-        Arc::new(CgbFuturesDeliveryRulePackParser),
+        Arc::new(CountingDeliveryRuleParser(parser_calls)),
+        snapshot_metadata,
+        blob_reader,
+        integrity_events,
+        snapshot_decoder,
         Arc::new(FundingRulePackV1Parser),
         Arc::new(TaxRulePackV1Parser),
         Arc::new(fallback),
@@ -435,6 +633,8 @@ fn tax_bond_service(
     );
     let unused_calls = Arc::new(AtomicUsize::new(0));
     let fallback = CountingFailureEngine(unused_calls);
+    let (snapshot_metadata, blob_reader, integrity_events, snapshot_decoder) =
+        snapshot_dependencies();
     RatesGrpcService::new(
         application,
         Arc::new(RecordingNativeBondEngine(bond_calls)),
@@ -444,6 +644,10 @@ fn tax_bond_service(
         Arc::new(FixtureDefinitions { values }),
         Arc::new(FixtureSubjects { values: subjects }),
         Arc::new(NoFuturesDeliveryRuleParser),
+        snapshot_metadata,
+        blob_reader,
+        integrity_events,
+        snapshot_decoder,
         Arc::new(FundingRulePackV1Parser),
         Arc::new(TaxRulePackV1Parser),
         Arc::new(fallback),
@@ -468,6 +672,8 @@ fn hedge_service(subjects: Vec<SubjectRecord>, hedge_calls: Arc<AtomicUsize>) ->
     );
     let unused_calls = Arc::new(AtomicUsize::new(0));
     let fallback = CountingFailureEngine(unused_calls);
+    let (snapshot_metadata, blob_reader, integrity_events, snapshot_decoder) =
+        snapshot_dependencies();
     RatesGrpcService::new(
         application,
         Arc::new(fallback.clone()),
@@ -477,6 +683,10 @@ fn hedge_service(subjects: Vec<SubjectRecord>, hedge_calls: Arc<AtomicUsize>) ->
         Arc::new(NoDefinitionRepository),
         Arc::new(FixtureSubjects { values: subjects }),
         Arc::new(NoFuturesDeliveryRuleParser),
+        snapshot_metadata,
+        blob_reader,
+        integrity_events,
+        snapshot_decoder,
         Arc::new(FundingRulePackV1Parser),
         Arc::new(TaxRulePackV1Parser),
         Arc::new(RecordingNativeHedgeEngine(hedge_calls)),
@@ -800,31 +1010,31 @@ async fn ac02_grpc_parses_exact_rule_pack_versions_and_reports_missing_item_befo
     let second = delivery_pack(2, "4", false);
     let missing = delivery_pack(3, "3", true);
     let calls = Arc::new(AtomicUsize::new(0));
-    let service = delivery_service(
-        vec![
-            DefinitionValue::MarketRulePack(first.clone()),
-            DefinitionValue::MarketRulePack(second.clone()),
-            DefinitionValue::MarketRulePack(missing.clone()),
-        ],
-        vec![fixture_subject(
-            'S',
-            FundingTier::DrAvailable,
-            &["CFFEX"],
-            &["futures-delivery"],
-        )],
-        Arc::clone(&calls),
+    let subject = fixture_subject(
+        'S',
+        FundingTier::DrAvailable,
+        &["CFFEX"],
+        &["futures-delivery"],
     );
 
-    let first_response = service
-        .analyze_futures_delivery(Request::new(delivery_request(&first)))
-        .await
-        .expect("business result is transported")
-        .into_inner();
-    let second_response = service
-        .analyze_futures_delivery(Request::new(delivery_request(&second)))
-        .await
-        .expect("business result is transported")
-        .into_inner();
+    let first_response = delivery_service(
+        vec![DefinitionValue::MarketRulePack(first.clone())],
+        vec![subject.clone()],
+        Arc::clone(&calls),
+    )
+    .analyze_futures_delivery(Request::new(delivery_request(&first)))
+    .await
+    .expect("business result is transported")
+    .into_inner();
+    let second_response = delivery_service(
+        vec![DefinitionValue::MarketRulePack(second.clone())],
+        vec![subject.clone()],
+        Arc::clone(&calls),
+    )
+    .analyze_futures_delivery(Request::new(delivery_request(&second)))
+    .await
+    .expect("business result is transported")
+    .into_inner();
     assert_ne!(
         conversion_factor_coefficient(&first_response),
         conversion_factor_coefficient(&second_response),
@@ -833,11 +1043,15 @@ async fn ac02_grpc_parses_exact_rule_pack_versions_and_reports_missing_item_befo
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     calls.store(0, Ordering::SeqCst);
 
-    let missing_response = service
-        .analyze_futures_delivery(Request::new(delivery_request(&missing)))
-        .await
-        .expect("business error is transported")
-        .into_inner();
+    let missing_response = delivery_service(
+        vec![DefinitionValue::MarketRulePack(missing.clone())],
+        vec![subject],
+        Arc::clone(&calls),
+    )
+    .analyze_futures_delivery(Request::new(delivery_request(&missing)))
+    .await
+    .expect("business error is transported")
+    .into_inner();
     let Some(analyze_futures_delivery_response::Result::Error(error)) = missing_response.result
     else {
         panic!("missing rule item must fail closed through ErrorDetail");
@@ -854,6 +1068,107 @@ async fn ac02_grpc_parses_exact_rule_pack_versions_and_reports_missing_item_befo
         "规则包缺少计算所需项"
     );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn ac28_only_concrete_futures_contract_reaches_delivery_engine() {
+    let pack = delivery_pack(1, "3", false);
+    let subject = fixture_subject(
+        'S',
+        FundingTier::DrAvailable,
+        &["CFFEX"],
+        &["futures-delivery"],
+    );
+    let rejected_definitions = [
+        (
+            "continuous Instrument without a FuturesContract subtype",
+            other_instrument_definition("T-CONTINUOUS", 1, owner()),
+        ),
+        (
+            "stitched Instrument without a FuturesContract subtype",
+            other_instrument_definition("T-STITCHED", 1, owner()),
+        ),
+        (
+            "plain Instrument without a subtype",
+            other_instrument_definition("T-PLAIN", 1, owner()),
+        ),
+        ("Bond subtype", bond_instrument_definition(1, owner())),
+        (
+            "different Instrument version",
+            futures_contract_definition(2, owner(), VersionRef::new(id('R'), version(1))),
+        ),
+        (
+            "different owner",
+            futures_contract_definition(
+                1,
+                OwnerRef::new(id('X'), id('Y')),
+                VersionRef::new(id('R'), version(1)),
+            ),
+        ),
+        (
+            "different RulePack reference",
+            futures_contract_definition(1, owner(), VersionRef::new(id('Q'), version(1))),
+        ),
+    ];
+
+    for (label, definition) in rejected_definitions {
+        let parser_calls = Arc::new(AtomicUsize::new(0));
+        let engine_calls = Arc::new(AtomicUsize::new(0));
+        let service = delivery_service_with_parser_calls(
+            vec![DefinitionValue::MarketRulePack(pack.clone()), definition],
+            vec![subject.clone()],
+            Arc::clone(&parser_calls),
+            Arc::clone(&engine_calls),
+        );
+
+        let response = service
+            .analyze_futures_delivery(Request::new(delivery_request(&pack)))
+            .await
+            .expect("business rejection is transported")
+            .into_inner();
+        assert_eq!(
+            (
+                parser_calls.load(Ordering::SeqCst),
+                engine_calls.load(Ordering::SeqCst)
+            ),
+            (0, 0),
+            "{label} must fail before both RulePack parsing and delivery calculation"
+        );
+        let Some(analyze_futures_delivery_response::Result::Error(error)) = response.result else {
+            panic!("{label} must fail closed before RulePack parsing and delivery calculation");
+        };
+        assert!(!error.retryable, "{label}");
+    }
+
+    let parser_calls = Arc::new(AtomicUsize::new(0));
+    let engine_calls = Arc::new(AtomicUsize::new(0));
+    let service = delivery_service_with_parser_calls(
+        vec![
+            DefinitionValue::MarketRulePack(pack.clone()),
+            futures_contract_definition(
+                1,
+                owner(),
+                VersionRef::new(id('R'), version(pack.version())),
+            ),
+        ],
+        vec![subject],
+        Arc::clone(&parser_calls),
+        Arc::clone(&engine_calls),
+    );
+    let response = service
+        .analyze_futures_delivery(Request::new(delivery_request(&pack)))
+        .await
+        .expect("concrete FuturesContract result is transported")
+        .into_inner();
+    assert!(
+        matches!(
+            response.result,
+            Some(analyze_futures_delivery_response::Result::Analysis(_))
+        ),
+        "an exact registered FuturesContract must reach the delivery engine"
+    );
+    assert_eq!(parser_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(engine_calls.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
@@ -1726,6 +2041,137 @@ fn delivery_request(pack: &MarketRulePack) -> AnalyzeFuturesDeliveryRequest {
     }
 }
 
+fn other_instrument_definition(
+    symbol: &str,
+    instrument_version: u64,
+    instrument_owner: OwnerRef,
+) -> DefinitionValue {
+    DefinitionValue::Instrument(
+        InstrumentDefinition::new(
+            instrument(
+                symbol,
+                instrument_version,
+                instrument_owner,
+                InstrumentKind::Other,
+            ),
+            None,
+        )
+        .unwrap(),
+    )
+}
+
+fn bond_instrument_definition(
+    instrument_version: u64,
+    instrument_owner: OwnerRef,
+) -> DefinitionValue {
+    let instrument = instrument(
+        "T-BOND",
+        instrument_version,
+        instrument_owner,
+        InstrumentKind::Bond,
+    );
+    let bond = Bond::new(
+        &instrument,
+        NaiveDate::from_ymd_opt(2024, 8, 15).unwrap(),
+        NaiveDate::from_ymd_opt(2034, 8, 15).unwrap(),
+        domain_amount("100"),
+    )
+    .unwrap();
+    DefinitionValue::Instrument(
+        InstrumentDefinition::new(instrument, Some(InstrumentSubtype::Bond(bond))).unwrap(),
+    )
+}
+
+fn delivery_bond_definition() -> DefinitionValue {
+    let instrument = Instrument::new(InstrumentInput {
+        instrument_id: id('D'),
+        version: version(1),
+        owner: owner(),
+        kind: InstrumentKind::Bond,
+        market: "CFFEX".to_owned(),
+        symbol: "260011.IB".to_owned(),
+        currency: UnitRef::new(id('M'), version(1)),
+        calendar: VersionRef::new(id('K'), version(1)),
+    })
+    .unwrap();
+    let bond = Bond::with_issuance(
+        &instrument,
+        NaiveDate::from_ymd_opt(2024, 8, 15).unwrap(),
+        NaiveDate::from_ymd_opt(2024, 8, 15).unwrap(),
+        NaiveDate::from_ymd_opt(2034, 8, 15).unwrap(),
+        domain_amount("100"),
+        ficant_domain::market::BondTaxAttributes::new(
+            ficant_domain::market::ValueAddedTaxStatus::Taxable,
+            ficant_domain::market::IncomeTaxStatus::Taxable,
+        ),
+        domain_amount("100"),
+    )
+    .unwrap();
+    DefinitionValue::Instrument(
+        InstrumentDefinition::new(instrument, Some(InstrumentSubtype::Bond(bond))).unwrap(),
+    )
+}
+
+fn futures_contract_definition(
+    instrument_version: u64,
+    instrument_owner: OwnerRef,
+    rule_pack: VersionRef,
+) -> DefinitionValue {
+    let instrument = instrument(
+        "T2609",
+        instrument_version,
+        instrument_owner,
+        InstrumentKind::Futures,
+    );
+    let contract = FuturesContract::new(
+        &instrument,
+        domain_time(18),
+        domain_time(19),
+        domain_time(20),
+        domain_amount("100"),
+        rule_pack,
+    )
+    .unwrap();
+    DefinitionValue::Instrument(
+        InstrumentDefinition::new(
+            instrument,
+            Some(InstrumentSubtype::FuturesContract(contract)),
+        )
+        .unwrap(),
+    )
+}
+
+fn instrument(
+    symbol: &str,
+    instrument_version: u64,
+    instrument_owner: OwnerRef,
+    kind: InstrumentKind,
+) -> Instrument {
+    Instrument::new(InstrumentInput {
+        instrument_id: id('C'),
+        version: version(instrument_version),
+        owner: instrument_owner,
+        kind,
+        market: "CFFEX".to_owned(),
+        symbol: symbol.to_owned(),
+        currency: UnitRef::new(id('M'), version(1)),
+        calendar: VersionRef::new(id('K'), version(1)),
+    })
+    .unwrap()
+}
+
+fn domain_amount(coefficient: &str) -> DomainDecimalValue {
+    DomainDecimalValue::new(coefficient, 0, UnitRef::new(id('M'), version(1))).unwrap()
+}
+
+fn fixed_decimal(coefficient: &str, scale: u32) -> FixedDecimal {
+    let coefficient = coefficient.parse::<i128>().unwrap();
+    let scaled = coefficient
+        .checked_mul(10_i128.checked_pow(12 - scale).unwrap())
+        .unwrap();
+    FixedDecimal::from_scaled(scaled)
+}
+
 fn hedge_request(subject_suffix: char) -> AnalyzeFuturesHedgeRequest {
     let rate = unit('P');
     AnalyzeFuturesHedgeRequest {
@@ -1970,6 +2416,10 @@ fn assert_within_one_fixed_decimal_tick(actual: ExactDecimal, expected: ExactDec
 
 fn owner() -> OwnerRef {
     OwnerRef::new(id('A'), id('B'))
+}
+
+fn version(value: u64) -> Version {
+    Version::new(value).unwrap()
 }
 
 fn proto_owner() -> ProtoOwnerRef {

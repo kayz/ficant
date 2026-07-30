@@ -1,5 +1,6 @@
 //! Frozen platform transport boundary for the Phase 1 application shell.
 
+mod canonical_snapshot;
 mod core_error;
 mod error;
 mod experiment;
@@ -9,6 +10,7 @@ mod registry;
 mod session;
 mod subject_registry;
 
+pub use canonical_snapshot::CanonicalSnapshotCodecAdapter;
 pub use core_error::CoreBusinessErrorMapper;
 pub use error::{PlatformFailure, PlatformFailureCode, SafeErrorMapper};
 pub use experiment::{ExperimentGrpcService, TrustedExperimentScope, TrustedNodeCatalog};

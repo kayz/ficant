@@ -4,9 +4,10 @@ use crate::grpc_web::request_credential;
 use crate::registry::PlatformPort;
 use chrono::{DateTime, NaiveDate, Utc};
 use ficant_application::ports::{
-    BondAnalyticsEngine, CarryRollEngine, DefinitionRepository, FundingRulePackParser,
-    FuturesDeliveryEngine, FuturesDeliveryRuleParser, FuturesHedgeEngine, SubjectRepository,
-    TaxRulePackParser, YieldCurveEngine,
+    BondAnalyticsEngine, CanonicalSnapshotDecoder, CarryRollEngine, DefinitionRepository,
+    FundingRulePackParser, FuturesDeliveryEngine, FuturesDeliveryRuleParser, FuturesHedgeEngine,
+    IntegrityEventSink, SnapshotVerifiedReadMetadataRepository, SubjectRepository,
+    TaxRulePackParser, VerifiedBlobReader, YieldCurveEngine,
 };
 use ficant_application::use_cases::{
     funding_rule::ResolveFundingRule, subject_resolution::ResolveSubject, tax_rule::ResolveTaxRule,
@@ -14,7 +15,8 @@ use ficant_application::use_cases::{
 use ficant_application::{
     AccessScope, ApplicationError, ApplicationErrorCategory, CalculateBondAnalytics,
     CalculateCarryRoll, CalculateFuturesDeliveryBasket, CalculateFuturesHedge,
-    ResolveFuturesDeliveryRule, map_analytics_error, map_domain_error,
+    FuturesDeliveryCandidateBinding, FuturesDeliveryInputBindings,
+    MaterializeFuturesDeliveryInputs, map_analytics_error, map_domain_error,
 };
 use ficant_contracts::ficant::core::v1::{
     DecimalValue, OwnerRef as ProtoOwnerRef, UnitRef as ProtoUnitRef,
@@ -36,8 +38,7 @@ use ficant_domain::curves::{
 };
 use ficant_domain::futures_delivery::{
     CgbFuturesProduct, FUTURES_DELIVERY_ALGORITHM_ID, FUTURES_DELIVERY_ALGORITHM_VERSION,
-    FUTURES_DELIVERY_CONVENTION_PROFILE, FuturesDeliverableInput, FuturesDeliveryBasketResult,
-    FuturesDeliveryMeasures,
+    FUTURES_DELIVERY_CONVENTION_PROFILE, FuturesDeliveryBasketResult, FuturesDeliveryMeasures,
 };
 use ficant_domain::futures_hedge::{
     FUTURES_HEDGE_ALGORITHM_ID, FUTURES_HEDGE_ALGORITHM_VERSION, FUTURES_HEDGE_CONVENTION_PROFILE,
@@ -48,6 +49,7 @@ use ficant_domain::primitives::{
     ContentHash, DecimalValue as DomainDecimalValue, MarketTime, OwnerRef, Ulid, UnitRef, Version,
     VersionRef,
 };
+use prost::Message;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
@@ -69,6 +71,10 @@ pub struct RatesGrpcService {
     definitions: Arc<dyn DefinitionRepository>,
     subjects: Arc<dyn SubjectRepository>,
     futures_delivery_rule_parser: Arc<dyn FuturesDeliveryRuleParser>,
+    snapshot_metadata: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
+    blob_reader: Arc<dyn VerifiedBlobReader>,
+    integrity_events: Arc<dyn IntegrityEventSink>,
+    canonical_snapshot_decoder: Arc<dyn CanonicalSnapshotDecoder>,
     funding_rule_pack_parser: Arc<dyn FundingRulePackParser>,
     tax_rule_pack_parser: Arc<dyn TaxRulePackParser>,
     futures_hedge: Arc<dyn FuturesHedgeEngine>,
@@ -91,6 +97,10 @@ impl RatesGrpcService {
         definitions: Arc<dyn DefinitionRepository>,
         subjects: Arc<dyn SubjectRepository>,
         futures_delivery_rule_parser: Arc<dyn FuturesDeliveryRuleParser>,
+        snapshot_metadata: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
+        blob_reader: Arc<dyn VerifiedBlobReader>,
+        integrity_events: Arc<dyn IntegrityEventSink>,
+        canonical_snapshot_decoder: Arc<dyn CanonicalSnapshotDecoder>,
         funding_rule_pack_parser: Arc<dyn FundingRulePackParser>,
         tax_rule_pack_parser: Arc<dyn TaxRulePackParser>,
         futures_hedge: Arc<dyn FuturesHedgeEngine>,
@@ -105,6 +115,10 @@ impl RatesGrpcService {
             definitions,
             subjects,
             futures_delivery_rule_parser,
+            snapshot_metadata,
+            blob_reader,
+            integrity_events,
+            canonical_snapshot_decoder,
             funding_rule_pack_parser,
             tax_rule_pack_parser,
             futures_hedge,
@@ -285,17 +299,6 @@ impl RatesGrpcService {
             context.owner.owner_id().clone(),
             vec![context.owner.owner_id().clone()],
         )?;
-        let rule = ResolveFuturesDeliveryRule::new(
-            self.definitions.as_ref(),
-            self.futures_delivery_rule_parser.as_ref(),
-        )
-        .execute(
-            &access_scope,
-            &context.rule_pack,
-            valuation_at.clone(),
-            product,
-        )
-        .await?;
         let funding_rate = ResolveFundingRule::new(
             self.definitions.as_ref(),
             self.funding_rule_pack_parser.as_ref(),
@@ -315,33 +318,45 @@ impl RatesGrpcService {
             &context.units.price_per_100,
         )?;
         let financing_rate = funding_rate.annual_financing_rate();
-        let inputs = request
+        let candidates = request
             .candidates
             .iter()
             .map(|candidate| {
-                FuturesDeliverableInput::new(
-                    context.owner.clone(),
-                    futures_contract.clone(),
+                Ok(FuturesDeliveryCandidateBinding::new(
                     parse_object(candidate.bond.as_ref())?,
-                    context.rule_pack.clone(),
-                    context.data_snapshot.clone(),
-                    valuation_at.clone(),
-                    purchase_date,
-                    delivery_month_first,
-                    delivery_date,
-                    product,
-                    rule.clone(),
                     parse_bond_terms(candidate.terms.as_ref(), &context.units)?,
                     parse_fixed_decimal(
                         candidate.spot_clean_price.as_ref().ok_or_else(invalid)?,
                         &context.units.price_per_100,
                     )?,
-                    futures_clean_price,
-                    financing_rate,
-                )
-                .map_err(map_domain_error)
+                ))
             })
             .collect::<Result<Vec<_>, _>>()?;
+        let bindings = FuturesDeliveryInputBindings::new(
+            context.owner.clone(),
+            futures_contract,
+            context.rule_pack.clone(),
+            context.data_snapshot.clone(),
+            valuation_at,
+            purchase_date,
+            delivery_month_first,
+            delivery_date,
+            product,
+            candidates,
+            futures_clean_price,
+            financing_rate,
+            parse_unit(&context.units.price_per_100)?,
+        );
+        let inputs = MaterializeFuturesDeliveryInputs::new(
+            self.definitions.as_ref(),
+            self.snapshot_metadata.as_ref(),
+            self.blob_reader.as_ref(),
+            self.integrity_events.as_ref(),
+            self.canonical_snapshot_decoder.as_ref(),
+            self.futures_delivery_rule_parser.as_ref(),
+        )
+        .execute(&access_scope, &bindings, trace_context(request))
+        .await?;
         let result =
             CalculateFuturesDeliveryBasket::new(self.futures_delivery.as_ref()).execute(&inputs)?;
         futures_delivery_result(
@@ -759,6 +774,19 @@ fn parse_object(value: Option<&pb::ObjectBinding>) -> Result<AnalyticsObjectRef,
         ),
         parse_hash(value.content_hash.as_ref())?,
     ))
+}
+
+fn trace_context(message: &impl Message) -> ficant_application::ports::SafeTraceContext {
+    let hash = ContentHash::digest(&message.encode_to_vec());
+    let value = hash.as_bytes()[..16]
+        .iter()
+        .fold(String::with_capacity(32), |mut output, byte| {
+            use std::fmt::Write as _;
+            write!(output, "{byte:02x}").expect("writing to String cannot fail");
+            output
+        });
+    ficant_application::ports::SafeTraceContext::new(value)
+        .expect("derived trace token is canonical")
 }
 
 fn parse_subject_ref(

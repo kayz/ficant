@@ -8,9 +8,12 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+async-trait = { workspace = true }
 chrono = { workspace = true }
+chrono-tz = { workspace = true }
 ficant-application = { path = "../ficant-application" }
 ficant-contracts = { path = "../ficant-contracts" }
+ficant-data = { path = "../ficant-data" }
 ficant-domain = { path = "../ficant-domain" }
 ficant-runtime = { path = "../ficant-runtime" }
 prost = { workspace = true }

@@ -760,10 +760,13 @@ dependencies = [
 name = "ficant-api"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
+ "chrono-tz",
  "ficant-application",
  "ficant-cgb-futures-pack",
  "ficant-contracts",
+ "ficant-data",
  "ficant-domain",
  "ficant-fixed-income-native",
  "ficant-funding-pack",
