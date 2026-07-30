@@ -229,7 +229,7 @@ impl CarryRollInput {
     ) -> DomainResult<Self> {
         if valuation_at.market_timezone() != MARKET_TIMEZONE
             || curve.valuation_date() != valuation_at.local_trading_date()
-            || initial_settlement < terms.issue_date()
+            || initial_settlement < terms.first_issue_date()
             || horizon_settlement <= initial_settlement
             || horizon_settlement >= terms.maturity_date()
         {
@@ -326,7 +326,7 @@ impl CarryRollInput {
         date_field(&mut bytes, self.calendar.coverage_end());
         dates_field(&mut bytes, self.calendar.non_business_days());
         dates_field(&mut bytes, self.calendar.work_weekends());
-        date_field(&mut bytes, self.terms.issue_date());
+        date_field(&mut bytes, self.terms.first_issue_date());
         date_field(&mut bytes, self.terms.maturity_date());
         field(&mut bytes, &(self.terms.frequency() as u32).to_be_bytes());
         field(&mut bytes, &(self.terms.day_count() as u32).to_be_bytes());

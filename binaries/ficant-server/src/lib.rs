@@ -21,6 +21,7 @@ use ficant_native_nodes::{native_node_source_digest, trusted_native_node};
 use ficant_runtime::NativeNode;
 use ficant_storage::postgres::PostgresRepository;
 use ficant_storage::s3::S3BlobStore;
+use ficant_tax_pack::TaxRulePackV1Parser;
 use sqlx::postgres::PgPoolOptions;
 use std::collections::BTreeMap;
 use std::env;
@@ -376,6 +377,7 @@ fn build_rates_service(
         subjects,
         Arc::new(CgbFuturesDeliveryRulePackParser),
         Arc::new(FundingRulePackV1Parser),
+        Arc::new(TaxRulePackV1Parser),
         Arc::new(NativeFuturesHedgeEngine),
         &settings.trace_key,
     )

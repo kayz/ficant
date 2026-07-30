@@ -92,7 +92,7 @@ impl FuturesDeliveryEngine for NativeFuturesDeliveryEngine {
                 residual_max_months,
                 residual_max_months_unbounded,
                 delivery_months: rule.delivery_months(),
-                issue_date: epoch_days(terms.issue_date())?,
+                issue_date: epoch_days(terms.first_issue_date())?,
                 maturity_date: epoch_days(terms.maturity_date())?,
                 delivery_month_first: epoch_days(input.delivery_month_first())?,
                 purchase_date: epoch_days(input.purchase_date())?,
@@ -318,7 +318,7 @@ impl BondAnalyticsEngine for NativeBondAnalyticsEngine {
         let non_business_days = epoch_days_all(input.calendar().non_business_days())?;
         let work_weekends = epoch_days_all(input.calendar().work_weekends())?;
         let bond = ficant_kernel_sys::BondInput {
-            issue_date: epoch_days(terms.issue_date())?,
+            issue_date: epoch_days(terms.first_issue_date())?,
             maturity_date: epoch_days(terms.maturity_date())?,
             frequency: match terms.frequency() {
                 CouponFrequency::Annual => ficant_kernel_sys::FREQUENCY_ANNUAL,

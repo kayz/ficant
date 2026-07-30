@@ -20,6 +20,12 @@ from ficant.market.v1.cgb_futures_rule_pb2 import (  # noqa: E402
     CgbFuturesProductRule,
 )
 from ficant.market.v1.funding_rule_pb2 import FundingRulePack, FundingTierRate  # noqa: E402
+from ficant.market.v1.tax_rule_pb2 import (  # noqa: E402
+    BondCouponTaxRule,
+    SubjectCouponTaxRate,
+    TaxRulePack,
+)
+from ficant.market.v1.definition_pb2 import BondTaxAttributes  # noqa: E402
 from ficant.market.v1.instrument_pb2 import Instrument  # noqa: E402
 from ficant.market.v1.rule_pb2 import MarketRulePack  # noqa: E402
 from ficant.rates.v1.analytics_pb2 import AnalyzeBondRequest  # noqa: E402
@@ -37,6 +43,12 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     cgb_pack = CgbFuturesDeliveryRulePack(delivery_months=[3, 6, 9, 12])
     cgb_product = CgbFuturesProductRule(product_code="T")
     funding_pack = FundingRulePack(rates=[FundingTierRate()])
+    tax_pack = TaxRulePack(
+        coupon_rules=[
+            BondCouponTaxRule(rates=[SubjectCouponTaxRate(value_added_tax_profile="synthetic")])
+        ]
+    )
+    tax_attributes = BondTaxAttributes()
 
     assert instrument.DESCRIPTOR.full_name == "ficant.market.v1.Instrument"
     assert decimal.DESCRIPTOR.full_name == "ficant.core.v1.DecimalValue"
@@ -49,3 +61,6 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert cgb_product.HasField("product_code")
     assert funding_pack.DESCRIPTOR.full_name == "ficant.market.v1.FundingRulePack"
     assert funding_pack.rates[0].DESCRIPTOR.full_name == "ficant.market.v1.FundingTierRate"
+    assert tax_pack.DESCRIPTOR.full_name == "ficant.market.v1.TaxRulePack"
+    assert tax_pack.coupon_rules[0].rates[0].DESCRIPTOR.full_name == "ficant.market.v1.SubjectCouponTaxRate"
+    assert tax_attributes.DESCRIPTOR.full_name == "ficant.market.v1.BondTaxAttributes"

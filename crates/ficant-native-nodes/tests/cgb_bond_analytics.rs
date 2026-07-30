@@ -4,6 +4,9 @@ use ficant_contracts::ficant::core::v1::{
     DecimalValue, MarketTime, OwnerRef as ProtoOwnerRef, Sha256, Ulid as ProtoUlid, UnitRef,
     VersionRef,
 };
+use ficant_contracts::ficant::market::v1::{
+    BondTaxAttributes, IncomeTaxStatus, ValueAddedTaxStatus,
+};
 use ficant_contracts::ficant::rates::v1::{
     AlgorithmBinding, AnalysisContext, AnalysisUnits, AnalyzeBondRequest, AnalyzeBondResult,
     BondTerms, CalendarBinding, CalendarRequirement, CouponFrequency, ObjectBinding, RiskSummary,
@@ -114,6 +117,7 @@ fn golden_request() -> AnalyzeBondRequest {
                 version: 1,
             }),
             funding_rule_pack: None,
+            tax_rule_pack: None,
         }),
         bond: Some(object('N')),
         valuation_at: Some(MarketTime {
@@ -136,11 +140,17 @@ fn golden_request() -> AnalyzeBondRequest {
             work_weekends: vec![],
         }),
         terms: Some(BondTerms {
-            issue_date: fixture["issue_date"].as_str().unwrap().to_owned(),
+            first_issue_date: fixture["issue_date"].as_str().unwrap().to_owned(),
+            current_issue_date: fixture["issue_date"].as_str().unwrap().to_owned(),
             maturity_date: fixture["maturity_date"].as_str().unwrap().to_owned(),
             frequency: CouponFrequency::Annual as i32,
             coupon_rate: Some(decimal("15", 3, units.rate.unwrap())),
             face_amount: Some(decimal("100", 0, units.currency_amount.unwrap())),
+            cumulative_issued_amount: Some(decimal("100", 0, unit('A'))),
+            tax_attributes: Some(BondTaxAttributes {
+                value_added_tax_status: ValueAddedTaxStatus::Taxable as i32,
+                income_tax_status: IncomeTaxStatus::Taxable as i32,
+            }),
         }),
         input: Some(analyze_bond_request::Input::YieldToMaturity(decimal(
             "155",

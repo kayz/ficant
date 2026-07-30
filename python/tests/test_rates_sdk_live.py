@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 from ficant.core.v1 import common_pb2, subject_pb2
-from ficant.market.v1 import funding_rule_pb2
+from ficant.market.v1 import definition_pb2, funding_rule_pb2, tax_rule_pb2
 from ficant.rates.v1 import analytics_pb2 as rates
 from ficant_sdk import RatesClient
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -78,6 +78,33 @@ def _funding_rule_pack() -> rates.ObjectBinding:
     )
 
 
+def _tax_rule_pack() -> rates.ObjectBinding:
+    payload = tax_rule_pb2.TaxRulePack(
+        coupon_rules=[
+            tax_rule_pb2.BondCouponTaxRule(
+                first_issue_from="2000-01-01",
+                tax_attributes=definition_pb2.BondTaxAttributes(
+                    value_added_tax_status=definition_pb2.VALUE_ADDED_TAX_STATUS_TAXABLE,
+                    income_tax_status=definition_pb2.INCOME_TAX_STATUS_TAXABLE,
+                ),
+                rates=[
+                    tax_rule_pb2.SubjectCouponTaxRate(
+                        value_added_tax_profile="synthetic-vat",
+                        income_tax_profile="synthetic-income",
+                        coupon_tax_rate=_decimal("0", UNITS.rate),
+                    )
+                ],
+            )
+        ]
+    )
+    return rates.ObjectBinding(
+        object=common_pb2.VersionRef(id=_ulid("T"), version=1),
+        content_hash=common_pb2.Sha256(
+            value=hashlib.sha256(payload.SerializeToString(deterministic=True)).digest()
+        ),
+    )
+
+
 def _unit(suffix: str) -> common_pb2.UnitRef:
     return common_pb2.UnitRef(unit_id=_ulid(suffix), version=1)
 
@@ -128,6 +155,7 @@ def _context(
     snapshot_suffix: str,
     rule_pack: rates.ObjectBinding | None = None,
     funding_rule_pack: rates.ObjectBinding | None = None,
+    tax_rule_pack: rates.ObjectBinding | None = None,
 ) -> rates.AnalysisContext:
     return rates.AnalysisContext(
         owner=common_pb2.OwnerRef(tenant_id=_ulid("0"), owner_id=_ulid("1")),
@@ -142,6 +170,7 @@ def _context(
         units=UNITS,
         subject_ref=_subject_ref(),
         funding_rule_pack=funding_rule_pack,
+        tax_rule_pack=tax_rule_pack,
     )
 
 
@@ -162,7 +191,8 @@ def _terms(value: dict[str, object]) -> rates.BondTerms:
         else rates.COUPON_FREQUENCY_SEMIANNUAL
     )
     return rates.BondTerms(
-        issue_date=str(value["issue_date"]),
+        first_issue_date=str(value["issue_date"]),
+        current_issue_date=str(value["issue_date"]),
         maturity_date=str(value["maturity_date"]),
         frequency=frequency,
         coupon_rate=_decimal(
@@ -171,6 +201,14 @@ def _terms(value: dict[str, object]) -> rates.BondTerms:
         face_amount=_decimal(
             str(value.get("face_value", "100.000000000000")),
             UNITS.currency_amount,
+        ),
+        cumulative_issued_amount=_decimal(
+            str(value.get("face_value", "100.000000000000")),
+            UNITS.currency_amount,
+        ),
+        tax_attributes=definition_pb2.BondTaxAttributes(
+            value_added_tax_status=definition_pb2.VALUE_ADDED_TAX_STATUS_TAXABLE,
+            income_tax_status=definition_pb2.INCOME_TAX_STATUS_TAXABLE,
         ),
     )
 
@@ -234,6 +272,7 @@ def _bond_request() -> rates.AnalyzeBondRequest:
             "cgb-reference-v1",
             rule_suffix="K",
             snapshot_suffix="M",
+            tax_rule_pack=_tax_rule_pack(),
         ),
         bond=_object("N"),
         valuation_at=_market_time(str(fixture["valuation_at"]), "2026-07-13"),
@@ -276,6 +315,7 @@ def _assert_bond(client: RatesClient) -> None:
         },
     )
     assert result.metadata.schema_id == "ficant.bond-analytics.result.v1"
+    assert result.metadata.tax_rule_pack.object.id.value == _ulid("T").value
 
 
 def _assert_curve_and_carry(client: RatesClient) -> None:

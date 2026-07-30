@@ -7,4 +7,5 @@ pub mod futures_hedge;
 pub mod phase1_business_loop;
 pub mod phase4_submission;
 pub mod subject_resolution;
+pub mod tax_rule;
 pub mod verified_reads;

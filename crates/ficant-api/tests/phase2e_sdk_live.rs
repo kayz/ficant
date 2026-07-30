@@ -12,7 +12,11 @@ use ficant_cgb_futures_pack::{CgbFuturesDeliveryRulePackParser, MARKET, RULE_TYP
 use ficant_contracts::ficant::core::v1::{
     DecimalValue, FundingTier as ProtoFundingTier, Ulid as ProtoUlid, UnitRef as ProtoUnitRef,
 };
-use ficant_contracts::ficant::market::v1::{FundingRulePack, FundingTierRate};
+use ficant_contracts::ficant::market::v1::{
+    BondCouponTaxRule, BondTaxAttributes, FundingRulePack, FundingTierRate,
+    IncomeTaxStatus as ProtoIncomeTaxStatus, SubjectCouponTaxRate, TaxRulePack,
+    ValueAddedTaxStatus as ProtoValueAddedTaxStatus,
+};
 use ficant_domain::VersionedDefinition;
 use ficant_domain::market::{
     MarketRulePack, MarketRulePackInput, RulePackContent, VerificationStatus,
@@ -31,6 +35,9 @@ use ficant_fixed_income_native::{
 use ficant_funding_pack::{
     FundingRulePackV1Parser, MARKET as FUNDING_MARKET, RULE_TYPE as FUNDING_RULE_TYPE,
     TYPE_URL as FUNDING_TYPE_URL,
+};
+use ficant_tax_pack::{
+    MARKET as TAX_MARKET, RULE_TYPE as TAX_RULE_TYPE, TYPE_URL as TAX_TYPE_URL, TaxRulePackV1Parser,
 };
 use prost::Message;
 use std::net::{Ipv4Addr, SocketAddr, TcpListener};
@@ -135,13 +142,18 @@ async fn python_sdk_matches_phase2_reference_slices_through_live_rule_pack_compo
         Arc::new(NativeCarryRollEngine),
         Arc::new(NativeFuturesDeliveryEngine),
         Arc::new(FixtureDefinitions {
-            values: vec![frozen_cgb_futures_pack(), synthetic_funding_pack()],
+            values: vec![
+                frozen_cgb_futures_pack(),
+                synthetic_funding_pack(),
+                synthetic_tax_pack(),
+            ],
         }),
         Arc::new(FixtureSubjects {
             value: fixture_subject(),
         }),
         Arc::new(CgbFuturesDeliveryRulePackParser),
         Arc::new(FundingRulePackV1Parser),
+        Arc::new(TaxRulePackV1Parser),
         Arc::new(NativeFuturesHedgeEngine),
         KEY,
     )
@@ -267,6 +279,45 @@ fn synthetic_funding_pack() -> MarketRulePack {
         content,
     )
     .expect("synthetic funding RulePack is valid")
+}
+
+fn synthetic_tax_pack() -> MarketRulePack {
+    let content = RulePackContent::new(
+        TAX_TYPE_URL,
+        TaxRulePack {
+            coupon_rules: vec![BondCouponTaxRule {
+                first_issue_from: "2000-01-01".to_owned(),
+                first_issue_to: String::new(),
+                tax_attributes: Some(BondTaxAttributes {
+                    value_added_tax_status: ProtoValueAddedTaxStatus::Taxable as i32,
+                    income_tax_status: ProtoIncomeTaxStatus::Taxable as i32,
+                }),
+                rates: vec![SubjectCouponTaxRate {
+                    value_added_tax_profile: "synthetic-vat".to_owned(),
+                    income_tax_profile: "synthetic-income".to_owned(),
+                    coupon_tax_rate: Some(decimal("0", 0)),
+                }],
+            }],
+        }
+        .encode_to_vec(),
+    )
+    .expect("synthetic tax payload is valid");
+    MarketRulePack::new_with_content(
+        MarketRulePackInput {
+            rule_pack_id: id('T'),
+            version: Version::new(1).expect("fixture version is valid"),
+            owner: OwnerRef::new(id('0'), id('1')),
+            market: TAX_MARKET.to_owned(),
+            rule_type: TAX_RULE_TYPE.to_owned(),
+            source: "synthetic-r3b-tax-fixture-not-authoritative".to_owned(),
+            effective: EffectivePeriod::new(domain_time(2026, 1, 1), domain_time(2027, 1, 1))
+                .expect("fixture effective period is valid"),
+            verification_status: VerificationStatus::Verified,
+            content_hash: ContentHash::digest(content.value()),
+        },
+        content,
+    )
+    .expect("synthetic tax RulePack is valid")
 }
 
 fn fixture_subject() -> SubjectRecord {

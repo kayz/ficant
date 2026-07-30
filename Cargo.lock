@@ -768,6 +768,7 @@ dependencies = [
  "ficant-fixed-income-native",
  "ficant-funding-pack",
  "ficant-runtime",
+ "ficant-tax-pack",
  "prost",
  "prost-types",
  "ring",
@@ -930,6 +931,7 @@ dependencies = [
  "ficant-native-nodes",
  "ficant-runtime",
  "ficant-storage",
+ "ficant-tax-pack",
  "serde_json",
  "sqlx",
  "tokio",
@@ -952,6 +954,17 @@ dependencies = [
  "prost",
  "sqlx",
  "tokio",
+]
+
+[[package]]
+name = "ficant-tax-pack"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "ficant-application",
+ "ficant-contracts",
+ "ficant-domain",
+ "prost",
 ]
 
 [[package]]

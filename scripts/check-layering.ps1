@@ -253,6 +253,53 @@ function Get-FundingRuleValueViolations {
     return @($violations)
 }
 
+function Get-TaxRuleValueViolations {
+    $candidatePaths = [System.Collections.Generic.List[string]]::new()
+    foreach ($relativePath in @(
+            'interface/proto/ficant/core/v1/subject.proto',
+            'interface/proto/ficant/core/v1/subject_state.proto',
+            'crates/ficant-domain/src/subject.rs',
+            'crates/ficant-domain/src/market/bond.rs',
+            'crates/ficant-kernel-sys/src/lib.rs',
+            'crates/ficant-fixed-income-native/src/lib.rs'
+        )) {
+        $candidatePaths.Add($relativePath)
+    }
+    $cppRoot = Join-Path $script:RepositoryRoot 'cpp\fixed-income-kernel'
+    if (Test-Path -LiteralPath $cppRoot -PathType Container) {
+        Get-ChildItem -LiteralPath $cppRoot -File -Recurse | Where-Object {
+            $_.Extension.ToLowerInvariant() -in @('.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx')
+        } | ForEach-Object {
+            $candidatePaths.Add((Get-RepositoryRelativePath -Path $_.FullName))
+        }
+    }
+
+    $codePattern = '(?i)\b(?:coupon_)?(?:tax|vat)[A-Za-z_]*rate\b\s*(?:=|:)\s*[-+]?(?:\d+\.\d+|\.\d+|\d+)'
+    $protoPattern = '(?i)\b(?:double|float)\s+(?:coupon_)?(?:tax|vat)[A-Za-z_]*rate\b\s*=\s*[-+]?(?:\d+\.\d+|\.\d+)'
+    $violations = foreach ($relativePath in $candidatePaths | Sort-Object -Unique) {
+        $path = Join-Path $script:RepositoryRoot ($relativePath.Replace('/', '\\'))
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            continue
+        }
+        $isProto = [System.IO.Path]::GetExtension($path).ToLowerInvariant() -eq '.proto'
+        $pattern = if ($isProto) { $protoPattern } else { $codePattern }
+        $lineNumber = 0
+        foreach ($line in Get-Content -LiteralPath $path) {
+            $lineNumber++
+            if ($line -match $pattern) {
+                [pscustomobject]@{
+                    Path = $relativePath
+                    Line = $lineNumber
+                    Category = 'tax-rate-value'
+                    Text = $line.Trim()
+                }
+            }
+        }
+    }
+
+    return @($violations)
+}
+
 try {
     if (-not (Test-Path -LiteralPath $script:RepositoryRoot -PathType Container)) {
         throw "Repository root is missing: $script:RepositoryRoot"
@@ -291,7 +338,15 @@ try {
         throw "Layering gate failed R3a with $($fundingRuleViolations.Count) Funding rule value violation(s)."
     }
 
-    Write-Host ("Layering gate passed: AC03=0 market branches; AC01=0 domain rule values; Phase2C production C++/FFI rule values=0; R3a Funding rule values=0; allowlist=$($allowlist.Count).")
+    $taxRuleViolations = @(Get-TaxRuleValueViolations)
+    if ($taxRuleViolations.Count -gt 0) {
+        foreach ($violation in $taxRuleViolations) {
+            Write-Error ("R3b tax rule value at {0}:{1} ({2}): {3}" -f $violation.Path, $violation.Line, $violation.Category, $violation.Text)
+        }
+        throw "Layering gate failed R3b with $($taxRuleViolations.Count) Tax rule value violation(s)."
+    }
+
+    Write-Host ("Layering gate passed: AC03=0 market branches; AC01=0 domain rule values; Phase2C production C++/FFI rule values=0; R3a Funding rule values=0; R3b Tax rule values=0; allowlist=$($allowlist.Count).")
     exit 0
 }
 catch {

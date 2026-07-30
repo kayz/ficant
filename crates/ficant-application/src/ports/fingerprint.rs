@@ -1,7 +1,7 @@
 use ficant_domain::market::{
-    ArtifactInputKind, Bond, Calendar, Cashflow, CashflowType, CurveSnapshot, FactSource,
-    FuturesContract, Instrument, InstrumentKind, MarketRulePack, Quote, Trade, Unit, Valuation,
-    VerificationStatus,
+    ArtifactInputKind, Bond, BondTaxAttributes, Calendar, Cashflow, CashflowType, CurveSnapshot,
+    FactSource, FuturesContract, IncomeTaxStatus, Instrument, InstrumentKind, MarketRulePack,
+    Quote, Trade, Unit, Valuation, ValueAddedTaxStatus, VerificationStatus,
 };
 use ficant_domain::primitives::ContentHash;
 use ficant_domain::primitives::{
@@ -215,12 +215,37 @@ fn instrument_bytes(instrument: &Instrument) -> Vec<u8> {
 }
 
 fn bond_bytes(bond: &Bond) -> Vec<u8> {
-    let mut value = FingerprintBuilder::new("definition/bond/v1");
+    let Some(tax_attributes) = bond.tax_attributes() else {
+        let mut legacy = FingerprintBuilder::new("definition/bond/v1");
+        legacy.field(2, &version_ref_bytes(bond.instrument()));
+        legacy.field(3, bond.first_issue_date().to_string().as_bytes());
+        legacy.field(4, bond.maturity_date().to_string().as_bytes());
+        legacy.field(5, &decimal_bytes(bond.face_value()));
+        return legacy.into_bytes();
+    };
+
+    let mut value = FingerprintBuilder::new("definition/bond/v2");
     value.field(2, &version_ref_bytes(bond.instrument()));
-    value.field(3, bond.issue_date().to_string().as_bytes());
-    value.field(4, bond.maturity_date().to_string().as_bytes());
-    value.field(5, &decimal_bytes(bond.face_value()));
+    value.field(3, bond.first_issue_date().to_string().as_bytes());
+    value.field(4, bond.current_issue_date().to_string().as_bytes());
+    value.field(5, bond.maturity_date().to_string().as_bytes());
+    value.field(6, &decimal_bytes(bond.cumulative_issued_amount()));
+    value.field(7, &bond_tax_attributes_bytes(tax_attributes));
+    value.field(8, &decimal_bytes(bond.face_value()));
     value.into_bytes()
+}
+
+fn bond_tax_attributes_bytes(attributes: BondTaxAttributes) -> [u8; 2] {
+    [
+        match attributes.value_added_tax_status() {
+            ValueAddedTaxStatus::Exempt => 1,
+            ValueAddedTaxStatus::Taxable => 2,
+        },
+        match attributes.income_tax_status() {
+            IncomeTaxStatus::Exempt => 1,
+            IncomeTaxStatus::Taxable => 2,
+        },
+    ]
 }
 
 fn futures_bytes(contract: &FuturesContract) -> Vec<u8> {
