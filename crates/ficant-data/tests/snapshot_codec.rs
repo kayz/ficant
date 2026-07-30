@@ -86,6 +86,38 @@ async fn deterministic_parquet_manifest_and_verified_round_trip_are_exact() {
         .decode_verified(first.snapshot().clone(), first.parquet(), first.manifest())
         .unwrap();
     assert_eq!(decoded.batch(), canonical.batch());
+    let quotes = decoded.quotes().unwrap();
+    assert_eq!(quotes.len(), 2);
+    assert_eq!(
+        quotes[0].instrument(),
+        &VersionRef::new(
+            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F20").unwrap(),
+            Version::new(7).unwrap(),
+        )
+    );
+    assert_eq!(
+        quotes[0].observed_at(),
+        "2026-07-20T01:30:00Z".parse::<DateTime<Utc>>().unwrap()
+    );
+    assert_eq!(
+        quotes[0].visible_at(),
+        "2026-07-20T01:30:05Z".parse::<DateTime<Utc>>().unwrap()
+    );
+    assert_eq!(
+        quotes[0].local_trading_date(),
+        NaiveDate::from_ymd_opt(2026, 7, 20).unwrap()
+    );
+    assert_eq!(quotes[0].bid().unwrap().coefficient(), "10123");
+    assert_eq!(quotes[0].bid().unwrap().scale(), 2);
+    assert_eq!(quotes[0].ask().unwrap().coefficient(), "10125");
+    assert_eq!(quotes[0].ask().unwrap().scale(), 2);
+    assert_eq!(
+        quotes[0].unit().unit_id(),
+        &Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F40").unwrap()
+    );
+    assert_eq!(quotes[0].unit().version(), Version::new(2).unwrap());
+    assert_eq!(quotes[0].bid().unwrap().unit(), quotes[0].unit());
+    assert_eq!(quotes[0].ask().unwrap().unit(), quotes[0].unit());
     assert_eq!(decoded.manifest().row_count(), 2);
     assert_eq!(
         decoded.manifest().data_source_id(),
@@ -102,6 +134,76 @@ async fn deterministic_parquet_manifest_and_verified_round_trip_are_exact() {
         .downcast_ref::<StringArray>()
         .unwrap();
     assert_eq!([ids.value(0), ids.value(1)], ["record-1", "record-2"]);
+
+    let schema_hash = canonical_quote_schema_hash().as_bytes().iter().fold(
+        String::with_capacity(64),
+        |mut encoded, byte| {
+            use std::fmt::Write as _;
+            write!(encoded, "{byte:02x}").unwrap();
+            encoded
+        },
+    );
+    assert_eq!(
+        schema_hash,
+        "e804a0becec18e51dde1be4250384ffe667cf4149c34dc3d2cfc82a206d71502"
+    );
+}
+
+#[tokio::test]
+async fn verified_quote_projection_preserves_optional_sides_and_exact_unit() {
+    let request = request();
+    let source = MemorySource(vec![
+        RawQuoteRow::new(
+            "record-bid",
+            "260011.IB",
+            "2026-07-20T01:30:00Z",
+            "2026-07-20T01:30:05Z",
+            Some(RawDecimal::new("1012300", 4)),
+            None,
+        ),
+        RawQuoteRow::new(
+            "record-ask",
+            "260011.IB",
+            "2026-07-20T01:31:00Z",
+            "2026-07-20T01:31:05Z",
+            None,
+            Some(RawDecimal::new("1012600", 4)),
+        ),
+    ]);
+    let canonical = CanonicalQuoteIngestor
+        .ingest(&source, &request)
+        .await
+        .unwrap();
+    let package = CanonicalSnapshotCodec
+        .build(
+            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F51").unwrap(),
+            &request,
+            &canonical,
+        )
+        .unwrap();
+    let verified = CanonicalSnapshotCodec
+        .decode_verified(
+            package.snapshot().clone(),
+            package.parquet(),
+            package.manifest(),
+        )
+        .unwrap();
+
+    let quotes = verified.quotes().unwrap();
+    assert_eq!(quotes.len(), 2);
+    assert!(quotes[0].bid().is_some());
+    assert!(quotes[0].ask().is_none());
+    assert!(quotes[1].bid().is_none());
+    assert!(quotes[1].ask().is_some());
+    assert_eq!(quotes[0].unit(), quotes[1].unit());
+    assert_eq!(
+        verified.batch().schema().as_ref(),
+        &ficant_data::canonical_quote_schema()
+    );
+    assert_eq!(
+        verified.snapshot().schema_hash(),
+        &canonical_quote_schema_hash()
+    );
 }
 
 #[tokio::test]
