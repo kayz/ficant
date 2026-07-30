@@ -1,10 +1,15 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use arrow::array::{RecordBatch, StringArray, TimestampMicrosecondArray, UInt64Array};
+use arrow::array::{
+    Array, Date32Array, RecordBatch, StringArray, TimestampMicrosecondArray, UInt32Array,
+    UInt64Array,
+};
 use bytes::Bytes;
-use chrono::SecondsFormat;
-use ficant_domain::primitives::{ContentHash, LineageRef, Ulid, Version, VersionRef};
+use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
+use ficant_domain::primitives::{
+    ContentHash, DecimalValue, LineageRef, Ulid, UnitRef, Version, VersionRef,
+};
 use ficant_domain::research::{DataSnapshot, DataSnapshotInput};
 use ficant_domain::{ContentAddressed, Lineaged, VersionedDefinition};
 use parquet::arrow::ArrowWriter;
@@ -60,6 +65,54 @@ pub struct VerifiedCanonicalSnapshot {
     batch: RecordBatch,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CanonicalQuoteProjection {
+    instrument: VersionRef,
+    observed_at: DateTime<Utc>,
+    visible_at: DateTime<Utc>,
+    local_trading_date: NaiveDate,
+    bid: Option<DecimalValue>,
+    ask: Option<DecimalValue>,
+    unit: UnitRef,
+}
+
+impl CanonicalQuoteProjection {
+    #[must_use]
+    pub fn instrument(&self) -> &VersionRef {
+        &self.instrument
+    }
+
+    #[must_use]
+    pub const fn observed_at(&self) -> DateTime<Utc> {
+        self.observed_at
+    }
+
+    #[must_use]
+    pub const fn visible_at(&self) -> DateTime<Utc> {
+        self.visible_at
+    }
+
+    #[must_use]
+    pub const fn local_trading_date(&self) -> NaiveDate {
+        self.local_trading_date
+    }
+
+    #[must_use]
+    pub fn bid(&self) -> Option<&DecimalValue> {
+        self.bid.as_ref()
+    }
+
+    #[must_use]
+    pub fn ask(&self) -> Option<&DecimalValue> {
+        self.ask.as_ref()
+    }
+
+    #[must_use]
+    pub fn unit(&self) -> &UnitRef {
+        &self.unit
+    }
+}
+
 impl VerifiedCanonicalSnapshot {
     #[must_use]
     pub fn snapshot(&self) -> &DataSnapshot {
@@ -74,6 +127,16 @@ impl VerifiedCanonicalSnapshot {
     #[must_use]
     pub fn batch(&self) -> &RecordBatch {
         &self.batch
+    }
+
+    /// Projects the verified canonical batch into the narrow quote shape consumed by analytics.
+    ///
+    /// # Errors
+    ///
+    /// Returns a fail-closed data error if any canonical column, exact version, timestamp, date,
+    /// nullable decimal pair, or unit binding drifts.
+    pub fn quotes(&self) -> DataResult<Vec<CanonicalQuoteProjection>> {
+        project_canonical_quotes(&self.snapshot, &self.batch)
     }
 }
 
@@ -446,6 +509,107 @@ fn validate_decoded_batch(
     Ok(())
 }
 
+fn project_canonical_quotes(
+    snapshot: &DataSnapshot,
+    batch: &RecordBatch,
+) -> DataResult<Vec<CanonicalQuoteProjection>> {
+    if batch.schema().as_ref() != &canonical_quote_schema() {
+        return Err(DataError::SchemaMismatch);
+    }
+    let instrument_ids = string_column(batch, 5)?;
+    let instrument_versions = u64_column(batch, 6)?;
+    let observed = timestamp_column(batch, 7)?;
+    let visible = timestamp_column(batch, 8)?;
+    let local_dates = date_column(batch, 9)?;
+    let bid_coefficients = string_column(batch, 10)?;
+    let bid_scales = u32_column(batch, 11)?;
+    let ask_coefficients = string_column(batch, 12)?;
+    let ask_scales = u32_column(batch, 13)?;
+    let unit_ids = string_column(batch, 14)?;
+    let unit_versions = u64_column(batch, 15)?;
+    let timezone = snapshot
+        .as_of()
+        .market_timezone()
+        .parse::<chrono_tz::Tz>()
+        .map_err(|_| DataError::SnapshotIntegrityFailed)?;
+    let mut quotes = Vec::with_capacity(batch.num_rows());
+    for row in 0..batch.num_rows() {
+        if instrument_ids.is_null(row)
+            || instrument_versions.is_null(row)
+            || observed.is_null(row)
+            || visible.is_null(row)
+            || local_dates.is_null(row)
+            || unit_ids.is_null(row)
+            || unit_versions.is_null(row)
+        {
+            return Err(DataError::SnapshotIntegrityFailed);
+        }
+        let instrument = VersionRef::new(
+            Ulid::new(instrument_ids.value(row)).map_err(|_| DataError::SnapshotIntegrityFailed)?,
+            Version::new(instrument_versions.value(row))
+                .map_err(|_| DataError::SnapshotIntegrityFailed)?,
+        );
+        let observed_at = DateTime::<Utc>::from_timestamp_micros(observed.value(row))
+            .ok_or(DataError::SnapshotIntegrityFailed)?;
+        let visible_at = DateTime::<Utc>::from_timestamp_micros(visible.value(row))
+            .ok_or(DataError::SnapshotIntegrityFailed)?;
+        let local_trading_date = epoch_date(local_dates.value(row))?;
+        if observed_at > visible_at
+            || observed_at > snapshot.as_of().instant()
+            || visible_at > snapshot.visible_at().instant()
+            || observed_at.with_timezone(&timezone).date_naive() != local_trading_date
+        {
+            return Err(DataError::SnapshotIntegrityFailed);
+        }
+        let unit = UnitRef::new(
+            Ulid::new(unit_ids.value(row)).map_err(|_| DataError::SnapshotIntegrityFailed)?,
+            Version::new(unit_versions.value(row))
+                .map_err(|_| DataError::SnapshotIntegrityFailed)?,
+        );
+        let bid = decimal_column(bid_coefficients, bid_scales, row, unit.clone())?;
+        let ask = decimal_column(ask_coefficients, ask_scales, row, unit.clone())?;
+        if bid.is_none() && ask.is_none() {
+            return Err(DataError::SnapshotIntegrityFailed);
+        }
+        quotes.push(CanonicalQuoteProjection {
+            instrument,
+            observed_at,
+            visible_at,
+            local_trading_date,
+            bid,
+            ask,
+            unit,
+        });
+    }
+    Ok(quotes)
+}
+
+fn decimal_column(
+    coefficients: &StringArray,
+    scales: &UInt32Array,
+    row: usize,
+    unit: UnitRef,
+) -> DataResult<Option<DecimalValue>> {
+    if coefficients.is_null(row) != scales.is_null(row) {
+        return Err(DataError::SnapshotIntegrityFailed);
+    }
+    if coefficients.is_null(row) {
+        return Ok(None);
+    }
+    DecimalValue::new(coefficients.value(row), scales.value(row), unit)
+        .map(Some)
+        .map_err(|_| DataError::SnapshotIntegrityFailed)
+}
+
+fn epoch_date(days: i32) -> DataResult<NaiveDate> {
+    let seconds = i64::from(days)
+        .checked_mul(86_400)
+        .ok_or(DataError::SnapshotIntegrityFailed)?;
+    DateTime::<Utc>::from_timestamp(seconds, 0)
+        .map(|value| value.date_naive())
+        .ok_or(DataError::SnapshotIntegrityFailed)
+}
+
 fn batch_instruments(batch: &RecordBatch) -> DataResult<Vec<VersionRef>> {
     let ids = string_column(batch, 5)?;
     let versions = u64_column(batch, 6)?;
@@ -582,6 +746,30 @@ fn u64_column(batch: &RecordBatch, index: usize) -> DataResult<&UInt64Array> {
         .column(index)
         .as_any()
         .downcast_ref::<UInt64Array>()
+        .ok_or(DataError::SchemaMismatch)
+}
+
+fn u32_column(batch: &RecordBatch, index: usize) -> DataResult<&UInt32Array> {
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<UInt32Array>()
+        .ok_or(DataError::SchemaMismatch)
+}
+
+fn timestamp_column(batch: &RecordBatch, index: usize) -> DataResult<&TimestampMicrosecondArray> {
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<TimestampMicrosecondArray>()
+        .ok_or(DataError::SchemaMismatch)
+}
+
+fn date_column(batch: &RecordBatch, index: usize) -> DataResult<&Date32Array> {
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<Date32Array>()
         .ok_or(DataError::SchemaMismatch)
 }
 
