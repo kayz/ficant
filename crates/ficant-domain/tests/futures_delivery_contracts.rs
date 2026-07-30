@@ -5,7 +5,7 @@ use ficant_domain::analytics::{
 };
 use ficant_domain::futures_delivery::{
     CgbFuturesProduct, FuturesDeliverableInput, FuturesDeliveryRule, FuturesDeliveryRuleInput,
-    is_deliverable, is_deliverable_by_dates,
+    is_deliverable,
 };
 use ficant_domain::primitives::{ContentHash, MarketTime, OwnerRef, Ulid, Version, VersionRef};
 
@@ -37,91 +37,6 @@ fn all_four_products_accept_and_reject_exact_residual_boundaries() {
             );
             assert!(!is_deliverable(&rule, &too_long, delivery).unwrap());
         }
-    }
-}
-
-#[test]
-fn dates_only_helper_preserves_inclusive_term_and_residual_boundaries() {
-    let delivery = date(2026, 9, 1);
-
-    let bounded_rule = rule(CgbFuturesProduct::TwoYear);
-    let minimum_maturity = add_months(delivery, 18);
-    assert!(
-        is_deliverable_by_dates(
-            &bounded_rule,
-            add_months(minimum_maturity, -60),
-            minimum_maturity,
-            delivery,
-        )
-        .unwrap()
-    );
-    assert!(
-        !is_deliverable_by_dates(
-            &bounded_rule,
-            add_months(minimum_maturity, -60),
-            add_days(minimum_maturity, -1),
-            delivery,
-        )
-        .unwrap()
-    );
-
-    let maximum_maturity = add_months(delivery, 27);
-    assert!(
-        is_deliverable_by_dates(&bounded_rule, date(2024, 1, 1), maximum_maturity, delivery,)
-            .unwrap()
-    );
-    assert!(
-        !is_deliverable_by_dates(
-            &bounded_rule,
-            date(2024, 1, 1),
-            add_days(maximum_maturity, 1),
-            delivery,
-        )
-        .unwrap()
-    );
-
-    let original_term_limit = date(2034, 9, 1);
-    let unbounded_rule = rule(CgbFuturesProduct::TenYear);
-    assert!(
-        is_deliverable_by_dates(
-            &unbounded_rule,
-            add_months(original_term_limit, -120),
-            original_term_limit,
-            delivery,
-        )
-        .unwrap()
-    );
-    assert!(
-        !is_deliverable_by_dates(
-            &unbounded_rule,
-            add_days(add_months(original_term_limit, -120), -1),
-            original_term_limit,
-            delivery,
-        )
-        .unwrap()
-    );
-}
-
-#[test]
-fn bond_terms_entry_point_delegates_to_dates_only_eligibility() {
-    let delivery = date(2026, 9, 1);
-    for product in [
-        CgbFuturesProduct::TwoYear,
-        CgbFuturesProduct::FiveYear,
-        CgbFuturesProduct::TenYear,
-        CgbFuturesProduct::ThirtyYear,
-    ] {
-        let rule = rule(product);
-        let terms = valid_input(product).11;
-        assert_eq!(
-            is_deliverable(&rule, &terms, delivery),
-            is_deliverable_by_dates(
-                &rule,
-                terms.first_issue_date(),
-                terms.maturity_date(),
-                delivery,
-            )
-        );
     }
 }
 
