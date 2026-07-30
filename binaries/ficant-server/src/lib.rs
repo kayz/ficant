@@ -1,12 +1,12 @@
 use ficant_api::{
-    ExperimentGrpcService, GrpcWebServeError, GrpcWebServerConfig, PlatformApplication,
-    PlatformGrpcService, PlatformPort, RatesGrpcService, SessionPolicy, SubjectRegistryGrpcService,
-    SystemClock, TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
-    serve_grpc_web_with_rates_and_experiment_and_registry,
+    CanonicalSnapshotCodecAdapter, ExperimentGrpcService, GrpcWebServeError, GrpcWebServerConfig,
+    PlatformApplication, PlatformGrpcService, PlatformPort, RatesGrpcService, SessionPolicy,
+    SubjectRegistryGrpcService, SystemClock, TrustedExperimentScope, TrustedIdentity,
+    TrustedNodeCatalog, serve_grpc_web_with_rates_and_experiment_and_registry,
 };
 use ficant_application::ports::{
     AeadCursorCodec, ArtifactRepository, CursorKey, DefinitionRepository, ExperimentRepository,
-    Phase4ExecutionRepository, RunJournalRepository, SnapshotRepository,
+    IntegrityEventSink, Phase4ExecutionRepository, RunJournalRepository, SnapshotRepository,
     SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobReader,
 };
 use ficant_application::{ApplicationError, map_runtime_error};
@@ -263,10 +263,30 @@ pub fn build_grpc_services(
     let application = build_platform_application(settings)?;
     let platform =
         PlatformGrpcService::new(Arc::clone(&application), &settings.trace_key).map_err(config)?;
-    let (repository, _, _) = build_repository(settings)?;
+    let (repository, pool, _) = build_repository(settings)?;
+    let blob_store = Arc::new(
+        S3BlobStore::new(
+            &settings.experiment_s3_endpoint,
+            settings.experiment_s3_bucket.clone(),
+            &settings.experiment_s3_access_key,
+            &settings.experiment_s3_secret_key,
+            pool,
+        )
+        .map_err(|_| config("experiment S3 configuration is invalid"))?,
+    );
     let definitions: Arc<dyn DefinitionRepository> = repository.clone();
-    let subjects: Arc<dyn SubjectRepository> = repository;
-    let rates = build_rates_service(application, definitions, subjects, settings)?;
+    let subjects: Arc<dyn SubjectRepository> = repository.clone();
+    let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository;
+    let blobs: Arc<dyn VerifiedBlobReader> = blob_store;
+    let rates = build_rates_service(
+        application,
+        definitions,
+        subjects,
+        snapshots,
+        blobs,
+        build_integrity_event_sink(),
+        settings,
+    )?;
     Ok((platform, rates))
 }
 
@@ -335,6 +355,9 @@ pub fn build_grpc_services_with_experiment_and_registry(
         Arc::clone(&application),
         definitions.clone(),
         subjects.clone(),
+        snapshots.clone(),
+        blobs.clone(),
+        build_integrity_event_sink(),
         settings,
     )?;
     let registry_identity = Arc::clone(&application);
@@ -365,6 +388,9 @@ fn build_rates_service(
     application: Arc<dyn PlatformPort>,
     definitions: Arc<dyn DefinitionRepository>,
     subjects: Arc<dyn SubjectRepository>,
+    snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
+    blobs: Arc<dyn VerifiedBlobReader>,
+    integrity_events: Arc<dyn IntegrityEventSink>,
     settings: &ServerSettings,
 ) -> Result<RatesGrpcService, ServerError> {
     RatesGrpcService::new(
@@ -376,6 +402,10 @@ fn build_rates_service(
         definitions,
         subjects,
         Arc::new(CgbFuturesDeliveryRulePackParser),
+        snapshots,
+        blobs,
+        integrity_events,
+        Arc::new(CanonicalSnapshotCodecAdapter),
         Arc::new(FundingRulePackV1Parser),
         Arc::new(TaxRulePackV1Parser),
         Arc::new(NativeFuturesHedgeEngine),

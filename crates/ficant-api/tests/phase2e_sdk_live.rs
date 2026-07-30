@@ -4,8 +4,11 @@ use ficant_api::{
     SessionPolicy, SystemClock, TrustedIdentity, serve_grpc_web_with_rates,
 };
 use ficant_application::ports::{
-    AccessScope, AppendDefinitionVersion, DefinitionIdentity, DefinitionRepository,
-    DefinitionValue, SubjectRepository,
+    AccessScope, AppendDefinitionVersion, CanonicalQuote, CanonicalSnapshotDecoder,
+    DefinitionIdentity, DefinitionRepository, DefinitionValue, InstrumentDefinition,
+    InstrumentSubtype, IntegrityEvent, IntegrityEventSink, RequiredVerifiedBlobRead,
+    SnapshotVerifiedReadMetadata, SnapshotVerifiedReadMetadataRepository, SubjectRepository,
+    VerifiedBlobPayload, VerifiedBlobReader, VerifiedBlobRole,
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_cgb_futures_pack::{CgbFuturesDeliveryRulePackParser, MARKET, RULE_TYPE, TYPE_URL};
@@ -17,13 +20,17 @@ use ficant_contracts::ficant::market::v1::{
     IncomeTaxStatus as ProtoIncomeTaxStatus, SubjectCouponTaxRate, TaxRulePack,
     ValueAddedTaxStatus as ProtoValueAddedTaxStatus,
 };
-use ficant_domain::VersionedDefinition;
+use ficant_domain::analytics::FixedDecimal;
 use ficant_domain::market::{
-    MarketRulePack, MarketRulePackInput, RulePackContent, VerificationStatus,
+    Bond, BondTaxAttributes as DomainBondTaxAttributes, FuturesContract, IncomeTaxStatus,
+    Instrument, InstrumentInput, InstrumentKind, MarketRulePack, MarketRulePackInput,
+    RulePackContent, ValueAddedTaxStatus, VerificationStatus,
 };
 use ficant_domain::primitives::{
-    ContentHash, EffectivePeriod, MarketTime, OwnerRef, Ulid, Version,
+    ContentHash, DecimalValue as DomainDecimalValue, EffectivePeriod, LineageRef, MarketTime,
+    OwnerRef, Ulid, UnitRef, Version, VersionRef,
 };
+use ficant_domain::research::{DataSnapshot, DataSnapshotInput};
 use ficant_domain::subject::{
     AccessSet, FundingTier, Subject, SubjectRecord, SubjectStateSnapshot, SubjectVersion,
     TaxTreatment,
@@ -52,7 +59,7 @@ const CGB_FUTURES_PACK: &[u8] =
 
 #[derive(Clone)]
 struct FixtureDefinitions {
-    values: Vec<MarketRulePack>,
+    values: Vec<DefinitionValue>,
 }
 
 #[tonic::async_trait]
@@ -80,8 +87,7 @@ impl DefinitionRepository for FixtureDefinitions {
             .find(|value| {
                 value.identity() == definition_id.as_str() && value.version() == version.get()
             })
-            .cloned()
-            .map(DefinitionValue::MarketRulePack))
+            .cloned())
     }
 
     async fn resolve_as_of(
@@ -91,6 +97,94 @@ impl DefinitionRepository for FixtureDefinitions {
         _: MarketTime,
     ) -> Result<Option<DefinitionValue>, ApplicationError> {
         Err(storage_unavailable())
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FixtureSnapshotMetadata;
+
+#[tonic::async_trait]
+impl SnapshotVerifiedReadMetadataRepository for FixtureSnapshotMetadata {
+    async fn get_verified_read_metadata(
+        &self,
+        _: &AccessScope,
+        snapshot_id: Ulid,
+    ) -> Result<Option<SnapshotVerifiedReadMetadata>, ApplicationError> {
+        if snapshot_id != id('Y') {
+            return Ok(None);
+        }
+        let snapshot = DataSnapshot::new(DataSnapshotInput {
+            data_snapshot_id: id('Y'),
+            owner: fixture_owner(),
+            visible_at: valuation_time(),
+            as_of: valuation_time(),
+            schema_hash: ContentHash::digest(b"phase2e-canonical-schema"),
+            manifest_hash: ContentHash::digest(b"phase2e-manifest"),
+            blob_content_hash: ContentHash::digest(b"object-Y"),
+            lineage: vec![LineageRef::content_addressed(
+                id('Q'),
+                ContentHash::digest(b"phase2e-source"),
+            )],
+        })
+        .expect("fixture DataSnapshot is valid");
+        SnapshotVerifiedReadMetadata::data(
+            snapshot,
+            b"object-Y".len() as u64,
+            b"phase2e-manifest".len() as u64,
+        )
+        .map(Some)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FixtureBlobReader;
+
+#[tonic::async_trait]
+impl VerifiedBlobReader for FixtureBlobReader {
+    async fn read_required(
+        &self,
+        request: &RequiredVerifiedBlobRead,
+        sink: &dyn IntegrityEventSink,
+    ) -> Result<VerifiedBlobPayload, ApplicationError> {
+        let bytes = match request.blob_role() {
+            VerifiedBlobRole::DataParquet => b"object-Y".as_slice(),
+            VerifiedBlobRole::DataManifest => b"phase2e-manifest".as_slice(),
+            _ => unreachable!("delivery reads only DataSnapshot roles"),
+        };
+        request.verify_bytes(sink, bytes.to_vec()).await
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FixtureIntegrityEvents;
+
+#[tonic::async_trait]
+impl IntegrityEventSink for FixtureIntegrityEvents {
+    async fn emit(&self, _: IntegrityEvent) -> Result<(), ApplicationError> {
+        unreachable!("fixture payload hashes and sizes are exact")
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FixtureCanonicalSnapshotDecoder;
+
+#[tonic::async_trait]
+impl CanonicalSnapshotDecoder for FixtureCanonicalSnapshotDecoder {
+    async fn decode_quotes(
+        &self,
+        snapshot: &DataSnapshot,
+        parquet: &[u8],
+        manifest: &[u8],
+    ) -> Result<Vec<CanonicalQuote>, ApplicationError> {
+        assert_eq!(snapshot.id(), &id('Y'));
+        assert_eq!(parquet, b"object-Y");
+        assert_eq!(manifest, b"phase2e-manifest");
+        Ok(vec![
+            canonical_quote('Z', "995", 1),
+            canonical_quote('2', "102", 0),
+            canonical_quote('3', "100", 0),
+            canonical_quote('4', "100", 0),
+        ])
     }
 }
 
@@ -143,15 +237,23 @@ async fn python_sdk_matches_phase2_reference_slices_through_live_rule_pack_compo
         Arc::new(NativeFuturesDeliveryEngine),
         Arc::new(FixtureDefinitions {
             values: vec![
-                frozen_cgb_futures_pack(),
-                synthetic_funding_pack(),
-                synthetic_tax_pack(),
+                DefinitionValue::MarketRulePack(frozen_cgb_futures_pack()),
+                DefinitionValue::MarketRulePack(synthetic_funding_pack()),
+                DefinitionValue::MarketRulePack(synthetic_tax_pack()),
+                futures_contract_definition(),
+                bond_definition('2', "T-bond-expensive"),
+                bond_definition('3', "T-bond-ctd"),
+                bond_definition('4', "T-bond-tied-later"),
             ],
         }),
         Arc::new(FixtureSubjects {
             value: fixture_subject(),
         }),
         Arc::new(CgbFuturesDeliveryRulePackParser),
+        Arc::new(FixtureSnapshotMetadata),
+        Arc::new(FixtureBlobReader),
+        Arc::new(FixtureIntegrityEvents),
+        Arc::new(FixtureCanonicalSnapshotDecoder),
         Arc::new(FundingRulePackV1Parser),
         Arc::new(TaxRulePackV1Parser),
         Arc::new(NativeFuturesHedgeEngine),
@@ -320,6 +422,98 @@ fn synthetic_tax_pack() -> MarketRulePack {
     .expect("synthetic tax RulePack is valid")
 }
 
+fn futures_contract_definition() -> DefinitionValue {
+    let instrument = instrument('Z', InstrumentKind::Futures, "T2609");
+    let contract = FuturesContract::new(
+        &instrument,
+        market_time(2026, 9, 17, 7),
+        market_time(2026, 9, 18, 7),
+        market_time(2026, 9, 18, 8),
+        domain_decimal("100", 0, 'A'),
+        VersionRef::new(id('X'), Version::new(1).expect("fixture version is valid")),
+    )
+    .expect("fixture concrete futures contract is valid");
+    DefinitionValue::Instrument(
+        InstrumentDefinition::new(
+            instrument,
+            Some(InstrumentSubtype::FuturesContract(contract)),
+        )
+        .expect("fixture futures definition is valid"),
+    )
+}
+
+fn bond_definition(suffix: char, symbol: &str) -> DefinitionValue {
+    let instrument = instrument(suffix, InstrumentKind::Bond, symbol);
+    let bond = Bond::with_issuance(
+        &instrument,
+        NaiveDate::from_ymd_opt(2024, 8, 15).expect("fixture issue date is valid"),
+        NaiveDate::from_ymd_opt(2024, 8, 15).expect("fixture current issue date is valid"),
+        NaiveDate::from_ymd_opt(2034, 8, 15).expect("fixture maturity date is valid"),
+        domain_decimal("100", 0, 'A'),
+        DomainBondTaxAttributes::new(ValueAddedTaxStatus::Taxable, IncomeTaxStatus::Taxable),
+        domain_decimal("100", 0, 'A'),
+    )
+    .expect("fixture registered Bond is valid");
+    DefinitionValue::Instrument(
+        InstrumentDefinition::new(instrument, Some(InstrumentSubtype::Bond(bond)))
+            .expect("fixture Bond definition is valid"),
+    )
+}
+
+fn instrument(suffix: char, kind: InstrumentKind, symbol: &str) -> Instrument {
+    Instrument::new(InstrumentInput {
+        instrument_id: id(suffix),
+        version: Version::new(1).expect("fixture version is valid"),
+        owner: fixture_owner(),
+        kind,
+        market: "CFFEX".to_owned(),
+        symbol: symbol.to_owned(),
+        currency: UnitRef::new(id('A'), Version::new(1).expect("fixture version is valid")),
+        calendar: VersionRef::new(id('K'), Version::new(1).expect("fixture version is valid")),
+    })
+    .expect("fixture Instrument is valid")
+}
+
+fn canonical_quote(suffix: char, coefficient: &str, scale: u32) -> CanonicalQuote {
+    CanonicalQuote::new(
+        VersionRef::new(
+            id(suffix),
+            Version::new(1).expect("fixture version is valid"),
+        ),
+        valuation_time(),
+        valuation_time(),
+        NaiveDate::from_ymd_opt(2026, 7, 20).expect("fixture quote date is valid"),
+        Some(fixed_decimal(coefficient, scale)),
+        None,
+        UnitRef::new(id('B'), Version::new(1).expect("fixture version is valid")),
+    )
+}
+
+fn fixed_decimal(coefficient: &str, scale: u32) -> FixedDecimal {
+    let scaled = coefficient
+        .parse::<i128>()
+        .expect("fixture Decimal coefficient is valid")
+        .checked_mul(
+            10_i128
+                .checked_pow(12 - scale)
+                .expect("fixture Decimal scale is valid"),
+        )
+        .expect("fixture Decimal fits the fixed representation");
+    FixedDecimal::from_scaled(scaled)
+}
+
+fn domain_decimal(coefficient: &str, scale: u32, unit_suffix: char) -> DomainDecimalValue {
+    DomainDecimalValue::new(
+        coefficient,
+        scale,
+        UnitRef::new(
+            id(unit_suffix),
+            Version::new(1).expect("fixture version is valid"),
+        ),
+    )
+    .expect("fixture Decimal is valid")
+}
+
 fn fixture_subject() -> SubjectRecord {
     let subject = Subject::new(id('S'), "Phase 2E fixture Subject").expect("fixture Subject");
     let version = SubjectVersion::new(
@@ -370,14 +564,26 @@ fn free_loopback_address() -> SocketAddr {
 }
 
 fn domain_time(year: i32, month: u32, day: u32) -> MarketTime {
+    market_time(year, month, day, 0)
+}
+
+fn valuation_time() -> MarketTime {
+    market_time(2026, 7, 20, 7)
+}
+
+fn market_time(year: i32, month: u32, day: u32, utc_hour: u32) -> MarketTime {
     MarketTime::new(
-        Utc.with_ymd_and_hms(year, month, day, 0, 0, 0)
+        Utc.with_ymd_and_hms(year, month, day, utc_hour, 0, 0)
             .single()
             .expect("fixture instant is valid"),
         "Asia/Shanghai",
         NaiveDate::from_ymd_opt(year, month, day).expect("fixture local date is valid"),
     )
     .expect("fixture market time is valid")
+}
+
+fn fixture_owner() -> OwnerRef {
+    OwnerRef::new(id('0'), id('1'))
 }
 
 fn id(suffix: char) -> Ulid {
