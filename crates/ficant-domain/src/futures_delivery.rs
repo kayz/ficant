@@ -402,8 +402,29 @@ pub fn is_deliverable(
     terms: &BondTerms,
     delivery_month_first: NaiveDate,
 ) -> DomainResult<bool> {
-    let original_limit = terms
-        .first_issue_date()
+    is_deliverable_by_dates(
+        rule,
+        terms.first_issue_date(),
+        terms.maturity_date(),
+        delivery_month_first,
+    )
+}
+
+/// Evaluates delivery eligibility from provider-neutral registered dates.
+///
+/// The caller remains responsible for resolving and verifying the source of these dates. This
+/// helper applies only the already-parsed rule and contains no market, product, or provider branch.
+///
+/// # Errors
+///
+/// Returns validation failure when a rule-bound date cannot be represented.
+pub fn is_deliverable_by_dates(
+    rule: &FuturesDeliveryRule,
+    first_issue_date: NaiveDate,
+    maturity_date: NaiveDate,
+    delivery_month_first: NaiveDate,
+) -> DomainResult<bool> {
+    let original_limit = first_issue_date
         .checked_add_months(Months::new(rule.original_term_max_months()))
         .ok_or(DomainErrorCode::InvalidValue)?;
     let minimum_maturity = delivery_month_first
@@ -417,9 +438,9 @@ pub fn is_deliverable(
         ),
         None => None,
     };
-    Ok(terms.maturity_date() <= original_limit
-        && terms.maturity_date() >= minimum_maturity
-        && maximum_maturity.is_none_or(|maximum| terms.maturity_date() <= maximum))
+    Ok(maturity_date <= original_limit
+        && maturity_date >= minimum_maturity
+        && maximum_maturity.is_none_or(|maximum| maturity_date <= maximum))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
