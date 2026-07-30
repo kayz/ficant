@@ -2,6 +2,7 @@ mod access;
 mod analytics;
 mod artifacts;
 mod blob_store;
+mod canonical_snapshot;
 mod cursor;
 mod curves;
 mod data_sources;
@@ -30,6 +31,7 @@ pub use analytics::{
 };
 pub use artifacts::{ArtifactRepository, PublishArtifact};
 pub use blob_store::{BeginBlobStage, BlobStore, StagedBlobRef, VerifiedBlobRef, VerifyBlobStage};
+pub use canonical_snapshot::{CanonicalQuote, CanonicalSnapshotDecoder};
 pub use cursor::{AeadCursorCodec, Cursor, CursorKey};
 pub use curves::{
     CarryRollArtifactCodec, CarryRollEngine, EncodedCarryRollArtifact, YieldCurveEngine,

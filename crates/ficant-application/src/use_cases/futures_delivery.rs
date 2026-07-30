@@ -1,20 +1,28 @@
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
+
+use chrono::NaiveDate;
+use ficant_domain::analytics::{AnalyticsObjectRef, BondTerms, DECIMAL_SCALE, FixedDecimal};
 use ficant_domain::futures_delivery::{
     CgbFuturesProduct, FuturesDeliverableInput, FuturesDeliveryBasketResult, FuturesDeliveryResult,
-    FuturesDeliveryRule,
+    FuturesDeliveryRule, is_deliverable_by_dates,
 };
-use ficant_domain::market::MarketRulePack;
-use ficant_domain::primitives::{LineageRef, MarketTime, Ulid};
+use ficant_domain::market::{Bond, FuturesContract, InstrumentKind, MarketRulePack};
+use ficant_domain::primitives::{
+    DecimalValue, LineageRef, MarketTime, OwnerRef, Ulid, UnitRef, VersionRef,
+};
 use ficant_domain::research::{Artifact, ArtifactKind};
 use ficant_domain::{ContentAddressed, DomainErrorCode, Lineaged, VersionedDefinition};
 
 use crate::ports::{
-    AccessScope, ApplicationResult, ArtifactRepository, BeginBlobStage, BlobStore,
-    DefinitionRepository, DefinitionValue, FuturesDeliveryArtifactCodec, FuturesDeliveryEngine,
-    FuturesDeliveryRuleParser, IdempotencyKey, IntegrityEventSink, PublishArtifact,
-    RequiredVerifiedBlobRead, SafeTraceContext, VerifiedBlobReader, VerifiedBlobRole,
+    AccessScope, ApplicationResult, ArtifactRepository, BeginBlobStage, BlobStore, CanonicalQuote,
+    CanonicalSnapshotDecoder, DefinitionRepository, DefinitionValue, FuturesDeliveryArtifactCodec,
+    FuturesDeliveryEngine, FuturesDeliveryRuleParser, IdempotencyKey, InstrumentSubtype,
+    IntegrityEventSink, PublishArtifact, RequiredVerifiedBlobRead, SafeTraceContext,
+    SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader, VerifiedBlobRole,
     VerifiedReadResourceKind, VerifyBlobStage,
 };
 use crate::use_cases::bond_analytics::map_analytics_error;
+use crate::use_cases::verified_reads::{VerifiedSnapshotRead, VerifiedSnapshotReader};
 use crate::{ApplicationError, ApplicationErrorCategory, map_domain_error};
 
 pub const FUTURES_DELIVERY_MEDIA_TYPE: &str =
@@ -113,6 +121,514 @@ fn validate_delivery_rule_pack(
 
 fn lineage_incomplete() -> ApplicationError {
     ApplicationError::new(ApplicationErrorCategory::LineageIncomplete, false)
+}
+
+/// Resolves one exact registered concrete futures contract.
+pub struct ResolveFuturesContract<'a> {
+    definitions: &'a dyn DefinitionRepository,
+}
+
+impl<'a> ResolveFuturesContract<'a> {
+    #[must_use]
+    pub const fn new(definitions: &'a dyn DefinitionRepository) -> Self {
+        Self { definitions }
+    }
+
+    /// Resolves only an exact `Instrument(Futures, FuturesContract)` definition version.
+    ///
+    /// # Errors
+    ///
+    /// Returns a fail-closed error for absent, inaccessible, wrong-version, non-futures,
+    /// subtype-less, or differently rule-bound definitions.
+    pub async fn execute(
+        &self,
+        scope: &AccessScope,
+        binding: &AnalyticsObjectRef,
+        expected_owner: &OwnerRef,
+        expected_rule_pack_ref: &VersionRef,
+    ) -> ApplicationResult<FuturesContract> {
+        let resolved = self
+            .definitions
+            .get_version(
+                scope,
+                binding.version_ref().id().clone(),
+                binding.version_ref().version(),
+            )
+            .await?
+            .ok_or_else(lineage_incomplete)?;
+        let DefinitionValue::Instrument(definition) = resolved else {
+            return Err(lineage_incomplete());
+        };
+        scope.authorize(definition.owner())?;
+        if definition.owner() != expected_owner
+            || definition.identity() != binding.version_ref().id().as_str()
+            || definition.version() != binding.version_ref().version().get()
+            || definition.instrument().kind() != InstrumentKind::Futures
+        {
+            return Err(lineage_incomplete());
+        }
+        let Some(InstrumentSubtype::FuturesContract(contract)) = definition.subtype() else {
+            return Err(lineage_incomplete());
+        };
+        if contract.instrument() != binding.version_ref()
+            || contract.rule_pack() != expected_rule_pack_ref
+        {
+            return Err(lineage_incomplete());
+        }
+        Ok(contract.clone())
+    }
+}
+
+/// Request-side candidate values that must agree with registered Bond facts and snapshot quotes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FuturesDeliveryCandidateBinding {
+    bond: AnalyticsObjectRef,
+    terms: BondTerms,
+    spot_clean_price: FixedDecimal,
+}
+
+impl FuturesDeliveryCandidateBinding {
+    #[must_use]
+    pub const fn new(
+        bond: AnalyticsObjectRef,
+        terms: BondTerms,
+        spot_clean_price: FixedDecimal,
+    ) -> Self {
+        Self {
+            bond,
+            terms,
+            spot_clean_price,
+        }
+    }
+
+    #[must_use]
+    pub fn bond(&self) -> &AnalyticsObjectRef {
+        &self.bond
+    }
+
+    #[must_use]
+    pub fn terms(&self) -> &BondTerms {
+        &self.terms
+    }
+
+    #[must_use]
+    pub const fn spot_clean_price(&self) -> FixedDecimal {
+        self.spot_clean_price
+    }
+}
+
+/// Frozen request-side values consumed while materializing exact futures-delivery inputs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FuturesDeliveryInputBindings {
+    owner: OwnerRef,
+    futures_contract: AnalyticsObjectRef,
+    rule_pack: AnalyticsObjectRef,
+    snapshot: AnalyticsObjectRef,
+    valuation_at: MarketTime,
+    purchase_date: NaiveDate,
+    delivery_month_first: NaiveDate,
+    delivery_date: NaiveDate,
+    product: CgbFuturesProduct,
+    candidates: Vec<FuturesDeliveryCandidateBinding>,
+    futures_clean_price: FixedDecimal,
+    financing_rate: FixedDecimal,
+    price_unit: UnitRef,
+}
+
+impl FuturesDeliveryInputBindings {
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub fn new(
+        owner: OwnerRef,
+        futures_contract: AnalyticsObjectRef,
+        rule_pack: AnalyticsObjectRef,
+        snapshot: AnalyticsObjectRef,
+        valuation_at: MarketTime,
+        purchase_date: NaiveDate,
+        delivery_month_first: NaiveDate,
+        delivery_date: NaiveDate,
+        product: CgbFuturesProduct,
+        candidates: Vec<FuturesDeliveryCandidateBinding>,
+        futures_clean_price: FixedDecimal,
+        financing_rate: FixedDecimal,
+        price_unit: UnitRef,
+    ) -> Self {
+        Self {
+            owner,
+            futures_contract,
+            rule_pack,
+            snapshot,
+            valuation_at,
+            purchase_date,
+            delivery_month_first,
+            delivery_date,
+            product,
+            candidates,
+            futures_clean_price,
+            financing_rate,
+            price_unit,
+        }
+    }
+
+    #[must_use]
+    pub fn owner(&self) -> &OwnerRef {
+        &self.owner
+    }
+
+    #[must_use]
+    pub fn futures_contract(&self) -> &AnalyticsObjectRef {
+        &self.futures_contract
+    }
+
+    #[must_use]
+    pub fn rule_pack(&self) -> &AnalyticsObjectRef {
+        &self.rule_pack
+    }
+
+    #[must_use]
+    pub fn snapshot(&self) -> &AnalyticsObjectRef {
+        &self.snapshot
+    }
+
+    #[must_use]
+    pub fn valuation_at(&self) -> &MarketTime {
+        &self.valuation_at
+    }
+
+    #[must_use]
+    pub fn candidates(&self) -> &[FuturesDeliveryCandidateBinding] {
+        &self.candidates
+    }
+
+    #[must_use]
+    pub fn price_unit(&self) -> &UnitRef {
+        &self.price_unit
+    }
+}
+
+/// Converts verified snapshot facts and exact Definitions into native delivery inputs.
+pub struct MaterializeFuturesDeliveryInputs<'a> {
+    definitions: &'a dyn DefinitionRepository,
+    snapshots: VerifiedSnapshotReader<'a>,
+    decoder: &'a dyn CanonicalSnapshotDecoder,
+    parser: &'a dyn FuturesDeliveryRuleParser,
+}
+
+impl<'a> MaterializeFuturesDeliveryInputs<'a> {
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub const fn new(
+        definitions: &'a dyn DefinitionRepository,
+        snapshot_metadata: &'a dyn SnapshotVerifiedReadMetadataRepository,
+        blob_reader: &'a dyn VerifiedBlobReader,
+        integrity_events: &'a dyn IntegrityEventSink,
+        decoder: &'a dyn CanonicalSnapshotDecoder,
+        parser: &'a dyn FuturesDeliveryRuleParser,
+    ) -> Self {
+        Self {
+            definitions,
+            snapshots: VerifiedSnapshotReader::new(
+                snapshot_metadata,
+                blob_reader,
+                integrity_events,
+            ),
+            decoder,
+            parser,
+        }
+    }
+
+    /// Verifies all persisted facts before constructing any native-engine input.
+    ///
+    /// # Errors
+    ///
+    /// Returns a non-retryable, fail-closed application error for snapshot, quote, Definition,
+    /// static-term, candidate-set, or price drift.
+    pub async fn execute(
+        &self,
+        scope: &AccessScope,
+        bindings: &FuturesDeliveryInputBindings,
+        trace: SafeTraceContext,
+    ) -> ApplicationResult<Vec<FuturesDeliverableInput>> {
+        scope.authorize(&bindings.owner)?;
+        ResolveFuturesContract::new(self.definitions)
+            .execute(
+                scope,
+                &bindings.futures_contract,
+                &bindings.owner,
+                bindings.rule_pack.version_ref(),
+            )
+            .await?;
+
+        let verified = self
+            .snapshots
+            .read(scope, bindings.snapshot.version_ref().id().clone(), trace)
+            .await?;
+        let VerifiedSnapshotRead::Data {
+            snapshot,
+            parquet,
+            manifest,
+        } = verified
+        else {
+            return Err(lineage_incomplete());
+        };
+        if snapshot.id() != bindings.snapshot.version_ref().id()
+            || snapshot.content_hash() != bindings.snapshot.content_hash()
+            || snapshot.owner() != &bindings.owner
+            || snapshot.as_of() != &bindings.valuation_at
+            || snapshot.visible_at().instant() < snapshot.as_of().instant()
+        {
+            return Err(lineage_incomplete());
+        }
+
+        let decoded = self
+            .decoder
+            .decode_quotes(&snapshot, parquet.bytes(), manifest.bytes())
+            .await?;
+        let quotes = exact_request_quotes(&snapshot, bindings, decoded)?;
+        let request_bonds = self
+            .validate_requested_bonds(scope, bindings, &quotes)
+            .await?;
+
+        let rule = ResolveFuturesDeliveryRule::new(self.definitions, self.parser)
+            .execute(
+                scope,
+                &bindings.rule_pack,
+                bindings.valuation_at.clone(),
+                bindings.product,
+            )
+            .await?;
+        let eligible = self
+            .eligible_snapshot_bonds(scope, bindings, &quotes, &rule)
+            .await?;
+        let requested = request_bonds.keys().cloned().collect::<BTreeSet<_>>();
+        if requested != eligible {
+            return Err(invalid());
+        }
+
+        bindings
+            .candidates
+            .iter()
+            .map(|candidate| {
+                FuturesDeliverableInput::new(
+                    bindings.owner.clone(),
+                    bindings.futures_contract.clone(),
+                    candidate.bond.clone(),
+                    bindings.rule_pack.clone(),
+                    bindings.snapshot.clone(),
+                    bindings.valuation_at.clone(),
+                    bindings.purchase_date,
+                    bindings.delivery_month_first,
+                    bindings.delivery_date,
+                    bindings.product,
+                    rule.clone(),
+                    candidate.terms.clone(),
+                    candidate.spot_clean_price,
+                    bindings.futures_clean_price,
+                    bindings.financing_rate,
+                )
+                .map_err(map_domain_error)
+            })
+            .collect()
+    }
+
+    async fn validate_requested_bonds(
+        &self,
+        scope: &AccessScope,
+        bindings: &FuturesDeliveryInputBindings,
+        quotes: &BTreeMap<VersionRef, CanonicalQuote>,
+    ) -> ApplicationResult<BTreeMap<VersionRef, Bond>> {
+        if bindings.candidates.is_empty() {
+            return Err(invalid());
+        }
+        let mut bonds = BTreeMap::new();
+        for candidate in &bindings.candidates {
+            let reference = candidate.bond.version_ref();
+            if bonds.contains_key(reference) {
+                return Err(invalid());
+            }
+            let bond = resolve_bond(self.definitions, scope, reference, &bindings.owner).await?;
+            validate_registered_bond_terms(&bond, &candidate.terms)?;
+            let quote = quotes.get(reference).ok_or_else(invalid)?;
+            if !quote_matches(quote, candidate.spot_clean_price) {
+                return Err(invalid());
+            }
+            bonds.insert(reference.clone(), bond);
+        }
+        let futures_quote = quotes
+            .get(bindings.futures_contract.version_ref())
+            .ok_or_else(invalid)?;
+        if !quote_matches(futures_quote, bindings.futures_clean_price) {
+            return Err(invalid());
+        }
+        Ok(bonds)
+    }
+
+    async fn eligible_snapshot_bonds(
+        &self,
+        scope: &AccessScope,
+        bindings: &FuturesDeliveryInputBindings,
+        quotes: &BTreeMap<VersionRef, CanonicalQuote>,
+        rule: &FuturesDeliveryRule,
+    ) -> ApplicationResult<BTreeSet<VersionRef>> {
+        let mut eligible = BTreeSet::new();
+        for reference in quotes.keys() {
+            if reference == bindings.futures_contract.version_ref() {
+                continue;
+            }
+            let Some(value) = self
+                .definitions
+                .get_version(scope, reference.id().clone(), reference.version())
+                .await?
+            else {
+                continue;
+            };
+            let DefinitionValue::Instrument(definition) = value else {
+                continue;
+            };
+            if definition.owner() != &bindings.owner {
+                continue;
+            }
+            let Some(InstrumentSubtype::Bond(bond)) = definition.subtype() else {
+                continue;
+            };
+            if is_deliverable_by_dates(
+                rule,
+                bond.first_issue_date(),
+                bond.maturity_date(),
+                bindings.delivery_month_first,
+            )
+            .map_err(map_domain_error)?
+            {
+                eligible.insert(reference.clone());
+            }
+        }
+        Ok(eligible)
+    }
+}
+
+fn exact_request_quotes(
+    snapshot: &ficant_domain::research::DataSnapshot,
+    bindings: &FuturesDeliveryInputBindings,
+    decoded: Vec<CanonicalQuote>,
+) -> ApplicationResult<BTreeMap<VersionRef, CanonicalQuote>> {
+    let mut quotes = BTreeMap::new();
+    for quote in decoded {
+        if quote.observed_at().instant() > quote.visible_at().instant()
+            || quote.observed_at().market_timezone() != snapshot.as_of().market_timezone()
+            || quote.visible_at().market_timezone() != snapshot.visible_at().market_timezone()
+            || quote.observed_at().local_trading_date() != quote.local_trading_date()
+        {
+            return Err(invalid());
+        }
+        if quote.local_trading_date() != bindings.valuation_at.local_trading_date()
+            || quote.observed_at().instant() > snapshot.as_of().instant()
+            || quote.visible_at().instant() > snapshot.visible_at().instant()
+            || quote.unit() != &bindings.price_unit
+        {
+            continue;
+        }
+        if quote.bid().is_none() && quote.ask().is_none()
+            || quote.bid().is_some_and(|value| !value.is_positive())
+            || quote.ask().is_some_and(|value| !value.is_positive())
+            || matches!((quote.bid(), quote.ask()), (Some(bid), Some(ask)) if bid > ask)
+        {
+            return Err(invalid());
+        }
+        match quotes.entry(quote.instrument().clone()) {
+            Entry::Vacant(entry) => {
+                entry.insert(quote);
+            }
+            Entry::Occupied(mut entry) => {
+                let current = entry.get();
+                let ordering = quote
+                    .observed_at()
+                    .instant()
+                    .cmp(&current.observed_at().instant())
+                    .then_with(|| {
+                        quote
+                            .visible_at()
+                            .instant()
+                            .cmp(&current.visible_at().instant())
+                    });
+                match ordering {
+                    std::cmp::Ordering::Greater => {
+                        entry.insert(quote);
+                    }
+                    std::cmp::Ordering::Equal => return Err(invalid()),
+                    std::cmp::Ordering::Less => {}
+                }
+            }
+        }
+    }
+    Ok(quotes)
+}
+
+async fn resolve_bond(
+    definitions: &dyn DefinitionRepository,
+    scope: &AccessScope,
+    reference: &VersionRef,
+    owner: &OwnerRef,
+) -> ApplicationResult<Bond> {
+    let resolved = definitions
+        .get_version(scope, reference.id().clone(), reference.version())
+        .await?
+        .ok_or_else(lineage_incomplete)?;
+    let DefinitionValue::Instrument(definition) = resolved else {
+        return Err(lineage_incomplete());
+    };
+    scope.authorize(definition.owner())?;
+    if definition.owner() != owner
+        || definition.identity() != reference.id().as_str()
+        || definition.version() != reference.version().get()
+        || definition.instrument().kind() != InstrumentKind::Bond
+    {
+        return Err(lineage_incomplete());
+    }
+    let Some(InstrumentSubtype::Bond(bond)) = definition.subtype() else {
+        return Err(lineage_incomplete());
+    };
+    if bond.instrument() != reference {
+        return Err(lineage_incomplete());
+    }
+    Ok(bond.clone())
+}
+
+fn validate_registered_bond_terms(bond: &Bond, terms: &BondTerms) -> ApplicationResult<()> {
+    if bond.first_issue_date() != terms.first_issue_date()
+        || bond.current_issue_date() != terms.current_issue_date()
+        || bond.maturity_date() != terms.maturity_date()
+        || !decimal_matches_fixed(bond.face_value(), terms.face_amount())
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn decimal_matches_fixed(value: &DecimalValue, expected: FixedDecimal) -> bool {
+    let Ok(coefficient) = value.coefficient().parse::<i128>() else {
+        return false;
+    };
+    match value.scale().cmp(&DECIMAL_SCALE) {
+        std::cmp::Ordering::Equal => coefficient == expected.scaled(),
+        std::cmp::Ordering::Less => 10_i128
+            .checked_pow(DECIMAL_SCALE - value.scale())
+            .and_then(|factor| coefficient.checked_mul(factor))
+            .is_some_and(|scaled| scaled == expected.scaled()),
+        std::cmp::Ordering::Greater => {
+            let Some(factor) = 10_i128.checked_pow(value.scale() - DECIMAL_SCALE) else {
+                return false;
+            };
+            coefficient % factor == 0 && coefficient / factor == expected.scaled()
+        }
+    }
+}
+
+fn quote_matches(quote: &CanonicalQuote, requested: FixedDecimal) -> bool {
+    quote.bid() == Some(requested) || quote.ask() == Some(requested)
+}
+
+fn invalid() -> ApplicationError {
+    map_domain_error(DomainErrorCode::InvalidValue)
 }
 
 pub struct CalculateFuturesDeliveryBasket<'a> {
