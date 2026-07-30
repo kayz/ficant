@@ -15,6 +15,7 @@ pub const CONVENTION_PROFILE: &str = "cgb-reference-v1";
 pub const MARKET_TIMEZONE: &str = "Asia/Shanghai";
 pub const ABI_VERSION: u32 = 1;
 pub const DECIMAL_SCALE: u32 = 12;
+const DECIMAL_FACTOR: i128 = 1_000_000_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -73,6 +74,7 @@ pub struct FixedDecimal(i128);
 
 impl FixedDecimal {
     pub const ZERO: Self = Self(0);
+    pub const ONE: Self = Self(DECIMAL_FACTOR);
 
     #[must_use]
     pub const fn from_scaled(value: i128) -> Self {
@@ -107,6 +109,20 @@ impl FixedDecimal {
             .map(Self)
             .ok_or(DomainErrorCode::InvalidValue)
     }
+
+    /// Multiplies two fixed decimals without applying an implicit market rounding rule.
+    ///
+    /// Values that cannot be represented exactly at the fixed scale fail closed.
+    pub fn checked_mul(self, other: Self) -> DomainResult<Self> {
+        let product = self
+            .0
+            .checked_mul(other.0)
+            .ok_or(DomainErrorCode::InvalidValue)?;
+        if product % DECIMAL_FACTOR != 0 {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        Ok(Self(product / DECIMAL_FACTOR))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -137,19 +153,22 @@ impl AnalyticsObjectRef {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BondTerms {
-    issue_date: NaiveDate,
+    first_issue_date: NaiveDate,
+    current_issue_date: NaiveDate,
     maturity_date: NaiveDate,
     frequency: CouponFrequency,
     day_count: DayCountConvention,
     business_day: BusinessDayConvention,
     coupon_rate: FixedDecimal,
     face_amount: FixedDecimal,
+    cumulative_issued_amount: FixedDecimal,
+    tax_attributes: Option<crate::market::BondTaxAttributes>,
 }
 
 impl BondTerms {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        issue_date: NaiveDate,
+        first_issue_date: NaiveDate,
         maturity_date: NaiveDate,
         frequency: CouponFrequency,
         day_count: DayCountConvention,
@@ -157,26 +176,69 @@ impl BondTerms {
         coupon_rate: FixedDecimal,
         face_amount: FixedDecimal,
     ) -> DomainResult<Self> {
-        if issue_date >= maturity_date
+        if first_issue_date >= maturity_date
             || !coupon_rate.is_non_negative()
             || !face_amount.is_positive()
         {
             return Err(DomainErrorCode::InvalidValue);
         }
         Ok(Self {
-            issue_date,
+            first_issue_date,
+            current_issue_date: first_issue_date,
             maturity_date,
             frequency,
             day_count,
             business_day,
             coupon_rate,
             face_amount,
+            cumulative_issued_amount: face_amount,
+            tax_attributes: None,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_issuance(
+        first_issue_date: NaiveDate,
+        current_issue_date: NaiveDate,
+        maturity_date: NaiveDate,
+        frequency: CouponFrequency,
+        day_count: DayCountConvention,
+        business_day: BusinessDayConvention,
+        coupon_rate: FixedDecimal,
+        face_amount: FixedDecimal,
+        cumulative_issued_amount: FixedDecimal,
+        tax_attributes: crate::market::BondTaxAttributes,
+    ) -> DomainResult<Self> {
+        if first_issue_date >= maturity_date
+            || current_issue_date < first_issue_date
+            || current_issue_date >= maturity_date
+            || !coupon_rate.is_non_negative()
+            || !face_amount.is_positive()
+            || !cumulative_issued_amount.is_positive()
+        {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        Ok(Self {
+            first_issue_date,
+            current_issue_date,
+            maturity_date,
+            frequency,
+            day_count,
+            business_day,
+            coupon_rate,
+            face_amount,
+            cumulative_issued_amount,
+            tax_attributes: Some(tax_attributes),
         })
     }
 
     #[must_use]
-    pub const fn issue_date(&self) -> NaiveDate {
-        self.issue_date
+    pub const fn first_issue_date(&self) -> NaiveDate {
+        self.first_issue_date
+    }
+    #[must_use]
+    pub const fn current_issue_date(&self) -> NaiveDate {
+        self.current_issue_date
     }
     #[must_use]
     pub const fn maturity_date(&self) -> NaiveDate {
@@ -201,6 +263,25 @@ impl BondTerms {
     #[must_use]
     pub const fn face_amount(&self) -> FixedDecimal {
         self.face_amount
+    }
+    #[must_use]
+    pub const fn cumulative_issued_amount(&self) -> FixedDecimal {
+        self.cumulative_issued_amount
+    }
+    #[must_use]
+    pub const fn tax_attributes(&self) -> Option<crate::market::BondTaxAttributes> {
+        self.tax_attributes
+    }
+
+    /// Returns the same issuance facts with a new coupon rate for a parsed external adjustment.
+    pub fn with_coupon_rate(&self, coupon_rate: FixedDecimal) -> DomainResult<Self> {
+        if !coupon_rate.is_non_negative() {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        Ok(Self {
+            coupon_rate,
+            ..self.clone()
+        })
     }
 }
 
@@ -311,7 +392,7 @@ impl BondAnalyticsInput {
         input_value: FixedDecimal,
     ) -> DomainResult<Self> {
         if valuation_at.market_timezone() != MARKET_TIMEZONE
-            || settlement_date < terms.issue_date()
+            || settlement_date < terms.first_issue_date()
             || settlement_date >= terms.maturity_date()
             || !input_value.is_positive()
         {
@@ -381,6 +462,30 @@ impl BondAnalyticsInput {
     #[must_use]
     pub const fn input_value(&self) -> FixedDecimal {
         self.input_value
+    }
+
+    /// Rebuilds the same calculation lineage with adjusted terms and the exact pre-tax price.
+    ///
+    /// This is used by a resolved external rule to rerun the same native engine without changing
+    /// the Bond, market-rule, snapshot, valuation, settlement, or calendar facts.
+    pub fn with_terms_and_price_in(
+        &self,
+        terms: BondTerms,
+        clean_price: FixedDecimal,
+    ) -> DomainResult<Self> {
+        Self::new(
+            self.owner.clone(),
+            self.bond.clone(),
+            self.rule_pack.clone(),
+            self.snapshot.clone(),
+            self.valuation_at.clone(),
+            self.settlement_date,
+            self.calendar_requirement,
+            self.calendar.clone(),
+            terms,
+            AnalyticsMode::PriceIn,
+            clean_price,
+        )
     }
 }
 

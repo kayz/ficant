@@ -21,6 +21,7 @@ mod runs;
 mod signals;
 mod snapshots;
 mod subjects;
+mod tax_rule_parser;
 mod unit_resolution;
 
 pub use access::AccessScope;
@@ -85,6 +86,7 @@ pub use snapshots::{
     StagedSnapshotBlob, StagedSnapshotProof, VerifiedSnapshotBlob, VerifiedSnapshotProof,
 };
 pub use subjects::SubjectRepository;
+pub use tax_rule_parser::{CouponTaxRate, TaxRulePackParser};
 pub use unit_resolution::{
     MarketFactFieldRole, MarketFactKind, MarketFactUnitResolver, ResolvedMarketFactProof,
     ResolvedUnitBinding, ValidatedMarketFact,

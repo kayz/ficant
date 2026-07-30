@@ -58,6 +58,8 @@ pub struct AnalysisContext {
     pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
     #[prost(message, optional, tag="7")]
     pub funding_rule_pack: ::core::option::Option<ObjectBinding>,
+    #[prost(message, optional, tag="8")]
+    pub tax_rule_pack: ::core::option::Option<ObjectBinding>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResultMetadata {
@@ -73,11 +75,11 @@ pub struct ResultMetadata {
     pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
     #[prost(message, optional, tag="6")]
     pub funding_rule_pack: ::core::option::Option<ObjectBinding>,
+    #[prost(message, optional, tag="7")]
+    pub tax_rule_pack: ::core::option::Option<ObjectBinding>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BondTerms {
-    #[prost(string, tag="1")]
-    pub issue_date: ::prost::alloc::string::String,
     #[prost(string, tag="2")]
     pub maturity_date: ::prost::alloc::string::String,
     #[prost(enumeration="CouponFrequency", tag="3")]
@@ -86,6 +88,14 @@ pub struct BondTerms {
     pub coupon_rate: ::core::option::Option<super::super::core::v1::DecimalValue>,
     #[prost(message, optional, tag="5")]
     pub face_amount: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(string, tag="6")]
+    pub first_issue_date: ::prost::alloc::string::String,
+    #[prost(string, tag="7")]
+    pub current_issue_date: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="8")]
+    pub cumulative_issued_amount: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="9")]
+    pub tax_attributes: ::core::option::Option<super::super::market::v1::BondTaxAttributes>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CalendarBinding {
@@ -156,6 +166,13 @@ pub struct BondAnalyticsMeasures {
     #[prost(message, optional, tag="8")]
     pub dv01: ::core::option::Option<super::super::core::v1::DecimalValue>,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TaxAdjustedBondAnalytics {
+    #[prost(message, repeated, tag="1")]
+    pub cashflows: ::prost::alloc::vec::Vec<DerivedCashflow>,
+    #[prost(message, optional, tag="2")]
+    pub yield_to_maturity: ::core::option::Option<super::super::core::v1::DecimalValue>,
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AnalyzeBondRequest {
     #[prost(message, optional, tag="1")]
@@ -193,6 +210,8 @@ pub struct AnalyzeBondResult {
     pub measures: ::core::option::Option<BondAnalyticsMeasures>,
     #[prost(message, optional, tag="3")]
     pub metadata: ::core::option::Option<ResultMetadata>,
+    #[prost(message, optional, tag="4")]
+    pub after_tax: ::core::option::Option<TaxAdjustedBondAnalytics>,
 }
 /// RiskSummary is the deterministic risk-only projection consumed by
 /// downstream ResearchGraph nodes. Values retain the exact Unit bindings and

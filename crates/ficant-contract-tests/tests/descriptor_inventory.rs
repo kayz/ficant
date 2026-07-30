@@ -15,8 +15,9 @@ use ficant_contracts::ficant::core::v1::{
     DecimalValue, Subject, SubjectStateSnapshot, SubjectVersion,
 };
 use ficant_contracts::ficant::market::v1::{
-    CgbFuturesDeliveryRulePack, CgbFuturesProductRule, FundingRulePack, FundingTierRate,
-    Instrument, InstrumentKind, MarketRulePack,
+    BondCouponTaxRule, BondTaxAttributes, CgbFuturesDeliveryRulePack, CgbFuturesProductRule,
+    FundingRulePack, FundingTierRate, Instrument, InstrumentKind, MarketRulePack,
+    SubjectCouponTaxRate, TaxRulePack,
 };
 use ficant_contracts::ficant::rates::v1::AnalyzeBondRequest;
 use ficant_contracts::ficant::research::v1::{
@@ -66,6 +67,10 @@ fn generated_rust_consumer_exports_representative_contracts() {
     let cgb_product_rule = CgbFuturesProductRule::default();
     let funding_rule_pack = FundingRulePack::default();
     let funding_tier_rate = FundingTierRate::default();
+    let tax_rule_pack = TaxRulePack::default();
+    let coupon_tax_rule = BondCouponTaxRule::default();
+    let subject_coupon_tax_rate = SubjectCouponTaxRate::default();
+    let bond_tax_attributes = BondTaxAttributes::default();
 
     assert!(instrument.instrument_id.is_none());
     assert_eq!(instrument.kind, InstrumentKind::Unspecified as i32);
@@ -84,6 +89,10 @@ fn generated_rust_consumer_exports_representative_contracts() {
     assert!(cgb_product_rule.product_code.is_none());
     assert!(funding_rule_pack.rates.is_empty());
     assert!(funding_tier_rate.annual_financing_rate.is_none());
+    assert!(tax_rule_pack.coupon_rules.is_empty());
+    assert!(coupon_tax_rule.tax_attributes.is_none());
+    assert!(subject_coupon_tax_rate.coupon_tax_rate.is_none());
+    assert_eq!(bond_tax_attributes.value_added_tax_status, 0);
 }
 
 #[derive(Clone, Copy)]
@@ -222,6 +231,7 @@ fn descriptor_inventory_is_unique_and_preserves_phase1_semantics() {
     assert_phase1_objects(&messages);
     assert_cgb_futures_rule_pack_contract(&messages);
     assert_funding_rule_pack_contract(&messages);
+    assert_tax_rule_pack_contract(&messages);
     assert_service_inventory(descriptor_set);
 }
 
@@ -828,6 +838,7 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
             ExpectedField::message("algorithm", ".ficant.rates.v1.AlgorithmBinding"),
             ExpectedField::message("subject_ref", version),
             ExpectedField::message("funding_rule_pack", binding),
+            ExpectedField::message("tax_rule_pack", binding),
         ],
     );
     assert_fields(
@@ -841,6 +852,7 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
             ExpectedField::message("units", ".ficant.rates.v1.AnalysisUnits"),
             ExpectedField::message("subject_ref", version),
             ExpectedField::message("funding_rule_pack", binding),
+            ExpectedField::message("tax_rule_pack", binding),
         ],
     );
     assert_fields(
@@ -866,6 +878,102 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
         ],
     );
     assert_reserved_tag(messages, "ficant.rates.v1.AnalyzeBondRequest", 10);
+
+    let bond_terms = messages
+        .get("ficant.rates.v1.BondTerms")
+        .expect("BondTerms must exist");
+    assert_exact_field(
+        bond_terms,
+        "maturity_date",
+        2,
+        Type::String,
+        None,
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond_terms,
+        "frequency",
+        3,
+        Type::Enum,
+        Some(".ficant.rates.v1.CouponFrequency"),
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond_terms,
+        "coupon_rate",
+        4,
+        Type::Message,
+        Some(decimal),
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond_terms,
+        "face_amount",
+        5,
+        Type::Message,
+        Some(decimal),
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond_terms,
+        "first_issue_date",
+        6,
+        Type::String,
+        None,
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond_terms,
+        "current_issue_date",
+        7,
+        Type::String,
+        None,
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond_terms,
+        "cumulative_issued_amount",
+        8,
+        Type::Message,
+        Some(decimal),
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond_terms,
+        "tax_attributes",
+        9,
+        Type::Message,
+        Some(".ficant.market.v1.BondTaxAttributes"),
+        false,
+        false,
+    );
+    assert_eq!(bond_terms.field.len(), 8, "BondTerms field drift");
+    assert_reserved_tag(messages, "ficant.rates.v1.BondTerms", 1);
+    assert_fields(
+        messages,
+        "ficant.rates.v1.TaxAdjustedBondAnalytics",
+        &[
+            ExpectedField::repeated_message("cashflows", ".ficant.rates.v1.DerivedCashflow"),
+            ExpectedField::message("yield_to_maturity", decimal),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.rates.v1.AnalyzeBondResult",
+        &[
+            ExpectedField::repeated_message("cashflows", ".ficant.rates.v1.DerivedCashflow"),
+            ExpectedField::message("measures", ".ficant.rates.v1.BondAnalyticsMeasures"),
+            ExpectedField::message("metadata", ".ficant.rates.v1.ResultMetadata"),
+            ExpectedField::message("after_tax", ".ficant.rates.v1.TaxAdjustedBondAnalytics"),
+        ],
+    );
 
     let delivery_request = messages
         .get("ficant.rates.v1.AnalyzeFuturesDeliveryRequest")
@@ -932,7 +1040,7 @@ fn assert_phase1_objects(messages: &BTreeMap<String, &DescriptorProto>) {
     let hash = ".ficant.core.v1.Sha256";
     let lineage = ".ficant.core.v1.LineageRef";
 
-    let specs: [(&str, &[ExpectedField]); 17] = [
+    let specs: [(&str, &[ExpectedField]); 16] = [
         (
             "ficant.market.v1.Instrument",
             &[
@@ -944,15 +1052,6 @@ fn assert_phase1_objects(messages: &BTreeMap<String, &DescriptorProto>) {
                 ExpectedField::scalar("symbol", Type::String),
                 ExpectedField::message("currency", ".ficant.core.v1.UnitRef"),
                 ExpectedField::message("calendar", version),
-            ],
-        ),
-        (
-            "ficant.market.v1.Bond",
-            &[
-                ExpectedField::message("instrument", version),
-                ExpectedField::scalar("issue_date", Type::String),
-                ExpectedField::scalar("maturity_date", Type::String),
-                ExpectedField::message("face_value", decimal),
             ],
         ),
         (
@@ -1166,6 +1265,81 @@ fn assert_phase1_objects(messages: &BTreeMap<String, &DescriptorProto>) {
     for (message, fields) in specs {
         assert_fields(messages, message, fields);
     }
+    assert_bond_contract(messages);
+}
+
+fn assert_bond_contract(messages: &BTreeMap<String, &DescriptorProto>) {
+    let bond = messages
+        .get("ficant.market.v1.Bond")
+        .expect("Bond must exist");
+    assert_exact_field(
+        bond,
+        "instrument",
+        1,
+        Type::Message,
+        Some(".ficant.core.v1.VersionRef"),
+        false,
+        false,
+    );
+    assert_exact_field(bond, "maturity_date", 3, Type::String, None, false, false);
+    assert_exact_field(
+        bond,
+        "face_value",
+        4,
+        Type::Message,
+        Some(".ficant.core.v1.DecimalValue"),
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond,
+        "first_issue_date",
+        5,
+        Type::String,
+        None,
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond,
+        "current_issue_date",
+        6,
+        Type::String,
+        None,
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond,
+        "cumulative_issued_amount",
+        7,
+        Type::Message,
+        Some(".ficant.core.v1.DecimalValue"),
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond,
+        "tax_attributes",
+        8,
+        Type::Message,
+        Some(".ficant.market.v1.BondTaxAttributes"),
+        false,
+        false,
+    );
+    assert_eq!(bond.field.len(), 7, "Bond field drift");
+    assert_reserved_tag(messages, "ficant.market.v1.Bond", 2);
+    assert_fields(
+        messages,
+        "ficant.market.v1.BondTaxAttributes",
+        &[
+            ExpectedField::enumeration(
+                "value_added_tax_status",
+                ".ficant.market.v1.ValueAddedTaxStatus",
+            ),
+            ExpectedField::enumeration("income_tax_status", ".ficant.market.v1.IncomeTaxStatus"),
+        ],
+    );
 }
 
 fn assert_cgb_futures_rule_pack_contract(messages: &BTreeMap<String, &DescriptorProto>) {
@@ -1295,6 +1469,41 @@ fn assert_funding_rule_pack_contract(messages: &BTreeMap<String, &DescriptorProt
         false,
     );
     assert_eq!(rate.field.len(), 2, "FundingTierRate field drift");
+}
+
+fn assert_tax_rule_pack_contract(messages: &BTreeMap<String, &DescriptorProto>) {
+    let pack = messages
+        .get("ficant.market.v1.TaxRulePack")
+        .expect("TaxRulePack must exist");
+    assert_exact_field(
+        pack,
+        "coupon_rules",
+        1,
+        Type::Message,
+        Some(".ficant.market.v1.BondCouponTaxRule"),
+        true,
+        false,
+    );
+    assert_eq!(pack.field.len(), 1, "TaxRulePack field drift");
+    assert_fields(
+        messages,
+        "ficant.market.v1.BondCouponTaxRule",
+        &[
+            ExpectedField::scalar("first_issue_from", Type::String),
+            ExpectedField::scalar("first_issue_to", Type::String),
+            ExpectedField::message("tax_attributes", ".ficant.market.v1.BondTaxAttributes"),
+            ExpectedField::repeated_message("rates", ".ficant.market.v1.SubjectCouponTaxRate"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.market.v1.SubjectCouponTaxRate",
+        &[
+            ExpectedField::scalar("value_added_tax_profile", Type::String),
+            ExpectedField::scalar("income_tax_profile", Type::String),
+            ExpectedField::message("coupon_tax_rate", ".ficant.core.v1.DecimalValue"),
+        ],
+    );
 }
 
 fn assert_reserved_tag(
@@ -2026,6 +2235,24 @@ fn assert_domain_enums(enums: &BTreeMap<String, &EnumDescriptorProto>) {
             ("VERIFICATION_STATUS_UNVERIFIED", 1),
             ("VERIFICATION_STATUS_VERIFIED", 2),
             ("VERIFICATION_STATUS_REJECTED", 3),
+        ],
+    );
+    assert_enum(
+        enums,
+        "ficant.market.v1.ValueAddedTaxStatus",
+        &[
+            ("VALUE_ADDED_TAX_STATUS_UNSPECIFIED", 0),
+            ("VALUE_ADDED_TAX_STATUS_EXEMPT", 1),
+            ("VALUE_ADDED_TAX_STATUS_TAXABLE", 2),
+        ],
+    );
+    assert_enum(
+        enums,
+        "ficant.market.v1.IncomeTaxStatus",
+        &[
+            ("INCOME_TAX_STATUS_UNSPECIFIED", 0),
+            ("INCOME_TAX_STATUS_EXEMPT", 1),
+            ("INCOME_TAX_STATUS_TAXABLE", 2),
         ],
     );
     assert_enum(

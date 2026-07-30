@@ -12,6 +12,7 @@ ficant-application = { path = "../../crates/ficant-application" }
 ficant-api = { path = "../../crates/ficant-api" }
 ficant-cgb-futures-pack = { path = "../../crates/ficant-cgb-futures-pack" }
 ficant-funding-pack = { path = "../../crates/ficant-funding-pack" }
+ficant-tax-pack = { path = "../../crates/ficant-tax-pack" }
 ficant-fixed-income-native = { path = "../../crates/ficant-fixed-income-native" }
 ficant-native-nodes = { path = "../../crates/ficant-native-nodes" }
 ficant-runtime = { path = "../../crates/ficant-runtime" }

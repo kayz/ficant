@@ -6,10 +6,10 @@ use chrono::{DateTime, NaiveDate, Utc};
 use ficant_application::ports::{
     BondAnalyticsEngine, CarryRollEngine, DefinitionRepository, FundingRulePackParser,
     FuturesDeliveryEngine, FuturesDeliveryRuleParser, FuturesHedgeEngine, SubjectRepository,
-    YieldCurveEngine,
+    TaxRulePackParser, YieldCurveEngine,
 };
 use ficant_application::use_cases::{
-    funding_rule::ResolveFundingRule, subject_resolution::ResolveSubject,
+    funding_rule::ResolveFundingRule, subject_resolution::ResolveSubject, tax_rule::ResolveTaxRule,
 };
 use ficant_application::{
     AccessScope, ApplicationError, ApplicationErrorCategory, CalculateBondAnalytics,
@@ -43,6 +43,7 @@ use ficant_domain::futures_hedge::{
     FUTURES_HEDGE_ALGORITHM_ID, FUTURES_HEDGE_ALGORITHM_VERSION, FUTURES_HEDGE_CONVENTION_PROFILE,
     FuturesHedgeInput, FuturesHedgeResult,
 };
+use ficant_domain::market::{BondTaxAttributes, IncomeTaxStatus, ValueAddedTaxStatus};
 use ficant_domain::primitives::{
     ContentHash, DecimalValue as DomainDecimalValue, MarketTime, OwnerRef, Ulid, UnitRef, Version,
     VersionRef,
@@ -69,6 +70,7 @@ pub struct RatesGrpcService {
     subjects: Arc<dyn SubjectRepository>,
     futures_delivery_rule_parser: Arc<dyn FuturesDeliveryRuleParser>,
     funding_rule_pack_parser: Arc<dyn FundingRulePackParser>,
+    tax_rule_pack_parser: Arc<dyn TaxRulePackParser>,
     futures_hedge: Arc<dyn FuturesHedgeEngine>,
     errors: CoreBusinessErrorMapper,
 }
@@ -90,6 +92,7 @@ impl RatesGrpcService {
         subjects: Arc<dyn SubjectRepository>,
         futures_delivery_rule_parser: Arc<dyn FuturesDeliveryRuleParser>,
         funding_rule_pack_parser: Arc<dyn FundingRulePackParser>,
+        tax_rule_pack_parser: Arc<dyn TaxRulePackParser>,
         futures_hedge: Arc<dyn FuturesHedgeEngine>,
         trace_key: &[u8],
     ) -> Result<Self, &'static str> {
@@ -103,6 +106,7 @@ impl RatesGrpcService {
             subjects,
             futures_delivery_rule_parser,
             funding_rule_pack_parser,
+            tax_rule_pack_parser,
             futures_hedge,
             errors: CoreBusinessErrorMapper::new(trace_key)?,
         })
@@ -137,11 +141,65 @@ impl RatesGrpcService {
     ) -> Result<pb::AnalyzeBondResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::bond())?;
         reject_funding_rule_pack(&context)?;
-        ResolveSubject::new(self.subjects.as_ref())
+        let subject = ResolveSubject::new(self.subjects.as_ref())
             .execute(&context.subject_ref, CN_MARKET, BOND_TOOL)
             .await?;
-        let parsed = parse_analyze_bond_request(request)?;
-        execute_parsed_bond_request(self.bond.as_ref(), &parsed)
+        let tax_rule_pack = context.tax_rule_pack.as_ref().ok_or_else(invalid)?;
+        let parsed = parse_bond_request(request, &context)?;
+        let tax_attributes = parsed
+            .input()
+            .terms()
+            .tax_attributes()
+            .ok_or_else(invalid)?;
+        let access_scope = AccessScope::new(
+            context.owner.tenant_id().clone(),
+            context.owner.owner_id().clone(),
+            vec![context.owner.owner_id().clone()],
+        )?;
+        let coupon_tax_rate = ResolveTaxRule::new(
+            self.definitions.as_ref(),
+            self.tax_rule_pack_parser.as_ref(),
+        )
+        .execute(
+            &access_scope,
+            tax_rule_pack,
+            parsed.input().valuation_at().clone(),
+            parsed.input().terms().first_issue_date(),
+            tax_attributes,
+            subject.tax_treatment(),
+        )
+        .await?;
+        if coupon_tax_rate.unit() != &parse_unit(&context.units.rate)? {
+            return Err(map_domain_error(DomainErrorCode::InvalidUnit));
+        }
+        let pre_tax = CalculateBondAnalytics::new(self.bond.as_ref()).execute(parsed.input())?;
+        let retained_coupon_fraction = FixedDecimal::ONE
+            .checked_sub(coupon_tax_rate.coupon_tax_rate())
+            .map_err(map_domain_error)?;
+        let adjusted_coupon_rate = parsed
+            .input()
+            .terms()
+            .coupon_rate()
+            .checked_mul(retained_coupon_fraction)
+            .map_err(map_domain_error)?;
+        let adjusted_terms = parsed
+            .input()
+            .terms()
+            .with_coupon_rate(adjusted_coupon_rate)
+            .map_err(map_domain_error)?;
+        let after_tax_input = parsed
+            .input()
+            .with_terms_and_price_in(adjusted_terms, pre_tax.measures().clean_price())
+            .map_err(map_domain_error)?;
+        let after_tax =
+            CalculateBondAnalytics::new(self.bond.as_ref()).execute(&after_tax_input)?;
+        Ok(bond_result(
+            &pre_tax,
+            &context.units,
+            &context.subject_ref,
+            Some(tax_rule_pack),
+            Some(&after_tax),
+        ))
     }
 
     async fn interpolate_curve_value(
@@ -150,6 +208,7 @@ impl RatesGrpcService {
     ) -> Result<pb::InterpolateYieldCurveResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::curve())?;
         reject_funding_rule_pack(&context)?;
+        reject_tax_rule_pack(&context)?;
         ResolveSubject::new(self.subjects.as_ref())
             .execute(&context.subject_ref, CN_MARKET, CURVE_TOOL)
             .await?;
@@ -172,6 +231,7 @@ impl RatesGrpcService {
     ) -> Result<pb::AnalyzeCarryRollResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::carry_roll())?;
         reject_funding_rule_pack(&context)?;
+        reject_tax_rule_pack(&context)?;
         ResolveSubject::new(self.subjects.as_ref())
             .execute(&context.subject_ref, CN_MARKET, CARRY_ROLL_TOOL)
             .await?;
@@ -205,6 +265,7 @@ impl RatesGrpcService {
             request.context.as_ref(),
             ExpectedAlgorithm::futures_delivery(),
         )?;
+        reject_tax_rule_pack(&context)?;
         let subject = ResolveSubject::new(self.subjects.as_ref())
             .execute(
                 &context.subject_ref,
@@ -298,6 +359,7 @@ impl RatesGrpcService {
     ) -> Result<pb::AnalyzeFuturesHedgeResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::futures_hedge())?;
         reject_funding_rule_pack(&context)?;
+        reject_tax_rule_pack(&context)?;
         ResolveSubject::new(self.subjects.as_ref())
             .execute(
                 &context.subject_ref,
@@ -367,6 +429,15 @@ pub fn parse_analyze_bond_request(
     request: &pb::AnalyzeBondRequest,
 ) -> Result<ParsedBondAnalyticsRequest, ApplicationError> {
     let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::bond())?;
+    reject_funding_rule_pack(&context)?;
+    reject_tax_rule_pack(&context)?;
+    parse_bond_request(request, &context)
+}
+
+fn parse_bond_request(
+    request: &pb::AnalyzeBondRequest,
+    context: &ParsedContext,
+) -> Result<ParsedBondAnalyticsRequest, ApplicationError> {
     let terms = parse_bond_terms(request.terms.as_ref(), &context.units)?;
     let (mode, input_value) = match request.input.as_ref() {
         Some(pb::analyze_bond_request::Input::YieldToMaturity(value)) => (
@@ -380,10 +451,10 @@ pub fn parse_analyze_bond_request(
         None => return Err(invalid()),
     };
     let input = BondAnalyticsInput::new(
-        context.owner,
+        context.owner.clone(),
         parse_object(request.bond.as_ref())?,
-        context.rule_pack,
-        context.data_snapshot,
+        context.rule_pack.clone(),
+        context.data_snapshot.clone(),
         parse_market_time(request.valuation_at.as_ref())?,
         parse_date(&request.settlement_date)?,
         parse_calendar_requirement(request.calendar_requirement)?,
@@ -395,8 +466,8 @@ pub fn parse_analyze_bond_request(
     .map_err(map_domain_error)?;
     Ok(ParsedBondAnalyticsRequest {
         input,
-        units: context.units,
-        subject_ref: context.subject_ref,
+        units: context.units.clone(),
+        subject_ref: context.subject_ref.clone(),
     })
 }
 
@@ -410,7 +481,13 @@ pub fn execute_parsed_bond_request(
     request: &ParsedBondAnalyticsRequest,
 ) -> Result<pb::AnalyzeBondResult, ApplicationError> {
     let result = CalculateBondAnalytics::new(engine).execute(&request.input)?;
-    Ok(bond_result(&result, &request.units, request.subject_ref()))
+    Ok(bond_result(
+        &result,
+        &request.units,
+        request.subject_ref(),
+        None,
+        None,
+    ))
 }
 
 /// Runs the shared pure parse, native calculation, and protobuf result mapping path.
@@ -532,6 +609,7 @@ struct ParsedContext {
     units: UnitBindings,
     subject_ref: VersionRef,
     funding_rule_pack: Option<AnalyticsObjectRef>,
+    tax_rule_pack: Option<AnalyticsObjectRef>,
 }
 
 #[derive(Clone)]
@@ -626,11 +704,23 @@ fn parse_context(
             .as_ref()
             .map(|binding| parse_object(Some(binding)))
             .transpose()?,
+        tax_rule_pack: value
+            .tax_rule_pack
+            .as_ref()
+            .map(|binding| parse_object(Some(binding)))
+            .transpose()?,
     })
 }
 
 fn reject_funding_rule_pack(context: &ParsedContext) -> Result<(), ApplicationError> {
     if context.funding_rule_pack.is_some() {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn reject_tax_rule_pack(context: &ParsedContext) -> Result<(), ApplicationError> {
+    if context.tax_rule_pack.is_some() {
         return Err(invalid());
     }
     Ok(())
@@ -812,8 +902,9 @@ fn parse_bond_terms(
         pb::CouponFrequency::Semiannual => CouponFrequency::Semiannual,
         pb::CouponFrequency::Unspecified => return Err(invalid()),
     };
-    BondTerms::new(
-        parse_date(&value.issue_date)?,
+    BondTerms::with_issuance(
+        parse_date(&value.first_issue_date)?,
+        parse_date(&value.current_issue_date)?,
         parse_date(&value.maturity_date)?,
         frequency,
         DayCountConvention::ActActBondIsma,
@@ -823,8 +914,53 @@ fn parse_bond_terms(
             value.face_amount.as_ref().ok_or_else(invalid)?,
             &units.currency_amount,
         )?,
+        parse_fixed_decimal(
+            value
+                .cumulative_issued_amount
+                .as_ref()
+                .ok_or_else(invalid)?,
+            &units.currency_amount,
+        )?,
+        parse_bond_tax_attributes(value.tax_attributes.as_ref())?,
     )
     .map_err(map_domain_error)
+}
+
+fn parse_bond_tax_attributes(
+    value: Option<&ficant_contracts::ficant::market::v1::BondTaxAttributes>,
+) -> Result<BondTaxAttributes, ApplicationError> {
+    let value = value.ok_or_else(invalid)?;
+    let value_added_tax_status =
+        match ficant_contracts::ficant::market::v1::ValueAddedTaxStatus::try_from(
+            value.value_added_tax_status,
+        )
+        .map_err(|_| invalid())?
+        {
+            ficant_contracts::ficant::market::v1::ValueAddedTaxStatus::Exempt => {
+                ValueAddedTaxStatus::Exempt
+            }
+            ficant_contracts::ficant::market::v1::ValueAddedTaxStatus::Taxable => {
+                ValueAddedTaxStatus::Taxable
+            }
+            ficant_contracts::ficant::market::v1::ValueAddedTaxStatus::Unspecified => {
+                return Err(invalid());
+            }
+        };
+    let income_tax_status = match ficant_contracts::ficant::market::v1::IncomeTaxStatus::try_from(
+        value.income_tax_status,
+    )
+    .map_err(|_| invalid())?
+    {
+        ficant_contracts::ficant::market::v1::IncomeTaxStatus::Exempt => IncomeTaxStatus::Exempt,
+        ficant_contracts::ficant::market::v1::IncomeTaxStatus::Taxable => IncomeTaxStatus::Taxable,
+        ficant_contracts::ficant::market::v1::IncomeTaxStatus::Unspecified => {
+            return Err(invalid());
+        }
+    };
+    Ok(BondTaxAttributes::new(
+        value_added_tax_status,
+        income_tax_status,
+    ))
 }
 
 fn parse_curve(
@@ -873,21 +1009,12 @@ fn bond_result(
     result: &BondAnalyticsResult,
     units: &UnitBindings,
     subject_ref: &VersionRef,
+    tax_rule_pack: Option<&AnalyticsObjectRef>,
+    after_tax: Option<&BondAnalyticsResult>,
 ) -> pb::AnalyzeBondResult {
     let measures = result.measures();
     pb::AnalyzeBondResult {
-        cashflows: result
-            .cashflows()
-            .iter()
-            .map(|cashflow| pb::DerivedCashflow {
-                sequence: cashflow.sequence(),
-                nominal_date: cashflow.nominal_date().to_string(),
-                payment_date: cashflow.payment_date().to_string(),
-                coupon: Some(decimal(cashflow.coupon(), &units.currency_amount)),
-                principal: Some(decimal(cashflow.principal(), &units.currency_amount)),
-                total: Some(decimal(cashflow.total(), &units.currency_amount)),
-            })
-            .collect(),
+        cashflows: derived_cashflows(result, units),
         measures: Some(pb::BondAnalyticsMeasures {
             accrued_interest: Some(decimal(measures.accrued_interest(), &units.price_per_100)),
             clean_price: Some(decimal(measures.clean_price(), &units.price_per_100)),
@@ -903,8 +1030,31 @@ fn bond_result(
             ExpectedAlgorithm::bond(),
             subject_ref,
             None,
+            tax_rule_pack,
         )),
+        after_tax: after_tax.map(|value| pb::TaxAdjustedBondAnalytics {
+            cashflows: derived_cashflows(value, units),
+            yield_to_maturity: Some(decimal(value.measures().yield_to_maturity(), &units.rate)),
+        }),
     }
+}
+
+fn derived_cashflows(
+    result: &BondAnalyticsResult,
+    units: &UnitBindings,
+) -> Vec<pb::DerivedCashflow> {
+    result
+        .cashflows()
+        .iter()
+        .map(|cashflow| pb::DerivedCashflow {
+            sequence: cashflow.sequence(),
+            nominal_date: cashflow.nominal_date().to_string(),
+            payment_date: cashflow.payment_date().to_string(),
+            coupon: Some(decimal(cashflow.coupon(), &units.currency_amount)),
+            principal: Some(decimal(cashflow.principal(), &units.currency_amount)),
+            total: Some(decimal(cashflow.total(), &units.currency_amount)),
+        })
+        .collect()
 }
 
 fn curve_result(
@@ -919,6 +1069,7 @@ fn curve_result(
             point.schema_id(),
             ExpectedAlgorithm::curve(),
             subject_ref,
+            None,
             None,
         )),
     }
@@ -953,6 +1104,7 @@ fn carry_roll_result(
             ExpectedAlgorithm::carry_roll(),
             subject_ref,
             None,
+            None,
         )),
     }
 }
@@ -985,6 +1137,7 @@ fn futures_delivery_result(
             ExpectedAlgorithm::futures_delivery(),
             subject_ref,
             Some(funding_rule_pack),
+            None,
         )),
     })
 }
@@ -1042,6 +1195,7 @@ fn futures_hedge_result(
             ExpectedAlgorithm::futures_hedge(),
             subject_ref,
             None,
+            None,
         )),
     }
 }
@@ -1065,6 +1219,7 @@ fn metadata(
     algorithm: ExpectedAlgorithm,
     subject_ref: &VersionRef,
     funding_rule_pack: Option<&AnalyticsObjectRef>,
+    tax_rule_pack: Option<&AnalyticsObjectRef>,
 ) -> pb::ResultMetadata {
     pb::ResultMetadata {
         schema_id: schema_id.to_owned(),
@@ -1078,6 +1233,7 @@ fn metadata(
         }),
         subject_ref: Some(proto_version_ref(subject_ref)),
         funding_rule_pack: funding_rule_pack.map(object_binding),
+        tax_rule_pack: tax_rule_pack.map(object_binding),
     }
 }
 

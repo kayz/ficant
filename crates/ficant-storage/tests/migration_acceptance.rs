@@ -96,7 +96,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
             .fetch_one(&pool)
             .await
             .expect("migration history must be queryable");
-    assert_eq!(migration_count, 14);
+    assert_eq!(migration_count, 15);
     let artifact_column: bool = sqlx::query_scalar(
         "SELECT EXISTS(
              SELECT 1 FROM information_schema.columns
@@ -108,6 +108,37 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     .await
     .expect("independent artifact identity column must be observable");
     assert!(artifact_column);
+    let issuance_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)
+         FROM information_schema.columns
+         WHERE table_schema = 'market' AND table_name = 'bonds'
+           AND column_name = ANY($1)
+           AND is_nullable = 'YES'",
+    )
+    .bind([
+        "first_issue_date",
+        "current_issue_date",
+        "cumulative_issued_coefficient",
+        "cumulative_issued_scale",
+        "cumulative_issued_unit_id",
+        "cumulative_issued_unit_version",
+        "value_added_tax_status",
+        "income_tax_status",
+    ])
+    .fetch_one(&pool)
+    .await
+    .expect("Bond issuance columns must be observable");
+    assert_eq!(issuance_columns, 8);
+    let issuance_constraint: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+             SELECT 1 FROM pg_constraint
+             WHERE conname = 'bonds_issuance_shape_check'
+         )",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("Bond issuance shape constraint must be observable");
+    assert!(issuance_constraint);
 
     let fixture =
         std::env::temp_dir().join(format!("ficant-failing-migration-{}", std::process::id()));

@@ -122,6 +122,19 @@ try {
         Invoke-GateExpect -ExpectedExitCode 0 -Scenario ($fixture.Scenario + ' removal restores pass')
     }
 
+    $taxRuleFixtures = @(
+        [pscustomobject]@{ Scenario = 'Subject tax rate'; Path = 'interface/proto/ficant/core/v1/subject.proto'; Content = 'double coupon_tax_rate = 0.13;' },
+        [pscustomobject]@{ Scenario = 'Bond/domain tax rate'; Path = 'crates/ficant-domain/src/market/bond.rs'; Content = 'let coupon_tax_rate = 0.13;' },
+        [pscustomobject]@{ Scenario = 'C++ tax rate'; Path = 'cpp/fixed-income-kernel/src/tax.cpp'; Content = 'const double coupon_tax_rate = 0.13;' },
+        [pscustomobject]@{ Scenario = 'FFI tax rate'; Path = 'crates/ficant-kernel-sys/src/lib.rs'; Content = 'let coupon_tax_rate = 0.13;' }
+    )
+    foreach ($fixture in $taxRuleFixtures) {
+        $taxRulePath = Write-FixtureFile -RelativePath $fixture.Path -Content $fixture.Content
+        Invoke-GateExpect -ExpectedExitCode 1 -Scenario ($fixture.Scenario + ' is rejected')
+        Remove-Item -LiteralPath $taxRulePath
+        Invoke-GateExpect -ExpectedExitCode 0 -Scenario ($fixture.Scenario + ' removal restores pass')
+    }
+
     $testPath = Write-FixtureFile -RelativePath 'tests/market_branch.rs' -Content ('match market { "' + $countryCode + '" => 1, _ => 0 }')
     Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'test source market branch is rejected'
     Remove-Item -LiteralPath $testPath

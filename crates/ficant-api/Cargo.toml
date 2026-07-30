@@ -27,5 +27,6 @@ workspace = true
 [dev-dependencies]
 ficant-cgb-futures-pack = { path = "../ficant-cgb-futures-pack" }
 ficant-funding-pack = { path = "../ficant-funding-pack" }
+ficant-tax-pack = { path = "../ficant-tax-pack" }
 ficant-fixed-income-native = { path = "../ficant-fixed-income-native" }
 rust_decimal = { workspace = true }

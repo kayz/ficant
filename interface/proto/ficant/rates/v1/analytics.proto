@@ -4,6 +4,7 @@ package ficant.rates.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
+import "ficant/market/v1/definition.proto";
 
 message ObjectBinding {
   ficant.core.v1.VersionRef object = 1;
@@ -40,6 +41,7 @@ message AnalysisContext {
   AnalysisUnits units = 5;
   ficant.core.v1.VersionRef subject_ref = 6;
   ObjectBinding funding_rule_pack = 7;
+  ObjectBinding tax_rule_pack = 8;
 }
 
 message ResultMetadata {
@@ -49,6 +51,7 @@ message ResultMetadata {
   AlgorithmBinding algorithm = 4;
   ficant.core.v1.VersionRef subject_ref = 5;
   ObjectBinding funding_rule_pack = 6;
+  ObjectBinding tax_rule_pack = 7;
 }
 
 enum CouponFrequency {
@@ -77,11 +80,15 @@ enum CgbFuturesProduct {
 }
 
 message BondTerms {
-  string issue_date = 1;
+  reserved 1;
   string maturity_date = 2;
   CouponFrequency frequency = 3;
   ficant.core.v1.DecimalValue coupon_rate = 4;
   ficant.core.v1.DecimalValue face_amount = 5;
+  string first_issue_date = 6;
+  string current_issue_date = 7;
+  ficant.core.v1.DecimalValue cumulative_issued_amount = 8;
+  ficant.market.v1.BondTaxAttributes tax_attributes = 9;
 }
 
 message CalendarBinding {
@@ -126,6 +133,11 @@ message BondAnalyticsMeasures {
   ficant.core.v1.DecimalValue dv01 = 8;
 }
 
+message TaxAdjustedBondAnalytics {
+  repeated DerivedCashflow cashflows = 1;
+  ficant.core.v1.DecimalValue yield_to_maturity = 2;
+}
+
 message AnalyzeBondRequest {
   AnalysisContext context = 1;
   ObjectBinding bond = 2;
@@ -145,6 +157,7 @@ message AnalyzeBondResult {
   repeated DerivedCashflow cashflows = 1;
   BondAnalyticsMeasures measures = 2;
   ResultMetadata metadata = 3;
+  TaxAdjustedBondAnalytics after_tax = 4;
 }
 
 // RiskSummary is the deterministic risk-only projection consumed by

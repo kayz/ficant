@@ -7,11 +7,34 @@ import "ficant/market/v1/instrument.proto";
 import "ficant/market/v1/rule.proto";
 import "google/protobuf/timestamp.proto";
 
+enum ValueAddedTaxStatus {
+  VALUE_ADDED_TAX_STATUS_UNSPECIFIED = 0;
+  VALUE_ADDED_TAX_STATUS_EXEMPT = 1;
+  VALUE_ADDED_TAX_STATUS_TAXABLE = 2;
+}
+
+enum IncomeTaxStatus {
+  INCOME_TAX_STATUS_UNSPECIFIED = 0;
+  INCOME_TAX_STATUS_EXEMPT = 1;
+  INCOME_TAX_STATUS_TAXABLE = 2;
+}
+
+// BondTaxAttributes are L2 asset facts. They carry no tax rate or cutoff:
+// the exact L3 TaxRulePack validates and consumes them for a calculation.
+message BondTaxAttributes {
+  ValueAddedTaxStatus value_added_tax_status = 1;
+  IncomeTaxStatus income_tax_status = 2;
+}
+
 message Bond {
   ficant.core.v1.VersionRef instrument = 1;
-  string issue_date = 2;
+  reserved 2;
   string maturity_date = 3;
   ficant.core.v1.DecimalValue face_value = 4;
+  string first_issue_date = 5;
+  string current_issue_date = 6;
+  ficant.core.v1.DecimalValue cumulative_issued_amount = 7;
+  BondTaxAttributes tax_attributes = 8;
 }
 
 message FuturesContract {

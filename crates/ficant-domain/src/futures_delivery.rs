@@ -206,7 +206,7 @@ impl FuturesDeliverableInput {
     ) -> DomainResult<Self> {
         if valuation_at.market_timezone() != MARKET_TIMEZONE
             || valuation_at.local_trading_date() > purchase_date
-            || purchase_date < terms.issue_date()
+            || purchase_date < terms.first_issue_date()
             || purchase_date >= delivery_date
             || delivery_date >= terms.maturity_date()
             || delivery_month_first.day() != 1
@@ -340,7 +340,7 @@ impl FuturesDeliverableInput {
             self.purchase_date,
             self.delivery_month_first,
             self.delivery_date,
-            self.terms.issue_date(),
+            self.terms.first_issue_date(),
             self.terms.maturity_date(),
         ] {
             field(&mut bytes, value.to_string().as_bytes());
@@ -403,7 +403,7 @@ pub fn is_deliverable(
     delivery_month_first: NaiveDate,
 ) -> DomainResult<bool> {
     let original_limit = terms
-        .issue_date()
+        .first_issue_date()
         .checked_add_months(Months::new(rule.original_term_max_months()))
         .ok_or(DomainErrorCode::InvalidValue)?;
     let minimum_maturity = delivery_month_first

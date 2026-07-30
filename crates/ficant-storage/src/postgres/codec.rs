@@ -5,11 +5,11 @@ use ficant_application::ports::{
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_domain::market::{
-    ArtifactInputKind, Bond, Calendar, CalendarInput, CalendarSession, Cashflow, CashflowInput,
-    CashflowType, CurveSnapshot, CurveSnapshotInput, FactSource, FuturesContract, Instrument,
-    InstrumentInput, InstrumentKind, MarketRulePack, MarketRulePackInput, Quote, QuoteInput,
-    RulePackContent, Trade, TradeInput, Unit, UnitInput, Valuation, ValuationInput,
-    VerificationStatus,
+    ArtifactInputKind, Bond, BondTaxAttributes, Calendar, CalendarInput, CalendarSession, Cashflow,
+    CashflowInput, CashflowType, CurveSnapshot, CurveSnapshotInput, FactSource, FuturesContract,
+    IncomeTaxStatus, Instrument, InstrumentInput, InstrumentKind, MarketRulePack,
+    MarketRulePackInput, Quote, QuoteInput, RulePackContent, Trade, TradeInput, Unit, UnitInput,
+    Valuation, ValuationInput, ValueAddedTaxStatus, VerificationStatus,
 };
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, EffectivePeriod, MarketTime, OwnerRef, Ulid, UnitRef, Version,
@@ -344,10 +344,20 @@ pub(crate) fn encode_definition(value: &DefinitionValue) -> Vec<u8> {
             match value.subtype() {
                 None => encoder.u8(0),
                 Some(InstrumentSubtype::Bond(value)) => {
-                    encoder.u8(1);
-                    encoder.string(&value.issue_date().to_string());
-                    encoder.string(&value.maturity_date().to_string());
-                    encode_decimal(&mut encoder, value.face_value());
+                    if let Some(attributes) = value.tax_attributes() {
+                        encoder.u8(3);
+                        encoder.string(&value.first_issue_date().to_string());
+                        encoder.string(&value.current_issue_date().to_string());
+                        encoder.string(&value.maturity_date().to_string());
+                        encode_decimal(&mut encoder, value.cumulative_issued_amount());
+                        encode_bond_tax_attributes(&mut encoder, attributes);
+                        encode_decimal(&mut encoder, value.face_value());
+                    } else {
+                        encoder.u8(1);
+                        encoder.string(&value.first_issue_date().to_string());
+                        encoder.string(&value.maturity_date().to_string());
+                        encode_decimal(&mut encoder, value.face_value());
+                    }
                 }
                 Some(InstrumentSubtype::FuturesContract(value)) => {
                     encoder.u8(2);
@@ -427,6 +437,18 @@ pub(crate) fn decode_definition(bytes: &[u8]) -> CodecResult<DefinitionValue> {
                         &instrument,
                         parse_date(&decoder.string()?)?,
                         parse_date(&decoder.string()?)?,
+                        decode_decimal(&mut decoder)?,
+                    )
+                    .map_err(ficant_application::map_domain_error)?,
+                )),
+                3 => Some(InstrumentSubtype::Bond(
+                    Bond::with_issuance(
+                        &instrument,
+                        parse_date(&decoder.string()?)?,
+                        parse_date(&decoder.string()?)?,
+                        parse_date(&decoder.string()?)?,
+                        decode_decimal(&mut decoder)?,
+                        decode_bond_tax_attributes(&mut decoder)?,
                         decode_decimal(&mut decoder)?,
                     )
                     .map_err(ficant_application::map_domain_error)?,
@@ -1013,6 +1035,34 @@ fn decode_decimal(decoder: &mut Decoder<'_>) -> CodecResult<DecimalValue> {
         .map_err(ficant_application::map_domain_error)
 }
 
+fn encode_bond_tax_attributes(encoder: &mut Encoder, value: BondTaxAttributes) {
+    encoder.u8(match value.value_added_tax_status() {
+        ValueAddedTaxStatus::Exempt => 1,
+        ValueAddedTaxStatus::Taxable => 2,
+    });
+    encoder.u8(match value.income_tax_status() {
+        IncomeTaxStatus::Exempt => 1,
+        IncomeTaxStatus::Taxable => 2,
+    });
+}
+
+fn decode_bond_tax_attributes(decoder: &mut Decoder<'_>) -> CodecResult<BondTaxAttributes> {
+    let value_added_tax_status = match decoder.u8()? {
+        1 => ValueAddedTaxStatus::Exempt,
+        2 => ValueAddedTaxStatus::Taxable,
+        _ => return Err(codec_error()),
+    };
+    let income_tax_status = match decoder.u8()? {
+        1 => IncomeTaxStatus::Exempt,
+        2 => IncomeTaxStatus::Taxable,
+        _ => return Err(codec_error()),
+    };
+    Ok(BondTaxAttributes::new(
+        value_added_tax_status,
+        income_tax_status,
+    ))
+}
+
 fn encode_optional_decimal(encoder: &mut Encoder, value: Option<&DecimalValue>) {
     encoder.bool(value.is_some());
     if let Some(value) = value {
@@ -1400,11 +1450,14 @@ impl<'a> Decoder<'a> {
 
 #[cfg(test)]
 mod tests {
-    use ficant_application::ports::{DefinitionValue, MarketFact};
+    use ficant_application::ports::{
+        DefinitionValue, InstrumentDefinition, InstrumentSubtype, MarketFact,
+    };
     use ficant_domain::ContentAddressed;
     use ficant_domain::market::{
-        FactSource, MarketRulePack, MarketRulePackInput, Quote, QuoteInput, RulePackContent, Unit,
-        UnitInput, VerificationStatus,
+        Bond, BondTaxAttributes, FactSource, IncomeTaxStatus, Instrument, InstrumentInput,
+        InstrumentKind, MarketRulePack, MarketRulePackInput, Quote, QuoteInput, RulePackContent,
+        Unit, UnitInput, ValueAddedTaxStatus, VerificationStatus,
     };
     use ficant_domain::primitives::{
         ContentHash, DecimalValue, EffectivePeriod, MarketTime, OwnerRef, Ulid, UnitRef, Version,
@@ -1439,6 +1492,87 @@ mod tests {
         let decoded = decode_definition(&encoded).unwrap();
 
         assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn bond_codec_round_trips_issuance_shape_and_reads_legacy_payload() {
+        let owner = OwnerRef::new(
+            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F01").unwrap(),
+            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F02").unwrap(),
+        );
+        let currency = UnitRef::new(
+            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F03").unwrap(),
+            Version::new(1).unwrap(),
+        );
+        let instrument = Instrument::new(InstrumentInput {
+            instrument_id: Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F04").unwrap(),
+            version: Version::new(1).unwrap(),
+            owner: owner.clone(),
+            kind: InstrumentKind::Bond,
+            market: "CN".to_owned(),
+            symbol: "SYNTHETIC-BOND".to_owned(),
+            currency: currency.clone(),
+            calendar: VersionRef::new(
+                Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F05").unwrap(),
+                Version::new(1).unwrap(),
+            ),
+        })
+        .unwrap();
+        let first_issue = NaiveDate::from_ymd_opt(2025, 8, 7).unwrap();
+        let current_issue = NaiveDate::from_ymd_opt(2025, 8, 9).unwrap();
+        let maturity = NaiveDate::from_ymd_opt(2035, 8, 7).unwrap();
+        let strict = DefinitionValue::Instrument(
+            InstrumentDefinition::new(
+                instrument.clone(),
+                Some(InstrumentSubtype::Bond(
+                    Bond::with_issuance(
+                        &instrument,
+                        first_issue,
+                        current_issue,
+                        maturity,
+                        DecimalValue::new("200000000", 0, currency.clone()).unwrap(),
+                        BondTaxAttributes::new(
+                            ValueAddedTaxStatus::Exempt,
+                            IncomeTaxStatus::Exempt,
+                        ),
+                        DecimalValue::new("100", 0, currency.clone()).unwrap(),
+                    )
+                    .unwrap(),
+                )),
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            decode_definition(&encode_definition(&strict)).unwrap(),
+            strict,
+            "strict issuance data must round-trip in the v2 codec shape"
+        );
+
+        let legacy = DefinitionValue::Instrument(
+            InstrumentDefinition::new(
+                instrument.clone(),
+                Some(InstrumentSubtype::Bond(
+                    Bond::new(
+                        &instrument,
+                        first_issue,
+                        maturity,
+                        DecimalValue::new("100", 0, currency).unwrap(),
+                    )
+                    .unwrap(),
+                )),
+            )
+            .unwrap(),
+        );
+        let DefinitionValue::Instrument(decoded) =
+            decode_definition(&encode_definition(&legacy)).unwrap()
+        else {
+            panic!("legacy Bond payload must decode as an Instrument definition");
+        };
+        let Some(InstrumentSubtype::Bond(decoded)) = decoded.subtype() else {
+            panic!("legacy Bond payload must preserve its Bond subtype");
+        };
+        assert_eq!(decoded.first_issue_date(), decoded.current_issue_date());
+        assert!(decoded.tax_attributes().is_none());
     }
 
     #[test]

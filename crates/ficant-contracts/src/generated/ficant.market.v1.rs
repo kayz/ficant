@@ -153,16 +153,31 @@ impl VerificationStatus {
         }
     }
 }
+/// BondTaxAttributes are L2 asset facts. They carry no tax rate or cutoff:
+/// the exact L3 TaxRulePack validates and consumes them for a calculation.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct BondTaxAttributes {
+    #[prost(enumeration="ValueAddedTaxStatus", tag="1")]
+    pub value_added_tax_status: i32,
+    #[prost(enumeration="IncomeTaxStatus", tag="2")]
+    pub income_tax_status: i32,
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Bond {
     #[prost(message, optional, tag="1")]
     pub instrument: ::core::option::Option<super::super::core::v1::VersionRef>,
-    #[prost(string, tag="2")]
-    pub issue_date: ::prost::alloc::string::String,
     #[prost(string, tag="3")]
     pub maturity_date: ::prost::alloc::string::String,
     #[prost(message, optional, tag="4")]
     pub face_value: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(string, tag="5")]
+    pub first_issue_date: ::prost::alloc::string::String,
+    #[prost(string, tag="6")]
+    pub current_issue_date: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="7")]
+    pub cumulative_issued_amount: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="8")]
+    pub tax_attributes: ::core::option::Option<BondTaxAttributes>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FuturesContract {
@@ -370,6 +385,64 @@ pub struct ListDefinitionVersionsResponse {
     pub definitions: ::prost::alloc::vec::Vec<MarketDefinition>,
     #[prost(message, optional, tag="2")]
     pub page: ::core::option::Option<super::super::core::v1::PageResponse>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ValueAddedTaxStatus {
+    Unspecified = 0,
+    Exempt = 1,
+    Taxable = 2,
+}
+impl ValueAddedTaxStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "VALUE_ADDED_TAX_STATUS_UNSPECIFIED",
+            Self::Exempt => "VALUE_ADDED_TAX_STATUS_EXEMPT",
+            Self::Taxable => "VALUE_ADDED_TAX_STATUS_TAXABLE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VALUE_ADDED_TAX_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
+            "VALUE_ADDED_TAX_STATUS_EXEMPT" => Some(Self::Exempt),
+            "VALUE_ADDED_TAX_STATUS_TAXABLE" => Some(Self::Taxable),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum IncomeTaxStatus {
+    Unspecified = 0,
+    Exempt = 1,
+    Taxable = 2,
+}
+impl IncomeTaxStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "INCOME_TAX_STATUS_UNSPECIFIED",
+            Self::Exempt => "INCOME_TAX_STATUS_EXEMPT",
+            Self::Taxable => "INCOME_TAX_STATUS_TAXABLE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "INCOME_TAX_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
+            "INCOME_TAX_STATUS_EXEMPT" => Some(Self::Exempt),
+            "INCOME_TAX_STATUS_TAXABLE" => Some(Self::Taxable),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FactSource {
@@ -608,5 +681,36 @@ pub struct FundingTierRate {
     pub funding_tier: i32,
     #[prost(message, optional, tag="2")]
     pub annual_financing_rate: ::core::option::Option<super::super::core::v1::DecimalValue>,
+}
+/// TaxRulePack is L3 content. It selects a coupon tax rate from the Bond's
+/// first issuance interval, its L2 tax attributes, and the exact Subject tax
+/// treatment pair. It contains no Subject identity or market-specific rate in
+/// the generic contracts.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TaxRulePack {
+    #[prost(message, repeated, tag="1")]
+    pub coupon_rules: ::prost::alloc::vec::Vec<BondCouponTaxRule>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BondCouponTaxRule {
+    /// Inclusive ISO-8601 date. Rules are sorted by this field.
+    #[prost(string, tag="1")]
+    pub first_issue_from: ::prost::alloc::string::String,
+    /// Exclusive ISO-8601 date. An empty value means this rule is unbounded above.
+    #[prost(string, tag="2")]
+    pub first_issue_to: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="3")]
+    pub tax_attributes: ::core::option::Option<BondTaxAttributes>,
+    #[prost(message, repeated, tag="4")]
+    pub rates: ::prost::alloc::vec::Vec<SubjectCouponTaxRate>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SubjectCouponTaxRate {
+    #[prost(string, tag="1")]
+    pub value_added_tax_profile: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub income_tax_profile: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="3")]
+    pub coupon_tax_rate: ::core::option::Option<super::super::core::v1::DecimalValue>,
 }
 // @@protoc_insertion_point(module)

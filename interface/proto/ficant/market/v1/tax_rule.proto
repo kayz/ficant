@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package ficant.market.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/market/v1/definition.proto";
+
+// TaxRulePack is L3 content. It selects a coupon tax rate from the Bond's
+// first issuance interval, its L2 tax attributes, and the exact Subject tax
+// treatment pair. It contains no Subject identity or market-specific rate in
+// the generic contracts.
+message TaxRulePack {
+  repeated BondCouponTaxRule coupon_rules = 1;
+}
+
+message BondCouponTaxRule {
+  // Inclusive ISO-8601 date. Rules are sorted by this field.
+  string first_issue_from = 1;
+  // Exclusive ISO-8601 date. An empty value means this rule is unbounded above.
+  string first_issue_to = 2;
+  BondTaxAttributes tax_attributes = 3;
+  repeated SubjectCouponTaxRate rates = 4;
+}
+
+message SubjectCouponTaxRate {
+  string value_added_tax_profile = 1;
+  string income_tax_profile = 2;
+  ficant.core.v1.DecimalValue coupon_tax_rate = 3;
+}
