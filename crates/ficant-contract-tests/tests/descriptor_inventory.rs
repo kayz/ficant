@@ -232,6 +232,7 @@ fn descriptor_inventory_is_unique_and_preserves_phase1_semantics() {
     assert_cgb_futures_rule_pack_contract(&messages);
     assert_funding_rule_pack_contract(&messages);
     assert_tax_rule_pack_contract(&messages);
+    assert_position_snapshot_contract(&messages);
     assert_service_inventory(descriptor_set);
 }
 
@@ -241,6 +242,15 @@ fn registry_service_has_exact_four_unary_rpcs() {
         descriptor_set(),
         "ficant.core.v1.RegistryService",
         &registry_methods(),
+    );
+}
+
+#[test]
+fn position_snapshot_service_has_exact_unary_rpcs() {
+    assert_exact_service(
+        descriptor_set(),
+        "ficant.research.v1.PositionSnapshotService",
+        &position_snapshot_methods(),
     );
 }
 
@@ -340,6 +350,7 @@ fn shared_and_domain_enums_and_unaffected_services_are_exact() {
     let enums = top_level_enums(descriptor_set);
 
     assert_domain_enums(&enums);
+    assert_position_snapshot_enums(&enums);
     assert_exact_service(
         descriptor_set,
         "ficant.research.v1.SnapshotService",
@@ -2503,6 +2514,223 @@ fn snapshot_methods() -> Vec<ExpectedMethod> {
     ]
 }
 
+fn position_snapshot_methods() -> Vec<ExpectedMethod> {
+    vec![
+        ExpectedMethod::new(
+            "PublishPositionSnapshot",
+            ".ficant.research.v1.PublishPositionSnapshotRequest",
+            ".ficant.research.v1.PublishPositionSnapshotResponse",
+        ),
+        ExpectedMethod::new(
+            "GetPositionSnapshot",
+            ".ficant.research.v1.GetPositionSnapshotRequest",
+            ".ficant.research.v1.GetPositionSnapshotResponse",
+        ),
+        ExpectedMethod::new(
+            "ResolvePositionSnapshot",
+            ".ficant.research.v1.ResolvePositionSnapshotRequest",
+            ".ficant.research.v1.ResolvePositionSnapshotResponse",
+        ),
+        ExpectedMethod::new(
+            "GetPositionViews",
+            ".ficant.research.v1.GetPositionViewsRequest",
+            ".ficant.research.v1.GetPositionViewsResponse",
+        ),
+        ExpectedMethod::new(
+            "CalculateCapitalUse",
+            ".ficant.research.v1.CalculateCapitalUseRequest",
+            ".ficant.research.v1.CalculateCapitalUseResponse",
+        ),
+    ]
+}
+
+fn assert_position_snapshot_contract(messages: &BTreeMap<String, &DescriptorProto>) {
+    assert_fields(
+        messages,
+        "ficant.research.v1.AccountingClassification",
+        &[
+            ExpectedField::enumeration(
+                "state",
+                ".ficant.research.v1.AccountingClassificationState",
+            ),
+            ExpectedField::enumeration("book", ".ficant.research.v1.AccountingBook"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.research.v1.Position",
+        &[
+            ExpectedField::message("position_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("instrument_ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("quantity", ".ficant.core.v1.DecimalValue"),
+            ExpectedField::message("economic_value", ".ficant.core.v1.DecimalValue"),
+            ExpectedField::message("economic_pnl", ".ficant.core.v1.DecimalValue"),
+            ExpectedField::message("accounting_pnl", ".ficant.core.v1.DecimalValue"),
+            ExpectedField::message("capital_requirement", ".ficant.core.v1.DecimalValue"),
+            ExpectedField::message(
+                "accounting_classification",
+                ".ficant.research.v1.AccountingClassification",
+            ),
+            ExpectedField::enumeration("holding_form", ".ficant.research.v1.PositionHoldingForm"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.research.v1.PositionSnapshot",
+        &[
+            ExpectedField::message("snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::message("subject_ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("observed_at", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("visible_at", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
+            ExpectedField::repeated_message("positions", ".ficant.research.v1.Position"),
+        ],
+    );
+    let responses = [
+        ("PublishPositionSnapshotResponse", "snapshot"),
+        ("GetPositionSnapshotResponse", "snapshot"),
+        ("ResolvePositionSnapshotResponse", "snapshot"),
+    ];
+    for (name, field) in responses {
+        assert_fields(
+            messages,
+            &format!("ficant.research.v1.{name}"),
+            &[
+                ExpectedField::oneof_message(
+                    field,
+                    ".ficant.research.v1.PositionSnapshot",
+                    "result",
+                ),
+                ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+            ],
+        );
+    }
+    assert_fields(
+        messages,
+        "ficant.research.v1.PublishPositionSnapshotRequest",
+        &[
+            ExpectedField::scalar("idempotency_key", Type::String),
+            ExpectedField::message("snapshot", ".ficant.research.v1.PositionSnapshot"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.research.v1.GetPositionSnapshotRequest",
+        &[
+            ExpectedField::message("snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("knowledge_at", ".ficant.core.v1.MarketTime"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.research.v1.ResolvePositionSnapshotRequest",
+        &[
+            ExpectedField::message("subject_ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("observed_at", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("knowledge_at", ".ficant.core.v1.MarketTime"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.research.v1.PositionView",
+        &[
+            ExpectedField::message("position_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("economic_value", ".ficant.core.v1.DecimalValue"),
+            ExpectedField::message("economic_pnl", ".ficant.core.v1.DecimalValue"),
+            ExpectedField::message("accounting_pnl", ".ficant.core.v1.DecimalValue"),
+            ExpectedField::scalar("included_in_position_exposure", Type::Bool),
+            ExpectedField::scalar("included_in_available_liquidity", Type::Bool),
+            ExpectedField::scalar("collateral_fact", Type::Bool),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.research.v1.PositionViews",
+        &[
+            ExpectedField::message("snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
+            ExpectedField::repeated_message("positions", ".ficant.research.v1.PositionView"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.research.v1.CapitalUse",
+        &[
+            ExpectedField::message("snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
+            ExpectedField::message("total_capital_requirement", ".ficant.core.v1.DecimalValue"),
+        ],
+    );
+    for (request, response, success, success_type) in [
+        (
+            "GetPositionViewsRequest",
+            "GetPositionViewsResponse",
+            "views",
+            ".ficant.research.v1.PositionViews",
+        ),
+        (
+            "CalculateCapitalUseRequest",
+            "CalculateCapitalUseResponse",
+            "capital_use",
+            ".ficant.research.v1.CapitalUse",
+        ),
+    ] {
+        assert_fields(
+            messages,
+            &format!("ficant.research.v1.{request}"),
+            &[
+                ExpectedField::message("snapshot_id", ".ficant.core.v1.Ulid"),
+                ExpectedField::message("knowledge_at", ".ficant.core.v1.MarketTime"),
+            ],
+        );
+        assert_fields(
+            messages,
+            &format!("ficant.research.v1.{response}"),
+            &[
+                ExpectedField::oneof_message(success, success_type, "result"),
+                ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+            ],
+        );
+    }
+}
+
+fn assert_position_snapshot_enums(enums: &BTreeMap<String, &EnumDescriptorProto>) {
+    assert_enum(
+        enums,
+        "ficant.research.v1.AccountingClassificationState",
+        &[
+            ("ACCOUNTING_CLASSIFICATION_STATE_UNSPECIFIED", 0),
+            ("ACCOUNTING_CLASSIFICATION_STATE_CLASSIFIED", 1),
+            ("ACCOUNTING_CLASSIFICATION_STATE_NOT_APPLICABLE", 2),
+            ("ACCOUNTING_CLASSIFICATION_STATE_UNKNOWN", 3),
+        ],
+    );
+    assert_enum(
+        enums,
+        "ficant.research.v1.AccountingBook",
+        &[
+            ("ACCOUNTING_BOOK_UNSPECIFIED", 0),
+            ("ACCOUNTING_BOOK_AC", 1),
+            ("ACCOUNTING_BOOK_FVOCI", 2),
+            ("ACCOUNTING_BOOK_FVTPL", 3),
+        ],
+    );
+    assert_enum(
+        enums,
+        "ficant.research.v1.PositionHoldingForm",
+        &[
+            ("POSITION_HOLDING_FORM_UNSPECIFIED", 0),
+            ("POSITION_HOLDING_FORM_OWNED", 1),
+            ("POSITION_HOLDING_FORM_REPO_SOLD", 2),
+            ("POSITION_HOLDING_FORM_REVERSE_REPO_COLLATERAL", 3),
+        ],
+    );
+}
+
 fn experiment_methods() -> Vec<ExpectedMethod> {
     vec![
         ExpectedMethod::new(
@@ -2691,6 +2919,7 @@ fn expected_service_fqns() -> BTreeSet<String> {
         "ficant.market.v1.MarketDefinitionService".to_owned(),
         "ficant.market.v1.MarketFactService".to_owned(),
         "ficant.research.v1.SnapshotService".to_owned(),
+        "ficant.research.v1.PositionSnapshotService".to_owned(),
         "ficant.research.v1.ExperimentService".to_owned(),
         "ficant.research.v1.ArtifactService".to_owned(),
         "ficant.app.v1.PlatformService".to_owned(),

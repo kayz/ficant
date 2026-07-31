@@ -125,7 +125,7 @@ impl<'a> PublishDataSnapshot<'a> {
         )?;
         match self.snapshots.publish_verified_manifest(command).await? {
             SnapshotValue::Data(snapshot) => Ok(snapshot),
-            SnapshotValue::Universe(_) => Err(validation_error()),
+            SnapshotValue::Universe(_) | SnapshotValue::Position(_) => Err(validation_error()),
         }
     }
 

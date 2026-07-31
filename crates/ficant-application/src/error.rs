@@ -21,6 +21,7 @@ pub enum ApplicationErrorCategory {
 pub enum ApplicationErrorDetail {
     RulePackItemMissing { path: String },
     SubjectBindingInvalid,
+    UnknownAccountingPositions { position_ids: Vec<String> },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,6 +62,15 @@ impl ApplicationError {
             category: ApplicationErrorCategory::ValidationFailed,
             retryable: false,
             detail: Some(ApplicationErrorDetail::SubjectBindingInvalid),
+        }
+    }
+
+    #[must_use]
+    pub fn unknown_accounting_positions(position_ids: Vec<String>) -> Self {
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail: Some(ApplicationErrorDetail::UnknownAccountingPositions { position_ids }),
         }
     }
 

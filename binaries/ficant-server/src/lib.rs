@@ -1,12 +1,14 @@
 use ficant_api::{
     CanonicalSnapshotCodecAdapter, ExperimentGrpcService, GrpcWebServeError, GrpcWebServerConfig,
-    PlatformApplication, PlatformGrpcService, PlatformPort, RatesGrpcService, SessionPolicy,
-    SubjectRegistryGrpcService, SystemClock, TrustedExperimentScope, TrustedIdentity,
-    TrustedNodeCatalog, serve_grpc_web_with_rates_and_experiment_and_registry,
+    PlatformApplication, PlatformGrpcService, PlatformPort, PositionSnapshotGrpcService,
+    RatesGrpcService, SessionPolicy, SubjectRegistryGrpcService, SystemClock,
+    TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
+    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions,
 };
 use ficant_application::ports::{
-    AeadCursorCodec, ArtifactRepository, CursorKey, DefinitionRepository, ExperimentRepository,
-    IntegrityEventSink, Phase4ExecutionRepository, RunJournalRepository, SnapshotRepository,
+    AccessScope, AeadCursorCodec, ArtifactRepository, BlobStore, CursorKey, DefinitionRepository,
+    ExperimentRepository, IntegrityEventSink, Phase4ExecutionRepository,
+    PositionSnapshotRepository, RunJournalRepository, SnapshotRepository,
     SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobReader,
 };
 use ficant_application::{ApplicationError, map_runtime_error};
@@ -384,6 +386,104 @@ pub fn build_grpc_services_with_experiment_and_registry(
     Ok((platform, rates, experiment, registry))
 }
 
+/// Composes all production services, including `PositionSnapshot` over the trusted server scope.
+///
+/// # Errors
+///
+/// Returns a redacted composition error when trusted configuration or adapters cannot be built.
+pub fn build_grpc_services_with_experiment_registry_and_positions(
+    settings: &ServerSettings,
+) -> Result<
+    (
+        PlatformGrpcService,
+        RatesGrpcService,
+        ExperimentGrpcService,
+        SubjectRegistryGrpcService,
+        PositionSnapshotGrpcService,
+    ),
+    ServerError,
+> {
+    let application = build_platform_application(settings)?;
+    let platform =
+        PlatformGrpcService::new(Arc::clone(&application), &settings.trace_key).map_err(config)?;
+    let (repository, pool, cursor) = build_repository(settings)?;
+    let blob_store = Arc::new(
+        S3BlobStore::new(
+            &settings.experiment_s3_endpoint,
+            settings.experiment_s3_bucket.clone(),
+            &settings.experiment_s3_access_key,
+            &settings.experiment_s3_secret_key,
+            pool,
+        )
+        .map_err(|_| config("experiment S3 configuration is invalid"))?,
+    );
+    let trusted = TrustedExperimentScope::new(
+        settings.experiment_tenant_id.clone(),
+        settings.experiment_owner_id.clone(),
+        settings.experiment_actor_id.clone(),
+        settings.experiment_runtime_image_digest.clone(),
+        settings.experiment_environment_attestation.clone(),
+        settings.experiment_native_source_digest.clone(),
+    )
+    .map_err(|_| config("trusted experiment scope is invalid"))?;
+    let phase4: Arc<dyn Phase4ExecutionRepository> = repository.clone();
+    let experiments: Arc<dyn ExperimentRepository> = repository.clone();
+    let journals: Arc<dyn RunJournalRepository> = repository.clone();
+    let snapshot_repository: Arc<dyn SnapshotRepository> = repository.clone();
+    let position_repository: Arc<dyn PositionSnapshotRepository> = repository.clone();
+    let artifacts: Arc<dyn ArtifactRepository> = repository.clone();
+    let definitions: Arc<dyn DefinitionRepository> = repository.clone();
+    let subjects: Arc<dyn SubjectRepository> = repository.clone();
+    let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository;
+    let blobs: Arc<dyn VerifiedBlobReader> = blob_store.clone();
+    let writable_blobs: Arc<dyn BlobStore> = blob_store;
+    let rates = build_rates_service(
+        Arc::clone(&application),
+        definitions.clone(),
+        subjects.clone(),
+        snapshots.clone(),
+        blobs.clone(),
+        build_integrity_event_sink(),
+        settings,
+    )?;
+    let experiment = ExperimentGrpcService::new(
+        Arc::clone(&application),
+        experiments,
+        journals,
+        snapshot_repository.clone(),
+        cursor,
+        phase4,
+        artifacts,
+        definitions,
+        snapshots,
+        blobs,
+        build_integrity_event_sink(),
+        Arc::new(ProductionNativeCatalog),
+        trusted,
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+    let registry =
+        SubjectRegistryGrpcService::new(Arc::clone(&application), subjects, &settings.trace_key)
+            .map_err(config)?;
+    let access_scope = AccessScope::new(
+        settings.experiment_tenant_id.clone(),
+        settings.experiment_actor_id.clone(),
+        vec![settings.experiment_owner_id.clone()],
+    )
+    .map_err(|_| config("trusted position access scope is invalid"))?;
+    let positions = PositionSnapshotGrpcService::new(
+        application,
+        access_scope,
+        position_repository,
+        snapshot_repository,
+        writable_blobs,
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+    Ok((platform, rates, experiment, registry, positions))
+}
+
 fn build_rates_service(
     application: Arc<dyn PlatformPort>,
     definitions: Arc<dyn DefinitionRepository>,
@@ -480,9 +580,9 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         .filter_map(|key| env::var(key).ok().map(|value| ((*key).to_owned(), value)))
         .collect();
     let settings = ServerSettings::try_from_values(&values)?;
-    let (platform, rates, experiment, registry) =
-        build_grpc_services_with_experiment_and_registry(&settings)?;
-    serve_grpc_web_with_rates_and_experiment_and_registry(
+    let (platform, rates, experiment, registry, positions) =
+        build_grpc_services_with_experiment_registry_and_positions(&settings)?;
+    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions(
         GrpcWebServerConfig {
             bind: settings.bind,
             allowed_origins: settings.allowed_origins.clone(),
@@ -491,6 +591,7 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         rates,
         experiment,
         registry,
+        positions,
     )
     .await?;
     Ok(())

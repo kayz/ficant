@@ -15,6 +15,7 @@ mod futures_delivery;
 mod futures_hedge;
 mod journal;
 mod phase4_execution;
+mod positions;
 mod required_reads;
 mod rule_pack_parser;
 mod rule_pack_resolution;
@@ -66,6 +67,7 @@ pub use phase4_execution::{
     RulePackBinding, StoredExecutionIdentity, StoredNodeManifest, SubmitGraphRun,
     replay_graph_execution, stable_node_artifact_id,
 };
+pub use positions::PositionSnapshotRepository;
 pub(crate) use required_reads::SnapshotVerifiedReadMetadataParts;
 pub use required_reads::{
     IntegrityEvent, IntegrityEventSeverity, IntegrityEventSink, IntegrityFailureReason,

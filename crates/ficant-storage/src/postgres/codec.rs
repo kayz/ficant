@@ -16,9 +16,11 @@ use ficant_domain::primitives::{
     VersionRef,
 };
 use ficant_domain::research::{
-    Artifact, ArtifactKind, DataSnapshot, DataSnapshotInput, DeterminismClass, ExperimentRun,
+    AccountingBook, AccountingClassification, AccountingClassificationState, Artifact,
+    ArtifactKind, DataSnapshot, DataSnapshotInput, DeterminismClass, ExperimentRun,
     ExperimentRunInput, FilesystemPermission, GraphExternalInput, GraphExternalInputBinding,
-    JournalEventType, NodePermissions, PortType, ResearchEdge, ResearchGraph, ResearchGraphInput,
+    JournalEventType, NodePermissions, PortType, Position, PositionHoldingForm, PositionInput,
+    PositionSnapshot, PositionSnapshotInput, ResearchEdge, ResearchGraph, ResearchGraphInput,
     ResearchNode, ResearchNodeContract, ResearchNodeContractInput, ResourceLimits, RunJournal,
     RunJournalInput, RunState, SignalSet, SignalSetInput, TypedValue, UniverseSnapshot,
 };
@@ -738,6 +740,46 @@ pub(crate) fn encode_snapshot(value: &SnapshotValue) -> Vec<u8> {
             encoder.bytes(value.content_hash().as_bytes());
             encode_lineage(&mut encoder, value.lineage());
         }
+        SnapshotValue::Position(value) => {
+            encoder.u8(3);
+            encoder.string(value.id().as_str());
+            encode_owner(&mut encoder, value.owner());
+            encode_version_ref(&mut encoder, value.subject_ref());
+            encode_market_time(&mut encoder, value.observed_at());
+            encode_market_time(&mut encoder, value.visible_at());
+            encoder.bytes(value.content_hash().as_bytes());
+            encode_lineage(&mut encoder, value.lineage());
+            encoder.len(value.positions().len());
+            for position in value.positions() {
+                encoder.string(position.id().as_str());
+                encode_version_ref(&mut encoder, position.instrument_ref());
+                for decimal in [
+                    position.quantity(),
+                    position.economic_value(),
+                    position.economic_pnl(),
+                    position.accounting_pnl(),
+                    position.capital_requirement(),
+                ] {
+                    encode_decimal(&mut encoder, decimal);
+                }
+                encoder.u8(match position.accounting_classification().state() {
+                    AccountingClassificationState::Classified => 1,
+                    AccountingClassificationState::NotApplicable => 2,
+                    AccountingClassificationState::Unknown => 3,
+                });
+                encoder.u8(match position.accounting_classification().book() {
+                    None => 0,
+                    Some(AccountingBook::Ac) => 1,
+                    Some(AccountingBook::Fvoci) => 2,
+                    Some(AccountingBook::Fvtpl) => 3,
+                });
+                encoder.u8(match position.holding_form() {
+                    PositionHoldingForm::Owned => 1,
+                    PositionHoldingForm::RepoSold => 2,
+                    PositionHoldingForm::ReverseRepoCollateral => 3,
+                });
+            }
+        }
         SnapshotValue::Universe(value) => {
             encoder.u8(2);
             encoder.string(value.id().as_str());
@@ -790,10 +832,79 @@ pub(crate) fn decode_snapshot(bytes: &[u8]) -> CodecResult<SnapshotValue> {
                 .map_err(ficant_application::map_domain_error)?,
             )
         }
+        3 => SnapshotValue::Position(decode_position_snapshot(&mut decoder)?),
         _ => return Err(codec_error()),
     };
     decoder.end()?;
     Ok(value)
+}
+
+fn decode_position_snapshot(decoder: &mut Decoder<'_>) -> CodecResult<PositionSnapshot> {
+    let snapshot_id = decode_ulid(decoder)?;
+    let owner = decode_owner(decoder)?;
+    let subject_ref = decode_version_ref(decoder)?;
+    let observed_at = decode_market_time(decoder)?;
+    let visible_at = decode_market_time(decoder)?;
+    let content_hash = decode_hash(decoder)?;
+    let lineage = decode_lineage(decoder)?;
+    let count = decoder.len()?;
+    let mut positions = Vec::with_capacity(count);
+    for _ in 0..count {
+        positions.push(decode_position(decoder)?);
+    }
+    PositionSnapshot::new(PositionSnapshotInput {
+        snapshot_id,
+        owner,
+        subject_ref,
+        observed_at,
+        visible_at,
+        content_hash,
+        lineage,
+        positions,
+    })
+    .map_err(ficant_application::map_domain_error)
+}
+
+fn decode_position(decoder: &mut Decoder<'_>) -> CodecResult<Position> {
+    let position_id = decode_ulid(decoder)?;
+    let instrument_ref = decode_version_ref(decoder)?;
+    let quantity = decode_decimal(decoder)?;
+    let economic_value = decode_decimal(decoder)?;
+    let economic_pnl = decode_decimal(decoder)?;
+    let accounting_pnl = decode_decimal(decoder)?;
+    let capital_requirement = decode_decimal(decoder)?;
+    let state = match decoder.u8()? {
+        1 => AccountingClassificationState::Classified,
+        2 => AccountingClassificationState::NotApplicable,
+        3 => AccountingClassificationState::Unknown,
+        _ => return Err(codec_error()),
+    };
+    let book = match decoder.u8()? {
+        0 => None,
+        1 => Some(AccountingBook::Ac),
+        2 => Some(AccountingBook::Fvoci),
+        3 => Some(AccountingBook::Fvtpl),
+        _ => return Err(codec_error()),
+    };
+    let holding_form = match decoder.u8()? {
+        1 => PositionHoldingForm::Owned,
+        2 => PositionHoldingForm::RepoSold,
+        3 => PositionHoldingForm::ReverseRepoCollateral,
+        _ => return Err(codec_error()),
+    };
+    Position::new(PositionInput {
+        position_id,
+        instrument_ref,
+        quantity,
+        economic_value,
+        economic_pnl,
+        accounting_pnl,
+        capital_requirement,
+        accounting_classification: AccountingClassification::new(state, book)
+            .map_err(ficant_application::map_domain_error)?,
+        holding_form,
+    })
+    .map_err(ficant_application::map_domain_error)
 }
 
 pub(crate) fn encode_run(value: &ExperimentRun) -> Vec<u8> {

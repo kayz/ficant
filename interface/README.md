@@ -6,7 +6,7 @@
 
 - `ficant.core.v1`：ULID、版本引用、SHA-256、所有者、单位、Decimal、市场时间、血缘、分页与稳定错误。
 - `ficant.market.v1`：Instrument、Bond、FuturesContract、Cashflow、Calendar、Unit、Quote、Trade、Valuation、CurveSnapshot、MarketRulePack，以及由 MarketRulePack 内容引用的强类型市场规则包。
-- `ficant.research.v1`：DataSnapshot、UniverseSnapshot、ExperimentRun、Artifact、SignalSet、RunJournal。
+- `ficant.research.v1`：DataSnapshot、UniverseSnapshot、PositionSnapshot、ExperimentRun、Artifact、SignalSet、RunJournal。PositionSnapshot 以完整 `observed_at` / `visible_at`、Subject version、owner、canonical content hash 与 lineage 固定外部导入持仓事实；其 PositionSnapshotService 只按明确 knowledge time 读取或解析已验证快照，并将会计三态、持仓敞口、可用流动性与担保品事实保持为分离视图。
 - `ficant.app.v1`：Platform Shell 使用的 App Registry、Session 与短期应用启动授权；它们不计入 17 个 Phase 1 领域对象。
 - `ficant.rates.v1`：Phase 2E 的固定收益参考分析调用合同；只承载强类型请求/结果并复用 `ficant.core.v1` 身份、Decimal、时间和错误，不把 Python 变成数值实现或控制平面。
 

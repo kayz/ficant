@@ -96,6 +96,22 @@ impl DecimalValue {
             .is_ok_and(|coefficient| coefficient > 0)
     }
 
+    /// Adds two values only when their exact `UnitRef` agrees.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidUnit` for different units and `InvalidValue` for decimal overflow.
+    pub fn checked_add(&self, other: &Self) -> DomainResult<Self> {
+        if self.unit != other.unit {
+            return Err(DomainErrorCode::InvalidUnit);
+        }
+        let sum = self
+            .as_decimal()
+            .checked_add(other.as_decimal())
+            .ok_or(DomainErrorCode::InvalidValue)?;
+        Self::new(sum.mantissa().to_string(), sum.scale(), self.unit.clone())
+    }
+
     pub(crate) fn compare(&self, other: &Self) -> DomainResult<Ordering> {
         if self.unit != other.unit {
             return Err(DomainErrorCode::InvalidUnit);
