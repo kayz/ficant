@@ -5,6 +5,7 @@ mod core_error;
 mod error;
 mod experiment;
 mod grpc_web;
+mod position_snapshot;
 mod rates;
 mod registry;
 mod session;
@@ -18,7 +19,9 @@ pub use grpc_web::{
     GrpcWebServeError, GrpcWebServerConfig, PlatformGrpcService, serve_grpc_web,
     serve_grpc_web_with_rates, serve_grpc_web_with_rates_and_experiment,
     serve_grpc_web_with_rates_and_experiment_and_registry,
+    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions,
 };
+pub use position_snapshot::PositionSnapshotGrpcService;
 pub use rates::{
     ParsedBondAnalyticsRequest, RatesGrpcService, analyze_bond_request,
     execute_parsed_bond_request, parse_analyze_bond_request,

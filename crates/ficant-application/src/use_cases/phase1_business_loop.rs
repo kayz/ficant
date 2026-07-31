@@ -516,6 +516,10 @@ async fn promote_snapshot_proof(
             let members_manifest = promote_snapshot_blob(blob_store, members_manifest).await?;
             VerifiedSnapshotProof::universe(members_manifest)
         }
+        StagedSnapshotProofParts::Position { payload } => {
+            let payload = promote_snapshot_blob(blob_store, payload).await?;
+            VerifiedSnapshotProof::position(payload)
+        }
     }
 }
 

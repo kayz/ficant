@@ -791,6 +791,7 @@ dependencies = [
  "ficant-domain",
  "ficant-runtime",
  "ring",
+ "tokio",
 ]
 
 [[package]]

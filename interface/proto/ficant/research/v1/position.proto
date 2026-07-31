@@ -1,0 +1,148 @@
+syntax = "proto3";
+
+package ficant.research.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+
+enum AccountingClassificationState {
+  ACCOUNTING_CLASSIFICATION_STATE_UNSPECIFIED = 0;
+  ACCOUNTING_CLASSIFICATION_STATE_CLASSIFIED = 1;
+  ACCOUNTING_CLASSIFICATION_STATE_NOT_APPLICABLE = 2;
+  ACCOUNTING_CLASSIFICATION_STATE_UNKNOWN = 3;
+}
+
+enum AccountingBook {
+  ACCOUNTING_BOOK_UNSPECIFIED = 0;
+  ACCOUNTING_BOOK_AC = 1;
+  ACCOUNTING_BOOK_FVOCI = 2;
+  ACCOUNTING_BOOK_FVTPL = 3;
+}
+
+enum PositionHoldingForm {
+  POSITION_HOLDING_FORM_UNSPECIFIED = 0;
+  POSITION_HOLDING_FORM_OWNED = 1;
+  POSITION_HOLDING_FORM_REPO_SOLD = 2;
+  POSITION_HOLDING_FORM_REVERSE_REPO_COLLATERAL = 3;
+}
+
+message AccountingClassification {
+  AccountingClassificationState state = 1;
+  AccountingBook book = 2;
+}
+
+message Position {
+  ficant.core.v1.Ulid position_id = 1;
+  ficant.core.v1.VersionRef instrument_ref = 2;
+  ficant.core.v1.DecimalValue quantity = 3;
+  ficant.core.v1.DecimalValue economic_value = 4;
+  ficant.core.v1.DecimalValue economic_pnl = 5;
+  ficant.core.v1.DecimalValue accounting_pnl = 6;
+  ficant.core.v1.DecimalValue capital_requirement = 7;
+  AccountingClassification accounting_classification = 8;
+  PositionHoldingForm holding_form = 9;
+}
+
+message PositionSnapshot {
+  ficant.core.v1.Ulid snapshot_id = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  ficant.core.v1.VersionRef subject_ref = 3;
+  ficant.core.v1.MarketTime observed_at = 4;
+  ficant.core.v1.MarketTime visible_at = 5;
+  ficant.core.v1.Sha256 content_hash = 6;
+  repeated ficant.core.v1.LineageRef lineage = 7;
+  repeated Position positions = 8;
+}
+
+message PublishPositionSnapshotRequest {
+  string idempotency_key = 1;
+  PositionSnapshot snapshot = 2;
+}
+
+message PublishPositionSnapshotResponse {
+  oneof result {
+    PositionSnapshot snapshot = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message GetPositionSnapshotRequest {
+  ficant.core.v1.Ulid snapshot_id = 1;
+  ficant.core.v1.MarketTime knowledge_at = 2;
+}
+
+message GetPositionSnapshotResponse {
+  oneof result {
+    PositionSnapshot snapshot = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message ResolvePositionSnapshotRequest {
+  ficant.core.v1.VersionRef subject_ref = 1;
+  ficant.core.v1.MarketTime observed_at = 2;
+  ficant.core.v1.MarketTime knowledge_at = 3;
+}
+
+message ResolvePositionSnapshotResponse {
+  oneof result {
+    PositionSnapshot snapshot = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message PositionView {
+  ficant.core.v1.Ulid position_id = 1;
+  ficant.core.v1.DecimalValue economic_value = 2;
+  ficant.core.v1.DecimalValue economic_pnl = 3;
+  ficant.core.v1.DecimalValue accounting_pnl = 4;
+  bool included_in_position_exposure = 5;
+  bool included_in_available_liquidity = 6;
+  bool collateral_fact = 7;
+}
+
+message PositionViews {
+  ficant.core.v1.Ulid snapshot_id = 1;
+  ficant.core.v1.Sha256 content_hash = 2;
+  repeated ficant.core.v1.LineageRef lineage = 3;
+  repeated PositionView positions = 4;
+}
+
+message GetPositionViewsRequest {
+  ficant.core.v1.Ulid snapshot_id = 1;
+  ficant.core.v1.MarketTime knowledge_at = 2;
+}
+
+message GetPositionViewsResponse {
+  oneof result {
+    PositionViews views = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message CapitalUse {
+  ficant.core.v1.Ulid snapshot_id = 1;
+  ficant.core.v1.Sha256 content_hash = 2;
+  repeated ficant.core.v1.LineageRef lineage = 3;
+  ficant.core.v1.DecimalValue total_capital_requirement = 4;
+}
+
+message CalculateCapitalUseRequest {
+  ficant.core.v1.Ulid snapshot_id = 1;
+  ficant.core.v1.MarketTime knowledge_at = 2;
+}
+
+message CalculateCapitalUseResponse {
+  oneof result {
+    CapitalUse capital_use = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+service PositionSnapshotService {
+  rpc PublishPositionSnapshot(PublishPositionSnapshotRequest) returns (PublishPositionSnapshotResponse);
+  rpc GetPositionSnapshot(GetPositionSnapshotRequest) returns (GetPositionSnapshotResponse);
+  rpc ResolvePositionSnapshot(ResolvePositionSnapshotRequest) returns (ResolvePositionSnapshotResponse);
+  rpc GetPositionViews(GetPositionViewsRequest) returns (GetPositionViewsResponse);
+  rpc CalculateCapitalUse(CalculateCapitalUseRequest) returns (CalculateCapitalUseResponse);
+}

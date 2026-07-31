@@ -59,6 +59,15 @@ impl CoreBusinessErrorMapper {
                 field: "context.subject_ref".to_owned(),
                 description: "主体版本缺失或无效".to_owned(),
             }],
+            Some(ApplicationErrorDetail::UnknownAccountingPositions { position_ids }) => {
+                position_ids
+                    .iter()
+                    .map(|position_id| FieldViolation {
+                        field: "positions[*].accounting_classification".to_owned(),
+                        description: format!("持仓 {position_id} 的会计分类未知"),
+                    })
+                    .collect()
+            }
             None => Vec::new(),
         };
 

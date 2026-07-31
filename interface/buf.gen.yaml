@@ -20,6 +20,7 @@ plugins:
     out: python/node-contracts/src/ficant_contracts/generated
     types:
       - ficant.rates.v1.RatesAnalyticsService
+      - ficant.research.v1.PositionSnapshotService
   - remote: buf.build/bufbuild/es:v2.5.2
     revision: 1
     out: web-dm/packages/contracts-generated/src

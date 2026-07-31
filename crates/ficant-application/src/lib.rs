@@ -34,6 +34,10 @@ pub use use_cases::phase1_business_loop::{
     Phase1BusinessInput, Phase1BusinessLoop, Phase1BusinessResult, StagedArtifact, StagedSnapshot,
     replay_collected_journal,
 };
+pub use use_cases::position_views::{
+    CapitalUse, PositionSnapshotPayload, PositionView, PositionViews, PositionViewsUseCase,
+    PublishPositionSnapshot,
+};
 pub use use_cases::verified_reads::VerifiedSnapshotReader;
 pub use use_cases::verified_reads::{
     VerifiedArtifactRead, VerifiedReadFacade, VerifiedSignalRead, VerifiedSnapshotRead,

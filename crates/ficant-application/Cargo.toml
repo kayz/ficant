@@ -14,5 +14,8 @@ ficant-domain = { path = "../ficant-domain" }
 ficant-runtime = { path = "../ficant-runtime" }
 ring = { workspace = true }
 
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+
 [lints]
 workspace = true

@@ -852,6 +852,300 @@ impl GraphRunComparisonDimension {
         }
     }
 }
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AccountingClassification {
+    #[prost(enumeration="AccountingClassificationState", tag="1")]
+    pub state: i32,
+    #[prost(enumeration="AccountingBook", tag="2")]
+    pub book: i32,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Position {
+    #[prost(message, optional, tag="1")]
+    pub position_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub instrument_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="3")]
+    pub quantity: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="4")]
+    pub economic_value: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="5")]
+    pub economic_pnl: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="6")]
+    pub accounting_pnl: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="7")]
+    pub capital_requirement: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="8")]
+    pub accounting_classification: ::core::option::Option<AccountingClassification>,
+    #[prost(enumeration="PositionHoldingForm", tag="9")]
+    pub holding_form: i32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PositionSnapshot {
+    #[prost(message, optional, tag="1")]
+    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, optional, tag="3")]
+    pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="4")]
+    pub observed_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="5")]
+    pub visible_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="6")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, repeated, tag="7")]
+    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+    #[prost(message, repeated, tag="8")]
+    pub positions: ::prost::alloc::vec::Vec<Position>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PublishPositionSnapshotRequest {
+    #[prost(string, tag="1")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub snapshot: ::core::option::Option<PositionSnapshot>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PublishPositionSnapshotResponse {
+    #[prost(oneof="publish_position_snapshot_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<publish_position_snapshot_response::Result>,
+}
+/// Nested message and enum types in `PublishPositionSnapshotResponse`.
+pub mod publish_position_snapshot_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Snapshot(super::PositionSnapshot),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetPositionSnapshotRequest {
+    #[prost(message, optional, tag="1")]
+    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub knowledge_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetPositionSnapshotResponse {
+    #[prost(oneof="get_position_snapshot_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_position_snapshot_response::Result>,
+}
+/// Nested message and enum types in `GetPositionSnapshotResponse`.
+pub mod get_position_snapshot_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Snapshot(super::PositionSnapshot),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ResolvePositionSnapshotRequest {
+    #[prost(message, optional, tag="1")]
+    pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="2")]
+    pub observed_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="3")]
+    pub knowledge_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResolvePositionSnapshotResponse {
+    #[prost(oneof="resolve_position_snapshot_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<resolve_position_snapshot_response::Result>,
+}
+/// Nested message and enum types in `ResolvePositionSnapshotResponse`.
+pub mod resolve_position_snapshot_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Snapshot(super::PositionSnapshot),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PositionView {
+    #[prost(message, optional, tag="1")]
+    pub position_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub economic_value: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="3")]
+    pub economic_pnl: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="4")]
+    pub accounting_pnl: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(bool, tag="5")]
+    pub included_in_position_exposure: bool,
+    #[prost(bool, tag="6")]
+    pub included_in_available_liquidity: bool,
+    #[prost(bool, tag="7")]
+    pub collateral_fact: bool,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PositionViews {
+    #[prost(message, optional, tag="1")]
+    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, repeated, tag="3")]
+    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+    #[prost(message, repeated, tag="4")]
+    pub positions: ::prost::alloc::vec::Vec<PositionView>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetPositionViewsRequest {
+    #[prost(message, optional, tag="1")]
+    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub knowledge_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetPositionViewsResponse {
+    #[prost(oneof="get_position_views_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_position_views_response::Result>,
+}
+/// Nested message and enum types in `GetPositionViewsResponse`.
+pub mod get_position_views_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Views(super::PositionViews),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CapitalUse {
+    #[prost(message, optional, tag="1")]
+    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, repeated, tag="3")]
+    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="4")]
+    pub total_capital_requirement: ::core::option::Option<super::super::core::v1::DecimalValue>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CalculateCapitalUseRequest {
+    #[prost(message, optional, tag="1")]
+    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub knowledge_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CalculateCapitalUseResponse {
+    #[prost(oneof="calculate_capital_use_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<calculate_capital_use_response::Result>,
+}
+/// Nested message and enum types in `CalculateCapitalUseResponse`.
+pub mod calculate_capital_use_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        CapitalUse(super::CapitalUse),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum AccountingClassificationState {
+    Unspecified = 0,
+    Classified = 1,
+    NotApplicable = 2,
+    Unknown = 3,
+}
+impl AccountingClassificationState {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "ACCOUNTING_CLASSIFICATION_STATE_UNSPECIFIED",
+            Self::Classified => "ACCOUNTING_CLASSIFICATION_STATE_CLASSIFIED",
+            Self::NotApplicable => "ACCOUNTING_CLASSIFICATION_STATE_NOT_APPLICABLE",
+            Self::Unknown => "ACCOUNTING_CLASSIFICATION_STATE_UNKNOWN",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ACCOUNTING_CLASSIFICATION_STATE_UNSPECIFIED" => Some(Self::Unspecified),
+            "ACCOUNTING_CLASSIFICATION_STATE_CLASSIFIED" => Some(Self::Classified),
+            "ACCOUNTING_CLASSIFICATION_STATE_NOT_APPLICABLE" => Some(Self::NotApplicable),
+            "ACCOUNTING_CLASSIFICATION_STATE_UNKNOWN" => Some(Self::Unknown),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum AccountingBook {
+    Unspecified = 0,
+    Ac = 1,
+    Fvoci = 2,
+    Fvtpl = 3,
+}
+impl AccountingBook {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "ACCOUNTING_BOOK_UNSPECIFIED",
+            Self::Ac => "ACCOUNTING_BOOK_AC",
+            Self::Fvoci => "ACCOUNTING_BOOK_FVOCI",
+            Self::Fvtpl => "ACCOUNTING_BOOK_FVTPL",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ACCOUNTING_BOOK_UNSPECIFIED" => Some(Self::Unspecified),
+            "ACCOUNTING_BOOK_AC" => Some(Self::Ac),
+            "ACCOUNTING_BOOK_FVOCI" => Some(Self::Fvoci),
+            "ACCOUNTING_BOOK_FVTPL" => Some(Self::Fvtpl),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PositionHoldingForm {
+    Unspecified = 0,
+    Owned = 1,
+    RepoSold = 2,
+    ReverseRepoCollateral = 3,
+}
+impl PositionHoldingForm {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "POSITION_HOLDING_FORM_UNSPECIFIED",
+            Self::Owned => "POSITION_HOLDING_FORM_OWNED",
+            Self::RepoSold => "POSITION_HOLDING_FORM_REPO_SOLD",
+            Self::ReverseRepoCollateral => "POSITION_HOLDING_FORM_REVERSE_REPO_COLLATERAL",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "POSITION_HOLDING_FORM_UNSPECIFIED" => Some(Self::Unspecified),
+            "POSITION_HOLDING_FORM_OWNED" => Some(Self::Owned),
+            "POSITION_HOLDING_FORM_REPO_SOLD" => Some(Self::RepoSold),
+            "POSITION_HOLDING_FORM_REVERSE_REPO_COLLATERAL" => Some(Self::ReverseRepoCollateral),
+            _ => None,
+        }
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DataSnapshot {
     #[prost(message, optional, tag="1")]
