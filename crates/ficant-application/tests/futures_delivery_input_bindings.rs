@@ -46,15 +46,18 @@ fn ac27_verified_snapshot_owns_delivery_candidates_and_prices() {
     let definitions = Definitions {
         values: vec![
             DefinitionValue::Instrument(futures_definition()),
-            DefinitionValue::Instrument(bond_definition()),
+            DefinitionValue::Instrument(bond_definition('B')),
             DefinitionValue::MarketRulePack(rule_pack()),
         ],
     };
-    let snapshot = data_snapshot();
+    let snapshot = data_snapshot(time(12), time(12));
     let metadata = SnapshotMetadata(snapshot.clone());
     let blobs = Blobs;
     let sink = Sink;
-    let decoder = Quotes;
+    let decoder = Quotes {
+        quote_visible_at: time(12),
+        include_second_bond: false,
+    };
     let parser = Parser {
         calls: &parser_calls,
     };
@@ -109,6 +112,122 @@ fn ac27_verified_snapshot_owns_delivery_candidates_and_prices() {
         0,
         "a rejected snapshot/input binding must fail before native calculation"
     );
+}
+
+#[test]
+fn ac27_accepts_a_later_visible_revision_of_the_same_historical_as_of() {
+    let parser_calls = AtomicUsize::new(0);
+    let definitions = Definitions {
+        values: vec![
+            DefinitionValue::Instrument(futures_definition()),
+            DefinitionValue::Instrument(bond_definition('B')),
+            DefinitionValue::MarketRulePack(rule_pack()),
+        ],
+    };
+    let snapshot = data_snapshot(time(12), time(13));
+    let decoder = Quotes {
+        quote_visible_at: time(13),
+        include_second_bond: false,
+    };
+    let inputs = materialize(
+        &definitions,
+        &SnapshotMetadata(snapshot.clone()),
+        &decoder,
+        &Parser {
+            calls: &parser_calls,
+        },
+        &request_bindings(snapshot.content_hash().clone(), decimal(100)),
+    )
+    .expect("later knowledge about the same historical as_of is a valid immutable view");
+
+    assert_eq!(inputs.len(), 1);
+    assert_eq!(parser_calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn ac27_rejects_current_as_of_and_incomplete_snapshot_eligible_set() {
+    let parser_calls = AtomicUsize::new(0);
+    let engine_calls = AtomicUsize::new(0);
+    let engine = Engine {
+        calls: &engine_calls,
+    };
+    let definitions = Definitions {
+        values: vec![
+            DefinitionValue::Instrument(futures_definition()),
+            DefinitionValue::Instrument(bond_definition('B')),
+            DefinitionValue::Instrument(bond_definition('G')),
+            DefinitionValue::MarketRulePack(rule_pack()),
+        ],
+    };
+    let current_snapshot = data_snapshot(time(13), time(13));
+    let current_outcome = materialize(
+        &definitions,
+        &SnapshotMetadata(current_snapshot.clone()),
+        &Quotes {
+            quote_visible_at: time(13),
+            include_second_bond: false,
+        },
+        &Parser {
+            calls: &parser_calls,
+        },
+        &request_bindings(current_snapshot.content_hash().clone(), decimal(100)),
+    )
+    .and_then(|inputs| CalculateFuturesDeliveryBasket::new(&engine).execute(&inputs));
+    assert_eq!(
+        current_outcome.unwrap_err().category(),
+        ApplicationErrorCategory::LineageIncomplete
+    );
+    assert_eq!(parser_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(engine_calls.load(Ordering::SeqCst), 0);
+
+    let historical_snapshot = data_snapshot(time(12), time(12));
+    let incomplete_outcome = materialize(
+        &definitions,
+        &SnapshotMetadata(historical_snapshot.clone()),
+        &Quotes {
+            quote_visible_at: time(12),
+            include_second_bond: true,
+        },
+        &Parser {
+            calls: &parser_calls,
+        },
+        &request_bindings(historical_snapshot.content_hash().clone(), decimal(100)),
+    )
+    .and_then(|inputs| CalculateFuturesDeliveryBasket::new(&engine).execute(&inputs));
+    assert_eq!(
+        incomplete_outcome.unwrap_err().category(),
+        ApplicationErrorCategory::ValidationFailed
+    );
+    assert_eq!(
+        parser_calls.load(Ordering::SeqCst),
+        1,
+        "the delivery rule is necessarily parsed once to derive the eligible snapshot set"
+    );
+    assert_eq!(engine_calls.load(Ordering::SeqCst), 0);
+}
+
+fn materialize(
+    definitions: &Definitions,
+    metadata: &SnapshotMetadata,
+    decoder: &Quotes,
+    parser: &Parser<'_>,
+    bindings: &FuturesDeliveryInputBindings,
+) -> Result<Vec<FuturesDeliverableInput>, ApplicationError> {
+    block_on(
+        MaterializeFuturesDeliveryInputs::new(
+            definitions,
+            metadata,
+            &Blobs,
+            &Sink,
+            decoder,
+            parser,
+        )
+        .execute(
+            &scope(),
+            bindings,
+            SafeTraceContext::new("cccccccccccccccccccccccccccccccc").unwrap(),
+        ),
+    )
 }
 
 struct Definitions {
@@ -201,7 +320,10 @@ impl IntegrityEventSink for Sink {
     }
 }
 
-struct Quotes;
+struct Quotes {
+    quote_visible_at: MarketTime,
+    include_second_bond: bool,
+}
 
 #[async_trait]
 impl CanonicalSnapshotDecoder for Quotes {
@@ -214,11 +336,11 @@ impl CanonicalSnapshotDecoder for Quotes {
         assert_eq!(snapshot.content_hash(), &ContentHash::digest(PARQUET));
         assert_eq!(parquet, PARQUET);
         assert_eq!(manifest, MANIFEST);
-        Ok(vec![
+        let mut quotes = vec![
             CanonicalQuote::new(
                 reference('B'),
                 time(11),
-                time(12),
+                self.quote_visible_at.clone(),
                 "2026-03-04".parse().unwrap(),
                 Some(decimal(100)),
                 Some(decimal(101)),
@@ -227,13 +349,25 @@ impl CanonicalSnapshotDecoder for Quotes {
             CanonicalQuote::new(
                 reference('F'),
                 time(11),
-                time(12),
+                self.quote_visible_at.clone(),
                 "2026-03-04".parse().unwrap(),
                 Some(decimal(99)),
                 Some(decimal(100)),
                 price_unit(),
             ),
-        ])
+        ];
+        if self.include_second_bond {
+            quotes.push(CanonicalQuote::new(
+                reference('G'),
+                time(11),
+                self.quote_visible_at.clone(),
+                "2026-03-04".parse().unwrap(),
+                Some(decimal(102)),
+                Some(decimal(103)),
+                price_unit(),
+            ));
+        }
+        Ok(quotes)
     }
 }
 
@@ -340,8 +474,8 @@ fn futures_definition() -> InstrumentDefinition {
     .unwrap()
 }
 
-fn bond_definition() -> InstrumentDefinition {
-    let instrument = instrument('B', InstrumentKind::Bond);
+fn bond_definition(suffix: char) -> InstrumentDefinition {
+    let instrument = instrument(suffix, InstrumentKind::Bond);
     let bond = Bond::with_issuance(
         &instrument,
         "2025-01-01".parse().unwrap(),
@@ -424,12 +558,15 @@ fn rule() -> FuturesDeliveryRule {
     .unwrap()
 }
 
-fn data_snapshot() -> ficant_domain::research::DataSnapshot {
+fn data_snapshot(
+    as_of: MarketTime,
+    visible_at: MarketTime,
+) -> ficant_domain::research::DataSnapshot {
     ficant_domain::research::DataSnapshot::new(ficant_domain::research::DataSnapshotInput {
         data_snapshot_id: id('D'),
         owner: owner(),
-        visible_at: time(12),
-        as_of: time(12),
+        visible_at,
+        as_of,
         schema_hash: ContentHash::digest(b"schema"),
         manifest_hash: ContentHash::digest(MANIFEST),
         blob_content_hash: ContentHash::digest(PARQUET),
