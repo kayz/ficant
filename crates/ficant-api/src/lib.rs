@@ -4,6 +4,7 @@ mod canonical_snapshot;
 mod core_error;
 mod error;
 mod experiment;
+mod factor_registry;
 mod grpc_web;
 mod position_snapshot;
 mod rates;
@@ -15,11 +16,13 @@ pub use canonical_snapshot::CanonicalSnapshotCodecAdapter;
 pub use core_error::CoreBusinessErrorMapper;
 pub use error::{PlatformFailure, PlatformFailureCode, SafeErrorMapper};
 pub use experiment::{ExperimentGrpcService, TrustedExperimentScope, TrustedNodeCatalog};
+pub use factor_registry::FactorRegistryGrpcService;
 pub use grpc_web::{
     GrpcWebServeError, GrpcWebServerConfig, PlatformGrpcService, serve_grpc_web,
     serve_grpc_web_with_rates, serve_grpc_web_with_rates_and_experiment,
     serve_grpc_web_with_rates_and_experiment_and_registry,
     serve_grpc_web_with_rates_and_experiment_and_registry_and_positions,
+    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors,
 };
 pub use position_snapshot::PositionSnapshotGrpcService;
 pub use rates::{

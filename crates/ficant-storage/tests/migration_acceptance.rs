@@ -1,6 +1,7 @@
 mod support;
 
 use std::collections::BTreeSet;
+use std::sync::OnceLock;
 
 use sqlx::Row;
 
@@ -25,12 +26,44 @@ const LEGACY_SIGNAL_HEX: &str = concat!(
     "7369612f5368616e67686169000000000000000a323032352d30312d3136"
 );
 
+fn migration_test_lock() -> &'static tokio::sync::Mutex<()> {
+    static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+}
+
 #[tokio::test]
 #[allow(clippy::too_many_lines)]
 async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
+    let _guard = migration_test_lock().lock().await;
     let pool = support::postgres_pool().await;
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
+
+    let expected_migration_versions = (1_i64..=17).collect::<Vec<_>>();
+    let applied_before_repeat: Vec<(i64, bool)> =
+        sqlx::query_as("SELECT version, success FROM public._sqlx_migrations ORDER BY version")
+            .fetch_all(&pool)
+            .await
+            .expect("migration history must record every forward migration");
+    assert_eq!(
+        applied_before_repeat
+            .iter()
+            .map(|(version, _)| *version)
+            .collect::<Vec<_>>(),
+        expected_migration_versions
+    );
+    assert!(
+        applied_before_repeat.iter().all(|(_, success)| *success),
+        "every recorded forward migration must have succeeded"
+    );
+    assert_eq!(
+        applied_before_repeat
+            .iter()
+            .filter(|(version, success)| *version == 17 && *success)
+            .count(),
+        1,
+        "0017 must be recorded exactly once after its successful application"
+    );
 
     let rows = sqlx::query(
         "SELECT schemaname, tablename
@@ -75,6 +108,9 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         "research.execution_external_inputs",
         "research.execution_node_implementations",
         "research.execution_rule_packs",
+        "research.factor_definitions",
+        "research.curve_node_definitions",
+        "research.factor_target_bindings",
         "research.lineage_edges",
         "research.node_executions",
         "research.research_graphs",
@@ -91,12 +127,15 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     assert_eq!(actual.intersection(&required).count(), required.len());
 
     support::migrate(&pool).await;
-    let migration_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM public._sqlx_migrations WHERE success = TRUE")
-            .fetch_one(&pool)
+    let applied_after_repeat: Vec<(i64, bool)> =
+        sqlx::query_as("SELECT version, success FROM public._sqlx_migrations ORDER BY version")
+            .fetch_all(&pool)
             .await
-            .expect("migration history must be queryable");
-    assert_eq!(migration_count, 15);
+            .expect("migration history must remain queryable after repeat");
+    assert_eq!(
+        applied_after_repeat, applied_before_repeat,
+        "a repeated forward migration run must not alter the recorded migration set"
+    );
     let artifact_column: bool = sqlx::query_scalar(
         "SELECT EXISTS(
              SELECT 1 FROM information_schema.columns
@@ -171,11 +210,79 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
             .expect("failed migration history must be queryable");
     assert_eq!(injected_history, 0);
     std::fs::remove_dir_all(fixture).expect("migration fixture must be removed");
+
+    pool.close().await;
+    let pool = support::postgres_pool().await;
+    support::reset_postgres(&pool).await;
+    let source =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../migrations/postgresql");
+    let fixture = std::env::temp_dir().join(format!(
+        "ficant-failing-0017-migration-{}",
+        std::process::id()
+    ));
+    if fixture.exists() {
+        std::fs::remove_dir_all(&fixture).expect("stale 0017 migration fixture must be removable");
+    }
+    std::fs::create_dir(&fixture).expect("0017 migration fixture directory must be creatable");
+    for version in 1..=16 {
+        let prefix = format!("{version:04}_");
+        let migration = std::fs::read_dir(&source)
+            .expect("migration source must be readable")
+            .filter_map(Result::ok)
+            .find(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+            .expect("each 0001..0016 migration must exist");
+        std::fs::copy(migration.path(), fixture.join(migration.file_name()))
+            .expect("pre-0017 migration must copy without mutation");
+    }
+    let pre_0017 = sqlx::migrate::Migrator::new(fixture.clone())
+        .await
+        .expect("pre-0017 migration fixture must load");
+    pre_0017
+        .run(&pool)
+        .await
+        .expect("0001..0016 migrations must apply before the 0017 failure check");
+    let original_0017 = std::fs::read_to_string(source.join("0017_factor_topology.sql"))
+        .expect("0017 migration source must be readable");
+    std::fs::write(
+        fixture.join("0017_factor_topology.sql"),
+        format!(
+            "{original_0017}\nINSERT INTO research.factor_definitions(unknown_column) VALUES ('x');\n"
+        ),
+    )
+    .expect("failing 0017 migration fixture must be writable");
+    let failing_0017 = sqlx::migrate::Migrator::new(fixture.clone())
+        .await
+        .expect("failing 0017 migration fixture must load");
+    assert!(failing_0017.run(&pool).await.is_err());
+    for relation in [
+        "research.factor_definitions",
+        "research.curve_node_definitions",
+        "research.factor_target_bindings",
+    ] {
+        let relation_after_failure: Option<String> =
+            sqlx::query_scalar("SELECT to_regclass($1)::text")
+                .bind(relation)
+                .fetch_one(&pool)
+                .await
+                .expect("0017 rollback observation must succeed");
+        assert_eq!(
+            relation_after_failure, None,
+            "failed 0017 must not retain {relation}"
+        );
+    }
+    let failed_0017_history: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM public._sqlx_migrations WHERE version = 17")
+            .fetch_one(&pool)
+            .await
+            .expect("0017 failure history must be queryable");
+    assert_eq!(failed_0017_history, 0);
+    std::fs::remove_dir_all(fixture).expect("0017 migration fixture must be removed");
 }
 
 #[tokio::test]
 #[allow(clippy::too_many_lines)]
 async fn legacy_signal_rows_block_identity_migration_without_mutating_schema_or_payload() {
+    let _guard = migration_test_lock().lock().await;
     let pool = support::postgres_pool().await;
     support::reset_postgres(&pool).await;
     let source =
@@ -295,6 +402,7 @@ fn decode_hex(value: &str) -> Vec<u8> {
 
 #[tokio::test]
 async fn manifest_blob_fk_upgrade_fails_before_mutating_invalid_legacy_schema() {
+    let _guard = migration_test_lock().lock().await;
     let pool = support::postgres_pool().await;
     let source =
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../migrations/postgresql");
@@ -341,6 +449,7 @@ async fn manifest_blob_fk_upgrade_fails_before_mutating_invalid_legacy_schema() 
 
 #[tokio::test]
 async fn manifest_blob_fk_upgrade_accepts_valid_legacy_schema_and_repeats() {
+    let _guard = migration_test_lock().lock().await;
     let pool = support::postgres_pool().await;
     let source =
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../migrations/postgresql");

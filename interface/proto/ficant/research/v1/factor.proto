@@ -1,0 +1,156 @@
+syntax = "proto3";
+
+package ficant.research.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+
+enum SensitivityDirection {
+  SENSITIVITY_DIRECTION_UNSPECIFIED = 0;
+  SENSITIVITY_DIRECTION_CENTRAL = 1;
+  SENSITIVITY_DIRECTION_UP = 2;
+  SENSITIVITY_DIRECTION_DOWN = 3;
+}
+
+enum CurveRebuildPolicy {
+  CURVE_REBUILD_POLICY_UNSPECIFIED = 0;
+  CURVE_REBUILD_POLICY_REBUILD = 1;
+  CURVE_REBUILD_POLICY_HOLD = 2;
+}
+
+enum SecondOrderPolicy {
+  SECOND_ORDER_POLICY_UNSPECIFIED = 0;
+  SECOND_ORDER_POLICY_INCLUDE = 1;
+  SECOND_ORDER_POLICY_EXCLUDE = 2;
+}
+
+message SensitivityConvention {
+  ficant.core.v1.DecimalValue bump = 1;
+  SensitivityDirection direction = 2;
+  CurveRebuildPolicy curve_rebuild = 3;
+  SecondOrderPolicy second_order = 4;
+}
+
+message FactorDefinition {
+  string factor_id = 1;
+  ficant.core.v1.UnitRef factor_unit = 2;
+  SensitivityConvention sensitivity_convention = 3;
+  ficant.core.v1.Sha256 content_hash = 4;
+}
+
+message CurveNodeDefinition {
+  string curve_node_id = 1;
+  string curve_family_id = 2;
+  string tenor = 3;
+  ficant.core.v1.UnitRef factor_unit = 4;
+  ficant.core.v1.Sha256 content_hash = 5;
+}
+
+message CurveNodeRef {
+  string curve_node_id = 1;
+  ficant.core.v1.Sha256 content_hash = 2;
+}
+
+message InstrumentFactorTarget {
+  ficant.core.v1.OwnerRef owner = 1;
+  ficant.core.v1.VersionRef instrument = 2;
+}
+
+message FactorTargetRef {
+  oneof target {
+    InstrumentFactorTarget instrument = 1;
+    CurveNodeRef curve_node = 2;
+  }
+}
+
+message FactorTargetBinding {
+  string factor_id = 1;
+  FactorTargetRef target = 2;
+  ficant.core.v1.Sha256 content_hash = 3;
+}
+
+message RegisterFactorDefinitionRequest {
+  string idempotency_key = 1;
+  FactorDefinition definition = 2;
+}
+
+message RegisterFactorDefinitionResponse {
+  oneof result {
+    FactorDefinition definition = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message RegisterCurveNodeDefinitionRequest {
+  string idempotency_key = 1;
+  CurveNodeDefinition definition = 2;
+}
+
+message RegisterCurveNodeDefinitionResponse {
+  oneof result {
+    CurveNodeDefinition definition = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message BindFactorTargetRequest {
+  string idempotency_key = 1;
+  FactorTargetBinding binding = 2;
+}
+
+message BindFactorTargetResponse {
+  oneof result {
+    FactorTargetBinding binding = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message GetFactorDefinitionRequest {
+  string factor_id = 1;
+}
+
+message GetFactorDefinitionResponse {
+  oneof result {
+    FactorDefinition definition = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message GetFactorTargetsRequest {
+  string factor_id = 1;
+}
+
+message GetFactorTargetsResponse {
+  oneof result {
+    FactorTargetBindings bindings = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message GetTargetFactorsRequest {
+  FactorTargetRef target = 1;
+}
+
+message GetTargetFactorsResponse {
+  oneof result {
+    FactorDefinitions definitions = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message FactorTargetBindings {
+  repeated FactorTargetBinding bindings = 1;
+}
+
+message FactorDefinitions {
+  repeated FactorDefinition definitions = 1;
+}
+
+service FactorRegistryService {
+  rpc RegisterFactorDefinition(RegisterFactorDefinitionRequest) returns (RegisterFactorDefinitionResponse);
+  rpc RegisterCurveNodeDefinition(RegisterCurveNodeDefinitionRequest) returns (RegisterCurveNodeDefinitionResponse);
+  rpc BindFactorTarget(BindFactorTargetRequest) returns (BindFactorTargetResponse);
+  rpc GetFactorDefinition(GetFactorDefinitionRequest) returns (GetFactorDefinitionResponse);
+  rpc GetFactorTargets(GetFactorTargetsRequest) returns (GetFactorTargetsResponse);
+  rpc GetTargetFactors(GetTargetFactorsRequest) returns (GetTargetFactorsResponse);
+}

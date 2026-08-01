@@ -1,13 +1,13 @@
 use ficant_api::{
-    CanonicalSnapshotCodecAdapter, ExperimentGrpcService, GrpcWebServeError, GrpcWebServerConfig,
-    PlatformApplication, PlatformGrpcService, PlatformPort, PositionSnapshotGrpcService,
-    RatesGrpcService, SessionPolicy, SubjectRegistryGrpcService, SystemClock,
-    TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
-    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions,
+    CanonicalSnapshotCodecAdapter, ExperimentGrpcService, FactorRegistryGrpcService,
+    GrpcWebServeError, GrpcWebServerConfig, PlatformApplication, PlatformGrpcService, PlatformPort,
+    PositionSnapshotGrpcService, RatesGrpcService, SessionPolicy, SubjectRegistryGrpcService,
+    SystemClock, TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
+    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors,
 };
 use ficant_application::ports::{
     AccessScope, AeadCursorCodec, ArtifactRepository, BlobStore, CursorKey, DefinitionRepository,
-    ExperimentRepository, IntegrityEventSink, Phase4ExecutionRepository,
+    ExperimentRepository, FactorTopologyRepository, IntegrityEventSink, Phase4ExecutionRepository,
     PositionSnapshotRepository, RunJournalRepository, SnapshotRepository,
     SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobReader,
 };
@@ -281,7 +281,7 @@ pub fn build_grpc_services(
     let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository;
     let blobs: Arc<dyn VerifiedBlobReader> = blob_store;
     let rates = build_rates_service(
-        application,
+        Arc::clone(&application),
         definitions,
         subjects,
         snapshots,
@@ -391,7 +391,7 @@ pub fn build_grpc_services_with_experiment_and_registry(
 /// # Errors
 ///
 /// Returns a redacted composition error when trusted configuration or adapters cannot be built.
-pub fn build_grpc_services_with_experiment_registry_and_positions(
+pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors(
     settings: &ServerSettings,
 ) -> Result<
     (
@@ -400,6 +400,7 @@ pub fn build_grpc_services_with_experiment_registry_and_positions(
         ExperimentGrpcService,
         SubjectRegistryGrpcService,
         PositionSnapshotGrpcService,
+        FactorRegistryGrpcService,
     ),
     ServerError,
 > {
@@ -431,6 +432,7 @@ pub fn build_grpc_services_with_experiment_registry_and_positions(
     let journals: Arc<dyn RunJournalRepository> = repository.clone();
     let snapshot_repository: Arc<dyn SnapshotRepository> = repository.clone();
     let position_repository: Arc<dyn PositionSnapshotRepository> = repository.clone();
+    let factor_repository: Arc<dyn FactorTopologyRepository> = repository.clone();
     let artifacts: Arc<dyn ArtifactRepository> = repository.clone();
     let definitions: Arc<dyn DefinitionRepository> = repository.clone();
     let subjects: Arc<dyn SubjectRepository> = repository.clone();
@@ -473,7 +475,7 @@ pub fn build_grpc_services_with_experiment_registry_and_positions(
     )
     .map_err(|_| config("trusted position access scope is invalid"))?;
     let positions = PositionSnapshotGrpcService::new(
-        application,
+        Arc::clone(&application),
         access_scope,
         position_repository,
         snapshot_repository,
@@ -481,6 +483,41 @@ pub fn build_grpc_services_with_experiment_registry_and_positions(
         &settings.trace_key,
     )
     .map_err(config)?;
+    let factors = FactorRegistryGrpcService::new(
+        Arc::clone(&application),
+        AccessScope::new(
+            settings.experiment_tenant_id.clone(),
+            settings.experiment_actor_id.clone(),
+            vec![settings.experiment_owner_id.clone()],
+        )
+        .map_err(|_| config("trusted factor access scope is invalid"))?,
+        factor_repository,
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+    Ok((platform, rates, experiment, registry, positions, factors))
+}
+
+/// Preserves the pre-R4c production composition surface without the additive Factor service.
+///
+/// # Errors
+///
+/// Returns a configuration or composition error when any production service
+/// dependency cannot be constructed.
+pub fn build_grpc_services_with_experiment_registry_and_positions(
+    settings: &ServerSettings,
+) -> Result<
+    (
+        PlatformGrpcService,
+        RatesGrpcService,
+        ExperimentGrpcService,
+        SubjectRegistryGrpcService,
+        PositionSnapshotGrpcService,
+    ),
+    ServerError,
+> {
+    let (platform, rates, experiment, registry, positions, _) =
+        build_grpc_services_with_experiment_registry_and_positions_and_factors(settings)?;
     Ok((platform, rates, experiment, registry, positions))
 }
 
@@ -580,9 +617,9 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         .filter_map(|key| env::var(key).ok().map(|value| ((*key).to_owned(), value)))
         .collect();
     let settings = ServerSettings::try_from_values(&values)?;
-    let (platform, rates, experiment, registry, positions) =
-        build_grpc_services_with_experiment_registry_and_positions(&settings)?;
-    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions(
+    let (platform, rates, experiment, registry, positions, factors) =
+        build_grpc_services_with_experiment_registry_and_positions_and_factors(&settings)?;
+    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors(
         GrpcWebServerConfig {
             bind: settings.bind,
             allowed_origins: settings.allowed_origins.clone(),
@@ -592,6 +629,7 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         experiment,
         registry,
         positions,
+        factors,
     )
     .await?;
     Ok(())

@@ -852,6 +852,305 @@ impl GraphRunComparisonDimension {
         }
     }
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SensitivityConvention {
+    #[prost(message, optional, tag="1")]
+    pub bump: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(enumeration="SensitivityDirection", tag="2")]
+    pub direction: i32,
+    #[prost(enumeration="CurveRebuildPolicy", tag="3")]
+    pub curve_rebuild: i32,
+    #[prost(enumeration="SecondOrderPolicy", tag="4")]
+    pub second_order: i32,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FactorDefinition {
+    #[prost(string, tag="1")]
+    pub factor_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub factor_unit: ::core::option::Option<super::super::core::v1::UnitRef>,
+    #[prost(message, optional, tag="3")]
+    pub sensitivity_convention: ::core::option::Option<SensitivityConvention>,
+    #[prost(message, optional, tag="4")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CurveNodeDefinition {
+    #[prost(string, tag="1")]
+    pub curve_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub curve_family_id: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub tenor: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="4")]
+    pub factor_unit: ::core::option::Option<super::super::core::v1::UnitRef>,
+    #[prost(message, optional, tag="5")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CurveNodeRef {
+    #[prost(string, tag="1")]
+    pub curve_node_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct InstrumentFactorTarget {
+    #[prost(message, optional, tag="1")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, optional, tag="2")]
+    pub instrument: ::core::option::Option<super::super::core::v1::VersionRef>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FactorTargetRef {
+    #[prost(oneof="factor_target_ref::Target", tags="1, 2")]
+    pub target: ::core::option::Option<factor_target_ref::Target>,
+}
+/// Nested message and enum types in `FactorTargetRef`.
+pub mod factor_target_ref {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Target {
+        #[prost(message, tag="1")]
+        Instrument(super::InstrumentFactorTarget),
+        #[prost(message, tag="2")]
+        CurveNode(super::CurveNodeRef),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FactorTargetBinding {
+    #[prost(string, tag="1")]
+    pub factor_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub target: ::core::option::Option<FactorTargetRef>,
+    #[prost(message, optional, tag="3")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RegisterFactorDefinitionRequest {
+    #[prost(string, tag="1")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub definition: ::core::option::Option<FactorDefinition>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RegisterFactorDefinitionResponse {
+    #[prost(oneof="register_factor_definition_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<register_factor_definition_response::Result>,
+}
+/// Nested message and enum types in `RegisterFactorDefinitionResponse`.
+pub mod register_factor_definition_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Definition(super::FactorDefinition),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RegisterCurveNodeDefinitionRequest {
+    #[prost(string, tag="1")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub definition: ::core::option::Option<CurveNodeDefinition>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RegisterCurveNodeDefinitionResponse {
+    #[prost(oneof="register_curve_node_definition_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<register_curve_node_definition_response::Result>,
+}
+/// Nested message and enum types in `RegisterCurveNodeDefinitionResponse`.
+pub mod register_curve_node_definition_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Definition(super::CurveNodeDefinition),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct BindFactorTargetRequest {
+    #[prost(string, tag="1")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub binding: ::core::option::Option<FactorTargetBinding>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BindFactorTargetResponse {
+    #[prost(oneof="bind_factor_target_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<bind_factor_target_response::Result>,
+}
+/// Nested message and enum types in `BindFactorTargetResponse`.
+pub mod bind_factor_target_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Binding(super::FactorTargetBinding),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetFactorDefinitionRequest {
+    #[prost(string, tag="1")]
+    pub factor_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetFactorDefinitionResponse {
+    #[prost(oneof="get_factor_definition_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_factor_definition_response::Result>,
+}
+/// Nested message and enum types in `GetFactorDefinitionResponse`.
+pub mod get_factor_definition_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Definition(super::FactorDefinition),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetFactorTargetsRequest {
+    #[prost(string, tag="1")]
+    pub factor_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetFactorTargetsResponse {
+    #[prost(oneof="get_factor_targets_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_factor_targets_response::Result>,
+}
+/// Nested message and enum types in `GetFactorTargetsResponse`.
+pub mod get_factor_targets_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Bindings(super::FactorTargetBindings),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetTargetFactorsRequest {
+    #[prost(message, optional, tag="1")]
+    pub target: ::core::option::Option<FactorTargetRef>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetTargetFactorsResponse {
+    #[prost(oneof="get_target_factors_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_target_factors_response::Result>,
+}
+/// Nested message and enum types in `GetTargetFactorsResponse`.
+pub mod get_target_factors_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Definitions(super::FactorDefinitions),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FactorTargetBindings {
+    #[prost(message, repeated, tag="1")]
+    pub bindings: ::prost::alloc::vec::Vec<FactorTargetBinding>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FactorDefinitions {
+    #[prost(message, repeated, tag="1")]
+    pub definitions: ::prost::alloc::vec::Vec<FactorDefinition>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SensitivityDirection {
+    Unspecified = 0,
+    Central = 1,
+    Up = 2,
+    Down = 3,
+}
+impl SensitivityDirection {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SENSITIVITY_DIRECTION_UNSPECIFIED",
+            Self::Central => "SENSITIVITY_DIRECTION_CENTRAL",
+            Self::Up => "SENSITIVITY_DIRECTION_UP",
+            Self::Down => "SENSITIVITY_DIRECTION_DOWN",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SENSITIVITY_DIRECTION_UNSPECIFIED" => Some(Self::Unspecified),
+            "SENSITIVITY_DIRECTION_CENTRAL" => Some(Self::Central),
+            "SENSITIVITY_DIRECTION_UP" => Some(Self::Up),
+            "SENSITIVITY_DIRECTION_DOWN" => Some(Self::Down),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum CurveRebuildPolicy {
+    Unspecified = 0,
+    Rebuild = 1,
+    Hold = 2,
+}
+impl CurveRebuildPolicy {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "CURVE_REBUILD_POLICY_UNSPECIFIED",
+            Self::Rebuild => "CURVE_REBUILD_POLICY_REBUILD",
+            Self::Hold => "CURVE_REBUILD_POLICY_HOLD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CURVE_REBUILD_POLICY_UNSPECIFIED" => Some(Self::Unspecified),
+            "CURVE_REBUILD_POLICY_REBUILD" => Some(Self::Rebuild),
+            "CURVE_REBUILD_POLICY_HOLD" => Some(Self::Hold),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SecondOrderPolicy {
+    Unspecified = 0,
+    Include = 1,
+    Exclude = 2,
+}
+impl SecondOrderPolicy {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SECOND_ORDER_POLICY_UNSPECIFIED",
+            Self::Include => "SECOND_ORDER_POLICY_INCLUDE",
+            Self::Exclude => "SECOND_ORDER_POLICY_EXCLUDE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SECOND_ORDER_POLICY_UNSPECIFIED" => Some(Self::Unspecified),
+            "SECOND_ORDER_POLICY_INCLUDE" => Some(Self::Include),
+            "SECOND_ORDER_POLICY_EXCLUDE" => Some(Self::Exclude),
+            _ => None,
+        }
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AccountingClassification {
     #[prost(enumeration="AccountingClassificationState", tag="1")]
