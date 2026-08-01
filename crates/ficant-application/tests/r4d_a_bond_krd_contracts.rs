@@ -55,6 +55,54 @@ async fn materializes_two_bonds_three_factors_exact_totals_and_fails_before_unsu
                 .collect::<Vec<_>>(),
             FACTOR_IDS
         );
+        assert!(
+            position
+                .input_evidence_hashes()
+                .windows(2)
+                .all(|pair| pair[0] < pair[1])
+        );
+        for (node, factor) in fixture.nodes.iter().zip(&fixture.factors) {
+            let curve_binding = FactorTargetBinding::new(
+                factor.factor_id(),
+                FactorTarget::CurveNode(
+                    ficant_domain::research::CurveNodeRef::new(
+                        node.curve_node_id(),
+                        node.content_hash().clone(),
+                    )
+                    .unwrap(),
+                ),
+            )
+            .unwrap();
+            assert!(
+                position
+                    .input_evidence_hashes()
+                    .contains(node.content_hash())
+            );
+            assert!(
+                position
+                    .input_evidence_hashes()
+                    .contains(curve_binding.content_hash())
+            );
+        }
+        for exposure in position
+            .exposures()
+            .iter()
+            .filter(|exposure| exposure.value() != FixedDecimal::ZERO)
+        {
+            let instrument_binding = FactorTargetBinding::new(
+                exposure.factor_id(),
+                FactorTarget::Instrument(ficant_domain::research::InstrumentFactorTarget::new(
+                    owner(),
+                    position.instrument().clone(),
+                )),
+            )
+            .unwrap();
+            assert!(
+                position
+                    .input_evidence_hashes()
+                    .contains(instrument_binding.content_hash())
+            );
+        }
     }
     for (index, total) in result.totals().iter().enumerate() {
         let exact = result
@@ -90,6 +138,40 @@ async fn materializes_two_bonds_three_factors_exact_totals_and_fails_before_unsu
     assert_eq!(error.category(), ApplicationErrorCategory::ValidationFailed);
     assert_eq!(rejected_calls.curve.load(Ordering::SeqCst), 0);
     assert_eq!(rejected_calls.bond.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn registered_face_value_is_normalized_before_position_notional_scaling() {
+    let baseline = Fixture::new(
+        false,
+        SensitivityDirection::Central,
+        "1",
+        EngineCalls::default(),
+    )
+    .execute()
+    .await
+    .unwrap();
+    let nonstandard_face = Fixture::new_with_first_face(
+        false,
+        SensitivityDirection::Central,
+        "1",
+        EngineCalls::default(),
+        "200",
+    )
+    .execute()
+    .await
+    .unwrap();
+
+    assert_eq!(
+        baseline.positions()[0].exposures(),
+        nonstandard_face.positions()[0].exposures(),
+        "the same notional holding must not change merely because the registered denomination changes"
+    );
+    assert_ne!(
+        baseline.positions()[0].content_hash(),
+        nonstandard_face.positions()[0].content_hash(),
+        "the changed registered Bond definition must still remain visible in lineage"
+    );
 }
 
 #[tokio::test]
@@ -153,6 +235,17 @@ impl Fixture {
         bump_coefficient: &str,
         calls: EngineCalls,
     ) -> Self {
+        Self::new_with_first_face(unsupported, direction, bump_coefficient, calls, "100")
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn new_with_first_face(
+        unsupported: bool,
+        direction: SensitivityDirection,
+        bump_coefficient: &str,
+        calls: EngineCalls,
+        first_face: &str,
+    ) -> Self {
         let owner = owner();
         let scope = AccessScope::new(id('T'), id('A'), vec![id('0')]).unwrap();
         let currency = unit("CNY", "currency", 'C');
@@ -166,10 +259,9 @@ impl Fixture {
         let first_definition = DefinitionValue::Instrument(
             ficant_application::ports::InstrumentDefinition::new(
                 first.clone(),
-                Some(ficant_application::ports::InstrumentSubtype::Bond(bond(
-                    &first,
-                    date(2031, 8, 3),
-                ))),
+                Some(ficant_application::ports::InstrumentSubtype::Bond(
+                    bond_with_face(&first, date(2031, 8, 3), first_face),
+                )),
             )
             .unwrap(),
         );
@@ -509,8 +601,12 @@ impl BondAnalyticsEngine for Fixture {
             .and_then(|value| value.checked_div(FixedDecimal::ONE.scaled()))
             .and_then(|value| value.checked_mul(1_000))
             .ok_or(AnalyticsError::NonFinite)?;
+        let per_hundred = 100 * FixedDecimal::ONE.scaled() - 100 * ytm.scaled() - quadratic;
         let clean = FixedDecimal::from_scaled(
-            100 * FixedDecimal::ONE.scaled() - 100 * ytm.scaled() - quadratic,
+            per_hundred
+                .checked_mul(input.terms().face_amount().scaled())
+                .and_then(|value| value.checked_div(100 * FixedDecimal::ONE.scaled()))
+                .ok_or(AnalyticsError::NonFinite)?,
         );
         let measures = AnalyticsMeasures::new(
             FixedDecimal::ZERO,
@@ -613,6 +709,10 @@ fn instrument(suffix: char, kind: InstrumentKind) -> Instrument {
 }
 
 fn bond(instrument: &Instrument, maturity: NaiveDate) -> Bond {
+    bond_with_face(instrument, maturity, "100")
+}
+
+fn bond_with_face(instrument: &Instrument, maturity: NaiveDate, face: &str) -> Bond {
     Bond::with_issuance(
         instrument,
         date(2024, 1, 15),
@@ -620,7 +720,7 @@ fn bond(instrument: &Instrument, maturity: NaiveDate) -> Bond {
         maturity,
         decimal("100000000", 0, unit_ref('N')),
         BondTaxAttributes::new(ValueAddedTaxStatus::Exempt, IncomeTaxStatus::Exempt),
-        decimal("100", 0, unit_ref('N')),
+        decimal(face, 0, unit_ref('N')),
     )
     .unwrap()
     .with_pricing_terms(
