@@ -35,6 +35,16 @@ impl FuturesDeliveryRuleParser for CgbFuturesDeliveryRulePackParser {
         TYPE_URL
     }
 
+    fn parse_product_code(&self, product_code: &str) -> ApplicationResult<CgbFuturesProduct> {
+        match product_code {
+            "TS" => Ok(CgbFuturesProduct::TwoYear),
+            "TF" => Ok(CgbFuturesProduct::FiveYear),
+            "T" => Ok(CgbFuturesProduct::TenYear),
+            "TL" => Ok(CgbFuturesProduct::ThirtyYear),
+            _ => Err(invalid()),
+        }
+    }
+
     fn parse(
         &self,
         content: &RulePackContent,
@@ -68,7 +78,7 @@ fn parse_payload(
         None => return Err(missing(&format!("{prefix}.residual_max_months"))),
     };
 
-    FuturesDeliveryRule::new(FuturesDeliveryRuleInput {
+    let rule = FuturesDeliveryRule::new(FuturesDeliveryRuleInput {
         original_term_max_months: required_u32(
             selected.original_term_max_months,
             &format!("{prefix}.original_term_max_months"),
@@ -95,7 +105,13 @@ fn parse_payload(
         )?,
         annual_day_basis: required_u32(payload.annual_day_basis, "annual_day_basis")?,
     })
-    .map_err(map_domain_error)
+    .map_err(map_domain_error)?;
+    match selected.contract_size_in_quote_units {
+        Some(value) => rule
+            .with_contract_size_in_quote_units(value)
+            .map_err(map_domain_error),
+        None => Ok(rule),
+    }
 }
 
 fn validate_product_order(values: &[CgbFuturesProductRule]) -> ApplicationResult<()> {
@@ -202,6 +218,13 @@ mod tests {
             rule.nominal_coupon(),
             FixedDecimal::from_scaled(30_000_000_000)
         );
+        assert_eq!(rule.contract_size_in_quote_units(), None);
+
+        complete.products[0].contract_size_in_quote_units = Some(10_000);
+        let risk_rule = parser
+            .parse_for_portfolio_risk(&content(&complete), CgbFuturesProduct::TenYear)
+            .unwrap();
+        assert_eq!(risk_rule.contract_size_in_quote_units(), Some(10_000));
 
         let mut missing = complete;
         missing.products[0].residual_min_months = None;
@@ -245,6 +268,7 @@ mod tests {
                 Some(value) => Some(ResidualUpperBound::ResidualMaxMonths(value)),
                 None => Some(ResidualUpperBound::ResidualMaxMonthsUnbounded(true)),
             },
+            contract_size_in_quote_units: None,
         }
     }
 

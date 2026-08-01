@@ -899,6 +899,8 @@ pub struct PortfolioKeyRateExposure {
     pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
     #[prost(message, repeated, tag="7")]
     pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="8")]
+    pub futures_data_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CalculateKeyRateDv01Request {
@@ -912,6 +914,8 @@ pub struct CalculateKeyRateDv01Request {
     pub curve_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
     #[prost(message, optional, tag="5")]
     pub dv01_unit: ::core::option::Option<super::super::core::v1::UnitRef>,
+    #[prost(message, optional, tag="6")]
+    pub futures_data_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CalculateKeyRateDv01Response {

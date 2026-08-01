@@ -38,6 +38,56 @@ pub fn key_rate_dv01(
     Ok(FixedDecimal::from_scaled(scaled_numerator / divisor))
 }
 
+/// Scales one fixed-CTD registered-face KRD into a signed futures-position KRD.
+///
+/// Every intermediate operation must be exactly representable at the canonical fixed scale.
+pub fn scale_futures_key_rate_dv01(
+    ctd_registered_face_krd: FixedDecimal,
+    registered_face: FixedDecimal,
+    face_quote_basis: FixedDecimal,
+    contract_size_in_quote_units: u32,
+    conversion_factor: FixedDecimal,
+    signed_contract_count: i64,
+) -> DomainResult<FixedDecimal> {
+    if !registered_face.is_positive()
+        || !face_quote_basis.is_positive()
+        || contract_size_in_quote_units == 0
+        || !conversion_factor.is_positive()
+        || signed_contract_count == 0
+    {
+        return Err(DomainErrorCode::InvalidValue);
+    }
+    let quote_krd = exact_div(
+        ctd_registered_face_krd.checked_mul(face_quote_basis)?,
+        registered_face,
+    )?;
+    let contract_size = FixedDecimal::from_scaled(
+        i128::from(contract_size_in_quote_units)
+            .checked_mul(FIXED_SCALE)
+            .ok_or(DomainErrorCode::InvalidValue)?,
+    );
+    let one_contract = exact_div(quote_krd.checked_mul(contract_size)?, conversion_factor)?;
+    one_contract.checked_mul(FixedDecimal::from_scaled(
+        i128::from(signed_contract_count)
+            .checked_mul(FIXED_SCALE)
+            .ok_or(DomainErrorCode::InvalidValue)?,
+    ))
+}
+
+fn exact_div(numerator: FixedDecimal, denominator: FixedDecimal) -> DomainResult<FixedDecimal> {
+    if denominator.scaled() == 0 {
+        return Err(DomainErrorCode::InvalidValue);
+    }
+    let scaled = numerator
+        .scaled()
+        .checked_mul(FIXED_SCALE)
+        .ok_or(DomainErrorCode::InvalidValue)?;
+    if scaled % denominator.scaled() != 0 {
+        return Err(DomainErrorCode::InvalidValue);
+    }
+    Ok(FixedDecimal::from_scaled(scaled / denominator.scaled()))
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FactorDv01 {
     factor_id: String,
@@ -230,6 +280,7 @@ impl RiskAlgorithmBinding {
 pub struct PortfolioKeyRateExposure {
     position_snapshot_id: Ulid,
     curve_snapshot_id: Ulid,
+    futures_data_snapshot_id: Option<Ulid>,
     positions: Vec<PositionKeyRateExposure>,
     totals: Vec<FactorDv01>,
     algorithm: RiskAlgorithmBinding,
@@ -241,6 +292,42 @@ impl PortfolioKeyRateExposure {
     pub fn new(
         position_snapshot_id: Ulid,
         curve_snapshot_id: Ulid,
+        positions: Vec<PositionKeyRateExposure>,
+        algorithm: RiskAlgorithmBinding,
+        lineage: Vec<LineageRef>,
+    ) -> DomainResult<Self> {
+        Self::new_inner(
+            position_snapshot_id,
+            curve_snapshot_id,
+            None,
+            positions,
+            algorithm,
+            lineage,
+        )
+    }
+
+    pub fn new_with_futures_data_snapshot(
+        position_snapshot_id: Ulid,
+        curve_snapshot_id: Ulid,
+        futures_data_snapshot_id: Ulid,
+        positions: Vec<PositionKeyRateExposure>,
+        algorithm: RiskAlgorithmBinding,
+        lineage: Vec<LineageRef>,
+    ) -> DomainResult<Self> {
+        Self::new_inner(
+            position_snapshot_id,
+            curve_snapshot_id,
+            Some(futures_data_snapshot_id),
+            positions,
+            algorithm,
+            lineage,
+        )
+    }
+
+    fn new_inner(
+        position_snapshot_id: Ulid,
+        curve_snapshot_id: Ulid,
+        futures_data_snapshot_id: Option<Ulid>,
         positions: Vec<PositionKeyRateExposure>,
         algorithm: RiskAlgorithmBinding,
         lineage: Vec<LineageRef>,
@@ -257,6 +344,10 @@ impl PortfolioKeyRateExposure {
         let mut bytes = Vec::new();
         append(&mut bytes, position_snapshot_id.as_str().as_bytes());
         append(&mut bytes, curve_snapshot_id.as_str().as_bytes());
+        if let Some(value) = &futures_data_snapshot_id {
+            append(&mut bytes, b"futures_data_snapshot_id");
+            append(&mut bytes, value.as_str().as_bytes());
+        }
         for position in &positions {
             append(&mut bytes, position.content_hash().as_bytes());
         }
@@ -277,6 +368,7 @@ impl PortfolioKeyRateExposure {
         Ok(Self {
             position_snapshot_id,
             curve_snapshot_id,
+            futures_data_snapshot_id,
             positions,
             totals,
             algorithm,
@@ -291,6 +383,10 @@ impl PortfolioKeyRateExposure {
 
     pub fn curve_snapshot_id(&self) -> &Ulid {
         &self.curve_snapshot_id
+    }
+
+    pub fn futures_data_snapshot_id(&self) -> Option<&Ulid> {
+        self.futures_data_snapshot_id.as_ref()
     }
 
     pub fn positions(&self) -> &[PositionKeyRateExposure] {

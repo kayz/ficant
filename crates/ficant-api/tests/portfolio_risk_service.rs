@@ -3,6 +3,7 @@ use ficant_application::ApplicationErrorCategory;
 use ficant_application::ports::CurvePointSetDecoder;
 use ficant_contracts::ficant::core::v1 as core;
 use ficant_contracts::ficant::market::v1 as market;
+use ficant_contracts::ficant::research::v1 as research;
 use ficant_contracts::ficant::research::v1::portfolio_risk_service_server::PortfolioRiskService;
 use prost::Message;
 
@@ -30,6 +31,28 @@ fn curve_point_decoder_rejects_unknown_fields_and_noncanonical_bytes() {
     unknown_field.extend_from_slice(&[0x18, 0x01]);
     let error = decoder.decode_canonical(&unknown_field).unwrap_err();
     assert_eq!(error.category(), ApplicationErrorCategory::HashMismatch);
+}
+
+#[test]
+fn futures_snapshot_binding_round_trips_on_request_and_result_contracts() {
+    let snapshot = core::Ulid {
+        value: "01ARZ3NDEKTSV4RRFFQ69G5F0D".to_owned(),
+    };
+    let request = research::CalculateKeyRateDv01Request {
+        futures_data_snapshot_id: Some(snapshot.clone()),
+        ..Default::default()
+    };
+    let decoded =
+        research::CalculateKeyRateDv01Request::decode(request.encode_to_vec().as_slice()).unwrap();
+    assert_eq!(decoded.futures_data_snapshot_id, Some(snapshot.clone()));
+
+    let exposure = research::PortfolioKeyRateExposure {
+        futures_data_snapshot_id: Some(snapshot.clone()),
+        ..Default::default()
+    };
+    let decoded =
+        research::PortfolioKeyRateExposure::decode(exposure.encode_to_vec().as_slice()).unwrap();
+    assert_eq!(decoded.futures_data_snapshot_id, Some(snapshot));
 }
 
 fn point(id: &str, coefficient: i32) -> market::CurvePoint {

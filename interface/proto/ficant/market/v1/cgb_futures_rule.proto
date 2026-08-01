@@ -26,4 +26,6 @@ message CgbFuturesProductRule {
     uint32 residual_max_months = 4;
     bool residual_max_months_unbounded = 5;
   }
+
+  optional uint32 contract_size_in_quote_units = 6;
 }

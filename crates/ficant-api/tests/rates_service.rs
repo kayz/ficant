@@ -1946,6 +1946,7 @@ fn delivery_pack(version: u64, nominal_coupon: &str, missing_residual_min: bool)
             original_term_max_months: Some(120),
             residual_min_months: (!missing_residual_min).then_some(78),
             residual_upper_bound: Some(ResidualUpperBound::ResidualMaxMonthsUnbounded(true)),
+            contract_size_in_quote_units: None,
         }],
         delivery_months: vec![3, 6, 9, 12],
         nominal_coupon: Some(decimal(nominal_coupon, 2, &unit('P'))),

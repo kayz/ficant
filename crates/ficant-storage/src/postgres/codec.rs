@@ -388,12 +388,18 @@ pub(crate) fn encode_definition(value: &DefinitionValue) -> Vec<u8> {
                     }
                 }
                 Some(InstrumentSubtype::FuturesContract(value)) => {
-                    encoder.u8(2);
+                    encoder.u8(if value.product_code().is_some() { 5 } else { 2 });
                     encode_market_time(&mut encoder, value.last_trade_time());
                     encode_market_time(&mut encoder, value.expiry_time());
                     encode_market_time(&mut encoder, value.settlement_time());
                     encode_decimal(&mut encoder, value.multiplier());
                     encode_version_ref(&mut encoder, value.rule_pack());
+                    if let (Some(product_code), Some(price_unit)) =
+                        (value.product_code(), value.price_unit())
+                    {
+                        encoder.string(product_code);
+                        encode_unit_ref(&mut encoder, price_unit);
+                    }
                 }
             }
         }
@@ -526,6 +532,22 @@ pub(crate) fn decode_definition(bytes: &[u8]) -> CodecResult<DefinitionValue> {
                     )
                     .map_err(ficant_application::map_domain_error)?,
                 )),
+                5 => {
+                    let future = FuturesContract::new(
+                        &instrument,
+                        decode_market_time(&mut decoder)?,
+                        decode_market_time(&mut decoder)?,
+                        decode_market_time(&mut decoder)?,
+                        decode_decimal(&mut decoder)?,
+                        decode_version_ref(&mut decoder)?,
+                    )
+                    .map_err(ficant_application::map_domain_error)?;
+                    Some(InstrumentSubtype::FuturesContract(
+                        future
+                            .with_risk_terms(decoder.string()?, decode_unit_ref(&mut decoder)?)
+                            .map_err(ficant_application::map_domain_error)?,
+                    ))
+                }
                 _ => return Err(codec_error()),
             };
             DefinitionValue::Instrument(InstrumentDefinition::new(instrument, subtype)?)

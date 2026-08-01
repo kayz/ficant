@@ -64,6 +64,8 @@ message FuturesContract {
   ficant.core.v1.MarketTime settlement_time = 4;
   ficant.core.v1.DecimalValue multiplier = 5;
   ficant.core.v1.VersionRef rule_pack = 6;
+  string product_code = 7;
+  ficant.core.v1.UnitRef price_unit = 8;
 }
 
 message CalendarSession {
