@@ -178,6 +178,14 @@ pub struct Bond {
     pub cumulative_issued_amount: ::core::option::Option<super::super::core::v1::DecimalValue>,
     #[prost(message, optional, tag="8")]
     pub tax_attributes: ::core::option::Option<BondTaxAttributes>,
+    #[prost(message, optional, tag="9")]
+    pub coupon_rate: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(enumeration="BondCouponFrequency", tag="10")]
+    pub coupon_frequency: i32,
+    #[prost(enumeration="BondDayCountConvention", tag="11")]
+    pub day_count: i32,
+    #[prost(enumeration="BondBusinessDayConvention", tag="12")]
+    pub business_day: i32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FuturesContract {
@@ -444,6 +452,87 @@ impl IncomeTaxStatus {
         }
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum BondCouponFrequency {
+    Unspecified = 0,
+    Annual = 1,
+    Semiannual = 2,
+}
+impl BondCouponFrequency {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "BOND_COUPON_FREQUENCY_UNSPECIFIED",
+            Self::Annual => "BOND_COUPON_FREQUENCY_ANNUAL",
+            Self::Semiannual => "BOND_COUPON_FREQUENCY_SEMIANNUAL",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "BOND_COUPON_FREQUENCY_UNSPECIFIED" => Some(Self::Unspecified),
+            "BOND_COUPON_FREQUENCY_ANNUAL" => Some(Self::Annual),
+            "BOND_COUPON_FREQUENCY_SEMIANNUAL" => Some(Self::Semiannual),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum BondDayCountConvention {
+    Unspecified = 0,
+    ActActBondIsma = 1,
+}
+impl BondDayCountConvention {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "BOND_DAY_COUNT_CONVENTION_UNSPECIFIED",
+            Self::ActActBondIsma => "BOND_DAY_COUNT_CONVENTION_ACT_ACT_BOND_ISMA",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "BOND_DAY_COUNT_CONVENTION_UNSPECIFIED" => Some(Self::Unspecified),
+            "BOND_DAY_COUNT_CONVENTION_ACT_ACT_BOND_ISMA" => Some(Self::ActActBondIsma),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum BondBusinessDayConvention {
+    Unspecified = 0,
+    Following = 1,
+}
+impl BondBusinessDayConvention {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "BOND_BUSINESS_DAY_CONVENTION_UNSPECIFIED",
+            Self::Following => "BOND_BUSINESS_DAY_CONVENTION_FOLLOWING",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "BOND_BUSINESS_DAY_CONVENTION_UNSPECIFIED" => Some(Self::Unspecified),
+            "BOND_BUSINESS_DAY_CONVENTION_FOLLOWING" => Some(Self::Following),
+            _ => None,
+        }
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FactSource {
     #[prost(string, tag="1")]
@@ -560,6 +649,28 @@ pub struct CurveSnapshot {
     pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
     #[prost(message, repeated, tag="10")]
     pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="11")]
+    pub visible_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(string, tag="12")]
+    pub curve_family_id: ::prost::alloc::string::String,
+}
+/// CurvePointSet is the canonical payload for point_schema
+/// ficant.yield-curve-points.protobuf.v1.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CurvePoint {
+    #[prost(string, tag="1")]
+    pub curve_node_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub curve_node_content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="3")]
+    pub yield_to_maturity: ::core::option::Option<super::super::core::v1::DecimalValue>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CurvePointSet {
+    #[prost(string, tag="1")]
+    pub curve_family_id: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag="2")]
+    pub points: ::prost::alloc::vec::Vec<CurvePoint>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AppendCashflowRequest {

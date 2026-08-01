@@ -22,6 +22,7 @@ plugins:
       - ficant.rates.v1.RatesAnalyticsService
       - ficant.research.v1.PositionSnapshotService
       - ficant.research.v1.FactorRegistryService
+      - ficant.research.v1.PortfolioRiskService
   - remote: buf.build/bufbuild/es:v2.5.2
     revision: 1
     out: web-dm/packages/contracts-generated/src

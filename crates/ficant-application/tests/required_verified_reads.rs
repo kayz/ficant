@@ -25,6 +25,7 @@ const SIGNAL_BYTES: &[u8] = b"signal-payload";
 const PARQUET_BYTES: &[u8] = b"parquet";
 const MANIFEST_BYTES: &[u8] = b"manifest";
 const MEMBERS_BYTES: &[u8] = b"members";
+const CURVE_BYTES: &[u8] = b"curve-points";
 
 #[test]
 fn artifact_signal_data_and_universe_require_complete_verified_payloads() {
@@ -249,6 +250,15 @@ fn request_factory_rejects_scope_owner_role_size_and_payload_drift() {
     )
     .unwrap();
     assert_eq!(valid.tenant_id(), scope().tenant_id());
+    let curve = request(
+        scope(),
+        owner(),
+        VerifiedReadResourceKind::CurveSnapshot,
+        VerifiedBlobRole::CurvePoints,
+        CURVE_BYTES,
+    )
+    .unwrap();
+    assert_eq!(curve.blob_role(), VerifiedBlobRole::CurvePoints);
 
     let wrong_scope = AccessScope::new(id('T'), id('B'), vec![id('Z')]).unwrap();
     let error = request(
@@ -564,6 +574,7 @@ fn bytes_for(role: VerifiedBlobRole) -> &'static [u8] {
         VerifiedBlobRole::DataParquet => PARQUET_BYTES,
         VerifiedBlobRole::DataManifest => MANIFEST_BYTES,
         VerifiedBlobRole::UniverseMembersManifest => MEMBERS_BYTES,
+        VerifiedBlobRole::CurvePoints => CURVE_BYTES,
     }
 }
 

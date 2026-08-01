@@ -255,6 +255,19 @@ async fn insert_definition(
                             ficant_domain::market::IncomeTaxStatus::Exempt => "exempt",
                             ficant_domain::market::IncomeTaxStatus::Taxable => "taxable",
                         });
+                    let pricing = bond.pricing_terms();
+                    let coupon_frequency = pricing.map(|value| match value.frequency() {
+                        ficant_domain::market::BondCouponFrequency::Annual => "annual",
+                        ficant_domain::market::BondCouponFrequency::Semiannual => "semiannual",
+                    });
+                    let day_count = pricing.map(|value| match value.day_count() {
+                        ficant_domain::market::BondDayCountConvention::ActActBondIsma => {
+                            "act_act_bond_isma"
+                        }
+                    });
+                    let business_day = pricing.map(|value| match value.business_day() {
+                        ficant_domain::market::BondBusinessDayConvention::Following => "following",
+                    });
                     sqlx::query(
                         "INSERT INTO market.bonds
                          (tenant_id, instrument_id, version, issue_date, first_issue_date,
@@ -262,9 +275,12 @@ async fn insert_definition(
                           cumulative_issued_scale, cumulative_issued_unit_id,
                           cumulative_issued_unit_version, value_added_tax_status,
                           income_tax_status, face_coefficient, face_scale, face_unit_id,
-                          face_unit_version, payload)
+                          face_unit_version, coupon_coefficient, coupon_scale, coupon_unit_id,
+                          coupon_unit_version, coupon_frequency, day_count_convention,
+                          business_day_convention, payload)
                          VALUES ($1, $2, $3, $4, $5, $6, $7, $8::numeric, $9, $10, $11,
-                                 $12, $13, $14::numeric, $15, $16, $17, $18)",
+                                 $12, $13, $14::numeric, $15, $16, $17, $18::numeric, $19,
+                                 $20, $21, $22, $23, $24, $25)",
                     )
                     .bind(tenant)
                     .bind(instrument.id().as_str())
@@ -295,6 +311,22 @@ async fn insert_definition(
                     .bind(i32::try_from(bond.face_value().scale()).map_err(|_| invalid())?)
                     .bind(bond.face_value().unit().unit_id().as_str())
                     .bind(version_i64(bond.face_value().unit().version().get())?)
+                    .bind(pricing.map(|value| value.coupon_rate().coefficient()))
+                    .bind(
+                        pricing
+                            .map(|value| i32::try_from(value.coupon_rate().scale()))
+                            .transpose()
+                            .map_err(|_| invalid())?,
+                    )
+                    .bind(pricing.map(|value| value.coupon_rate().unit().unit_id().as_str()))
+                    .bind(
+                        pricing
+                            .map(|value| version_i64(value.coupon_rate().unit().version().get()))
+                            .transpose()?,
+                    )
+                    .bind(coupon_frequency)
+                    .bind(day_count)
+                    .bind(business_day)
                     .bind(&payload)
                     .execute(&mut **transaction)
                     .await

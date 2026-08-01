@@ -14,6 +14,7 @@ pub enum VerifiedReadResourceKind {
     SignalSet,
     DataSnapshot,
     UniverseSnapshot,
+    CurveSnapshot,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,6 +24,7 @@ pub enum VerifiedBlobRole {
     DataParquet,
     DataManifest,
     UniverseMembersManifest,
+    CurvePoints,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -504,6 +506,9 @@ fn role_matches(kind: VerifiedReadResourceKind, role: VerifiedBlobRole) -> bool 
         ) | (
             VerifiedReadResourceKind::UniverseSnapshot,
             VerifiedBlobRole::UniverseMembersManifest
+        ) | (
+            VerifiedReadResourceKind::CurveSnapshot,
+            VerifiedBlobRole::CurvePoints
         )
     )
 }

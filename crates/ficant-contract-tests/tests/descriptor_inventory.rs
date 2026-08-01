@@ -264,6 +264,38 @@ fn factor_registry_service_has_exact_unary_rpcs() {
 }
 
 #[test]
+fn r4d_a_bond_curve_and_portfolio_risk_contracts_are_exact() {
+    let descriptor_set = descriptor_set();
+    let messages = top_level_messages(descriptor_set);
+    assert_fields(
+        &messages,
+        "ficant.market.v1.CurvePoint",
+        &[
+            ExpectedField::scalar("curve_node_id", Type::String),
+            ExpectedField::message("curve_node_content_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("yield_to_maturity", ".ficant.core.v1.DecimalValue"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.market.v1.CurvePointSet",
+        &[
+            ExpectedField::scalar("curve_family_id", Type::String),
+            ExpectedField::repeated_message("points", ".ficant.market.v1.CurvePoint"),
+        ],
+    );
+    assert_exact_service(
+        descriptor_set,
+        "ficant.research.v1.PortfolioRiskService",
+        &[ExpectedMethod::new(
+            "CalculateKeyRateDv01",
+            ".ficant.research.v1.CalculateKeyRateDv01Request",
+            ".ficant.research.v1.CalculateKeyRateDv01Response",
+        )],
+    );
+}
+
+#[test]
 fn market_definition_query_service_has_exact_signatures() {
     let descriptor_set = descriptor_set();
     assert_exact_service(
@@ -1178,6 +1210,8 @@ fn assert_phase1_objects(messages: &BTreeMap<String, &DescriptorProto>) {
                 ExpectedField::scalar("point_schema", Type::String),
                 ExpectedField::message("content_hash", hash),
                 ExpectedField::repeated_message("lineage", lineage),
+                ExpectedField::message("visible_at", time),
+                ExpectedField::scalar("curve_family_id", Type::String),
             ],
         ),
         (
@@ -1347,7 +1381,43 @@ fn assert_bond_contract(messages: &BTreeMap<String, &DescriptorProto>) {
         false,
         false,
     );
-    assert_eq!(bond.field.len(), 7, "Bond field drift");
+    assert_exact_field(
+        bond,
+        "coupon_rate",
+        9,
+        Type::Message,
+        Some(".ficant.core.v1.DecimalValue"),
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond,
+        "coupon_frequency",
+        10,
+        Type::Enum,
+        Some(".ficant.market.v1.BondCouponFrequency"),
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond,
+        "day_count",
+        11,
+        Type::Enum,
+        Some(".ficant.market.v1.BondDayCountConvention"),
+        false,
+        false,
+    );
+    assert_exact_field(
+        bond,
+        "business_day",
+        12,
+        Type::Enum,
+        Some(".ficant.market.v1.BondBusinessDayConvention"),
+        false,
+        false,
+    );
+    assert_eq!(bond.field.len(), 11, "Bond field drift");
     assert_reserved_tag(messages, "ficant.market.v1.Bond", 2);
     assert_fields(
         messages,
@@ -2965,6 +3035,7 @@ fn expected_service_fqns() -> BTreeSet<String> {
         "ficant.research.v1.SnapshotService".to_owned(),
         "ficant.research.v1.PositionSnapshotService".to_owned(),
         "ficant.research.v1.FactorRegistryService".to_owned(),
+        "ficant.research.v1.PortfolioRiskService".to_owned(),
         "ficant.research.v1.ExperimentService".to_owned(),
         "ficant.research.v1.ArtifactService".to_owned(),
         "ficant.app.v1.PlatformService".to_owned(),

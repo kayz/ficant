@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package ficant.research.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+
+message RiskAlgorithmBinding {
+  string algorithm_id = 1;
+  uint32 algorithm_version = 2;
+  string convention_profile = 3;
+}
+
+message FactorDv01 {
+  string factor_id = 1;
+  ficant.core.v1.Sha256 factor_definition_hash = 2;
+  ficant.core.v1.DecimalValue dv01 = 3;
+}
+
+message PositionKeyRateExposure {
+  ficant.core.v1.Ulid position_id = 1;
+  ficant.core.v1.VersionRef instrument = 2;
+  repeated FactorDv01 exposures = 3;
+  ficant.core.v1.Sha256 content_hash = 4;
+  repeated ficant.core.v1.LineageRef lineage = 5;
+}
+
+message PortfolioKeyRateExposure {
+  ficant.core.v1.Ulid position_snapshot_id = 1;
+  ficant.core.v1.Ulid curve_snapshot_id = 2;
+  repeated PositionKeyRateExposure positions = 3;
+  repeated FactorDv01 totals = 4;
+  RiskAlgorithmBinding algorithm = 5;
+  ficant.core.v1.Sha256 content_hash = 6;
+  repeated ficant.core.v1.LineageRef lineage = 7;
+}
+
+message CalculateKeyRateDv01Request {
+  ficant.core.v1.Ulid position_snapshot_id = 1;
+  ficant.core.v1.MarketTime knowledge_at = 2;
+  ficant.core.v1.MarketTime valuation_at = 3;
+  ficant.core.v1.Ulid curve_snapshot_id = 4;
+  ficant.core.v1.UnitRef dv01_unit = 5;
+}
+
+message CalculateKeyRateDv01Response {
+  oneof result {
+    PortfolioKeyRateExposure exposure = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+service PortfolioRiskService {
+  rpc CalculateKeyRateDv01(CalculateKeyRateDv01Request) returns (CalculateKeyRateDv01Response);
+}

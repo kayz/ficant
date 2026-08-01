@@ -121,6 +121,7 @@ impl S3BlobStore {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn formal_blob_reference(
         &self,
         request: &RequiredVerifiedBlobRead,
@@ -210,6 +211,26 @@ impl S3BlobStore {
                     declared_size: None,
                     linkage_valid: true,
                 }))
+            }
+            (VerifiedReadResourceKind::CurveSnapshot, VerifiedBlobRole::CurvePoints) => {
+                let row: Option<(String, String, i64)> = sqlx::query_as(
+                    "SELECT owner_id::text, content_hash::text, blob_size
+                     FROM market.curve_snapshots
+                     WHERE tenant_id=$1 AND curve_snapshot_id=$2",
+                )
+                .bind(request.tenant_id().as_str())
+                .bind(request.resource_id().as_str())
+                .fetch_optional(&self.tracking_pool)
+                .await
+                .map_err(map_sqlx_error)?;
+                Ok(row.map(
+                    |(owner_id, content_hash, declared_size)| FormalBlobReference {
+                        owner_id,
+                        content_hash,
+                        declared_size: Some(declared_size),
+                        linkage_valid: true,
+                    },
+                ))
             }
             _ => Err(validation_error()),
         }

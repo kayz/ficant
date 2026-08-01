@@ -23,6 +23,66 @@ pub struct BondTaxAttributes {
     income_tax_status: IncomeTaxStatus,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BondCouponFrequency {
+    Annual,
+    Semiannual,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BondDayCountConvention {
+    ActActBondIsma,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BondBusinessDayConvention {
+    Following,
+}
+
+/// Complete registered pricing terms required by R4d-a fixed-rate bond repricing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BondPricingTerms {
+    coupon_rate: DecimalValue,
+    frequency: BondCouponFrequency,
+    day_count: BondDayCountConvention,
+    business_day: BondBusinessDayConvention,
+}
+
+impl BondPricingTerms {
+    pub fn new(
+        coupon_rate: DecimalValue,
+        frequency: BondCouponFrequency,
+        day_count: BondDayCountConvention,
+        business_day: BondBusinessDayConvention,
+    ) -> DomainResult<Self> {
+        if coupon_rate.coefficient().starts_with('-') {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        Ok(Self {
+            coupon_rate,
+            frequency,
+            day_count,
+            business_day,
+        })
+    }
+
+    pub fn coupon_rate(&self) -> &DecimalValue {
+        &self.coupon_rate
+    }
+
+    pub const fn frequency(&self) -> BondCouponFrequency {
+        self.frequency
+    }
+
+    pub const fn day_count(&self) -> BondDayCountConvention {
+        self.day_count
+    }
+
+    pub const fn business_day(&self) -> BondBusinessDayConvention {
+        self.business_day
+    }
+}
+
 impl BondTaxAttributes {
     #[must_use]
     pub const fn new(
@@ -55,6 +115,7 @@ pub struct Bond {
     cumulative_issued_amount: DecimalValue,
     tax_attributes: Option<BondTaxAttributes>,
     face_value: DecimalValue,
+    pricing_terms: Option<BondPricingTerms>,
 }
 
 impl Bond {
@@ -82,6 +143,7 @@ impl Bond {
             cumulative_issued_amount: face_value.clone(),
             tax_attributes: None,
             face_value,
+            pricing_terms: None,
         })
     }
 
@@ -116,7 +178,17 @@ impl Bond {
             cumulative_issued_amount,
             tax_attributes: Some(tax_attributes),
             face_value,
+            pricing_terms: None,
         })
+    }
+
+    /// Adds the complete immutable pricing shape without changing legacy constructors.
+    pub fn with_pricing_terms(mut self, pricing_terms: BondPricingTerms) -> DomainResult<Self> {
+        if self.pricing_terms.is_some() || self.tax_attributes.is_none() {
+            return Err(DomainErrorCode::InvalidStateTransition);
+        }
+        self.pricing_terms = Some(pricing_terms);
+        Ok(self)
     }
 
     pub fn instrument(&self) -> &VersionRef {
@@ -145,5 +217,9 @@ impl Bond {
 
     pub fn tax_attributes(&self) -> Option<BondTaxAttributes> {
         self.tax_attributes
+    }
+
+    pub fn pricing_terms(&self) -> Option<&BondPricingTerms> {
+        self.pricing_terms.as_ref()
     }
 }

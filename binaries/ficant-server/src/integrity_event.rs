@@ -60,6 +60,7 @@ const fn resource_kind(kind: VerifiedReadResourceKind) -> &'static str {
         VerifiedReadResourceKind::SignalSet => "signal_set",
         VerifiedReadResourceKind::DataSnapshot => "data_snapshot",
         VerifiedReadResourceKind::UniverseSnapshot => "universe_snapshot",
+        VerifiedReadResourceKind::CurveSnapshot => "curve_snapshot",
     }
 }
 
@@ -70,6 +71,7 @@ const fn blob_role(role: VerifiedBlobRole) -> &'static str {
         VerifiedBlobRole::DataParquet => "data_parquet",
         VerifiedBlobRole::DataManifest => "data_manifest",
         VerifiedBlobRole::UniverseMembersManifest => "universe_members_manifest",
+        VerifiedBlobRole::CurvePoints => "curve_points",
     }
 }
 
