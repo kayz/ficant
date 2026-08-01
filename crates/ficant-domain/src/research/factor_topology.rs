@@ -332,13 +332,13 @@ fn is_id_segment(segment: &str) -> bool {
 }
 
 fn validate_tenor(value: &str) -> DomainResult<()> {
-    if !value.starts_with('P')
-        || value.len() < 3
-        || !value[1..]
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'Y' | b'M' | b'D'))
-        || !value.bytes().any(|byte| byte.is_ascii_digit())
+    let bytes = value.as_bytes();
+    if bytes.len() < 3 || bytes[0] != b'P' || !matches!(bytes[bytes.len() - 1], b'Y' | b'M' | b'D')
     {
+        return Err(DomainErrorCode::InvalidValue);
+    }
+    let amount = &bytes[1..bytes.len() - 1];
+    if amount[0] == b'0' || !amount.iter().all(u8::is_ascii_digit) {
         return Err(DomainErrorCode::InvalidValue);
     }
     Ok(())
