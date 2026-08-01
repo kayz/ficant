@@ -87,6 +87,7 @@ pub struct PositionKeyRateExposure {
     position_id: Ulid,
     instrument: VersionRef,
     exposures: Vec<FactorDv01>,
+    input_evidence_hashes: Vec<ContentHash>,
     content_hash: ContentHash,
     lineage: Vec<LineageRef>,
 }
@@ -96,24 +97,36 @@ impl PositionKeyRateExposure {
         position_id: Ulid,
         instrument: VersionRef,
         exposures: Vec<FactorDv01>,
+        input_evidence_hashes: Vec<ContentHash>,
         lineage: Vec<LineageRef>,
     ) -> DomainResult<Self> {
         if exposures.is_empty()
+            || input_evidence_hashes.is_empty()
             || lineage.is_empty()
             || exposures
                 .windows(2)
-                .any(|pair| pair[0].factor_id() == pair[1].factor_id())
+                .any(|pair| pair[0].factor_id() >= pair[1].factor_id())
+            || input_evidence_hashes
+                .windows(2)
+                .any(|pair| pair[0] >= pair[1])
             || exposures
                 .iter()
                 .any(|value| value.unit() != exposures[0].unit())
         {
             return Err(DomainErrorCode::BrokenLineage);
         }
-        let content_hash = hash_position(&position_id, &instrument, &exposures, &lineage);
+        let content_hash = hash_position(
+            &position_id,
+            &instrument,
+            &exposures,
+            &input_evidence_hashes,
+            &lineage,
+        );
         Ok(Self {
             position_id,
             instrument,
             exposures,
+            input_evidence_hashes,
             content_hash,
             lineage,
         })
@@ -129,6 +142,10 @@ impl PositionKeyRateExposure {
 
     pub fn exposures(&self) -> &[FactorDv01] {
         &self.exposures
+    }
+
+    pub fn input_evidence_hashes(&self) -> &[ContentHash] {
+        &self.input_evidence_hashes
     }
 }
 
@@ -254,7 +271,7 @@ impl PortfolioKeyRateExposure {
         append(&mut bytes, &algorithm.algorithm_version().to_be_bytes());
         append(&mut bytes, algorithm.convention_profile().as_bytes());
         for reference in &lineage {
-            append(&mut bytes, reference.object_id().as_str().as_bytes());
+            append_lineage(&mut bytes, reference);
         }
         let content_hash = ContentHash::digest(&bytes);
         Ok(Self {
@@ -305,6 +322,7 @@ fn hash_position(
     position_id: &Ulid,
     instrument: &VersionRef,
     exposures: &[FactorDv01],
+    input_evidence_hashes: &[ContentHash],
     lineage: &[LineageRef],
 ) -> ContentHash {
     let mut bytes = Vec::new();
@@ -318,18 +336,25 @@ fn hash_position(
         append(&mut bytes, exposure.unit.unit_id().as_str().as_bytes());
         append(&mut bytes, &exposure.unit.version().get().to_be_bytes());
     }
+    for hash in input_evidence_hashes {
+        append(&mut bytes, hash.as_bytes());
+    }
     for reference in lineage {
-        append(&mut bytes, reference.object_id().as_str().as_bytes());
-        append(
-            &mut bytes,
-            &reference.version().map_or(0, Version::get).to_be_bytes(),
-        );
-        match reference.content_hash() {
-            Some(hash) => append(&mut bytes, hash.as_bytes()),
-            None => append(&mut bytes, &[]),
-        }
+        append_lineage(&mut bytes, reference);
     }
     ContentHash::digest(&bytes)
+}
+
+fn append_lineage(bytes: &mut Vec<u8>, reference: &LineageRef) {
+    append(bytes, reference.object_id().as_str().as_bytes());
+    append(
+        bytes,
+        &reference.version().map_or(0, Version::get).to_be_bytes(),
+    );
+    match reference.content_hash() {
+        Some(hash) => append(bytes, hash.as_bytes()),
+        None => append(bytes, &[]),
+    }
 }
 
 fn append(bytes: &mut Vec<u8>, value: &[u8]) {

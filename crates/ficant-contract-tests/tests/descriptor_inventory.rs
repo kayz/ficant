@@ -267,6 +267,7 @@ fn factor_registry_service_has_exact_unary_rpcs() {
 fn r4d_a_bond_curve_and_portfolio_risk_contracts_are_exact() {
     let descriptor_set = descriptor_set();
     let messages = top_level_messages(descriptor_set);
+    let enums = top_level_enums(descriptor_set);
     assert_fields(
         &messages,
         "ficant.market.v1.CurvePoint",
@@ -282,6 +283,99 @@ fn r4d_a_bond_curve_and_portfolio_risk_contracts_are_exact() {
         &[
             ExpectedField::scalar("curve_family_id", Type::String),
             ExpectedField::repeated_message("points", ".ficant.market.v1.CurvePoint"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.RiskAlgorithmBinding",
+        &[
+            ExpectedField::scalar("algorithm_id", Type::String),
+            ExpectedField::scalar("algorithm_version", Type::Uint32),
+            ExpectedField::scalar("convention_profile", Type::String),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.FactorDv01",
+        &[
+            ExpectedField::scalar("factor_id", Type::String),
+            ExpectedField::message("factor_definition_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("dv01", ".ficant.core.v1.DecimalValue"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.PositionKeyRateExposure",
+        &[
+            ExpectedField::message("position_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("instrument", ".ficant.core.v1.VersionRef"),
+            ExpectedField::repeated_message("exposures", ".ficant.research.v1.FactorDv01"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.PortfolioKeyRateExposure",
+        &[
+            ExpectedField::message("position_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("curve_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::repeated_message(
+                "positions",
+                ".ficant.research.v1.PositionKeyRateExposure",
+            ),
+            ExpectedField::repeated_message("totals", ".ficant.research.v1.FactorDv01"),
+            ExpectedField::message("algorithm", ".ficant.research.v1.RiskAlgorithmBinding"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.CalculateKeyRateDv01Request",
+        &[
+            ExpectedField::message("position_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("knowledge_at", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("valuation_at", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("curve_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("dv01_unit", ".ficant.core.v1.UnitRef"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.CalculateKeyRateDv01Response",
+        &[
+            ExpectedField::oneof_message(
+                "exposure",
+                ".ficant.research.v1.PortfolioKeyRateExposure",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.market.v1.BondCouponFrequency",
+        &[
+            ("BOND_COUPON_FREQUENCY_UNSPECIFIED", 0),
+            ("BOND_COUPON_FREQUENCY_ANNUAL", 1),
+            ("BOND_COUPON_FREQUENCY_SEMIANNUAL", 2),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.market.v1.BondDayCountConvention",
+        &[
+            ("BOND_DAY_COUNT_CONVENTION_UNSPECIFIED", 0),
+            ("BOND_DAY_COUNT_CONVENTION_ACT_ACT_BOND_ISMA", 1),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.market.v1.BondBusinessDayConvention",
+        &[
+            ("BOND_BUSINESS_DAY_CONVENTION_UNSPECIFIED", 0),
+            ("BOND_BUSINESS_DAY_CONVENTION_FOLLOWING", 1),
         ],
     );
     assert_exact_service(

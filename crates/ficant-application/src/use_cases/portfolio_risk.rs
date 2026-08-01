@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use chrono::{Datelike, Days, Months, NaiveDate, Weekday};
 use ficant_domain::analytics::{
@@ -17,7 +17,7 @@ use ficant_domain::primitives::{
 };
 use ficant_domain::research::{
     CurveNodeDefinition, CurveNodeRef, CurveRebuildPolicy, FactorDefinition, FactorDv01,
-    FactorTarget, InstrumentFactorTarget, PortfolioKeyRateExposure, Position,
+    FactorTarget, FactorTargetBinding, InstrumentFactorTarget, PortfolioKeyRateExposure, Position,
     PositionKeyRateExposure, PositionSnapshot, RiskAlgorithmBinding, SecondOrderPolicy,
     SensitivityDirection, key_rate_dv01,
 };
@@ -36,7 +36,6 @@ use crate::{ApplicationError, ApplicationErrorCategory, map_domain_error};
 pub const R4D_A_ALGORITHM_ID: &str = "ficant.fixed-rate-bond.key-rate-yield";
 pub const R4D_A_ALGORITHM_VERSION: u32 = 1;
 pub const R4D_A_CONVENTION_PROFILE: &str = "linear-ytm-registered-bond-v1";
-const FIXED_SCALE: i128 = 1_000_000_000_000;
 const FIXED_DECIMAL_SCALE: u32 = 12;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -284,6 +283,8 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
                 return Err(lineage());
             }
             let factor = factors.into_iter().next().expect("length checked");
+            let curve_binding =
+                FactorTargetBinding::new(factor.factor_id(), target).map_err(map_domain_error)?;
             validate_factor(point, &node, &factor)?;
             let factor_unit = self.read_unit(scope, factor.factor_unit()).await?;
             validate_decimal_unit(
@@ -302,6 +303,8 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
                 maturity_date: tenor_date(curve.as_of().local_trading_date(), node.tenor())?,
                 yield_to_maturity: decimal_to_fixed(point.yield_to_maturity())?,
                 bump_yield: decimal_to_fixed(factor.convention().bump())?,
+                node_content_hash: node.content_hash().clone(),
+                curve_binding_hash: curve_binding.content_hash().clone(),
                 factor,
                 factor_unit,
             });
@@ -406,8 +409,12 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             .get_target_factors(scope, &target)
             .await?
             .into_iter()
-            .map(|value| value.factor_id().to_owned())
-            .collect::<BTreeSet<_>>();
+            .map(|value| {
+                let binding = FactorTargetBinding::new(value.factor_id(), target.clone())
+                    .map_err(map_domain_error)?;
+                Ok((value.factor_id().to_owned(), binding.content_hash().clone()))
+            })
+            .collect::<ApplicationResult<BTreeMap<_, _>>>()?;
 
         let terms = BondTerms::with_issuance(
             bond.first_issue_date(),
@@ -534,7 +541,10 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
         )?;
         let base_price = self.price(&position, base_curve)?;
         let mut exposures = Vec::with_capacity(axis.len());
+        let mut input_evidence_hashes = Vec::with_capacity(axis.len() * 3);
         for (index, point) in axis.iter().enumerate() {
+            input_evidence_hashes.push(point.node_content_hash.clone());
+            input_evidence_hashes.push(point.curve_binding_hash.clone());
             let direction = point.factor.convention().direction();
             let up_price = if matches!(
                 direction,
@@ -575,14 +585,23 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
                     .checked_mul(10_000)
                     .ok_or_else(validation)?,
             );
-            let per_hundred = key_rate_dv01(base_price, up_price, down_price, bump_bp, direction)
-                .map_err(map_domain_error)?;
-            let value = scale_by_notional(per_hundred, &position.quantity)?;
+            let registered_face =
+                key_rate_dv01(base_price, up_price, down_price, bump_bp, direction)
+                    .map_err(map_domain_error)?;
+            let value = scale_by_notional(
+                registered_face,
+                &position.quantity,
+                position.terms.face_amount(),
+            )?;
             validate_fixed_output(value, output_unit_definition)?;
-            if value != FixedDecimal::ZERO
-                && !position.bound_factors.contains(point.factor.factor_id())
-            {
-                return Err(lineage());
+            if value != FixedDecimal::ZERO {
+                input_evidence_hashes.push(
+                    position
+                        .bound_factors
+                        .get(point.factor.factor_id())
+                        .ok_or_else(lineage)?
+                        .clone(),
+                );
             }
             exposures.push(
                 FactorDv01::new(
@@ -604,10 +623,13 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             )
             .map_err(map_domain_error)?,
         );
+        input_evidence_hashes.sort_unstable();
+        input_evidence_hashes.dedup();
         PositionKeyRateExposure::new(
             position.position_id,
             position.instrument,
             exposures,
+            input_evidence_hashes,
             position.lineage,
         )
         .map_err(map_domain_error)
@@ -713,6 +735,8 @@ struct AxisPoint {
     maturity_date: NaiveDate,
     yield_to_maturity: FixedDecimal,
     bump_yield: FixedDecimal,
+    node_content_hash: ContentHash,
+    curve_binding_hash: ContentHash,
 }
 
 struct PreparedPosition {
@@ -729,7 +753,7 @@ struct PreparedPosition {
     calendar_binding: CalendarBinding,
     terms: BondTerms,
     maturity_date: NaiveDate,
-    bound_factors: BTreeSet<String>,
+    bound_factors: BTreeMap<String, ContentHash>,
     lineage: Vec<LineageRef>,
 }
 
@@ -964,13 +988,17 @@ fn decimal_precision(coefficient: &str) -> u32 {
 fn scale_by_notional(
     value: FixedDecimal,
     quantity: &DecimalValue,
+    registered_face: FixedDecimal,
 ) -> ApplicationResult<FixedDecimal> {
+    if !registered_face.is_positive() {
+        return Err(validation());
+    }
     let quantity = decimal_to_fixed(quantity)?;
     let numerator = value
         .scaled()
         .checked_mul(quantity.scaled())
         .ok_or_else(validation)?;
-    let denominator = FIXED_SCALE.checked_mul(100).ok_or_else(validation)?;
+    let denominator = registered_face.scaled();
     if numerator % denominator != 0 {
         return Err(validation());
     }
