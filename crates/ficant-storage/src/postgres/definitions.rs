@@ -336,10 +336,12 @@ async fn insert_definition(
                     sqlx::query(
                         "INSERT INTO market.futures_contracts
                          (tenant_id, instrument_id, version, last_trade_time, expiry_time,
-                          settlement_time, multiplier_coefficient, multiplier_scale,
+                         settlement_time, multiplier_coefficient, multiplier_scale,
                           multiplier_unit_id, multiplier_unit_version, rule_pack_id,
-                          rule_pack_version, payload)
-                         VALUES ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13)",
+                          rule_pack_version, product_code, price_unit_id, price_unit_version,
+                          payload)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12,
+                                 $13, $14, $15, $16)",
                     )
                     .bind(tenant)
                     .bind(instrument.id().as_str())
@@ -353,6 +355,14 @@ async fn insert_definition(
                     .bind(version_i64(future.multiplier().unit().version().get())?)
                     .bind(future.rule_pack().id().as_str())
                     .bind(version_i64(future.rule_pack().version().get())?)
+                    .bind(future.product_code())
+                    .bind(future.price_unit().map(|value| value.unit_id().as_str()))
+                    .bind(
+                        future
+                            .price_unit()
+                            .map(|value| version_i64(value.version().get()))
+                            .transpose()?,
+                    )
                     .bind(&payload)
                     .execute(&mut **transaction)
                     .await

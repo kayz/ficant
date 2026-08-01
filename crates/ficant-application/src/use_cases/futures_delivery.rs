@@ -1,14 +1,20 @@
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
-use chrono::NaiveDate;
-use ficant_domain::analytics::{AnalyticsObjectRef, BondTerms, DECIMAL_SCALE, FixedDecimal};
+use chrono::{Datelike, NaiveDate};
+use ficant_domain::analytics::{
+    AnalyticsObjectRef, BondTerms, BusinessDayConvention, CouponFrequency, DECIMAL_SCALE,
+    DayCountConvention, FixedDecimal,
+};
 use ficant_domain::futures_delivery::{
     CgbFuturesProduct, FuturesDeliverableInput, FuturesDeliveryBasketResult, FuturesDeliveryResult,
     FuturesDeliveryRule, is_deliverable_by_dates,
 };
-use ficant_domain::market::{Bond, FuturesContract, InstrumentKind, MarketRulePack};
+use ficant_domain::market::{
+    Bond, BondBusinessDayConvention, BondCouponFrequency, BondDayCountConvention, FuturesContract,
+    InstrumentKind, MarketRulePack,
+};
 use ficant_domain::primitives::{
-    DecimalValue, LineageRef, MarketTime, OwnerRef, Ulid, UnitRef, VersionRef,
+    ContentHash, DecimalValue, LineageRef, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
 };
 use ficant_domain::research::{Artifact, ArtifactKind};
 use ficant_domain::{ContentAddressed, DomainErrorCode, Lineaged, VersionedDefinition};
@@ -19,7 +25,7 @@ use crate::ports::{
     FuturesDeliveryEngine, FuturesDeliveryRuleParser, IdempotencyKey, InstrumentSubtype,
     IntegrityEventSink, PublishArtifact, RequiredVerifiedBlobRead, SafeTraceContext,
     SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader, VerifiedBlobRole,
-    VerifiedReadResourceKind, VerifyBlobStage,
+    VerifiedReadResourceKind, VerifyBlobStage, definition_content_hash,
 };
 use crate::use_cases::bond_analytics::map_analytics_error;
 use crate::use_cases::verified_reads::{VerifiedSnapshotRead, VerifiedSnapshotReader};
@@ -504,6 +510,466 @@ impl<'a> MaterializeFuturesDeliveryInputs<'a> {
         }
         Ok(eligible)
     }
+}
+
+/// Exact server-derived delivery inputs and the hashes consumed by portfolio risk.
+#[derive(Clone, Debug)]
+pub struct RegisteredFuturesDeliveryMaterialization {
+    inputs: Vec<FuturesDeliverableInput>,
+    rule: FuturesDeliveryRule,
+    contract: FuturesContract,
+    input_evidence_hashes: Vec<ContentHash>,
+    lineage: Vec<LineageRef>,
+}
+
+impl RegisteredFuturesDeliveryMaterialization {
+    #[must_use]
+    pub fn inputs(&self) -> &[FuturesDeliverableInput] {
+        &self.inputs
+    }
+
+    #[must_use]
+    pub fn rule(&self) -> &FuturesDeliveryRule {
+        &self.rule
+    }
+
+    #[must_use]
+    pub fn contract(&self) -> &FuturesContract {
+        &self.contract
+    }
+
+    #[must_use]
+    pub fn input_evidence_hashes(&self) -> &[ContentHash] {
+        &self.input_evidence_hashes
+    }
+
+    #[must_use]
+    pub fn lineage(&self) -> &[LineageRef] {
+        &self.lineage
+    }
+}
+
+/// Builds one complete concrete-futures delivery basket without caller-supplied market values.
+pub struct MaterializeRegisteredFuturesDelivery<'a> {
+    definitions: &'a dyn DefinitionRepository,
+    snapshots: VerifiedSnapshotReader<'a>,
+    decoder: &'a dyn CanonicalSnapshotDecoder,
+    parser: &'a dyn FuturesDeliveryRuleParser,
+}
+
+impl<'a> MaterializeRegisteredFuturesDelivery<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub const fn new(
+        definitions: &'a dyn DefinitionRepository,
+        snapshot_metadata: &'a dyn SnapshotVerifiedReadMetadataRepository,
+        blob_reader: &'a dyn VerifiedBlobReader,
+        integrity_events: &'a dyn IntegrityEventSink,
+        decoder: &'a dyn CanonicalSnapshotDecoder,
+        parser: &'a dyn FuturesDeliveryRuleParser,
+    ) -> Self {
+        Self {
+            definitions,
+            snapshots: VerifiedSnapshotReader::new(
+                snapshot_metadata,
+                blob_reader,
+                integrity_events,
+            ),
+            decoder,
+            parser,
+        }
+    }
+
+    /// Materializes a risk-ready exact contract, complete eligible basket, and exact midpoints.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed when any definition, rule, snapshot, quote, owner, time, unit, or hash
+    /// binding is absent or inconsistent.
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+    pub async fn execute(
+        &self,
+        scope: &AccessScope,
+        owner: &OwnerRef,
+        futures_contract_ref: &VersionRef,
+        data_snapshot_id: Ulid,
+        valuation_at: &MarketTime,
+        knowledge_at: &MarketTime,
+        trace: SafeTraceContext,
+    ) -> ApplicationResult<RegisteredFuturesDeliveryMaterialization> {
+        scope.authorize(owner)?;
+        let definition = self
+            .definitions
+            .get_version(
+                scope,
+                futures_contract_ref.id().clone(),
+                futures_contract_ref.version(),
+            )
+            .await?
+            .ok_or_else(lineage_incomplete)?;
+        let DefinitionValue::Instrument(instrument) = definition else {
+            return Err(lineage_incomplete());
+        };
+        if instrument.owner() != owner
+            || instrument.instrument().version_ref() != *futures_contract_ref
+            || instrument.instrument().kind() != InstrumentKind::Futures
+        {
+            return Err(lineage_incomplete());
+        }
+        let Some(InstrumentSubtype::FuturesContract(contract)) = instrument.subtype() else {
+            return Err(lineage_incomplete());
+        };
+        let product_code = contract.product_code().ok_or_else(lineage_incomplete)?;
+        let price_unit = contract.price_unit().ok_or_else(lineage_incomplete)?;
+        if contract.instrument() != futures_contract_ref
+            || valuation_at.instant() > contract.last_trade_time().instant()
+            || contract.last_trade_time().market_timezone() != valuation_at.market_timezone()
+            || contract.expiry_time().market_timezone() != valuation_at.market_timezone()
+            || contract.settlement_time().market_timezone() != valuation_at.market_timezone()
+        {
+            return Err(lineage_incomplete());
+        }
+        let product = self.parser.parse_product_code(product_code)?;
+
+        let rule_value = self
+            .definitions
+            .get_version(
+                scope,
+                contract.rule_pack().id().clone(),
+                contract.rule_pack().version(),
+            )
+            .await?
+            .ok_or_else(lineage_incomplete)?;
+        let DefinitionValue::MarketRulePack(rule_pack) = rule_value else {
+            return Err(lineage_incomplete());
+        };
+        let rule_binding = AnalyticsObjectRef::new(
+            contract.rule_pack().clone(),
+            rule_pack.content_hash().clone(),
+        );
+        validate_delivery_rule_pack(scope, &rule_binding, valuation_at, &rule_pack, self.parser)?;
+        if rule_pack.owner() != owner {
+            return Err(lineage_incomplete());
+        }
+        let content = rule_pack
+            .content()
+            .ok_or_else(|| ApplicationError::rule_pack_item_missing("context.rule_pack.content"))?;
+        let rule = self.parser.parse_for_portfolio_risk(content, product)?;
+
+        let verified = self
+            .snapshots
+            .read(scope, data_snapshot_id.clone(), trace)
+            .await?;
+        let VerifiedSnapshotRead::Data {
+            snapshot,
+            parquet,
+            manifest,
+        } = verified
+        else {
+            return Err(lineage_incomplete());
+        };
+        if snapshot.id() != &data_snapshot_id
+            || snapshot.owner() != owner
+            || snapshot.as_of() != valuation_at
+            || snapshot.visible_at().instant() < snapshot.as_of().instant()
+            || snapshot.visible_at().instant() > knowledge_at.instant()
+        {
+            return Err(lineage_incomplete());
+        }
+        let decoded = self
+            .decoder
+            .decode_quotes(&snapshot, parquet.bytes(), manifest.bytes())
+            .await?;
+        let quotes = exact_midpoint_quotes(&snapshot, valuation_at, price_unit, decoded)?;
+        let futures_quote = quotes
+            .get(futures_contract_ref)
+            .ok_or_else(lineage_incomplete)?;
+        let futures_clean_price = exact_midpoint(futures_quote)?;
+        let delivery_date = contract.settlement_time().local_trading_date();
+        let delivery_month_first = delivery_date.with_day(1).ok_or_else(invalid)?;
+        let purchase_date = valuation_at.local_trading_date();
+        if purchase_date >= delivery_date {
+            return Err(invalid());
+        }
+
+        let contract_hash =
+            definition_content_hash(&DefinitionValue::Instrument(instrument.clone()));
+        let contract_ref =
+            AnalyticsObjectRef::new(futures_contract_ref.clone(), contract_hash.clone());
+        let snapshot_ref = AnalyticsObjectRef::new(
+            VersionRef::new(
+                data_snapshot_id.clone(),
+                Version::new(1).map_err(map_domain_error)?,
+            ),
+            snapshot.content_hash().clone(),
+        );
+        let mut inputs = Vec::new();
+        let mut evidence = vec![
+            contract_hash,
+            definition_content_hash(&DefinitionValue::MarketRulePack(rule_pack.clone())),
+            snapshot.content_hash().clone(),
+            quote_evidence_hash(futures_quote),
+        ];
+        let mut lineage = vec![
+            LineageRef::new(
+                futures_contract_ref.id().clone(),
+                Some(futures_contract_ref.version()),
+                Some(definition_content_hash(&DefinitionValue::Instrument(
+                    instrument.clone(),
+                ))),
+            )
+            .map_err(map_domain_error)?,
+            LineageRef::new(
+                contract.rule_pack().id().clone(),
+                Some(contract.rule_pack().version()),
+                Some(rule_pack.content_hash().clone()),
+            )
+            .map_err(map_domain_error)?,
+            LineageRef::new(
+                data_snapshot_id,
+                None,
+                Some(snapshot.content_hash().clone()),
+            )
+            .map_err(map_domain_error)?,
+        ];
+        for (reference, quote) in &quotes {
+            if reference == futures_contract_ref {
+                continue;
+            }
+            let Some(value) = self
+                .definitions
+                .get_version(scope, reference.id().clone(), reference.version())
+                .await?
+            else {
+                continue;
+            };
+            let DefinitionValue::Instrument(candidate) = value else {
+                continue;
+            };
+            if candidate.owner() != owner {
+                continue;
+            }
+            let Some(InstrumentSubtype::Bond(bond)) = candidate.subtype() else {
+                continue;
+            };
+            if !is_deliverable_by_dates(
+                &rule,
+                bond.first_issue_date(),
+                bond.maturity_date(),
+                delivery_month_first,
+            )
+            .map_err(map_domain_error)?
+            {
+                continue;
+            }
+            let terms = registered_bond_terms(bond)?;
+            let candidate_hash = definition_content_hash(&DefinitionValue::Instrument(candidate));
+            evidence.push(candidate_hash.clone());
+            evidence.push(quote_evidence_hash(quote));
+            lineage.push(
+                LineageRef::new(
+                    reference.id().clone(),
+                    Some(reference.version()),
+                    Some(candidate_hash.clone()),
+                )
+                .map_err(map_domain_error)?,
+            );
+            inputs.push(
+                FuturesDeliverableInput::new(
+                    owner.clone(),
+                    contract_ref.clone(),
+                    AnalyticsObjectRef::new(reference.clone(), candidate_hash),
+                    rule_binding.clone(),
+                    snapshot_ref.clone(),
+                    valuation_at.clone(),
+                    purchase_date,
+                    delivery_month_first,
+                    delivery_date,
+                    product,
+                    rule.clone(),
+                    terms,
+                    exact_midpoint(quote)?,
+                    futures_clean_price,
+                    FixedDecimal::ZERO,
+                )
+                .map_err(map_domain_error)?,
+            );
+        }
+        if inputs.is_empty() {
+            return Err(invalid());
+        }
+        inputs.sort_by(|left, right| left.bond().version_ref().cmp(right.bond().version_ref()));
+        evidence.extend(inputs.iter().map(FuturesDeliverableInput::fingerprint));
+        evidence.sort_unstable();
+        evidence.dedup();
+        lineage.sort_by(|left, right| {
+            left.object_id()
+                .cmp(right.object_id())
+                .then_with(|| left.version().cmp(&right.version()))
+        });
+        Ok(RegisteredFuturesDeliveryMaterialization {
+            inputs,
+            rule,
+            contract: contract.clone(),
+            input_evidence_hashes: evidence,
+            lineage,
+        })
+    }
+}
+
+fn registered_bond_terms(bond: &Bond) -> ApplicationResult<BondTerms> {
+    let pricing = bond.pricing_terms().ok_or_else(lineage_incomplete)?;
+    let tax = bond.tax_attributes().ok_or_else(lineage_incomplete)?;
+    BondTerms::with_issuance(
+        bond.first_issue_date(),
+        bond.current_issue_date(),
+        bond.maturity_date(),
+        match pricing.frequency() {
+            BondCouponFrequency::Annual => CouponFrequency::Annual,
+            BondCouponFrequency::Semiannual => CouponFrequency::Semiannual,
+        },
+        match pricing.day_count() {
+            BondDayCountConvention::ActActBondIsma => DayCountConvention::ActActBondIsma,
+        },
+        match pricing.business_day() {
+            BondBusinessDayConvention::Following => BusinessDayConvention::Following,
+        },
+        decimal_to_fixed_exact(pricing.coupon_rate())?,
+        decimal_to_fixed_exact(bond.face_value())?,
+        decimal_to_fixed_exact(bond.cumulative_issued_amount())?,
+        tax,
+    )
+    .map_err(map_domain_error)
+}
+
+fn decimal_to_fixed_exact(value: &DecimalValue) -> ApplicationResult<FixedDecimal> {
+    if value.scale() > 12 {
+        return Err(invalid());
+    }
+    let coefficient = value.coefficient().parse::<i128>().map_err(|_| invalid())?;
+    let factor = 10_i128
+        .checked_pow(12 - value.scale())
+        .ok_or_else(invalid)?;
+    Ok(FixedDecimal::from_scaled(
+        coefficient.checked_mul(factor).ok_or_else(invalid)?,
+    ))
+}
+
+fn exact_midpoint(quote: &CanonicalQuote) -> ApplicationResult<FixedDecimal> {
+    let bid = quote.bid().ok_or_else(invalid)?;
+    let ask = quote.ask().ok_or_else(invalid)?;
+    let sum = bid.scaled().checked_add(ask.scaled()).ok_or_else(invalid)?;
+    if sum % 2 != 0 {
+        return Err(invalid());
+    }
+    Ok(FixedDecimal::from_scaled(sum / 2))
+}
+
+fn exact_midpoint_quotes(
+    snapshot: &ficant_domain::research::DataSnapshot,
+    valuation_at: &MarketTime,
+    price_unit: &UnitRef,
+    decoded: Vec<CanonicalQuote>,
+) -> ApplicationResult<BTreeMap<VersionRef, CanonicalQuote>> {
+    let mut quotes = BTreeMap::new();
+    for quote in decoded {
+        if quote.observed_at().instant() > quote.visible_at().instant()
+            || quote.observed_at().market_timezone() != snapshot.as_of().market_timezone()
+            || quote.visible_at().market_timezone() != snapshot.visible_at().market_timezone()
+            || quote.observed_at().local_trading_date() != quote.local_trading_date()
+        {
+            return Err(invalid());
+        }
+        if quote.local_trading_date() != valuation_at.local_trading_date()
+            || quote.observed_at().instant() > snapshot.as_of().instant()
+            || quote.visible_at().instant() > snapshot.visible_at().instant()
+            || quote.unit() != price_unit
+        {
+            continue;
+        }
+        let bid = quote.bid().ok_or_else(invalid)?;
+        let ask = quote.ask().ok_or_else(invalid)?;
+        if !bid.is_positive() || !ask.is_positive() || bid > ask {
+            return Err(invalid());
+        }
+        exact_midpoint(&quote)?;
+        match quotes.entry(quote.instrument().clone()) {
+            Entry::Vacant(entry) => {
+                entry.insert(quote);
+            }
+            Entry::Occupied(mut entry) => {
+                let current = entry.get();
+                let ordering = quote
+                    .observed_at()
+                    .instant()
+                    .cmp(&current.observed_at().instant())
+                    .then_with(|| {
+                        quote
+                            .visible_at()
+                            .instant()
+                            .cmp(&current.visible_at().instant())
+                    });
+                match ordering {
+                    std::cmp::Ordering::Greater => {
+                        entry.insert(quote);
+                    }
+                    std::cmp::Ordering::Equal => return Err(invalid()),
+                    std::cmp::Ordering::Less => {}
+                }
+            }
+        }
+    }
+    Ok(quotes)
+}
+
+fn quote_evidence_hash(quote: &CanonicalQuote) -> ContentHash {
+    let mut bytes = Vec::new();
+    append_quote_field(&mut bytes, quote.instrument().id().as_str().as_bytes());
+    append_quote_field(
+        &mut bytes,
+        &quote.instrument().version().get().to_be_bytes(),
+    );
+    append_quote_field(
+        &mut bytes,
+        &quote
+            .observed_at()
+            .instant()
+            .timestamp_micros()
+            .to_be_bytes(),
+    );
+    append_quote_field(
+        &mut bytes,
+        &quote
+            .visible_at()
+            .instant()
+            .timestamp_micros()
+            .to_be_bytes(),
+    );
+    append_quote_field(
+        &mut bytes,
+        quote.local_trading_date().to_string().as_bytes(),
+    );
+    append_quote_field(
+        &mut bytes,
+        &quote
+            .bid()
+            .map_or(i128::MIN, FixedDecimal::scaled)
+            .to_be_bytes(),
+    );
+    append_quote_field(
+        &mut bytes,
+        &quote
+            .ask()
+            .map_or(i128::MIN, FixedDecimal::scaled)
+            .to_be_bytes(),
+    );
+    append_quote_field(&mut bytes, quote.unit().unit_id().as_str().as_bytes());
+    append_quote_field(&mut bytes, &quote.unit().version().get().to_be_bytes());
+    ContentHash::digest(&bytes)
+}
+
+fn append_quote_field(bytes: &mut Vec<u8>, value: &[u8]) {
+    bytes.extend_from_slice(&(value.len() as u64).to_be_bytes());
+    bytes.extend_from_slice(value);
 }
 
 fn exact_request_quotes(

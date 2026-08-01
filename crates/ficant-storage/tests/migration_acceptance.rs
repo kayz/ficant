@@ -39,7 +39,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
 
-    let expected_migration_versions = (1_i64..=19).collect::<Vec<_>>();
+    let expected_migration_versions = (1_i64..=20).collect::<Vec<_>>();
     let applied_before_repeat: Vec<(i64, bool)> =
         sqlx::query_as("SELECT version, success FROM public._sqlx_migrations ORDER BY version")
             .fetch_all(&pool)
@@ -79,6 +79,14 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
             .count(),
         1,
         "0019 must be recorded exactly once after its successful application"
+    );
+    assert_eq!(
+        applied_before_repeat
+            .iter()
+            .filter(|(version, success)| *version == 20 && *success)
+            .count(),
+        1,
+        "0020 must be recorded exactly once after its successful application"
     );
 
     let rows = sqlx::query(
@@ -242,6 +250,29 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     .await
     .expect("0019 all-or-none and FK constraints must be observable");
     assert_eq!(r4d_input_constraints, 3);
+    let futures_risk_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM information_schema.columns
+         WHERE table_schema = 'market' AND table_name = 'futures_contracts'
+           AND column_name = ANY($1)",
+    )
+    .bind(["product_code", "price_unit_id", "price_unit_version"])
+    .fetch_one(&pool)
+    .await
+    .expect("0020 Futures risk columns must be observable");
+    assert_eq!(futures_risk_columns, 3);
+    let futures_risk_constraints: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pg_constraint
+         WHERE conrelid = 'market.futures_contracts'::regclass
+           AND conname = ANY($1)",
+    )
+    .bind([
+        "futures_contracts_risk_terms_shape_check",
+        "futures_contracts_price_unit_fkey",
+    ])
+    .fetch_one(&pool)
+    .await
+    .expect("0020 Futures risk constraints must be observable");
+    assert_eq!(futures_risk_constraints, 2);
 
     let fixture =
         std::env::temp_dir().join(format!("ficant-failing-migration-{}", std::process::id()));
@@ -473,6 +504,65 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
             .expect("0019 failure history must be queryable");
     assert_eq!(failed_0019_history, 0);
     std::fs::remove_dir_all(fixture).expect("0019 migration fixture must be removed");
+
+    pool.close().await;
+    let pool = support::postgres_pool().await;
+    support::reset_postgres(&pool).await;
+    let fixture = std::env::temp_dir().join(format!(
+        "ficant-failing-0020-migration-{}",
+        std::process::id()
+    ));
+    if fixture.exists() {
+        std::fs::remove_dir_all(&fixture).expect("stale 0020 migration fixture must be removable");
+    }
+    std::fs::create_dir(&fixture).expect("0020 migration fixture directory must be creatable");
+    for version in 1..=19 {
+        let prefix = format!("{version:04}_");
+        let migration = std::fs::read_dir(&source)
+            .expect("migration source must be readable")
+            .filter_map(Result::ok)
+            .find(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+            .expect("each 0001..0019 migration must exist");
+        std::fs::copy(migration.path(), fixture.join(migration.file_name()))
+            .expect("pre-0020 migration must copy without mutation");
+    }
+    let pre_0020 = sqlx::migrate::Migrator::new(fixture.clone())
+        .await
+        .expect("pre-0020 migration fixture must load");
+    pre_0020
+        .run(&pool)
+        .await
+        .expect("0001..0019 migrations must apply before the 0020 failure check");
+    let original_0020 = std::fs::read_to_string(source.join("0020_r4d_b_futures_risk_terms.sql"))
+        .expect("0020 migration source must be readable");
+    std::fs::write(
+        fixture.join("0020_r4d_b_futures_risk_terms.sql"),
+        format!(
+            "{original_0020}\nINSERT INTO market.futures_contracts(unknown_column) VALUES ('x');\n"
+        ),
+    )
+    .expect("failing 0020 migration fixture must be writable");
+    let failing_0020 = sqlx::migrate::Migrator::new(fixture.clone())
+        .await
+        .expect("failing 0020 migration fixture must load");
+    assert!(failing_0020.run(&pool).await.is_err());
+    let risk_columns_after_failure: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM information_schema.columns
+         WHERE table_schema = 'market' AND table_name = 'futures_contracts'
+           AND column_name = ANY($1)",
+    )
+    .bind(["product_code", "price_unit_id", "price_unit_version"])
+    .fetch_one(&pool)
+    .await
+    .expect("0020 rollback columns must be observable");
+    assert_eq!(risk_columns_after_failure, 0);
+    let failed_0020_history: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM public._sqlx_migrations WHERE version = 20")
+            .fetch_one(&pool)
+            .await
+            .expect("0020 failure history must be queryable");
+    assert_eq!(failed_0020_history, 0);
+    std::fs::remove_dir_all(fixture).expect("0020 migration fixture must be removed");
 }
 
 #[tokio::test]

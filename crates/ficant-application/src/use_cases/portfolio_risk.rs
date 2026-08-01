@@ -8,6 +8,7 @@ use ficant_domain::analytics::{
 use ficant_domain::curves::{
     YieldCurveBinding, YieldCurveInterpolation, YieldCurveNode, YieldCurveQuery,
 };
+use ficant_domain::futures_delivery::FuturesDeliveryRule;
 use ficant_domain::market::{
     BondBusinessDayConvention, BondCouponFrequency, BondDayCountConvention, Calendar,
     MarketRulePack, Unit,
@@ -19,23 +20,30 @@ use ficant_domain::research::{
     CurveNodeDefinition, CurveNodeRef, CurveRebuildPolicy, FactorDefinition, FactorDv01,
     FactorTarget, FactorTargetBinding, InstrumentFactorTarget, PortfolioKeyRateExposure, Position,
     PositionKeyRateExposure, PositionSnapshot, RiskAlgorithmBinding, SecondOrderPolicy,
-    SensitivityDirection, key_rate_dv01,
+    SensitivityDirection, key_rate_dv01, scale_futures_key_rate_dv01,
 };
 use ficant_domain::{ContentAddressed, VersionedDefinition};
 
 use crate::ports::{
-    AccessScope, ApplicationResult, BondAnalyticsEngine, CurvePointSetDecoder,
-    CurveSnapshotMetadataRepository, DefinitionRepository, DefinitionValue,
-    FactorTopologyRepository, InstrumentSubtype, IntegrityEventSink, PositionSnapshotRepository,
-    RequiredVerifiedBlobRead, SafeTraceContext, VerifiedBlobReader, VerifiedBlobRole,
+    AccessScope, ApplicationResult, BondAnalyticsEngine, CanonicalSnapshotDecoder,
+    CurvePointSetDecoder, CurveSnapshotMetadataRepository, DefinitionRepository, DefinitionValue,
+    FactorTopologyRepository, FuturesDeliveryEngine, FuturesDeliveryRuleParser, InstrumentSubtype,
+    IntegrityEventSink, PositionSnapshotRepository, RequiredVerifiedBlobRead, SafeTraceContext,
+    SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader, VerifiedBlobRole,
     VerifiedReadResourceKind, YieldCurveEngine, definition_content_hash,
 };
 use crate::use_cases::bond_analytics::map_analytics_error;
+use crate::use_cases::futures_delivery::{
+    CalculateFuturesDeliveryBasket, MaterializeRegisteredFuturesDelivery,
+};
 use crate::{ApplicationError, ApplicationErrorCategory, map_domain_error};
 
 pub const R4D_A_ALGORITHM_ID: &str = "ficant.fixed-rate-bond.key-rate-yield";
 pub const R4D_A_ALGORITHM_VERSION: u32 = 1;
 pub const R4D_A_CONVENTION_PROFILE: &str = "linear-ytm-registered-bond-v1";
+pub const R4D_B_ALGORITHM_ID: &str = "ficant.fixed-income.portfolio-key-rate-yield";
+pub const R4D_B_ALGORITHM_VERSION: u32 = 1;
+pub const R4D_B_CONVENTION_PROFILE: &str = "linear-ytm-fixed-base-ctd-v1";
 const FIXED_DECIMAL_SCALE: u32 = 12;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -45,6 +53,7 @@ pub struct CalculateBondKeyRateDv01Command {
     valuation_at: MarketTime,
     curve_snapshot_id: Ulid,
     dv01_unit: UnitRef,
+    futures_data_snapshot_id: Option<Ulid>,
 }
 
 impl CalculateBondKeyRateDv01Command {
@@ -69,7 +78,32 @@ impl CalculateBondKeyRateDv01Command {
             valuation_at,
             curve_snapshot_id,
             dv01_unit,
+            futures_data_snapshot_id: None,
         })
+    }
+
+    /// Creates the full Bond + concrete Futures request bound to one verified quote snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the common portfolio-risk command fields are invalid.
+    pub fn new_with_futures_data_snapshot(
+        position_snapshot_id: Ulid,
+        knowledge_at: MarketTime,
+        valuation_at: MarketTime,
+        curve_snapshot_id: Ulid,
+        dv01_unit: UnitRef,
+        futures_data_snapshot_id: Ulid,
+    ) -> ApplicationResult<Self> {
+        let mut command = Self::new(
+            position_snapshot_id,
+            knowledge_at,
+            valuation_at,
+            curve_snapshot_id,
+            dv01_unit,
+        )?;
+        command.futures_data_snapshot_id = Some(futures_data_snapshot_id);
+        Ok(command)
     }
 
     #[must_use]
@@ -96,6 +130,11 @@ impl CalculateBondKeyRateDv01Command {
     pub fn dv01_unit(&self) -> &UnitRef {
         &self.dv01_unit
     }
+
+    #[must_use]
+    pub fn futures_data_snapshot_id(&self) -> Option<&Ulid> {
+        self.futures_data_snapshot_id.as_ref()
+    }
 }
 
 pub struct CalculateBondKeyRateDv01<'a> {
@@ -108,6 +147,10 @@ pub struct CalculateBondKeyRateDv01<'a> {
     decoder: &'a dyn CurvePointSetDecoder,
     curve_engine: &'a dyn YieldCurveEngine,
     bond_engine: &'a dyn BondAnalyticsEngine,
+    futures_snapshot_metadata: Option<&'a dyn SnapshotVerifiedReadMetadataRepository>,
+    futures_snapshot_decoder: Option<&'a dyn CanonicalSnapshotDecoder>,
+    futures_rule_parser: Option<&'a dyn FuturesDeliveryRuleParser>,
+    futures_engine: Option<&'a dyn FuturesDeliveryEngine>,
 }
 
 impl<'a> CalculateBondKeyRateDv01<'a> {
@@ -133,6 +176,43 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             decoder,
             curve_engine,
             bond_engine,
+            futures_snapshot_metadata: None,
+            futures_snapshot_decoder: None,
+            futures_rule_parser: None,
+            futures_engine: None,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub const fn new_with_futures(
+        positions: &'a dyn PositionSnapshotRepository,
+        curves: &'a dyn CurveSnapshotMetadataRepository,
+        definitions: &'a dyn DefinitionRepository,
+        factors: &'a dyn FactorTopologyRepository,
+        blobs: &'a dyn VerifiedBlobReader,
+        integrity_events: &'a dyn IntegrityEventSink,
+        decoder: &'a dyn CurvePointSetDecoder,
+        curve_engine: &'a dyn YieldCurveEngine,
+        bond_engine: &'a dyn BondAnalyticsEngine,
+        futures_snapshot_metadata: &'a dyn SnapshotVerifiedReadMetadataRepository,
+        futures_snapshot_decoder: &'a dyn CanonicalSnapshotDecoder,
+        futures_rule_parser: &'a dyn FuturesDeliveryRuleParser,
+        futures_engine: &'a dyn FuturesDeliveryEngine,
+    ) -> Self {
+        Self {
+            positions,
+            curves,
+            definitions,
+            factors,
+            blobs,
+            integrity_events,
+            decoder,
+            curve_engine,
+            bond_engine,
+            futures_snapshot_metadata: Some(futures_snapshot_metadata),
+            futures_snapshot_decoder: Some(futures_snapshot_decoder),
+            futures_rule_parser: Some(futures_rule_parser),
+            futures_engine: Some(futures_engine),
         }
     }
 
@@ -224,18 +304,24 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
         if prepared.is_empty() {
             return Err(validation());
         }
-
-        let mut exposures = Vec::with_capacity(prepared.len());
-        for position in prepared {
-            exposures.push(self.calculate_position(
-                position,
-                &axis,
-                command.dv01_unit(),
-                &output_unit,
-            )?);
+        let has_futures = prepared
+            .iter()
+            .any(|value| matches!(value, PreparedRiskPosition::Futures(_)));
+        if has_futures != command.futures_data_snapshot_id().is_some() {
+            return Err(validation());
         }
-        exposures.sort_by(|left, right| left.position_id().cmp(right.position_id()));
-        let lineage = vec![
+
+        let mut selected = Vec::with_capacity(prepared.len());
+        for position in prepared {
+            selected.push(match position {
+                PreparedRiskPosition::Bond(value) => SelectedRiskPosition::Bond(value),
+                PreparedRiskPosition::Futures(value) => SelectedRiskPosition::Futures(Box::new(
+                    self.select_futures_position(scope, *value, &axis).await?,
+                )),
+            });
+        }
+
+        let mut lineage = vec![
             LineageRef::new(
                 snapshot.id().clone(),
                 None,
@@ -245,18 +331,69 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             LineageRef::new(curve.id().clone(), None, Some(curve.content_hash().clone()))
                 .map_err(map_domain_error)?,
         ];
-        PortfolioKeyRateExposure::new(
-            snapshot.id().clone(),
-            curve.id().clone(),
-            exposures,
-            RiskAlgorithmBinding::new(
+        for position in &selected {
+            if let SelectedRiskPosition::Futures(value) = position {
+                for reference in &value.materialization_lineage {
+                    if !lineage.contains(reference) {
+                        lineage.push(reference.clone());
+                    }
+                }
+            }
+        }
+        lineage.sort_by(|left, right| {
+            left.object_id()
+                .cmp(right.object_id())
+                .then_with(|| left.version().cmp(&right.version()))
+        });
+
+        let mut exposures = Vec::with_capacity(selected.len());
+        for position in selected {
+            exposures.push(match position {
+                SelectedRiskPosition::Bond(value) => {
+                    self.calculate_position(*value, &axis, command.dv01_unit(), &output_unit)?
+                }
+                SelectedRiskPosition::Futures(value) => self.calculate_futures_position(
+                    *value,
+                    &axis,
+                    command.dv01_unit(),
+                    &output_unit,
+                )?,
+            });
+        }
+        exposures.sort_by(|left, right| left.position_id().cmp(right.position_id()));
+        let (algorithm_id, algorithm_version, convention_profile) = if has_futures {
+            (
+                R4D_B_ALGORITHM_ID,
+                R4D_B_ALGORITHM_VERSION,
+                R4D_B_CONVENTION_PROFILE,
+            )
+        } else {
+            (
                 R4D_A_ALGORITHM_ID,
                 R4D_A_ALGORITHM_VERSION,
                 R4D_A_CONVENTION_PROFILE,
             )
-            .map_err(map_domain_error)?,
-            lineage,
-        )
+        };
+        let algorithm =
+            RiskAlgorithmBinding::new(algorithm_id, algorithm_version, convention_profile)
+                .map_err(map_domain_error)?;
+        match command.futures_data_snapshot_id {
+            Some(data_snapshot_id) => PortfolioKeyRateExposure::new_with_futures_data_snapshot(
+                snapshot.id().clone(),
+                curve.id().clone(),
+                data_snapshot_id,
+                exposures,
+                algorithm,
+                lineage,
+            ),
+            None => PortfolioKeyRateExposure::new(
+                snapshot.id().clone(),
+                curve.id().clone(),
+                exposures,
+                algorithm,
+                lineage,
+            ),
+        }
         .map_err(map_domain_error)
     }
 
@@ -345,7 +482,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
         rule_pack: &MarketRulePack,
         axis: &[AxisPoint],
         command: &CalculateBondKeyRateDv01Command,
-    ) -> ApplicationResult<PreparedPosition> {
+    ) -> ApplicationResult<PreparedRiskPosition> {
         if position.quantity().coefficient() == "0" {
             return Err(validation());
         }
@@ -368,7 +505,18 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
         {
             return Err(lineage());
         }
-        let Some(InstrumentSubtype::Bond(bond)) = instrument.subtype() else {
+        let Some(subtype) = instrument.subtype() else {
+            return Err(validation());
+        };
+        if matches!(subtype, InstrumentSubtype::FuturesContract(_)) {
+            return self
+                .prepare_futures_position(
+                    scope, snapshot, position, curve, calendar, rule_pack, axis, command,
+                )
+                .await
+                .map(|value| PreparedRiskPosition::Futures(Box::new(value)));
+        }
+        let InstrumentSubtype::Bond(bond) = subtype else {
             return Err(validation());
         };
         if position.quantity().unit() != bond.face_value().unit() {
@@ -415,6 +563,12 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
                 Ok((value.factor_id().to_owned(), binding.content_hash().clone()))
             })
             .collect::<ApplicationResult<BTreeMap<_, _>>>()?;
+        if axis
+            .iter()
+            .any(|point| !bound_factors.contains_key(point.factor.factor_id()))
+        {
+            return Err(lineage());
+        }
 
         let terms = BondTerms::with_issuance(
             bond.first_issue_date(),
@@ -501,7 +655,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             )
             .map_err(map_domain_error)?,
         ];
-        Ok(PreparedPosition {
+        Ok(PreparedRiskPosition::Bond(Box::new(PreparedPosition {
             position_id: position.id().clone(),
             instrument: position.instrument_ref().clone(),
             quantity: position.quantity().clone(),
@@ -523,6 +677,278 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             maturity_date: bond.maturity_date(),
             bound_factors,
             lineage,
+        })))
+    }
+
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+    async fn prepare_futures_position(
+        &self,
+        scope: &AccessScope,
+        snapshot: &PositionSnapshot,
+        position: &Position,
+        curve: &ficant_domain::market::CurveSnapshot,
+        calendar: &Calendar,
+        curve_rule_pack: &MarketRulePack,
+        axis: &[AxisPoint],
+        command: &CalculateBondKeyRateDv01Command,
+    ) -> ApplicationResult<PreparedFuturesPosition> {
+        if position.quantity().scale() != 0 {
+            return Err(validation());
+        }
+        let signed_contract_count = position
+            .quantity()
+            .coefficient()
+            .parse::<i64>()
+            .map_err(|_| validation())?;
+        if signed_contract_count == 0 {
+            return Err(validation());
+        }
+        let quantity_unit = self.read_unit(scope, position.quantity().unit()).await?;
+        validate_decimal_unit(
+            position.quantity(),
+            &quantity_unit,
+            "contract_count",
+            snapshot.owner(),
+        )?;
+        if quantity_unit.scale() != 0 {
+            return Err(validation());
+        }
+        let data_snapshot_id = command
+            .futures_data_snapshot_id()
+            .ok_or_else(validation)?
+            .clone();
+        let snapshot_metadata = self.futures_snapshot_metadata.ok_or_else(validation)?;
+        let snapshot_decoder = self.futures_snapshot_decoder.ok_or_else(validation)?;
+        let rule_parser = self.futures_rule_parser.ok_or_else(validation)?;
+        let materialization = MaterializeRegisteredFuturesDelivery::new(
+            self.definitions,
+            snapshot_metadata,
+            self.blobs,
+            self.integrity_events,
+            snapshot_decoder,
+            rule_parser,
+        )
+        .execute(
+            scope,
+            snapshot.owner(),
+            position.instrument_ref(),
+            data_snapshot_id,
+            command.valuation_at(),
+            command.knowledge_at(),
+            trace_for(command)?,
+        )
+        .await?;
+        let price_unit_ref = materialization
+            .contract()
+            .price_unit()
+            .ok_or_else(lineage)?;
+        let price_unit = self.read_unit(scope, price_unit_ref).await?;
+        if price_unit.owner() != snapshot.owner()
+            || price_unit.dimension() != "price_per_100"
+            || price_unit.scale() < FIXED_DECIMAL_SCALE
+        {
+            return Err(validation());
+        }
+        let future_target = FactorTarget::Instrument(InstrumentFactorTarget::new(
+            snapshot.owner().clone(),
+            position.instrument_ref().clone(),
+        ));
+        let future_bound_factors = self
+            .factors
+            .get_target_factors(scope, &future_target)
+            .await?
+            .into_iter()
+            .map(|value| {
+                let binding = FactorTargetBinding::new(value.factor_id(), future_target.clone())
+                    .map_err(map_domain_error)?;
+                Ok((value.factor_id().to_owned(), binding.content_hash().clone()))
+            })
+            .collect::<ApplicationResult<BTreeMap<_, _>>>()?;
+        if axis
+            .iter()
+            .any(|point| !future_bound_factors.contains_key(point.factor.factor_id()))
+        {
+            return Err(lineage());
+        }
+
+        let calendar_value = DefinitionValue::Calendar(calendar.clone());
+        let curve_rule_pack_value = DefinitionValue::MarketRulePack(curve_rule_pack.clone());
+        let quantity_unit_value = DefinitionValue::Unit(quantity_unit);
+        let price_unit_value = DefinitionValue::Unit(price_unit);
+        let rate_axis = axis.first().ok_or_else(validation)?;
+        let rate_unit = &rate_axis.factor_unit;
+        let rate_unit_ref = rate_axis.factor.factor_unit();
+        let common_lineage = vec![
+            LineageRef::new(
+                snapshot.id().clone(),
+                None,
+                Some(snapshot.content_hash().clone()),
+            )
+            .map_err(map_domain_error)?,
+            LineageRef::new(curve.id().clone(), None, Some(curve.content_hash().clone()))
+                .map_err(map_domain_error)?,
+            LineageRef::new(
+                curve.calendar().id().clone(),
+                Some(curve.calendar().version()),
+                Some(definition_content_hash(&calendar_value)),
+            )
+            .map_err(map_domain_error)?,
+            LineageRef::new(
+                curve.rule_pack().id().clone(),
+                Some(curve.rule_pack().version()),
+                Some(definition_content_hash(&curve_rule_pack_value)),
+            )
+            .map_err(map_domain_error)?,
+            LineageRef::new(
+                position.quantity().unit().unit_id().clone(),
+                Some(position.quantity().unit().version()),
+                Some(definition_content_hash(&quantity_unit_value)),
+            )
+            .map_err(map_domain_error)?,
+            LineageRef::new(
+                price_unit_ref.unit_id().clone(),
+                Some(price_unit_ref.version()),
+                Some(definition_content_hash(&price_unit_value)),
+            )
+            .map_err(map_domain_error)?,
+            LineageRef::new(
+                rate_unit_ref.unit_id().clone(),
+                Some(rate_unit_ref.version()),
+                Some(definition_content_hash(&DefinitionValue::Unit(
+                    rate_unit.clone(),
+                ))),
+            )
+            .map_err(map_domain_error)?,
+        ];
+        Ok(PreparedFuturesPosition {
+            position_id: position.id().clone(),
+            instrument: position.instrument_ref().clone(),
+            quantity: position.quantity().clone(),
+            signed_contract_count,
+            owner: snapshot.owner().clone(),
+            curve_rule_pack_ref: AnalyticsObjectRef::new(
+                curve.rule_pack().clone(),
+                curve_rule_pack.content_hash().clone(),
+            ),
+            curve_snapshot_ref: AnalyticsObjectRef::new(
+                VersionRef::new(
+                    curve.id().clone(),
+                    Version::new(1).map_err(map_domain_error)?,
+                ),
+                curve.content_hash().clone(),
+            ),
+            curve_ref: AnalyticsObjectRef::new(
+                VersionRef::new(
+                    curve.id().clone(),
+                    Version::new(1).map_err(map_domain_error)?,
+                ),
+                curve.content_hash().clone(),
+            ),
+            valuation_at: command.valuation_at.clone(),
+            settlement_date: command.valuation_at.local_trading_date(),
+            calendar_binding: calendar_binding(calendar, definition_content_hash(&calendar_value))?,
+            future_bound_factors,
+            common_lineage,
+            materialization,
+        })
+    }
+
+    async fn select_futures_position(
+        &self,
+        scope: &AccessScope,
+        position: PreparedFuturesPosition,
+        axis: &[AxisPoint],
+    ) -> ApplicationResult<SelectedFuturesPosition> {
+        let engine = self.futures_engine.ok_or_else(validation)?;
+        let basket = CalculateFuturesDeliveryBasket::new(engine)
+            .execute(position.materialization.inputs())?;
+        let ctd = basket.ctd();
+        let ctd_input = ctd.input();
+        let ctd_target = FactorTarget::Instrument(InstrumentFactorTarget::new(
+            position.owner.clone(),
+            ctd_input.bond().version_ref().clone(),
+        ));
+        let ctd_bound_factors = self
+            .factors
+            .get_target_factors(scope, &ctd_target)
+            .await?
+            .into_iter()
+            .map(|value| {
+                let binding = FactorTargetBinding::new(value.factor_id(), ctd_target.clone())
+                    .map_err(map_domain_error)?;
+                Ok((value.factor_id().to_owned(), binding.content_hash().clone()))
+            })
+            .collect::<ApplicationResult<BTreeMap<_, _>>>()?;
+        if axis.iter().any(|point| {
+            !position
+                .future_bound_factors
+                .contains_key(point.factor.factor_id())
+                || !ctd_bound_factors.contains_key(point.factor.factor_id())
+        }) {
+            return Err(lineage());
+        }
+        let maturity_date = ctd_input.terms().maturity_date();
+        let curve_binding = yield_curve_from_axis(
+            position.curve_ref.clone(),
+            axis,
+            position.valuation_at.local_trading_date(),
+            None,
+        )?;
+        if !curve_binding.covers(maturity_date) {
+            return Err(validation());
+        }
+        let mut evidence = position.materialization.input_evidence_hashes().to_vec();
+        let mut selection_bytes = Vec::new();
+        selection_bytes.extend_from_slice(ctd_input.bond().version_ref().id().as_str().as_bytes());
+        selection_bytes
+            .extend_from_slice(&ctd_input.bond().version_ref().version().get().to_be_bytes());
+        selection_bytes
+            .extend_from_slice(&ctd.measures().conversion_factor().scaled().to_be_bytes());
+        selection_bytes.extend_from_slice(
+            &position
+                .materialization
+                .rule()
+                .contract_size_in_quote_units()
+                .ok_or_else(validation)?
+                .to_be_bytes(),
+        );
+        evidence.push(ContentHash::digest(&selection_bytes));
+        evidence.sort_unstable();
+        evidence.dedup();
+        let mut lineage = position.common_lineage.clone();
+        for reference in position.materialization.lineage() {
+            if !lineage.contains(reference) {
+                lineage.push(reference.clone());
+            }
+        }
+        Ok(SelectedFuturesPosition {
+            position_id: position.position_id.clone(),
+            instrument: position.instrument.clone(),
+            signed_contract_count: position.signed_contract_count,
+            pricing: PreparedPosition {
+                position_id: position.position_id,
+                instrument: position.instrument,
+                quantity: position.quantity,
+                owner: position.owner,
+                bond_ref: ctd_input.bond().clone(),
+                rule_pack_ref: position.curve_rule_pack_ref,
+                snapshot_ref: position.curve_snapshot_ref,
+                curve_ref: position.curve_ref,
+                valuation_at: position.valuation_at,
+                settlement_date: position.settlement_date,
+                calendar_binding: position.calendar_binding,
+                terms: ctd_input.terms().clone(),
+                maturity_date,
+                bound_factors: ctd_bound_factors.clone(),
+                lineage: lineage.clone(),
+            },
+            rule: position.materialization.rule().clone(),
+            conversion_factor: ctd.measures().conversion_factor(),
+            future_bound_factors: position.future_bound_factors,
+            ctd_bound_factors,
+            input_evidence_hashes: evidence,
+            lineage,
+            materialization_lineage: position.materialization.lineage().to_vec(),
         })
     }
 
@@ -598,6 +1024,130 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
                 input_evidence_hashes.push(
                     position
                         .bound_factors
+                        .get(point.factor.factor_id())
+                        .ok_or_else(lineage)?
+                        .clone(),
+                );
+            }
+            exposures.push(
+                FactorDv01::new(
+                    point.factor.factor_id(),
+                    point.factor.content_hash().clone(),
+                    value,
+                    output_unit.clone(),
+                )
+                .map_err(map_domain_error)?,
+            );
+        }
+        position.lineage.push(
+            LineageRef::new(
+                output_unit.unit_id().clone(),
+                Some(output_unit.version()),
+                Some(definition_content_hash(&DefinitionValue::Unit(
+                    output_unit_definition.clone(),
+                ))),
+            )
+            .map_err(map_domain_error)?,
+        );
+        input_evidence_hashes.sort_unstable();
+        input_evidence_hashes.dedup();
+        PositionKeyRateExposure::new(
+            position.position_id,
+            position.instrument,
+            exposures,
+            input_evidence_hashes,
+            position.lineage,
+        )
+        .map_err(map_domain_error)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn calculate_futures_position(
+        &self,
+        mut position: SelectedFuturesPosition,
+        axis: &[AxisPoint],
+        output_unit: &UnitRef,
+        output_unit_definition: &Unit,
+    ) -> ApplicationResult<PositionKeyRateExposure> {
+        let base_curve = yield_curve_from_axis(
+            position.pricing.curve_ref.clone(),
+            axis,
+            position.pricing.valuation_at.local_trading_date(),
+            None,
+        )?;
+        let base_price = self.price(&position.pricing, base_curve)?;
+        let mut exposures = Vec::with_capacity(axis.len());
+        let mut input_evidence_hashes = position.input_evidence_hashes.clone();
+        for (index, point) in axis.iter().enumerate() {
+            input_evidence_hashes.push(point.node_content_hash.clone());
+            input_evidence_hashes.push(point.curve_binding_hash.clone());
+            let direction = point.factor.convention().direction();
+            let up_price = if matches!(
+                direction,
+                SensitivityDirection::Central | SensitivityDirection::Up
+            ) {
+                self.price(
+                    &position.pricing,
+                    yield_curve_from_axis(
+                        position.pricing.curve_ref.clone(),
+                        axis,
+                        position.pricing.valuation_at.local_trading_date(),
+                        Some((index, true)),
+                    )?,
+                )?
+            } else {
+                base_price
+            };
+            let down_price = if matches!(
+                direction,
+                SensitivityDirection::Central | SensitivityDirection::Down
+            ) {
+                self.price(
+                    &position.pricing,
+                    yield_curve_from_axis(
+                        position.pricing.curve_ref.clone(),
+                        axis,
+                        position.pricing.valuation_at.local_trading_date(),
+                        Some((index, false)),
+                    )?,
+                )?
+            } else {
+                base_price
+            };
+            let bump_bp = FixedDecimal::from_scaled(
+                point
+                    .bump_yield
+                    .scaled()
+                    .checked_mul(10_000)
+                    .ok_or_else(validation)?,
+            );
+            let registered_face_krd =
+                key_rate_dv01(base_price, up_price, down_price, bump_bp, direction)
+                    .map_err(map_domain_error)?;
+            let value = scale_futures_key_rate_dv01(
+                registered_face_krd,
+                position.pricing.terms.face_amount(),
+                position.rule.face_quote_basis(),
+                position
+                    .rule
+                    .contract_size_in_quote_units()
+                    .ok_or_else(validation)?,
+                position.conversion_factor,
+                position.signed_contract_count,
+            )
+            .map_err(map_domain_error)?;
+            validate_fixed_output(value, output_unit_definition)?;
+            if value != FixedDecimal::ZERO {
+                input_evidence_hashes.push(
+                    position
+                        .future_bound_factors
+                        .get(point.factor.factor_id())
+                        .ok_or_else(lineage)?
+                        .clone(),
+                );
+                input_evidence_hashes.push(
+                    position
+                        .ctd_bound_factors
                         .get(point.factor.factor_id())
                         .ok_or_else(lineage)?
                         .clone(),
@@ -727,6 +1277,47 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             _ => Err(lineage()),
         }
     }
+}
+
+enum PreparedRiskPosition {
+    Bond(Box<PreparedPosition>),
+    Futures(Box<PreparedFuturesPosition>),
+}
+
+enum SelectedRiskPosition {
+    Bond(Box<PreparedPosition>),
+    Futures(Box<SelectedFuturesPosition>),
+}
+
+struct PreparedFuturesPosition {
+    position_id: Ulid,
+    instrument: VersionRef,
+    quantity: DecimalValue,
+    signed_contract_count: i64,
+    owner: ficant_domain::primitives::OwnerRef,
+    curve_rule_pack_ref: AnalyticsObjectRef,
+    curve_snapshot_ref: AnalyticsObjectRef,
+    curve_ref: AnalyticsObjectRef,
+    valuation_at: MarketTime,
+    settlement_date: NaiveDate,
+    calendar_binding: CalendarBinding,
+    future_bound_factors: BTreeMap<String, ContentHash>,
+    common_lineage: Vec<LineageRef>,
+    materialization: crate::use_cases::futures_delivery::RegisteredFuturesDeliveryMaterialization,
+}
+
+struct SelectedFuturesPosition {
+    position_id: Ulid,
+    instrument: VersionRef,
+    signed_contract_count: i64,
+    pricing: PreparedPosition,
+    rule: FuturesDeliveryRule,
+    conversion_factor: FixedDecimal,
+    future_bound_factors: BTreeMap<String, ContentHash>,
+    ctd_bound_factors: BTreeMap<String, ContentHash>,
+    input_evidence_hashes: Vec<ContentHash>,
+    lineage: Vec<LineageRef>,
+    materialization_lineage: Vec<LineageRef>,
 }
 
 struct AxisPoint {

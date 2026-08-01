@@ -50,6 +50,7 @@ pub struct FuturesDeliveryRule {
     conversion_factor_rounding_places: u32,
     accrued_interest_rounding_places: u32,
     annual_day_basis: u32,
+    contract_size_in_quote_units: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -112,7 +113,17 @@ impl FuturesDeliveryRule {
             conversion_factor_rounding_places,
             accrued_interest_rounding_places,
             annual_day_basis,
+            contract_size_in_quote_units: None,
         })
+    }
+
+    /// Adds the product-specific L3 contract size used only by portfolio risk.
+    pub fn with_contract_size_in_quote_units(mut self, value: u32) -> DomainResult<Self> {
+        if value == 0 {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        self.contract_size_in_quote_units = Some(value);
+        Ok(self)
     }
 
     #[must_use]
@@ -163,6 +174,11 @@ impl FuturesDeliveryRule {
     #[must_use]
     pub const fn annual_day_basis(&self) -> u32 {
         self.annual_day_basis
+    }
+
+    #[must_use]
+    pub const fn contract_size_in_quote_units(&self) -> Option<u32> {
+        self.contract_size_in_quote_units
     }
 }
 

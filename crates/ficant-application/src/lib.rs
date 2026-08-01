@@ -24,7 +24,8 @@ pub use use_cases::factor_topology::FactorTopologyUseCase;
 pub use use_cases::futures_delivery::{
     CalculateFuturesDeliveryBasket, FUTURES_DELIVERY_MEDIA_TYPE, FuturesDeliveryCandidateBinding,
     FuturesDeliveryInputBindings, FuturesDeliveryReplay, MaterializeFuturesDeliveryInputs,
-    PublishFuturesDelivery, ReplayFuturesDelivery, ResolveFuturesContract,
+    MaterializeRegisteredFuturesDelivery, PublishFuturesDelivery,
+    RegisteredFuturesDeliveryMaterialization, ReplayFuturesDelivery, ResolveFuturesContract,
     ResolveFuturesDeliveryRule,
 };
 pub use use_cases::futures_hedge::{

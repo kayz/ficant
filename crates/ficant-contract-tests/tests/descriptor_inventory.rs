@@ -328,6 +328,7 @@ fn r4d_a_bond_curve_and_portfolio_risk_contracts_are_exact() {
             ExpectedField::message("algorithm", ".ficant.research.v1.RiskAlgorithmBinding"),
             ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
             ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
+            ExpectedField::message("futures_data_snapshot_id", ".ficant.core.v1.Ulid"),
         ],
     );
     assert_fields(
@@ -339,6 +340,7 @@ fn r4d_a_bond_curve_and_portfolio_risk_contracts_are_exact() {
             ExpectedField::message("valuation_at", ".ficant.core.v1.MarketTime"),
             ExpectedField::message("curve_snapshot_id", ".ficant.core.v1.Ulid"),
             ExpectedField::message("dv01_unit", ".ficant.core.v1.UnitRef"),
+            ExpectedField::message("futures_data_snapshot_id", ".ficant.core.v1.Ulid"),
         ],
     );
     assert_fields(
@@ -1209,6 +1211,8 @@ fn assert_phase1_objects(messages: &BTreeMap<String, &DescriptorProto>) {
                 ExpectedField::message("settlement_time", time),
                 ExpectedField::message("multiplier", decimal),
                 ExpectedField::message("rule_pack", version),
+                ExpectedField::scalar("product_code", Type::String),
+                ExpectedField::message("price_unit", ".ficant.core.v1.UnitRef"),
             ],
         ),
         (
@@ -1600,7 +1604,16 @@ fn assert_cgb_futures_rule_pack_contract(messages: &BTreeMap<String, &Descriptor
         false,
         false,
     );
-    assert_eq!(product.field.len(), 5, "CgbFuturesProductRule field drift");
+    assert_exact_field(
+        product,
+        "contract_size_in_quote_units",
+        6,
+        Type::Uint32,
+        None,
+        false,
+        true,
+    );
+    assert_eq!(product.field.len(), 6, "CgbFuturesProductRule field drift");
     let residual_oneof = product
         .oneof_decl
         .iter()

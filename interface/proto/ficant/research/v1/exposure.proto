@@ -33,6 +33,7 @@ message PortfolioKeyRateExposure {
   RiskAlgorithmBinding algorithm = 5;
   ficant.core.v1.Sha256 content_hash = 6;
   repeated ficant.core.v1.LineageRef lineage = 7;
+  ficant.core.v1.Ulid futures_data_snapshot_id = 8;
 }
 
 message CalculateKeyRateDv01Request {
@@ -41,6 +42,7 @@ message CalculateKeyRateDv01Request {
   ficant.core.v1.MarketTime valuation_at = 3;
   ficant.core.v1.Ulid curve_snapshot_id = 4;
   ficant.core.v1.UnitRef dv01_unit = 5;
+  ficant.core.v1.Ulid futures_data_snapshot_id = 6;
 }
 
 message CalculateKeyRateDv01Response {

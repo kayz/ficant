@@ -169,6 +169,45 @@ fn subtype_business_field_changes_the_fcmd_v1_fingerprint() {
 }
 
 #[test]
+fn futures_risk_selectors_extend_without_reinterpreting_the_legacy_fingerprint() {
+    let instrument = instrument('F', 1, InstrumentKind::Futures);
+    let legacy = futures_contract(&instrument, "1000");
+    let replay = futures_contract(&instrument, "1000");
+    let ten_year = legacy
+        .clone()
+        .with_risk_terms("T", UnitRef::new(id('Q'), version(1)))
+        .unwrap();
+    let long = legacy
+        .clone()
+        .with_risk_terms("TL", UnitRef::new(id('Q'), version(1)))
+        .unwrap();
+    let other_price_unit = legacy
+        .clone()
+        .with_risk_terms("T", UnitRef::new(id('R'), version(1)))
+        .unwrap();
+    let command = |value: FuturesContract| {
+        append(
+            InstrumentDefinition::new(
+                instrument.clone(),
+                Some(InstrumentSubtype::FuturesContract(value)),
+            )
+            .unwrap(),
+            "futures-risk-fingerprint",
+        )
+    };
+
+    assert_eq!(command(legacy).fingerprint(), command(replay).fingerprint());
+    assert_ne!(
+        command(ten_year.clone()).fingerprint(),
+        command(long).fingerprint()
+    );
+    assert_ne!(
+        command(ten_year).fingerprint(),
+        command(other_price_unit).fingerprint()
+    );
+}
+
+#[test]
 fn repository_port_can_be_implemented_with_the_aggregate_value() {
     fn assert_repository<T: DefinitionRepository>() {}
     assert_repository::<ContractDefinitionRepository>();

@@ -29,6 +29,8 @@ pub struct CgbFuturesProductRule {
     pub original_term_max_months: ::core::option::Option<u32>,
     #[prost(uint32, optional, tag="3")]
     pub residual_min_months: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag="6")]
+    pub contract_size_in_quote_units: ::core::option::Option<u32>,
     #[prost(oneof="cgb_futures_product_rule::ResidualUpperBound", tags="4, 5")]
     pub residual_upper_bound: ::core::option::Option<cgb_futures_product_rule::ResidualUpperBound>,
 }
@@ -201,6 +203,10 @@ pub struct FuturesContract {
     pub multiplier: ::core::option::Option<super::super::core::v1::DecimalValue>,
     #[prost(message, optional, tag="6")]
     pub rule_pack: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(string, tag="7")]
+    pub product_code: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="8")]
+    pub price_unit: ::core::option::Option<super::super::core::v1::UnitRef>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CalendarSession {

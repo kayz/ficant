@@ -298,6 +298,11 @@ fn futures_bytes(contract: &FuturesContract) -> Vec<u8> {
     value.field(5, &market_time_bytes(contract.settlement_time()));
     value.field(6, &decimal_bytes(contract.multiplier()));
     value.field(7, &version_ref_bytes(contract.rule_pack()));
+    if let (Some(product_code), Some(price_unit)) = (contract.product_code(), contract.price_unit())
+    {
+        value.field(8, product_code.as_bytes());
+        value.field(9, &unit_ref_bytes(price_unit));
+    }
     value.into_bytes()
 }
 

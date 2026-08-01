@@ -2,9 +2,11 @@ use std::sync::Arc;
 
 use chrono::{NaiveDate, TimeZone, Utc};
 use ficant_application::ports::{
-    AccessScope, BondAnalyticsEngine, CurvePointSetDecoder, CurveSnapshotMetadataRepository,
-    DefinitionRepository, FactorTopologyRepository, IntegrityEventSink, PositionSnapshotRepository,
-    VerifiedBlobReader, YieldCurveEngine,
+    AccessScope, BondAnalyticsEngine, CanonicalSnapshotDecoder, CurvePointSetDecoder,
+    CurveSnapshotMetadataRepository, DefinitionRepository, FactorTopologyRepository,
+    FuturesDeliveryEngine, FuturesDeliveryRuleParser, IntegrityEventSink,
+    PositionSnapshotRepository, SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader,
+    YieldCurveEngine,
 };
 use ficant_application::{
     ApplicationError, ApplicationErrorCategory, CalculateBondKeyRateDv01,
@@ -39,6 +41,10 @@ pub struct PortfolioRiskGrpcService {
     decoder: Arc<dyn CurvePointSetDecoder>,
     curve_engine: Arc<dyn YieldCurveEngine>,
     bond_engine: Arc<dyn BondAnalyticsEngine>,
+    futures_snapshot_metadata: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
+    futures_snapshot_decoder: Arc<dyn CanonicalSnapshotDecoder>,
+    futures_rule_parser: Arc<dyn FuturesDeliveryRuleParser>,
+    futures_engine: Arc<dyn FuturesDeliveryEngine>,
     errors: CoreBusinessErrorMapper,
 }
 
@@ -61,6 +67,10 @@ impl PortfolioRiskGrpcService {
         decoder: Arc<dyn CurvePointSetDecoder>,
         curve_engine: Arc<dyn YieldCurveEngine>,
         bond_engine: Arc<dyn BondAnalyticsEngine>,
+        futures_snapshot_metadata: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
+        futures_snapshot_decoder: Arc<dyn CanonicalSnapshotDecoder>,
+        futures_rule_parser: Arc<dyn FuturesDeliveryRuleParser>,
+        futures_engine: Arc<dyn FuturesDeliveryEngine>,
         trace_key: &[u8],
     ) -> Result<Self, &'static str> {
         Ok(Self {
@@ -75,6 +85,10 @@ impl PortfolioRiskGrpcService {
             decoder,
             curve_engine,
             bond_engine,
+            futures_snapshot_metadata,
+            futures_snapshot_decoder,
+            futures_rule_parser,
+            futures_engine,
             errors: CoreBusinessErrorMapper::new(trace_key)?,
         })
     }
@@ -104,7 +118,7 @@ impl PortfolioRiskService for PortfolioRiskGrpcService {
             Ok(()) => match parse_command(request.get_ref()) {
                 Err(error) => Err(error),
                 Ok(command) => {
-                    CalculateBondKeyRateDv01::new(
+                    CalculateBondKeyRateDv01::new_with_futures(
                         self.positions.as_ref(),
                         self.curves.as_ref(),
                         self.definitions.as_ref(),
@@ -114,6 +128,10 @@ impl PortfolioRiskService for PortfolioRiskGrpcService {
                         self.decoder.as_ref(),
                         self.curve_engine.as_ref(),
                         self.bond_engine.as_ref(),
+                        self.futures_snapshot_metadata.as_ref(),
+                        self.futures_snapshot_decoder.as_ref(),
+                        self.futures_rule_parser.as_ref(),
+                        self.futures_engine.as_ref(),
                     )
                     .execute(&self.access_scope, command)
                     .await
@@ -138,13 +156,28 @@ impl PortfolioRiskService for PortfolioRiskGrpcService {
 fn parse_command(
     value: &pb::CalculateKeyRateDv01Request,
 ) -> Result<CalculateBondKeyRateDv01Command, ApplicationError> {
-    CalculateBondKeyRateDv01Command::new(
-        parse_ulid(value.position_snapshot_id.as_ref())?,
-        parse_market_time(value.knowledge_at.as_ref())?,
-        parse_market_time(value.valuation_at.as_ref())?,
-        parse_ulid(value.curve_snapshot_id.as_ref())?,
-        parse_unit(value.dv01_unit.as_ref())?,
-    )
+    let position_snapshot_id = parse_ulid(value.position_snapshot_id.as_ref())?;
+    let knowledge_at = parse_market_time(value.knowledge_at.as_ref())?;
+    let valuation_at = parse_market_time(value.valuation_at.as_ref())?;
+    let curve_snapshot_id = parse_ulid(value.curve_snapshot_id.as_ref())?;
+    let dv01_unit = parse_unit(value.dv01_unit.as_ref())?;
+    match value.futures_data_snapshot_id.as_ref() {
+        Some(snapshot_id) => CalculateBondKeyRateDv01Command::new_with_futures_data_snapshot(
+            position_snapshot_id,
+            knowledge_at,
+            valuation_at,
+            curve_snapshot_id,
+            dv01_unit,
+            parse_ulid(Some(snapshot_id))?,
+        ),
+        None => CalculateBondKeyRateDv01Command::new(
+            position_snapshot_id,
+            knowledge_at,
+            valuation_at,
+            curve_snapshot_id,
+            dv01_unit,
+        ),
+    }
 }
 
 fn portfolio(value: &PortfolioKeyRateExposure) -> pb::PortfolioKeyRateExposure {
@@ -160,6 +193,7 @@ fn portfolio(value: &PortfolioKeyRateExposure) -> pb::PortfolioKeyRateExposure {
         }),
         content_hash: Some(hash(value.content_hash())),
         lineage: value.lineage().iter().map(lineage).collect(),
+        futures_data_snapshot_id: value.futures_data_snapshot_id().map(ulid),
     }
 }
 
