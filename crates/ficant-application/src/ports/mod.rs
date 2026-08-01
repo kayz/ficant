@@ -8,6 +8,7 @@ mod curves;
 mod data_sources;
 mod definitions;
 mod execution;
+mod factor_topology;
 mod facts;
 mod fingerprint;
 mod funding_rule_parser;
@@ -45,6 +46,7 @@ pub use definitions::{
 pub use execution::{
     Clock, IdGenerator, Phase1AtomicWork, Phase1PublicationWork, Phase1RunWork, TransactionRunner,
 };
+pub use factor_topology::FactorTopologyRepository;
 pub use facts::{
     AppendMarketFact, CorrectMarketFact, MarketFact, MarketFactRepository, MarketFactWindow,
     PublishCurveSnapshot,

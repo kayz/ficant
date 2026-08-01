@@ -4,6 +4,7 @@ pub(crate) mod common;
 pub mod data_sources;
 pub mod definitions;
 mod execution;
+pub mod factor_topology;
 pub mod facts;
 pub mod journal;
 pub mod phase4_execution;

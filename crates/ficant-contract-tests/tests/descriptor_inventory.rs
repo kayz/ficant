@@ -255,6 +255,15 @@ fn position_snapshot_service_has_exact_unary_rpcs() {
 }
 
 #[test]
+fn factor_registry_service_has_exact_unary_rpcs() {
+    assert_exact_service(
+        descriptor_set(),
+        "ficant.research.v1.FactorRegistryService",
+        &factor_registry_methods(),
+    );
+}
+
+#[test]
 fn market_definition_query_service_has_exact_signatures() {
     let descriptor_set = descriptor_set();
     assert_exact_service(
@@ -2369,6 +2378,41 @@ fn assert_exact_service(
     );
 }
 
+fn factor_registry_methods() -> Vec<ExpectedMethod> {
+    vec![
+        ExpectedMethod::new(
+            "RegisterFactorDefinition",
+            ".ficant.research.v1.RegisterFactorDefinitionRequest",
+            ".ficant.research.v1.RegisterFactorDefinitionResponse",
+        ),
+        ExpectedMethod::new(
+            "RegisterCurveNodeDefinition",
+            ".ficant.research.v1.RegisterCurveNodeDefinitionRequest",
+            ".ficant.research.v1.RegisterCurveNodeDefinitionResponse",
+        ),
+        ExpectedMethod::new(
+            "BindFactorTarget",
+            ".ficant.research.v1.BindFactorTargetRequest",
+            ".ficant.research.v1.BindFactorTargetResponse",
+        ),
+        ExpectedMethod::new(
+            "GetFactorDefinition",
+            ".ficant.research.v1.GetFactorDefinitionRequest",
+            ".ficant.research.v1.GetFactorDefinitionResponse",
+        ),
+        ExpectedMethod::new(
+            "GetFactorTargets",
+            ".ficant.research.v1.GetFactorTargetsRequest",
+            ".ficant.research.v1.GetFactorTargetsResponse",
+        ),
+        ExpectedMethod::new(
+            "GetTargetFactors",
+            ".ficant.research.v1.GetTargetFactorsRequest",
+            ".ficant.research.v1.GetTargetFactorsResponse",
+        ),
+    ]
+}
+
 fn market_definition_methods() -> Vec<ExpectedMethod> {
     vec![
         ExpectedMethod::new(
@@ -2920,6 +2964,7 @@ fn expected_service_fqns() -> BTreeSet<String> {
         "ficant.market.v1.MarketFactService".to_owned(),
         "ficant.research.v1.SnapshotService".to_owned(),
         "ficant.research.v1.PositionSnapshotService".to_owned(),
+        "ficant.research.v1.FactorRegistryService".to_owned(),
         "ficant.research.v1.ExperimentService".to_owned(),
         "ficant.research.v1.ArtifactService".to_owned(),
         "ficant.app.v1.PlatformService".to_owned(),

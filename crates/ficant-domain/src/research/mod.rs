@@ -1,6 +1,7 @@
 mod artifact;
 mod data_snapshot;
 mod experiment_run;
+mod factor_topology;
 mod position_snapshot;
 mod research_graph;
 mod run_journal;
@@ -10,6 +11,11 @@ mod universe_snapshot;
 pub use artifact::{Artifact, ArtifactKind};
 pub use data_snapshot::{DataSnapshot, DataSnapshotInput};
 pub use experiment_run::{ExperimentRun, ExperimentRunInput, RunState};
+pub use factor_topology::{
+    CurveNodeDefinition, CurveNodeDefinitionInput, CurveNodeRef, CurveRebuildPolicy,
+    FactorDefinition, FactorDefinitionInput, FactorTarget, FactorTargetBinding,
+    InstrumentFactorTarget, SecondOrderPolicy, SensitivityConvention, SensitivityDirection,
+};
 pub use position_snapshot::{
     AccountingBook, AccountingClassification, AccountingClassificationState, Position,
     PositionHoldingForm, PositionInput, PositionSnapshot, PositionSnapshotInput,
