@@ -11,7 +11,10 @@ mod trade;
 mod unit;
 mod valuation;
 
-pub use bond::{Bond, BondTaxAttributes, IncomeTaxStatus, ValueAddedTaxStatus};
+pub use bond::{
+    Bond, BondBusinessDayConvention, BondCouponFrequency, BondDayCountConvention, BondPricingTerms,
+    BondTaxAttributes, IncomeTaxStatus, ValueAddedTaxStatus,
+};
 pub use calendar::{Calendar, CalendarInput, CalendarSession};
 pub use cashflow::{Cashflow, CashflowInput, CashflowType};
 pub use curve_snapshot::{ArtifactInputKind, CurveSnapshot, CurveSnapshotInput};

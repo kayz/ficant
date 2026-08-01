@@ -199,6 +199,13 @@ impl FactorTopologyRepository for PostgresRepository {
         read_factor(self.pool(), factor_id).await
     }
 
+    async fn get_curve_node_definition(
+        &self,
+        curve_node_id: &str,
+    ) -> Result<Option<CurveNodeDefinition>, ApplicationError> {
+        read_curve_node(self.pool(), curve_node_id).await
+    }
+
     async fn get_factor_targets(
         &self,
         scope: &AccessScope,

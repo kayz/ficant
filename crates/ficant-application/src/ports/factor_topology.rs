@@ -34,6 +34,13 @@ pub trait FactorTopologyRepository: Send + Sync {
         factor_id: &str,
     ) -> ApplicationResult<Option<FactorDefinition>>;
 
+    async fn get_curve_node_definition(
+        &self,
+        _curve_node_id: &str,
+    ) -> ApplicationResult<Option<CurveNodeDefinition>> {
+        Ok(None)
+    }
+
     async fn get_factor_targets(
         &self,
         scope: &AccessScope,

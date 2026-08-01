@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ficant/market/v1/fact.proto.
  */
 export const file_ficant_market_v1_fact: GenFile = /*@__PURE__*/
-  fileDesc("ChtmaWNhbnQvbWFya2V0L3YxL2ZhY3QucHJvdG8SEGZpY2FudC5tYXJrZXQudjEiTQoKRmFjdFNvdXJjZRIRCglzb3VyY2VfaWQYASABKAkSEwoLZXh0ZXJuYWxfaWQYAiABKAkSFwoPc291cmNlX3JldmlzaW9uGAMgASgEIuoCCghDYXNoZmxvdxIpCgtjYXNoZmxvd19pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSKAoEYm9uZBgCIAEoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYSMAoMcGF5bWVudF90aW1lGAMgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRIsCgZhbW91bnQYBCABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUSJwoFb3duZXIYBSABKAsyGC5maWNhbnQuY29yZS52MS5Pd25lclJlZhIsCgZzb3VyY2UYBiABKAsyHC5maWNhbnQubWFya2V0LnYxLkZhY3RTb3VyY2USKwoNc3VwZXJzZWRlc19pZBgHIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSEwoLc2NoZWR1bGVfaWQYCCABKAkSEAoIc2VxdWVuY2UYCSABKAQimwMKBVF1b3RlEiYKCHF1b3RlX2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIuCgppbnN0cnVtZW50GAIgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhInCgVvd25lchgDIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEiwKBnNvdXJjZRgEIAEoCzIcLmZpY2FudC5tYXJrZXQudjEuRmFjdFNvdXJjZRIvCgtvYnNlcnZlZF9hdBgFIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSLwoLcmVjZWl2ZWRfYXQYBiABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEikKA2JpZBgHIAEoCzIcLmZpY2FudC5jb3JlLnYxLkRlY2ltYWxWYWx1ZRIpCgNhc2sYCCABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUSKwoNc3VwZXJzZWRlc19pZBgJIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQi8QIKBVRyYWRlEiYKCHRyYWRlX2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIuCgppbnN0cnVtZW50GAIgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhInCgVvd25lchgDIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEiwKBnNvdXJjZRgEIAEoCzIcLmZpY2FudC5tYXJrZXQudjEuRmFjdFNvdXJjZRIvCgtleGVjdXRlZF9hdBgFIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSKwoFcHJpY2UYBiABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUSLgoIcXVhbnRpdHkYByABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUSKwoNc3VwZXJzZWRlc19pZBgIIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQiigMKCVZhbHVhdGlvbhIqCgx2YWx1YXRpb25faWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEi4KCmluc3RydW1lbnQYAiABKAsyGi5maWNhbnQuY29yZS52MS5WZXJzaW9uUmVmEicKBW93bmVyGAMgASgLMhguZmljYW50LmNvcmUudjEuT3duZXJSZWYSLAoGc291cmNlGAQgASgLMhwuZmljYW50Lm1hcmtldC52MS5GYWN0U291cmNlEjAKDHZhbHVhdGlvbl9hdBgFIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSDgoGbWV0aG9kGAYgASgJEi0KCXJ1bGVfcGFjaxgHIAEoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYSLAoGdmFsdWVzGAggAygLMhwuZmljYW50LmNvcmUudjEuRGVjaW1hbFZhbHVlEisKDXN1cGVyc2VkZXNfaWQYCSABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkIqEDCg1DdXJ2ZVNuYXBzaG90Ei8KEWN1cnZlX3NuYXBzaG90X2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBInCgVvd25lchgCIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEikKBWFzX29mGAMgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRIpCghjdXJyZW5jeRgEIAEoCzIXLmZpY2FudC5jb3JlLnYxLlVuaXRSZWYSEgoKY3VydmVfa2luZBgFIAEoCRIsCghjYWxlbmRhchgGIAEoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYSLQoJcnVsZV9wYWNrGAcgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIUCgxwb2ludF9zY2hlbWEYCCABKAkSLAoMY29udGVudF9oYXNoGAkgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EisKB2xpbmVhZ2UYCiADKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmIl4KFUFwcGVuZENhc2hmbG93UmVxdWVzdBIXCg9pZGVtcG90ZW5jeV9rZXkYASABKAkSLAoIY2FzaGZsb3cYAiABKAsyGi5maWNhbnQubWFya2V0LnYxLkNhc2hmbG93IkYKFkFwcGVuZENhc2hmbG93UmVzcG9uc2USLAoIY2FzaGZsb3cYASABKAsyGi5maWNhbnQubWFya2V0LnYxLkNhc2hmbG93IlUKEkFwcGVuZFF1b3RlUmVxdWVzdBIXCg9pZGVtcG90ZW5jeV9rZXkYASABKAkSJgoFcXVvdGUYAiABKAsyFy5maWNhbnQubWFya2V0LnYxLlF1b3RlIj0KE0FwcGVuZFF1b3RlUmVzcG9uc2USJgoFcXVvdGUYASABKAsyFy5maWNhbnQubWFya2V0LnYxLlF1b3RlIlUKEkFwcGVuZFRyYWRlUmVxdWVzdBIXCg9pZGVtcG90ZW5jeV9rZXkYASABKAkSJgoFdHJhZGUYAiABKAsyFy5maWNhbnQubWFya2V0LnYxLlRyYWRlIj0KE0FwcGVuZFRyYWRlUmVzcG9uc2USJgoFdHJhZGUYASABKAsyFy5maWNhbnQubWFya2V0LnYxLlRyYWRlImEKFkFwcGVuZFZhbHVhdGlvblJlcXVlc3QSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgJEi4KCXZhbHVhdGlvbhgCIAEoCzIbLmZpY2FudC5tYXJrZXQudjEuVmFsdWF0aW9uIkkKF0FwcGVuZFZhbHVhdGlvblJlc3BvbnNlEi4KCXZhbHVhdGlvbhgBIAEoCzIbLmZpY2FudC5tYXJrZXQudjEuVmFsdWF0aW9uIm8KG1B1Ymxpc2hDdXJ2ZVNuYXBzaG90UmVxdWVzdBIXCg9pZGVtcG90ZW5jeV9rZXkYASABKAkSNwoOY3VydmVfc25hcHNob3QYAiABKAsyHy5maWNhbnQubWFya2V0LnYxLkN1cnZlU25hcHNob3QiVwocUHVibGlzaEN1cnZlU25hcHNob3RSZXNwb25zZRI3Cg5jdXJ2ZV9zbmFwc2hvdBgBIAEoCzIfLmZpY2FudC5tYXJrZXQudjEuQ3VydmVTbmFwc2hvdCLKAQoKTWFya2V0RmFjdBIuCghjYXNoZmxvdxgBIAEoCzIaLmZpY2FudC5tYXJrZXQudjEuQ2FzaGZsb3dIABIoCgVxdW90ZRgCIAEoCzIXLmZpY2FudC5tYXJrZXQudjEuUXVvdGVIABIoCgV0cmFkZRgDIAEoCzIXLmZpY2FudC5tYXJrZXQudjEuVHJhZGVIABIwCgl2YWx1YXRpb24YBCABKAsyGy5maWNhbnQubWFya2V0LnYxLlZhbHVhdGlvbkgAQgYKBGZhY3QiygEKG1F1ZXJ5SW5zdHJ1bWVudEZhY3RzUmVxdWVzdBIuCgppbnN0cnVtZW50GAEgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIoCgRmcm9tGAIgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRImCgJ0bxgDIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSKQoEcGFnZRgEIAEoCzIbLmZpY2FudC5jb3JlLnYxLlBhZ2VSZXF1ZXN0IncKHFF1ZXJ5SW5zdHJ1bWVudEZhY3RzUmVzcG9uc2USKwoFZmFjdHMYASADKAsyHC5maWNhbnQubWFya2V0LnYxLk1hcmtldEZhY3QSKgoEcGFnZRgCIAEoCzIcLmZpY2FudC5jb3JlLnYxLlBhZ2VSZXNwb25zZSJKChdHZXRDdXJ2ZVNuYXBzaG90UmVxdWVzdBIvChFjdXJ2ZV9zbmFwc2hvdF9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQiUwoYR2V0Q3VydmVTbmFwc2hvdFJlc3BvbnNlEjcKDmN1cnZlX3NuYXBzaG90GAEgASgLMh8uZmljYW50Lm1hcmtldC52MS5DdXJ2ZVNuYXBzaG90MvEFChFNYXJrZXRGYWN0U2VydmljZRJjCg5BcHBlbmRDYXNoZmxvdxInLmZpY2FudC5tYXJrZXQudjEuQXBwZW5kQ2FzaGZsb3dSZXF1ZXN0GiguZmljYW50Lm1hcmtldC52MS5BcHBlbmRDYXNoZmxvd1Jlc3BvbnNlEloKC0FwcGVuZFF1b3RlEiQuZmljYW50Lm1hcmtldC52MS5BcHBlbmRRdW90ZVJlcXVlc3QaJS5maWNhbnQubWFya2V0LnYxLkFwcGVuZFF1b3RlUmVzcG9uc2USWgoLQXBwZW5kVHJhZGUSJC5maWNhbnQubWFya2V0LnYxLkFwcGVuZFRyYWRlUmVxdWVzdBolLmZpY2FudC5tYXJrZXQudjEuQXBwZW5kVHJhZGVSZXNwb25zZRJmCg9BcHBlbmRWYWx1YXRpb24SKC5maWNhbnQubWFya2V0LnYxLkFwcGVuZFZhbHVhdGlvblJlcXVlc3QaKS5maWNhbnQubWFya2V0LnYxLkFwcGVuZFZhbHVhdGlvblJlc3BvbnNlEnUKFFB1Ymxpc2hDdXJ2ZVNuYXBzaG90Ei0uZmljYW50Lm1hcmtldC52MS5QdWJsaXNoQ3VydmVTbmFwc2hvdFJlcXVlc3QaLi5maWNhbnQubWFya2V0LnYxLlB1Ymxpc2hDdXJ2ZVNuYXBzaG90UmVzcG9uc2USdQoUUXVlcnlJbnN0cnVtZW50RmFjdHMSLS5maWNhbnQubWFya2V0LnYxLlF1ZXJ5SW5zdHJ1bWVudEZhY3RzUmVxdWVzdBouLmZpY2FudC5tYXJrZXQudjEuUXVlcnlJbnN0cnVtZW50RmFjdHNSZXNwb25zZRJpChBHZXRDdXJ2ZVNuYXBzaG90EikuZmljYW50Lm1hcmtldC52MS5HZXRDdXJ2ZVNuYXBzaG90UmVxdWVzdBoqLmZpY2FudC5tYXJrZXQudjEuR2V0Q3VydmVTbmFwc2hvdFJlc3BvbnNlYgZwcm90bzM", [file_ficant_core_v1_common]);
+  fileDesc("ChtmaWNhbnQvbWFya2V0L3YxL2ZhY3QucHJvdG8SEGZpY2FudC5tYXJrZXQudjEiTQoKRmFjdFNvdXJjZRIRCglzb3VyY2VfaWQYASABKAkSEwoLZXh0ZXJuYWxfaWQYAiABKAkSFwoPc291cmNlX3JldmlzaW9uGAMgASgEIuoCCghDYXNoZmxvdxIpCgtjYXNoZmxvd19pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSKAoEYm9uZBgCIAEoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYSMAoMcGF5bWVudF90aW1lGAMgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRIsCgZhbW91bnQYBCABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUSJwoFb3duZXIYBSABKAsyGC5maWNhbnQuY29yZS52MS5Pd25lclJlZhIsCgZzb3VyY2UYBiABKAsyHC5maWNhbnQubWFya2V0LnYxLkZhY3RTb3VyY2USKwoNc3VwZXJzZWRlc19pZBgHIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSEwoLc2NoZWR1bGVfaWQYCCABKAkSEAoIc2VxdWVuY2UYCSABKAQimwMKBVF1b3RlEiYKCHF1b3RlX2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIuCgppbnN0cnVtZW50GAIgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhInCgVvd25lchgDIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEiwKBnNvdXJjZRgEIAEoCzIcLmZpY2FudC5tYXJrZXQudjEuRmFjdFNvdXJjZRIvCgtvYnNlcnZlZF9hdBgFIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSLwoLcmVjZWl2ZWRfYXQYBiABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEikKA2JpZBgHIAEoCzIcLmZpY2FudC5jb3JlLnYxLkRlY2ltYWxWYWx1ZRIpCgNhc2sYCCABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUSKwoNc3VwZXJzZWRlc19pZBgJIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQi8QIKBVRyYWRlEiYKCHRyYWRlX2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIuCgppbnN0cnVtZW50GAIgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhInCgVvd25lchgDIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEiwKBnNvdXJjZRgEIAEoCzIcLmZpY2FudC5tYXJrZXQudjEuRmFjdFNvdXJjZRIvCgtleGVjdXRlZF9hdBgFIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSKwoFcHJpY2UYBiABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUSLgoIcXVhbnRpdHkYByABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUSKwoNc3VwZXJzZWRlc19pZBgIIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQiigMKCVZhbHVhdGlvbhIqCgx2YWx1YXRpb25faWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEi4KCmluc3RydW1lbnQYAiABKAsyGi5maWNhbnQuY29yZS52MS5WZXJzaW9uUmVmEicKBW93bmVyGAMgASgLMhguZmljYW50LmNvcmUudjEuT3duZXJSZWYSLAoGc291cmNlGAQgASgLMhwuZmljYW50Lm1hcmtldC52MS5GYWN0U291cmNlEjAKDHZhbHVhdGlvbl9hdBgFIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSDgoGbWV0aG9kGAYgASgJEi0KCXJ1bGVfcGFjaxgHIAEoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYSLAoGdmFsdWVzGAggAygLMhwuZmljYW50LmNvcmUudjEuRGVjaW1hbFZhbHVlEisKDXN1cGVyc2VkZXNfaWQYCSABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkIuoDCg1DdXJ2ZVNuYXBzaG90Ei8KEWN1cnZlX3NuYXBzaG90X2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBInCgVvd25lchgCIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEikKBWFzX29mGAMgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRIpCghjdXJyZW5jeRgEIAEoCzIXLmZpY2FudC5jb3JlLnYxLlVuaXRSZWYSEgoKY3VydmVfa2luZBgFIAEoCRIsCghjYWxlbmRhchgGIAEoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYSLQoJcnVsZV9wYWNrGAcgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIUCgxwb2ludF9zY2hlbWEYCCABKAkSLAoMY29udGVudF9oYXNoGAkgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EisKB2xpbmVhZ2UYCiADKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmEi4KCnZpc2libGVfYXQYCyABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEhcKD2N1cnZlX2ZhbWlseV9pZBgMIAEoCSKVAQoKQ3VydmVQb2ludBIVCg1jdXJ2ZV9ub2RlX2lkGAEgASgJEjcKF2N1cnZlX25vZGVfY29udGVudF9oYXNoGAIgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EjcKEXlpZWxkX3RvX21hdHVyaXR5GAMgASgLMhwuZmljYW50LmNvcmUudjEuRGVjaW1hbFZhbHVlIlYKDUN1cnZlUG9pbnRTZXQSFwoPY3VydmVfZmFtaWx5X2lkGAEgASgJEiwKBnBvaW50cxgCIAMoCzIcLmZpY2FudC5tYXJrZXQudjEuQ3VydmVQb2ludCJeChVBcHBlbmRDYXNoZmxvd1JlcXVlc3QSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgJEiwKCGNhc2hmbG93GAIgASgLMhouZmljYW50Lm1hcmtldC52MS5DYXNoZmxvdyJGChZBcHBlbmRDYXNoZmxvd1Jlc3BvbnNlEiwKCGNhc2hmbG93GAEgASgLMhouZmljYW50Lm1hcmtldC52MS5DYXNoZmxvdyJVChJBcHBlbmRRdW90ZVJlcXVlc3QSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgJEiYKBXF1b3RlGAIgASgLMhcuZmljYW50Lm1hcmtldC52MS5RdW90ZSI9ChNBcHBlbmRRdW90ZVJlc3BvbnNlEiYKBXF1b3RlGAEgASgLMhcuZmljYW50Lm1hcmtldC52MS5RdW90ZSJVChJBcHBlbmRUcmFkZVJlcXVlc3QSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgJEiYKBXRyYWRlGAIgASgLMhcuZmljYW50Lm1hcmtldC52MS5UcmFkZSI9ChNBcHBlbmRUcmFkZVJlc3BvbnNlEiYKBXRyYWRlGAEgASgLMhcuZmljYW50Lm1hcmtldC52MS5UcmFkZSJhChZBcHBlbmRWYWx1YXRpb25SZXF1ZXN0EhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoCRIuCgl2YWx1YXRpb24YAiABKAsyGy5maWNhbnQubWFya2V0LnYxLlZhbHVhdGlvbiJJChdBcHBlbmRWYWx1YXRpb25SZXNwb25zZRIuCgl2YWx1YXRpb24YASABKAsyGy5maWNhbnQubWFya2V0LnYxLlZhbHVhdGlvbiJvChtQdWJsaXNoQ3VydmVTbmFwc2hvdFJlcXVlc3QSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgJEjcKDmN1cnZlX3NuYXBzaG90GAIgASgLMh8uZmljYW50Lm1hcmtldC52MS5DdXJ2ZVNuYXBzaG90IlcKHFB1Ymxpc2hDdXJ2ZVNuYXBzaG90UmVzcG9uc2USNwoOY3VydmVfc25hcHNob3QYASABKAsyHy5maWNhbnQubWFya2V0LnYxLkN1cnZlU25hcHNob3QiygEKCk1hcmtldEZhY3QSLgoIY2FzaGZsb3cYASABKAsyGi5maWNhbnQubWFya2V0LnYxLkNhc2hmbG93SAASKAoFcXVvdGUYAiABKAsyFy5maWNhbnQubWFya2V0LnYxLlF1b3RlSAASKAoFdHJhZGUYAyABKAsyFy5maWNhbnQubWFya2V0LnYxLlRyYWRlSAASMAoJdmFsdWF0aW9uGAQgASgLMhsuZmljYW50Lm1hcmtldC52MS5WYWx1YXRpb25IAEIGCgRmYWN0IsoBChtRdWVyeUluc3RydW1lbnRGYWN0c1JlcXVlc3QSLgoKaW5zdHJ1bWVudBgBIAEoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYSKAoEZnJvbRgCIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSJgoCdG8YAyABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEikKBHBhZ2UYBCABKAsyGy5maWNhbnQuY29yZS52MS5QYWdlUmVxdWVzdCJ3ChxRdWVyeUluc3RydW1lbnRGYWN0c1Jlc3BvbnNlEisKBWZhY3RzGAEgAygLMhwuZmljYW50Lm1hcmtldC52MS5NYXJrZXRGYWN0EioKBHBhZ2UYAiABKAsyHC5maWNhbnQuY29yZS52MS5QYWdlUmVzcG9uc2UiSgoXR2V0Q3VydmVTbmFwc2hvdFJlcXVlc3QSLwoRY3VydmVfc25hcHNob3RfaWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkIlMKGEdldEN1cnZlU25hcHNob3RSZXNwb25zZRI3Cg5jdXJ2ZV9zbmFwc2hvdBgBIAEoCzIfLmZpY2FudC5tYXJrZXQudjEuQ3VydmVTbmFwc2hvdDLxBQoRTWFya2V0RmFjdFNlcnZpY2USYwoOQXBwZW5kQ2FzaGZsb3cSJy5maWNhbnQubWFya2V0LnYxLkFwcGVuZENhc2hmbG93UmVxdWVzdBooLmZpY2FudC5tYXJrZXQudjEuQXBwZW5kQ2FzaGZsb3dSZXNwb25zZRJaCgtBcHBlbmRRdW90ZRIkLmZpY2FudC5tYXJrZXQudjEuQXBwZW5kUXVvdGVSZXF1ZXN0GiUuZmljYW50Lm1hcmtldC52MS5BcHBlbmRRdW90ZVJlc3BvbnNlEloKC0FwcGVuZFRyYWRlEiQuZmljYW50Lm1hcmtldC52MS5BcHBlbmRUcmFkZVJlcXVlc3QaJS5maWNhbnQubWFya2V0LnYxLkFwcGVuZFRyYWRlUmVzcG9uc2USZgoPQXBwZW5kVmFsdWF0aW9uEiguZmljYW50Lm1hcmtldC52MS5BcHBlbmRWYWx1YXRpb25SZXF1ZXN0GikuZmljYW50Lm1hcmtldC52MS5BcHBlbmRWYWx1YXRpb25SZXNwb25zZRJ1ChRQdWJsaXNoQ3VydmVTbmFwc2hvdBItLmZpY2FudC5tYXJrZXQudjEuUHVibGlzaEN1cnZlU25hcHNob3RSZXF1ZXN0Gi4uZmljYW50Lm1hcmtldC52MS5QdWJsaXNoQ3VydmVTbmFwc2hvdFJlc3BvbnNlEnUKFFF1ZXJ5SW5zdHJ1bWVudEZhY3RzEi0uZmljYW50Lm1hcmtldC52MS5RdWVyeUluc3RydW1lbnRGYWN0c1JlcXVlc3QaLi5maWNhbnQubWFya2V0LnYxLlF1ZXJ5SW5zdHJ1bWVudEZhY3RzUmVzcG9uc2USaQoQR2V0Q3VydmVTbmFwc2hvdBIpLmZpY2FudC5tYXJrZXQudjEuR2V0Q3VydmVTbmFwc2hvdFJlcXVlc3QaKi5maWNhbnQubWFya2V0LnYxLkdldEN1cnZlU25hcHNob3RSZXNwb25zZWIGcHJvdG8z", [file_ficant_core_v1_common]);
 
 /**
  * @generated from message ficant.market.v1.FactSource
@@ -323,6 +323,16 @@ export type CurveSnapshot = Message<"ficant.market.v1.CurveSnapshot"> & {
    * @generated from field: repeated ficant.core.v1.LineageRef lineage = 10;
    */
   lineage: LineageRef[];
+
+  /**
+   * @generated from field: ficant.core.v1.MarketTime visible_at = 11;
+   */
+  visibleAt?: MarketTime;
+
+  /**
+   * @generated from field: string curve_family_id = 12;
+   */
+  curveFamilyId: string;
 };
 
 /**
@@ -331,6 +341,58 @@ export type CurveSnapshot = Message<"ficant.market.v1.CurveSnapshot"> & {
  */
 export const CurveSnapshotSchema: GenMessage<CurveSnapshot> = /*@__PURE__*/
   messageDesc(file_ficant_market_v1_fact, 5);
+
+/**
+ * CurvePointSet is the canonical payload for point_schema
+ * ficant.yield-curve-points.protobuf.v1.
+ *
+ * @generated from message ficant.market.v1.CurvePoint
+ */
+export type CurvePoint = Message<"ficant.market.v1.CurvePoint"> & {
+  /**
+   * @generated from field: string curve_node_id = 1;
+   */
+  curveNodeId: string;
+
+  /**
+   * @generated from field: ficant.core.v1.Sha256 curve_node_content_hash = 2;
+   */
+  curveNodeContentHash?: Sha256;
+
+  /**
+   * @generated from field: ficant.core.v1.DecimalValue yield_to_maturity = 3;
+   */
+  yieldToMaturity?: DecimalValue;
+};
+
+/**
+ * Describes the message ficant.market.v1.CurvePoint.
+ * Use `create(CurvePointSchema)` to create a new message.
+ */
+export const CurvePointSchema: GenMessage<CurvePoint> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_fact, 6);
+
+/**
+ * @generated from message ficant.market.v1.CurvePointSet
+ */
+export type CurvePointSet = Message<"ficant.market.v1.CurvePointSet"> & {
+  /**
+   * @generated from field: string curve_family_id = 1;
+   */
+  curveFamilyId: string;
+
+  /**
+   * @generated from field: repeated ficant.market.v1.CurvePoint points = 2;
+   */
+  points: CurvePoint[];
+};
+
+/**
+ * Describes the message ficant.market.v1.CurvePointSet.
+ * Use `create(CurvePointSetSchema)` to create a new message.
+ */
+export const CurvePointSetSchema: GenMessage<CurvePointSet> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_fact, 7);
 
 /**
  * @generated from message ficant.market.v1.AppendCashflowRequest
@@ -352,7 +414,7 @@ export type AppendCashflowRequest = Message<"ficant.market.v1.AppendCashflowRequ
  * Use `create(AppendCashflowRequestSchema)` to create a new message.
  */
 export const AppendCashflowRequestSchema: GenMessage<AppendCashflowRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 6);
+  messageDesc(file_ficant_market_v1_fact, 8);
 
 /**
  * @generated from message ficant.market.v1.AppendCashflowResponse
@@ -369,7 +431,7 @@ export type AppendCashflowResponse = Message<"ficant.market.v1.AppendCashflowRes
  * Use `create(AppendCashflowResponseSchema)` to create a new message.
  */
 export const AppendCashflowResponseSchema: GenMessage<AppendCashflowResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 7);
+  messageDesc(file_ficant_market_v1_fact, 9);
 
 /**
  * @generated from message ficant.market.v1.AppendQuoteRequest
@@ -391,7 +453,7 @@ export type AppendQuoteRequest = Message<"ficant.market.v1.AppendQuoteRequest"> 
  * Use `create(AppendQuoteRequestSchema)` to create a new message.
  */
 export const AppendQuoteRequestSchema: GenMessage<AppendQuoteRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 8);
+  messageDesc(file_ficant_market_v1_fact, 10);
 
 /**
  * @generated from message ficant.market.v1.AppendQuoteResponse
@@ -408,7 +470,7 @@ export type AppendQuoteResponse = Message<"ficant.market.v1.AppendQuoteResponse"
  * Use `create(AppendQuoteResponseSchema)` to create a new message.
  */
 export const AppendQuoteResponseSchema: GenMessage<AppendQuoteResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 9);
+  messageDesc(file_ficant_market_v1_fact, 11);
 
 /**
  * @generated from message ficant.market.v1.AppendTradeRequest
@@ -430,7 +492,7 @@ export type AppendTradeRequest = Message<"ficant.market.v1.AppendTradeRequest"> 
  * Use `create(AppendTradeRequestSchema)` to create a new message.
  */
 export const AppendTradeRequestSchema: GenMessage<AppendTradeRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 10);
+  messageDesc(file_ficant_market_v1_fact, 12);
 
 /**
  * @generated from message ficant.market.v1.AppendTradeResponse
@@ -447,7 +509,7 @@ export type AppendTradeResponse = Message<"ficant.market.v1.AppendTradeResponse"
  * Use `create(AppendTradeResponseSchema)` to create a new message.
  */
 export const AppendTradeResponseSchema: GenMessage<AppendTradeResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 11);
+  messageDesc(file_ficant_market_v1_fact, 13);
 
 /**
  * @generated from message ficant.market.v1.AppendValuationRequest
@@ -469,7 +531,7 @@ export type AppendValuationRequest = Message<"ficant.market.v1.AppendValuationRe
  * Use `create(AppendValuationRequestSchema)` to create a new message.
  */
 export const AppendValuationRequestSchema: GenMessage<AppendValuationRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 12);
+  messageDesc(file_ficant_market_v1_fact, 14);
 
 /**
  * @generated from message ficant.market.v1.AppendValuationResponse
@@ -486,7 +548,7 @@ export type AppendValuationResponse = Message<"ficant.market.v1.AppendValuationR
  * Use `create(AppendValuationResponseSchema)` to create a new message.
  */
 export const AppendValuationResponseSchema: GenMessage<AppendValuationResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 13);
+  messageDesc(file_ficant_market_v1_fact, 15);
 
 /**
  * @generated from message ficant.market.v1.PublishCurveSnapshotRequest
@@ -508,7 +570,7 @@ export type PublishCurveSnapshotRequest = Message<"ficant.market.v1.PublishCurve
  * Use `create(PublishCurveSnapshotRequestSchema)` to create a new message.
  */
 export const PublishCurveSnapshotRequestSchema: GenMessage<PublishCurveSnapshotRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 14);
+  messageDesc(file_ficant_market_v1_fact, 16);
 
 /**
  * @generated from message ficant.market.v1.PublishCurveSnapshotResponse
@@ -525,7 +587,7 @@ export type PublishCurveSnapshotResponse = Message<"ficant.market.v1.PublishCurv
  * Use `create(PublishCurveSnapshotResponseSchema)` to create a new message.
  */
 export const PublishCurveSnapshotResponseSchema: GenMessage<PublishCurveSnapshotResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 15);
+  messageDesc(file_ficant_market_v1_fact, 17);
 
 /**
  * @generated from message ficant.market.v1.MarketFact
@@ -566,7 +628,7 @@ export type MarketFact = Message<"ficant.market.v1.MarketFact"> & {
  * Use `create(MarketFactSchema)` to create a new message.
  */
 export const MarketFactSchema: GenMessage<MarketFact> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 16);
+  messageDesc(file_ficant_market_v1_fact, 18);
 
 /**
  * @generated from message ficant.market.v1.QueryInstrumentFactsRequest
@@ -598,7 +660,7 @@ export type QueryInstrumentFactsRequest = Message<"ficant.market.v1.QueryInstrum
  * Use `create(QueryInstrumentFactsRequestSchema)` to create a new message.
  */
 export const QueryInstrumentFactsRequestSchema: GenMessage<QueryInstrumentFactsRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 17);
+  messageDesc(file_ficant_market_v1_fact, 19);
 
 /**
  * @generated from message ficant.market.v1.QueryInstrumentFactsResponse
@@ -620,7 +682,7 @@ export type QueryInstrumentFactsResponse = Message<"ficant.market.v1.QueryInstru
  * Use `create(QueryInstrumentFactsResponseSchema)` to create a new message.
  */
 export const QueryInstrumentFactsResponseSchema: GenMessage<QueryInstrumentFactsResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 18);
+  messageDesc(file_ficant_market_v1_fact, 20);
 
 /**
  * @generated from message ficant.market.v1.GetCurveSnapshotRequest
@@ -637,7 +699,7 @@ export type GetCurveSnapshotRequest = Message<"ficant.market.v1.GetCurveSnapshot
  * Use `create(GetCurveSnapshotRequestSchema)` to create a new message.
  */
 export const GetCurveSnapshotRequestSchema: GenMessage<GetCurveSnapshotRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 19);
+  messageDesc(file_ficant_market_v1_fact, 21);
 
 /**
  * @generated from message ficant.market.v1.GetCurveSnapshotResponse
@@ -654,7 +716,7 @@ export type GetCurveSnapshotResponse = Message<"ficant.market.v1.GetCurveSnapsho
  * Use `create(GetCurveSnapshotResponseSchema)` to create a new message.
  */
 export const GetCurveSnapshotResponseSchema: GenMessage<GetCurveSnapshotResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_fact, 20);
+  messageDesc(file_ficant_market_v1_fact, 22);
 
 /**
  * @generated from service ficant.market.v1.MarketFactService

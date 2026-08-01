@@ -453,7 +453,8 @@ pub async fn serve_grpc_web_with_rates_and_experiment_and_registry_and_positions
 /// # Errors
 ///
 /// Returns an error for an invalid exact CORS origin or a transport failure.
-pub async fn serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors(
+#[allow(clippy::too_many_arguments)]
+pub async fn serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk(
     config: GrpcWebServerConfig,
     platform: PlatformGrpcService,
     rates: crate::rates::RatesGrpcService,
@@ -461,21 +462,24 @@ pub async fn serve_grpc_web_with_rates_and_experiment_and_registry_and_positions
     registry: crate::subject_registry::SubjectRegistryGrpcService,
     positions: crate::position_snapshot::PositionSnapshotGrpcService,
     factors: crate::factor_registry::FactorRegistryGrpcService,
+    portfolio_risk: crate::portfolio_risk::PortfolioRiskGrpcService,
 ) -> Result<(), GrpcWebServeError> {
     use ficant_contracts::ficant::core::v1::registry_service_server::RegistryServiceServer;
     use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsServiceServer;
     use ficant_contracts::ficant::research::v1::experiment_service_server::ExperimentServiceServer;
     use ficant_contracts::ficant::research::v1::factor_registry_service_server::FactorRegistryServiceServer;
+    use ficant_contracts::ficant::research::v1::portfolio_risk_service_server::PortfolioRiskServiceServer;
     use ficant_contracts::ficant::research::v1::position_snapshot_service_server::PositionSnapshotServiceServer;
 
     let cors = ExactCorsLayer::try_new(&config.allowed_origins)?;
-    let service = PlatformRatesExperimentRegistryPositionFactorService {
+    let service = PlatformRatesExperimentRegistryPositionFactorRiskService {
         platform: PlatformServiceServer::new(platform),
         rates: RatesAnalyticsServiceServer::new(rates),
         experiment: ExperimentServiceServer::new(experiment),
         registry: RegistryServiceServer::new(registry),
         positions: PositionSnapshotServiceServer::new(positions),
         factors: FactorRegistryServiceServer::new(factors),
+        portfolio_risk: PortfolioRiskServiceServer::new(portfolio_risk),
     };
     let service = GrpcWebLayer::new().layer(service);
     let service = cors.layer(service);
@@ -512,17 +516,18 @@ struct PlatformRatesExperimentRegistryPositionService<P, R, E, G, S> {
 }
 
 #[derive(Clone, Debug)]
-struct PlatformRatesExperimentRegistryPositionFactorService<P, R, E, G, S, F> {
+struct PlatformRatesExperimentRegistryPositionFactorRiskService<P, R, E, G, S, F, K> {
     platform: P,
     rates: R,
     experiment: E,
     registry: G,
     positions: S,
     factors: F,
+    portfolio_risk: K,
 }
 
-impl<P, R, E, G, S, F, RequestBody> Service<HttpRequest<RequestBody>>
-    for PlatformRatesExperimentRegistryPositionFactorService<P, R, E, G, S, F>
+impl<P, R, E, G, S, F, K, RequestBody> Service<HttpRequest<RequestBody>>
+    for PlatformRatesExperimentRegistryPositionFactorRiskService<P, R, E, G, S, F, K>
 where
     P: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>> + Send + 'static,
     R: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
@@ -540,12 +545,16 @@ where
     F: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
         + Send
         + 'static,
+    K: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
+        + Send
+        + 'static,
     P::Future: Send + 'static,
     R::Future: Send + 'static,
     E::Future: Send + 'static,
     G::Future: Send + 'static,
     S::Future: Send + 'static,
     F::Future: Send + 'static,
+    K::Future: Send + 'static,
     P::Error: Send + 'static,
     RequestBody: Send + 'static,
 {
@@ -579,7 +588,12 @@ where
             Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
             Poll::Pending => return Poll::Pending,
         }
-        self.factors.poll_ready(context)
+        match self.factors.poll_ready(context) {
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+            Poll::Pending => return Poll::Pending,
+        }
+        self.portfolio_risk.poll_ready(context)
     }
 
     fn call(&mut self, request: HttpRequest<RequestBody>) -> Self::Future {
@@ -594,6 +608,8 @@ where
             Box::pin(self.positions.call(request))
         } else if path.starts_with("/ficant.research.v1.FactorRegistryService/") {
             Box::pin(self.factors.call(request))
+        } else if path.starts_with("/ficant.research.v1.PortfolioRiskService/") {
+            Box::pin(self.portfolio_risk.call(request))
         } else {
             Box::pin(self.platform.call(request))
         }

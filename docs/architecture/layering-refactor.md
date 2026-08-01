@@ -160,7 +160,8 @@
 | **R4a** | **CTD 双时间与具体合约** | verified DataSnapshot 的历史 CTD 清单 / 价格边界；具体 FuturesContract 输入拒绝语义 | AC27 AC28 |
 | **R4b** | **PositionSnapshot 与会计视图** | `PositionSnapshot` 走双时间通道；会计三态与 fail-closed；回购穿透的敞口 / 可用流动性边界 | AC14 AC17–AC19 |
 | **R4c** | **Factor 身份与拓扑** | 全局 immutable `FactorId`、敏感度口径、稳定曲线节点定义及 asset ↔ Factor 双向索引；不产生数值 Exposure | AC05 |
-| **R4d** | **KRD 与组合聚合** | 从 PositionSnapshot、曲线快照、Instrument definition 和 R4c FactorDefinition 内部冲击 / 重定价，生成逐仓位 KRD 并聚合 | AC16 |
+| **R4d-a** | **可验证风险输入与债券 KRD** | 完整 Bond 定价条款、verified curve points 与 Factor convention 执行；生成逐债券仓位 KRD 和债券子组合 totals；非债券敞口失败关闭 | —（AC16 前置） |
+| **R4d-b** | **具体期货 KRD 与全组合聚合** | 依赖 R4d-a；复用 R4a 的 exact FuturesContract / CTD materializer，内部生成期货 KRD 并与债券逐仓位结果完整聚合 | AC16 |
 | **R5** | 可信度与覆盖度 | canonical quote 加来源类型与可信度；`CoverageDeclaration` 成为组合级结果的必带元数据；`DataHealthReport` 以 AnalyticsService 形态落地；重跑 Phase 3A/3B 取证 | AC15 AC35 AC36 |
 | **R6** | 角色与白名单 | 平台管理员与研究用户分离；数据源导入白名单；基础数据变更留痕 | AC37 |
 | **R7** | 一期收口 | **虚构市场零核心改动验证**（健康度指标）；全量重取证；MANUAL 走查 | AC04 AC11–AC13 AC30–AC33 |

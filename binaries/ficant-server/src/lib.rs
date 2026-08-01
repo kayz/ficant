@@ -1,13 +1,15 @@
 use ficant_api::{
-    CanonicalSnapshotCodecAdapter, ExperimentGrpcService, FactorRegistryGrpcService,
-    GrpcWebServeError, GrpcWebServerConfig, PlatformApplication, PlatformGrpcService, PlatformPort,
-    PositionSnapshotGrpcService, RatesGrpcService, SessionPolicy, SubjectRegistryGrpcService,
-    SystemClock, TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
-    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors,
+    CanonicalCurvePointSetDecoder, CanonicalSnapshotCodecAdapter, ExperimentGrpcService,
+    FactorRegistryGrpcService, GrpcWebServeError, GrpcWebServerConfig, PlatformApplication,
+    PlatformGrpcService, PlatformPort, PortfolioRiskGrpcService, PositionSnapshotGrpcService,
+    RatesGrpcService, SessionPolicy, SubjectRegistryGrpcService, SystemClock,
+    TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
+    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk,
 };
 use ficant_application::ports::{
-    AccessScope, AeadCursorCodec, ArtifactRepository, BlobStore, CursorKey, DefinitionRepository,
-    ExperimentRepository, FactorTopologyRepository, IntegrityEventSink, Phase4ExecutionRepository,
+    AccessScope, AeadCursorCodec, ArtifactRepository, BlobStore, CursorKey,
+    CurveSnapshotMetadataRepository, DefinitionRepository, ExperimentRepository,
+    FactorTopologyRepository, IntegrityEventSink, Phase4ExecutionRepository,
     PositionSnapshotRepository, RunJournalRepository, SnapshotRepository,
     SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobReader,
 };
@@ -371,9 +373,9 @@ pub fn build_grpc_services_with_experiment_and_registry(
         cursor,
         phase4,
         artifacts,
-        definitions,
+        definitions.clone(),
         snapshots,
-        blobs,
+        blobs.clone(),
         build_integrity_event_sink(),
         Arc::new(ProductionNativeCatalog),
         trusted,
@@ -386,12 +388,13 @@ pub fn build_grpc_services_with_experiment_and_registry(
     Ok((platform, rates, experiment, registry))
 }
 
-/// Composes all production services, including `PositionSnapshot` over the trusted server scope.
+/// Composes all production services, including `PositionSnapshot`, Factor, and Portfolio Risk.
 ///
 /// # Errors
 ///
 /// Returns a redacted composition error when trusted configuration or adapters cannot be built.
-pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors(
+#[allow(clippy::type_complexity, clippy::too_many_lines)]
+pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk(
     settings: &ServerSettings,
 ) -> Result<
     (
@@ -401,6 +404,7 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors(
         SubjectRegistryGrpcService,
         PositionSnapshotGrpcService,
         FactorRegistryGrpcService,
+        PortfolioRiskGrpcService,
     ),
     ServerError,
 > {
@@ -433,12 +437,13 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors(
     let snapshot_repository: Arc<dyn SnapshotRepository> = repository.clone();
     let position_repository: Arc<dyn PositionSnapshotRepository> = repository.clone();
     let factor_repository: Arc<dyn FactorTopologyRepository> = repository.clone();
+    let curve_repository: Arc<dyn CurveSnapshotMetadataRepository> = repository.clone();
     let artifacts: Arc<dyn ArtifactRepository> = repository.clone();
     let definitions: Arc<dyn DefinitionRepository> = repository.clone();
     let subjects: Arc<dyn SubjectRepository> = repository.clone();
-    let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository;
+    let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository.clone();
     let blobs: Arc<dyn VerifiedBlobReader> = blob_store.clone();
-    let writable_blobs: Arc<dyn BlobStore> = blob_store;
+    let writable_blobs: Arc<dyn BlobStore> = blob_store.clone();
     let rates = build_rates_service(
         Arc::clone(&application),
         definitions.clone(),
@@ -456,9 +461,9 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors(
         cursor,
         phase4,
         artifacts,
-        definitions,
+        definitions.clone(),
         snapshots,
-        blobs,
+        blobs.clone(),
         build_integrity_event_sink(),
         Arc::new(ProductionNativeCatalog),
         trusted,
@@ -476,10 +481,25 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors(
     .map_err(|_| config("trusted position access scope is invalid"))?;
     let positions = PositionSnapshotGrpcService::new(
         Arc::clone(&application),
-        access_scope,
-        position_repository,
+        access_scope.clone(),
+        position_repository.clone(),
         snapshot_repository,
         writable_blobs,
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+    let portfolio_risk = PortfolioRiskGrpcService::new(
+        Arc::clone(&application),
+        access_scope,
+        position_repository,
+        curve_repository,
+        definitions,
+        factor_repository.clone(),
+        blobs,
+        build_integrity_event_sink(),
+        Arc::new(CanonicalCurvePointSetDecoder),
+        Arc::new(NativeYieldCurveEngine),
+        Arc::new(NativeBondAnalyticsEngine),
         &settings.trace_key,
     )
     .map_err(config)?;
@@ -495,6 +515,39 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors(
         &settings.trace_key,
     )
     .map_err(config)?;
+    Ok((
+        platform,
+        rates,
+        experiment,
+        registry,
+        positions,
+        factors,
+        portfolio_risk,
+    ))
+}
+
+/// Preserves the R4c production composition surface for focused Factor tests.
+///
+/// # Errors
+///
+/// Returns a configuration or composition error when any production dependency cannot be built.
+pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors(
+    settings: &ServerSettings,
+) -> Result<
+    (
+        PlatformGrpcService,
+        RatesGrpcService,
+        ExperimentGrpcService,
+        SubjectRegistryGrpcService,
+        PositionSnapshotGrpcService,
+        FactorRegistryGrpcService,
+    ),
+    ServerError,
+> {
+    let (platform, rates, experiment, registry, positions, factors, _) =
+        build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk(
+            settings,
+        )?;
     Ok((platform, rates, experiment, registry, positions, factors))
 }
 
@@ -617,9 +670,11 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         .filter_map(|key| env::var(key).ok().map(|value| ((*key).to_owned(), value)))
         .collect();
     let settings = ServerSettings::try_from_values(&values)?;
-    let (platform, rates, experiment, registry, positions, factors) =
-        build_grpc_services_with_experiment_registry_and_positions_and_factors(&settings)?;
-    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors(
+    let (platform, rates, experiment, registry, positions, factors, portfolio_risk) =
+        build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk(
+            &settings,
+        )?;
+    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk(
         GrpcWebServerConfig {
             bind: settings.bind,
             allowed_origins: settings.allowed_origins.clone(),
@@ -630,6 +685,7 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         registry,
         positions,
         factors,
+        portfolio_risk,
     )
     .await?;
     Ok(())

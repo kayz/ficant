@@ -19,6 +19,22 @@ enum IncomeTaxStatus {
   INCOME_TAX_STATUS_TAXABLE = 2;
 }
 
+enum BondCouponFrequency {
+  BOND_COUPON_FREQUENCY_UNSPECIFIED = 0;
+  BOND_COUPON_FREQUENCY_ANNUAL = 1;
+  BOND_COUPON_FREQUENCY_SEMIANNUAL = 2;
+}
+
+enum BondDayCountConvention {
+  BOND_DAY_COUNT_CONVENTION_UNSPECIFIED = 0;
+  BOND_DAY_COUNT_CONVENTION_ACT_ACT_BOND_ISMA = 1;
+}
+
+enum BondBusinessDayConvention {
+  BOND_BUSINESS_DAY_CONVENTION_UNSPECIFIED = 0;
+  BOND_BUSINESS_DAY_CONVENTION_FOLLOWING = 1;
+}
+
 // BondTaxAttributes are L2 asset facts. They carry no tax rate or cutoff:
 // the exact L3 TaxRulePack validates and consumes them for a calculation.
 message BondTaxAttributes {
@@ -35,6 +51,10 @@ message Bond {
   string current_issue_date = 6;
   ficant.core.v1.DecimalValue cumulative_issued_amount = 7;
   BondTaxAttributes tax_attributes = 8;
+  ficant.core.v1.DecimalValue coupon_rate = 9;
+  BondCouponFrequency coupon_frequency = 10;
+  BondDayCountConvention day_count = 11;
+  BondBusinessDayConvention business_day = 12;
 }
 
 message FuturesContract {

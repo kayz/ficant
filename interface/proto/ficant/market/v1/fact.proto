@@ -71,6 +71,21 @@ message CurveSnapshot {
   string point_schema = 8;
   ficant.core.v1.Sha256 content_hash = 9;
   repeated ficant.core.v1.LineageRef lineage = 10;
+  ficant.core.v1.MarketTime visible_at = 11;
+  string curve_family_id = 12;
+}
+
+// CurvePointSet is the canonical payload for point_schema
+// ficant.yield-curve-points.protobuf.v1.
+message CurvePoint {
+  string curve_node_id = 1;
+  ficant.core.v1.Sha256 curve_node_content_hash = 2;
+  ficant.core.v1.DecimalValue yield_to_maturity = 3;
+}
+
+message CurvePointSet {
+  string curve_family_id = 1;
+  repeated CurvePoint points = 2;
 }
 
 message AppendCashflowRequest {

@@ -1,5 +1,6 @@
 use ficant_domain::market::{
-    ArtifactInputKind, Bond, BondTaxAttributes, Calendar, Cashflow, CashflowType, CurveSnapshot,
+    ArtifactInputKind, Bond, BondBusinessDayConvention, BondCouponFrequency,
+    BondDayCountConvention, BondTaxAttributes, Calendar, Cashflow, CashflowType, CurveSnapshot,
     FactSource, FuturesContract, IncomeTaxStatus, Instrument, InstrumentKind, MarketRulePack,
     Quote, Trade, Unit, Valuation, ValueAddedTaxStatus, VerificationStatus,
 };
@@ -182,6 +183,10 @@ pub(crate) fn definition_bytes(definition: &DefinitionValue) -> Vec<u8> {
     }
 }
 
+pub(crate) fn definition_content_hash(definition: &DefinitionValue) -> ContentHash {
+    ContentHash::digest(&definition_bytes(definition))
+}
+
 fn instrument_definition_bytes(definition: &InstrumentDefinition) -> Vec<u8> {
     let mut value = FingerprintBuilder::new("definition/instrument-aggregate/v1");
     value.field(2, &instrument_bytes(definition.instrument()));
@@ -215,6 +220,43 @@ fn instrument_bytes(instrument: &Instrument) -> Vec<u8> {
 }
 
 fn bond_bytes(bond: &Bond) -> Vec<u8> {
+    if let Some(pricing) = bond.pricing_terms() {
+        let mut value = FingerprintBuilder::new("definition/bond/v3");
+        value.field(2, &version_ref_bytes(bond.instrument()));
+        value.field(3, bond.first_issue_date().to_string().as_bytes());
+        value.field(4, bond.current_issue_date().to_string().as_bytes());
+        value.field(5, bond.maturity_date().to_string().as_bytes());
+        value.field(6, &decimal_bytes(bond.cumulative_issued_amount()));
+        value.field(
+            7,
+            &bond_tax_attributes_bytes(
+                bond.tax_attributes()
+                    .expect("priced Bond construction requires tax attributes"),
+            ),
+        );
+        value.field(8, &decimal_bytes(bond.face_value()));
+        value.field(9, &decimal_bytes(pricing.coupon_rate()));
+        value.field(
+            10,
+            &[match pricing.frequency() {
+                BondCouponFrequency::Annual => 1,
+                BondCouponFrequency::Semiannual => 2,
+            }],
+        );
+        value.field(
+            11,
+            &[match pricing.day_count() {
+                BondDayCountConvention::ActActBondIsma => 1,
+            }],
+        );
+        value.field(
+            12,
+            &[match pricing.business_day() {
+                BondBusinessDayConvention::Following => 1,
+            }],
+        );
+        return value.into_bytes();
+    }
     let Some(tax_attributes) = bond.tax_attributes() else {
         let mut legacy = FingerprintBuilder::new("definition/bond/v1");
         legacy.field(2, &version_ref_bytes(bond.instrument()));
@@ -320,7 +362,11 @@ fn rule_pack_bytes(rule: &MarketRulePack) -> Vec<u8> {
 }
 
 pub(crate) fn curve_snapshot_bytes(curve: &CurveSnapshot) -> Vec<u8> {
-    let mut value = FingerprintBuilder::new("curve-snapshot/v1");
+    let mut value = FingerprintBuilder::new(if curve.visible_at().is_some() {
+        "curve-snapshot/v2"
+    } else {
+        "curve-snapshot/v1"
+    });
     value.field(2, curve.id().as_str().as_bytes());
     value.field(3, &owner_bytes(curve.owner()));
     value.field(4, &market_time_bytes(curve.as_of()));
@@ -332,6 +378,11 @@ pub(crate) fn curve_snapshot_bytes(curve: &CurveSnapshot) -> Vec<u8> {
     value.field(10, curve.content_hash().as_bytes());
     value.field(11, &lineage_bytes(curve.lineage()));
     value.field(12, &[artifact_input_kind_code(curve.input_kind())]);
+    if let (Some(visible_at), Some(curve_family_id)) = (curve.visible_at(), curve.curve_family_id())
+    {
+        value.field(13, &market_time_bytes(visible_at));
+        value.field(14, curve_family_id.as_bytes());
+    }
     value.into_bytes()
 }
 

@@ -5,12 +5,12 @@
 ## 包与边界
 
 - `ficant.core.v1`：ULID、版本引用、SHA-256、所有者、单位、Decimal、市场时间、血缘、分页与稳定错误。
-- `ficant.market.v1`：Instrument、Bond、FuturesContract、Cashflow、Calendar、Unit、Quote、Trade、Valuation、CurveSnapshot、MarketRulePack，以及由 MarketRulePack 内容引用的强类型市场规则包。
-- `ficant.research.v1`：DataSnapshot、UniverseSnapshot、PositionSnapshot、ExperimentRun、Artifact、SignalSet、RunJournal，以及全局 immutable FactorDefinition、稳定 CurveNodeDefinition 与 append-only FactorTargetBinding。PositionSnapshot 以完整 `observed_at` / `visible_at`、Subject version、owner、canonical content hash 与 lineage 固定外部导入持仓事实；其 PositionSnapshotService 只按明确 knowledge time 读取或解析已验证快照，并将会计三态、持仓敞口、可用流动性与担保品事实保持为分离视图。FactorRegistryService 只注册因子口径与 exact Instrument / curve-node 静态拓扑并提供双向查询，不产生 Exposure、DV01、KRD 或权重。
+- `ficant.market.v1`：Instrument、带完整 fixed-rate 定价条款的 Bond、FuturesContract、Cashflow、Calendar、Unit、Quote、Trade、Valuation、带 `visible_at` / 稳定曲线族的 CurveSnapshot、canonical CurvePointSet、MarketRulePack，以及由 MarketRulePack 内容引用的强类型市场规则包。
+- `ficant.research.v1`：DataSnapshot、UniverseSnapshot、PositionSnapshot、ExperimentRun、Artifact、SignalSet、RunJournal，以及全局 immutable FactorDefinition、稳定 CurveNodeDefinition、append-only FactorTargetBinding 和债券子组合 PortfolioRiskService。PositionSnapshot 以完整 `observed_at` / `visible_at`、Subject version、owner、canonical content hash 与 lineage 固定外部导入持仓事实；其 PositionSnapshotService 只按明确 knowledge time 读取或解析已验证快照，并将会计三态、持仓敞口、可用流动性与担保品事实保持为分离视图。FactorRegistryService 只注册因子口径与 exact Instrument / curve-node 静态拓扑并提供双向查询；PortfolioRiskService 才按 verified curve points 与已注册 Factor convention 内部重定价，返回逐债券仓位 KRD 和债券子组合 totals，不接受调用方提交 DV01、KRD 或权重，也不宣称覆盖期货或全组合。
 - `ficant.app.v1`：Platform Shell 使用的 App Registry、Session 与短期应用启动授权；它们不计入 17 个 Phase 1 领域对象。
 - `ficant.rates.v1`：Phase 2E 的固定收益参考分析调用合同；只承载强类型请求/结果并复用 `ficant.core.v1` 身份、Decimal、时间和错误，不把 Python 变成数值实现或控制平面。
 
-`DecimalValue` 的唯一表示是 `coefficient(string) + scale(uint32) + UnitRef`。时间 instant 使用 Protobuf `Timestamp`，并显式携带 IANA 市场时区和本地交易日期。Valuation、CurveSnapshot 与 Cashflow 只登记外部输入事实和来源，不提供定价、曲线、现金流生成、久期、DV01 或其他 Phase 2 算法。
+`DecimalValue` 的唯一表示是 `coefficient(string) + scale(uint32) + UnitRef`。时间 instant 使用 Protobuf `Timestamp`，并显式携带 IANA 市场时区和本地交易日期。Valuation、CurveSnapshot 与 Cashflow 只登记外部输入事实和来源；CurveSnapshot 的 point blob 也只是经 hash / size / canonical bytes 验证的收益率节点事实。数值 KRD 由独立 PortfolioRiskService 绑定这些事实、definition 与算法 identity 后产生，不能回写或冒充市场事实。
 
 `MarketRulePack.content` 是加法式 `google.protobuf.Any`：`content_hash` 绑定其确定性 `value` bytes，而 `type_url` 只标识 L3 内容 schema。现有内容为 `CgbFuturesDeliveryRulePack`、`FundingRulePack` 与 `TaxRulePack`：前者由 `cgb-futures` adapter 解析，后两者分别按精确 Subject 的 `FundingTier` 与完整 VAT / income profile pair 解析；`TaxRulePack` 还校验 Bond 的首发日期间与券级税收属性。core 与通用 market 合同不解释其中的市场规则数值。
 

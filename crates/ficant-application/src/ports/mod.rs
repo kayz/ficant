@@ -4,6 +4,7 @@ mod artifacts;
 mod blob_store;
 mod canonical_snapshot;
 mod cursor;
+mod curve_points;
 mod curves;
 mod data_sources;
 mod definitions;
@@ -35,6 +36,10 @@ pub use artifacts::{ArtifactRepository, PublishArtifact};
 pub use blob_store::{BeginBlobStage, BlobStore, StagedBlobRef, VerifiedBlobRef, VerifyBlobStage};
 pub use canonical_snapshot::{CanonicalQuote, CanonicalSnapshotDecoder};
 pub use cursor::{AeadCursorCodec, Cursor, CursorKey};
+pub use curve_points::{
+    CURVE_POINT_SCHEMA, CurvePointSetDecoder, CurveSnapshotMetadata,
+    CurveSnapshotMetadataRepository, DecodedCurvePoint, DecodedCurvePointSet,
+};
 pub use curves::{
     CarryRollArtifactCodec, CarryRollEngine, EncodedCarryRollArtifact, YieldCurveEngine,
 };
@@ -52,6 +57,7 @@ pub use facts::{
     PublishCurveSnapshot,
 };
 pub use fingerprint::OperationFingerprint;
+pub(crate) use fingerprint::definition_content_hash;
 pub use funding_rule_parser::{FundingRate, FundingRulePackParser};
 pub use futures_delivery::{
     EncodedFuturesDeliveryArtifact, FuturesDeliveryArtifactCodec, FuturesDeliveryEngine,

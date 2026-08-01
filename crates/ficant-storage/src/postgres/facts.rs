@@ -2,9 +2,10 @@ use async_trait::async_trait;
 use ficant_application::ApplicationError;
 use ficant_application::ApplicationErrorCategory;
 use ficant_application::ports::{
-    AccessScope, AppendMarketFact, CorrectMarketFact, Cursor, CursorPage, DefinitionValue,
-    MarketFact, MarketFactKind, MarketFactRepository, MarketFactRuleProof, MarketFactRuleProofKind,
-    MarketFactWindow, PublishCurveSnapshot, ResolvedMarketFactProof,
+    AccessScope, AppendMarketFact, CorrectMarketFact, Cursor, CursorPage, CurveSnapshotMetadata,
+    CurveSnapshotMetadataRepository, DefinitionValue, MarketFact, MarketFactKind,
+    MarketFactRepository, MarketFactRuleProof, MarketFactRuleProofKind, MarketFactWindow,
+    PublishCurveSnapshot, ResolvedMarketFactProof,
 };
 use ficant_domain::market::CurveSnapshot;
 use ficant_domain::primitives::Ulid;
@@ -163,8 +164,10 @@ impl MarketFactRepository for PostgresRepository {
              (tenant_id, curve_snapshot_id, owner_id, as_of,
               currency_unit_id, currency_unit_version, curve_kind,
               calendar_id, calendar_version, rule_pack_id, rule_pack_version,
-              point_schema, content_hash, blob_size, idempotency_key, fingerprint, payload)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
+              point_schema, content_hash, blob_size, idempotency_key, fingerprint, payload,
+              visible_at, curve_family_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                     $15, $16, $17, $18, $19)",
         )
         .bind(tenant)
         .bind(curve.id().as_str())
@@ -183,6 +186,12 @@ impl MarketFactRepository for PostgresRepository {
         .bind(command.idempotency_key().as_str())
         .bind(command.fingerprint().content_hash().as_bytes().as_slice())
         .bind(encode_curve_snapshot(curve))
+        .bind(
+            curve
+                .visible_at()
+                .map(ficant_domain::primitives::MarketTime::instant),
+        )
+        .bind(curve.curve_family_id())
         .execute(&mut *transaction)
         .await
         .map_err(map_sqlx_error)?;
@@ -217,6 +226,35 @@ impl MarketFactRepository for PostgresRepository {
         payload
             .map(|bytes| decode_curve_snapshot(&bytes))
             .transpose()
+    }
+}
+
+#[async_trait]
+impl CurveSnapshotMetadataRepository for PostgresRepository {
+    async fn get_curve_snapshot_metadata(
+        &self,
+        scope: &AccessScope,
+        curve_snapshot_id: Ulid,
+    ) -> Result<Option<CurveSnapshotMetadata>, ApplicationError> {
+        let owners = owner_strings(scope);
+        let row: Option<(Vec<u8>, i64)> = sqlx::query_as(
+            "SELECT payload, blob_size FROM market.curve_snapshots
+             WHERE tenant_id = $1 AND curve_snapshot_id = $2
+               AND owner_id::text = ANY($3::text[])",
+        )
+        .bind(scope.tenant_id().as_str())
+        .bind(curve_snapshot_id.as_str())
+        .bind(&owners)
+        .fetch_optional(self.pool())
+        .await
+        .map_err(map_sqlx_error)?;
+        row.map(|(payload, size)| {
+            let size = u64::try_from(size).map_err(|_| {
+                application_error(ApplicationErrorCategory::ValidationFailed, false)
+            })?;
+            CurveSnapshotMetadata::new(decode_curve_snapshot(&payload)?, size)
+        })
+        .transpose()
     }
 }
 

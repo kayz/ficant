@@ -5,11 +5,12 @@ use ficant_application::ports::{
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_domain::market::{
-    ArtifactInputKind, Bond, BondTaxAttributes, Calendar, CalendarInput, CalendarSession, Cashflow,
-    CashflowInput, CashflowType, CurveSnapshot, CurveSnapshotInput, FactSource, FuturesContract,
-    IncomeTaxStatus, Instrument, InstrumentInput, InstrumentKind, MarketRulePack,
-    MarketRulePackInput, Quote, QuoteInput, RulePackContent, Trade, TradeInput, Unit, UnitInput,
-    Valuation, ValuationInput, ValueAddedTaxStatus, VerificationStatus,
+    ArtifactInputKind, Bond, BondBusinessDayConvention, BondCouponFrequency,
+    BondDayCountConvention, BondPricingTerms, BondTaxAttributes, Calendar, CalendarInput,
+    CalendarSession, Cashflow, CashflowInput, CashflowType, CurveSnapshot, CurveSnapshotInput,
+    FactSource, FuturesContract, IncomeTaxStatus, Instrument, InstrumentInput, InstrumentKind,
+    MarketRulePack, MarketRulePackInput, Quote, QuoteInput, RulePackContent, Trade, TradeInput,
+    Unit, UnitInput, Valuation, ValuationInput, ValueAddedTaxStatus, VerificationStatus,
 };
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, EffectivePeriod, MarketTime, OwnerRef, Ulid, UnitRef, Version,
@@ -337,6 +338,7 @@ fn decode_typed_value(decoder: &mut Decoder<'_>) -> CodecResult<TypedValue> {
     .map_err(ficant_application::map_domain_error)
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn encode_definition(value: &DefinitionValue) -> Vec<u8> {
     let mut encoder = Encoder::new();
     match value {
@@ -346,7 +348,31 @@ pub(crate) fn encode_definition(value: &DefinitionValue) -> Vec<u8> {
             match value.subtype() {
                 None => encoder.u8(0),
                 Some(InstrumentSubtype::Bond(value)) => {
-                    if let Some(attributes) = value.tax_attributes() {
+                    if let Some(pricing) = value.pricing_terms() {
+                        encoder.u8(4);
+                        encoder.string(&value.first_issue_date().to_string());
+                        encoder.string(&value.current_issue_date().to_string());
+                        encoder.string(&value.maturity_date().to_string());
+                        encode_decimal(&mut encoder, value.cumulative_issued_amount());
+                        encode_bond_tax_attributes(
+                            &mut encoder,
+                            value
+                                .tax_attributes()
+                                .expect("priced Bond construction requires tax attributes"),
+                        );
+                        encode_decimal(&mut encoder, value.face_value());
+                        encode_decimal(&mut encoder, pricing.coupon_rate());
+                        encoder.u8(match pricing.frequency() {
+                            BondCouponFrequency::Annual => 1,
+                            BondCouponFrequency::Semiannual => 2,
+                        });
+                        encoder.u8(match pricing.day_count() {
+                            BondDayCountConvention::ActActBondIsma => 1,
+                        });
+                        encoder.u8(match pricing.business_day() {
+                            BondBusinessDayConvention::Following => 1,
+                        });
+                    } else if let Some(attributes) = value.tax_attributes() {
                         encoder.u8(3);
                         encoder.string(&value.first_issue_date().to_string());
                         encoder.string(&value.current_issue_date().to_string());
@@ -427,6 +453,7 @@ pub(crate) fn encode_definition(value: &DefinitionValue) -> Vec<u8> {
     encoder.finish()
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn decode_definition(bytes: &[u8]) -> CodecResult<DefinitionValue> {
     let mut decoder = Decoder::new(bytes)?;
     let value = match decoder.u8()? {
@@ -455,6 +482,39 @@ pub(crate) fn decode_definition(bytes: &[u8]) -> CodecResult<DefinitionValue> {
                     )
                     .map_err(ficant_application::map_domain_error)?,
                 )),
+                4 => {
+                    let bond = Bond::with_issuance(
+                        &instrument,
+                        parse_date(&decoder.string()?)?,
+                        parse_date(&decoder.string()?)?,
+                        parse_date(&decoder.string()?)?,
+                        decode_decimal(&mut decoder)?,
+                        decode_bond_tax_attributes(&mut decoder)?,
+                        decode_decimal(&mut decoder)?,
+                    )
+                    .map_err(ficant_application::map_domain_error)?;
+                    let pricing = BondPricingTerms::new(
+                        decode_decimal(&mut decoder)?,
+                        match decoder.u8()? {
+                            1 => BondCouponFrequency::Annual,
+                            2 => BondCouponFrequency::Semiannual,
+                            _ => return Err(codec_error()),
+                        },
+                        match decoder.u8()? {
+                            1 => BondDayCountConvention::ActActBondIsma,
+                            _ => return Err(codec_error()),
+                        },
+                        match decoder.u8()? {
+                            1 => BondBusinessDayConvention::Following,
+                            _ => return Err(codec_error()),
+                        },
+                    )
+                    .map_err(ficant_application::map_domain_error)?;
+                    Some(InstrumentSubtype::Bond(
+                        bond.with_pricing_terms(pricing)
+                            .map_err(ficant_application::map_domain_error)?,
+                    ))
+                }
                 2 => Some(InstrumentSubtype::FuturesContract(
                     FuturesContract::new(
                         &instrument,
@@ -701,6 +761,12 @@ pub(crate) fn encode_curve_snapshot(value: &CurveSnapshot) -> Vec<u8> {
     encoder.u8(match value.input_kind() {
         ArtifactInputKind::ExternalFixture => 1,
     });
+    if let (Some(visible_at), Some(curve_family_id)) = (value.visible_at(), value.curve_family_id())
+    {
+        encoder.bool(true);
+        encode_market_time(&mut encoder, visible_at);
+        encoder.string(curve_family_id);
+    }
     encoder.finish()
 }
 
@@ -722,8 +788,18 @@ pub(crate) fn decode_curve_snapshot(bytes: &[u8]) -> CodecResult<CurveSnapshot> 
             _ => return Err(codec_error()),
         },
     };
+    let curve = CurveSnapshot::new(input).map_err(ficant_application::map_domain_error)?;
+    let curve = if decoder.at_end() {
+        curve
+    } else if decoder.bool()? {
+        curve
+            .with_knowledge_time(decode_market_time(&mut decoder)?, decoder.string()?)
+            .map_err(ficant_application::map_domain_error)?
+    } else {
+        return Err(codec_error());
+    };
     decoder.end()?;
-    CurveSnapshot::new(input).map_err(ficant_application::map_domain_error)
+    Ok(curve)
 }
 
 pub(crate) fn encode_snapshot(value: &SnapshotValue) -> Vec<u8> {

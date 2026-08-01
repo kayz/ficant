@@ -1,6 +1,7 @@
 mod artifact;
 mod data_snapshot;
 mod experiment_run;
+mod exposure;
 mod factor_topology;
 mod position_snapshot;
 mod research_graph;
@@ -11,6 +12,10 @@ mod universe_snapshot;
 pub use artifact::{Artifact, ArtifactKind};
 pub use data_snapshot::{DataSnapshot, DataSnapshotInput};
 pub use experiment_run::{ExperimentRun, ExperimentRunInput, RunState};
+pub use exposure::{
+    FactorDv01, PortfolioKeyRateExposure, PositionKeyRateExposure, RiskAlgorithmBinding,
+    aggregate_bond_key_rate_exposures, key_rate_dv01,
+};
 pub use factor_topology::{
     CurveNodeDefinition, CurveNodeDefinitionInput, CurveNodeRef, CurveRebuildPolicy,
     FactorDefinition, FactorDefinitionInput, FactorTarget, FactorTargetBinding,

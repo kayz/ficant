@@ -853,6 +853,82 @@ impl GraphRunComparisonDimension {
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RiskAlgorithmBinding {
+    #[prost(string, tag="1")]
+    pub algorithm_id: ::prost::alloc::string::String,
+    #[prost(uint32, tag="2")]
+    pub algorithm_version: u32,
+    #[prost(string, tag="3")]
+    pub convention_profile: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FactorDv01 {
+    #[prost(string, tag="1")]
+    pub factor_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub factor_definition_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="3")]
+    pub dv01: ::core::option::Option<super::super::core::v1::DecimalValue>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PositionKeyRateExposure {
+    #[prost(message, optional, tag="1")]
+    pub position_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub instrument: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, repeated, tag="3")]
+    pub exposures: ::prost::alloc::vec::Vec<FactorDv01>,
+    #[prost(message, optional, tag="4")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, repeated, tag="5")]
+    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PortfolioKeyRateExposure {
+    #[prost(message, optional, tag="1")]
+    pub position_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub curve_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, repeated, tag="3")]
+    pub positions: ::prost::alloc::vec::Vec<PositionKeyRateExposure>,
+    #[prost(message, repeated, tag="4")]
+    pub totals: ::prost::alloc::vec::Vec<FactorDv01>,
+    #[prost(message, optional, tag="5")]
+    pub algorithm: ::core::option::Option<RiskAlgorithmBinding>,
+    #[prost(message, optional, tag="6")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, repeated, tag="7")]
+    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CalculateKeyRateDv01Request {
+    #[prost(message, optional, tag="1")]
+    pub position_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub knowledge_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="3")]
+    pub valuation_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="4")]
+    pub curve_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="5")]
+    pub dv01_unit: ::core::option::Option<super::super::core::v1::UnitRef>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CalculateKeyRateDv01Response {
+    #[prost(oneof="calculate_key_rate_dv01_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<calculate_key_rate_dv01_response::Result>,
+}
+/// Nested message and enum types in `CalculateKeyRateDv01Response`.
+pub mod calculate_key_rate_dv01_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Exposure(super::PortfolioKeyRateExposure),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SensitivityConvention {
     #[prost(message, optional, tag="1")]
     pub bump: ::core::option::Option<super::super::core::v1::DecimalValue>,
