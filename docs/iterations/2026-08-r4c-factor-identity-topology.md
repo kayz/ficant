@@ -43,7 +43,7 @@ R4c 闸门：
 
 - 新增 `ficant.research.v1.factor.proto` 与 `FactorRegistryService`。服务只包含 `RegisterFactorDefinition`、`RegisterCurveNodeDefinition`、`BindFactorTarget`、`GetFactorDefinition`、`GetFactorTargets`、`GetTargetFactors` 六个一元 RPC；写操作需要 `factors:write`，全局 definition 读取需要 `factors:read`，target 关系读取还需通过被引用 Instrument owner 的 AccessScope。每个响应使用 typed success-or-`ErrorDetail` oneof。
 - `FactorDefinition` 的固定 wire shape 为 `factor_id = 1`、`factor_unit = 2`、`sensitivity_convention = 3`、`content_hash = 4`。`SensitivityConvention` 固定为 `bump = 1`、`direction = 2`、`curve_rebuild = 3`、`second_order = 4`；三个策略 enum 均有 `UNSPECIFIED = 0`，但注册拒绝它。Factor 的 canonical content 不包含其宣称 hash；hash 从其他确定性字段重算。
-- `CurveNodeDefinition` 的固定 wire shape 为 `curve_node_id = 1`、`curve_family_id = 2`、`tenor = 3`、`factor_unit = 4`、`content_hash = 5`。它是全局 immutable identity，`curve_node_id` 与 `curve_family_id` 均为规范化、非空的小写点分 id，tenor 使用规范 ISO-8601 period；同 id 不同内容失败关闭。`CurveNodeRef` 固定为 `curve_node_id = 1`、`content_hash = 2`。
+- `CurveNodeDefinition` 的固定 wire shape 为 `curve_node_id = 1`、`curve_family_id = 2`、`tenor = 3`、`factor_unit = 4`、`content_hash = 5`。它是全局 immutable identity，`curve_node_id` 与 `curve_family_id` 均为规范化、非空的小写点分 id；tenor 采用单段、正整数、无前导零的日期 period `P<正整数><Y|M|D>`（例如 `P10Y`）。同一 `(curve_family_id, tenor)` 只能注册一个稳定 node id；换 id 重复注册或同 id 不同内容均失败关闭。`CurveNodeRef` 固定为 `curve_node_id = 1`、`content_hash = 2`。
 - `FactorTargetRef` 固定为 `oneof target`：`InstrumentTarget instrument = 1` 或 `CurveNodeRef curve_node = 2`；`InstrumentTarget` 固定为 `owner = 1`、`instrument = 2`。`FactorTargetBinding` 固定为 `factor_id = 1`、`target = 2`、`content_hash = 3`。binding canonical hash 覆盖 FactorId 与完整 target ref；它不可更新或删除。
 - FactorDefinition / CurveNodeDefinition 本身无 owner、tenant 或版本：这落实单机构部署下的全平台唯一性。Instrument binding 保留 owner，防止把同一 VersionRef 误解释为跨 owner 可读。未来多租户支持必须先重裁 SPEC §0 的主体隔离 / 授权契约，不能把 tenant 前缀塞入 FactorId。
 - 新服务及 message 进入 Rust、Python、TypeScript 生成合同与 descriptor inventory；Python gRPC 只在 buf 配置显式列出 FactorRegistryService 后生成。既有 proto、Rates API、C++ / C ABI 与 generated API 不作破坏性更改。
@@ -54,6 +54,7 @@ R4c 闸门：
 - **已裁决——全局 immutable Factor：** FactorId 是不带 owner、tenant、alias 或 version 的全局字符串；相同 id 的不同 definition / convention 失败关闭。此选择遵守 ADR-0015 的“同一经济量只有一个 FactorId 与一套敏感度口径”，并避免以 version 偷渡不可相加的 Exposure。versioned Factor 或 tenant-scoped id 不属于 R4c；如未来需要，必须重新评估 S5 与跨主体聚合语义。
 - **已裁决——曲线节点的稳定身份：** 使用 immutable `CurveNodeDefinition(curve_family_id, tenor, factor_unit, content_hash)` 与 exact `CurveNodeRef`，而非 CurveSnapshotId + maturity date 或 Rates 请求字段。curve node id 与 curve family 均采用同一小写点分规范，tenor 采用 ISO-8601 period；R4c 不注册或计算任何曲线数值。
 - **已裁决——拓扑对象边界：** 静态 binding 只接受 exact Bond / Futures Instrument subtype 和 CurveNodeRef；不允许普通 Instrument、连续 / 拼接期货、Asset class、裸 maturity、裸 FactorId 或调用方数值。Researcher 具有 `factors:write`（ADR-0018），但所有 FactorId 共享全平台 collision gate；读取 binding 仍遵循目标 Instrument owner scope。
+- **已裁决——post-merge 曲线节点身份修正：** Human 在公共 R4c `ce39db0d5913d3545b657bce99793191a6f9e08a` 与 authority `cbeb305ef2d6af1d1e98f16b82aa7e9443eab793` 已闭环后，要求消除审查发现的两项残余。tenor 收敛为与数据库一致的单段 canonical date period `^P[1-9][0-9]*[YMD]$`；`(curve_family_id, tenor)` 成为唯一稳定身份，不允许以第二个 `curve_node_id` 复制同一节点。修正必须用 forward-only 0018 migration，禁止改写已发布的 0017。允许写路径仅为 `crates/ficant-domain/src/research/factor_topology.rs`、`crates/ficant-domain/tests/factor_topology_contracts.rs`、`crates/ficant-storage/tests/factor_topology_postgres.rs`、`crates/ficant-storage/tests/migration_acceptance.rs`、新建 `migrations/postgresql/0018_curve_node_identity_constraints.sql` 与本 brief；该修正合并前，原 R4d 双 base 不得作为新实现 base。
 - **执行期事前授权——0017 migration inventory：** Human 已在首次 migration acceptance 取得真实失败证据后，明确授权只扩展 `crates/ficant-storage/tests/migration_acceptance.rs` 的首个 forward-migration 测试及专用于 0017 的局部断言 / fixture。该测试必须精确核验成功历史为 0001–0017、0017 只成功登记一次、重复执行不改变历史，且人为使 0017 失败时不残留其部分 schema 或 history；不得改动另外三个 migration 测试、共享升级辅助、legacy / FK 判据、失败消息、夹具或既有原子回滚断言，也不得用 ignore、过滤、重试或弱化断言制造通过。execution base 已含 0016 而旧断言仍为 15，故此同时记录 R4b 遗留的 migration-inventory 债务，并非完全由 R4c 引入；本条是事前窄范围授权，不修改下列 §6 冻结清单。
 - **执行期追加授权——migration 测试隔离：** 上述窄授权后，完整 `migration_acceptance` 并行运行暴露四个测试共享同一 disposable PostgreSQL schema 的相互 reset 竞争。Human 随后明确授权为取得真实 4/4 而完成范围内必要工作；据此只在同一测试文件加入 file-local async mutex，并在四个测试入口持有 guard，使既有四项判据串行使用该共享数据库。没有改动另外三项测试的 fixture、失败消息、业务断言或共享升级辅助，没有使用 ignore、过滤、重试或降低 expected。此项是后续明确授权，不追溯改写原窄授权，也不修改 §6 冻结清单。
 - **执行证据偏差——application RED 未独立留存：** domain contract test 在实现前真实取得 exit 101（未解析的 Factor topology import），RED 不是 checkpoint。application contract test 没有在 application 实现前独立留存一次非零 exit code，且 forward-only 纪律禁止为了补记录回退已验证实现；因此 R4c 不宣称完整满足闸门 1 的双 RED 取证。最终 application 判据、实现和全量检查均为绿，但这个过程证据缺口仍需 Human 在候选审阅时可见，不能由最终绿灯倒推为曾经取得 RED。
@@ -147,6 +148,25 @@ R4c 闸门：
 - R4c 的 proto、domain、application、storage 与 API 源码扫描 `Exposure|DV01|KRD|weight` 命中为 0；Rates 请求、定价公式、C++ / C ABI、RulePack、Golden、Oracle、canonical schema/hash、Phase 2C/2D matrix 与 allowlist 均无 diff。因此本 brief 的 acceptance sentence 在本地候选上成立；AC05 是否点亮仍只由公共 merge 后的 authority / Human 决定。
 
 **写路径与冻结资产审计：** `git diff --name-only` 加未跟踪文件共 32 个路径；与 §6 冻结清单及 §5 明确授权的 `migration_acceptance.rs` 逐项比对，冻结范围外为 0。`SPEC.md`、`ACCEPTANCE.md`、`MANUAL.md`、ADR、既有 proto、`cpp/**`、`domain-packs/**`、`scripts/**`、Golden、Oracle、Phase 2C/2D matrix、`crates/ficant-data/src/canonical.rs`、发布与部署路径的 diff 均为 0；唯一新增 proto 是本轮授权的 `factor.proto`；`scripts/layering-allowlist.json` 内容仍精确为 `[]`。
+
+**Post-merge 曲线节点身份修正候选（2026-08-01）：** 本修正从公共 `ce39db0d5913d3545b657bce99793191a6f9e08a` 建立隔离分支 `codex/r4c-topology-identity-correction`，authority 语义基线为 `cbeb305ef2d6af1d1e98f16b82aa7e9443eab793`。它不改 proto wire shape、FactorId、FactorDefinition hash、binding、定价、Exposure 或 AC05 的已批准行为，只关闭稳定曲线节点身份的两个实现缺口。
+
+- RED-first：domain 判据因 `P0Y` 被错误接受而 exit 101；PostgreSQL 判据因相同 family/tenor 的第二个 node id 被错误注册而 exit 101；migration acceptance 因历史只有 0001–0017 而新判据要求 0001–0018，真实结果 3/4、exit 101。三条 RED 均未作为 checkpoint。
+- Domain 与 PostgreSQL 现在共同执行 `^P[1-9][0-9]*[YMD]$`；`P0Y`、`P01Y`、`P1Y2M`、`P1Y2`、`P1W` 与无 `P` 前缀均失败关闭。0018 删除 0017 的宽松 tenor check，新增同口径 named check 与 `(curve_family_id, tenor)` unique constraint。
+- Migration 判据精确核验 0001–0018、0017 与 0018 各只成功登记一次、repeat 历史不变；注入 0018 失败后，新 check / unique constraint 均不存在、0017 原约束仍在、0018 history 为 0。
+
+| 修正候选命令 | exit code | 结果 |
+|---|---:|---|
+| `cargo test --offline --locked -p ficant-domain --test factor_topology_contracts` | 0 | 2/2；六类非 canonical tenor 拒绝 |
+| `cargo test --offline --locked -p ficant-storage --test factor_topology_postgres` | 0 | 1/1；重复 family/tenor 以 `AlreadyExists` 失败关闭 |
+| `cargo test --offline --locked -p ficant-storage --test migration_acceptance -- --test-threads=1` | 0 | 4/4；0001–0018、repeat、0017/0018 单次登记、0018 原子回滚 |
+| `pwsh -NoProfile -NonInteractive -File scripts/check-layering.ps1` | 0 | AC03=0、AC01=0、C++/FFI=0、Funding=0、Tax=0、allowlist=0 |
+| `pwsh -NoProfile -NonInteractive -File scripts/test-layering-check.ps1` | 0 | 51 assertions |
+| `pwsh -NoProfile -NonInteractive -File scripts/check-fast.ps1` | 0 | `FICANT fast local checks passed.` |
+| `pwsh -NoProfile -NonInteractive -File scripts/check.ps1` | 0 | `FICANT complete local checks passed.` |
+| `pwsh -NoProfile -NonInteractive -File scripts/check.ps1 -IncludeIntegration` | 0 | `FICANT complete local checks passed.`；migration 4/4 与集成切片全绿 |
+
+修正候选的写路径严格为上述 6 项；`SPEC.md`、`ACCEPTANCE.md`、`MANUAL.md`、ADR、proto/generated、C++/C ABI、RulePack、Golden、Oracle、canonical schema/hash、Phase 2C/2D matrix、allowlist 与 scripts 均无 diff。首次 `check-fast` 只因 rustfmt 换行 exit 1；运行标准 formatter 后重跑受影响 domain 判据及全部规定检查并取得上述最终结果，没有修改 expected、Oracle、Golden、matrix、allowlist 或门禁断言。
 
 ## 7. 残余风险
 

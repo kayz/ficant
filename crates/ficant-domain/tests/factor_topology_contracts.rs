@@ -56,6 +56,18 @@ fn stable_curve_nodes_and_exact_targets_are_content_addressed() {
     };
     node_input.content_hash = CurveNodeDefinition::content_hash_for(&node_input);
     let node = CurveNodeDefinition::new(node_input.clone()).unwrap();
+
+    for invalid_tenor in ["P0Y", "P01Y", "P1Y2M", "P1Y2", "P1W", "10Y"] {
+        let mut invalid = node_input.clone();
+        invalid.tenor = invalid_tenor.to_owned();
+        invalid.content_hash = CurveNodeDefinition::content_hash_for(&invalid);
+        assert_eq!(
+            CurveNodeDefinition::new(invalid).unwrap_err(),
+            DomainErrorCode::InvalidValue,
+            "{invalid_tenor} is not a canonical single-component date tenor"
+        );
+    }
+
     let node_ref = CurveNodeRef::new(node.curve_node_id(), node.content_hash().clone()).unwrap();
 
     let binding =

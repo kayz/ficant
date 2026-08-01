@@ -132,6 +132,20 @@ async fn register_and_verify_topology(
             .unwrap(),
         curve
     );
+    let duplicate_identity = curve_node("cn.gov.curve.cny.duplicate-10y");
+    let error = repository
+        .register_curve_node_definition(
+            scope,
+            duplicate_identity,
+            IdempotencyKey::new("factor:curve:duplicate-family-tenor:v1").unwrap(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.category(),
+        ApplicationErrorCategory::AlreadyExists,
+        "one curve family and tenor pair must have exactly one stable node identity"
+    );
     let curve_target = FactorTarget::CurveNode(
         CurveNodeRef::new(curve.curve_node_id(), curve.content_hash().clone()).unwrap(),
     );
