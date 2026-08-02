@@ -62,7 +62,8 @@
 | `SubjectStateSnapshot` | 净资本、各项额度上限；走双时间通道 | **R1 契约 + 注册** |
 | `Position` / `PositionSnapshot` | 仓位、会计分类三态、回购与借贷穿透标记；走双时间通道 | R4 |
 | `Factor` / `FactorId` / `Exposure` | 全局唯一标识、经济量定义、单位、敏感度口径；资产↔因子双向可查 | R4 |
-| `CoverageDeclaration` / `DataHealthReport` | 覆盖度元数据；缺失与异常的预警清单 | R5 |
+| `CoverageDeclaration` | 组合级覆盖度元数据、分母、缺失项与字段可信度分布 | R5b |
+| `DataHealthReport` | 缺失与异常的可查询预警清单 | R5c |
 | `Constraint` / `ShadowPrice` | 约束形状（上下限、口径、绑定的 Subject 与 RulePack），**不含任何具体数值** | **v0.2** |
 | `Policy` / `PolicyArtifact` | 参数、适用券域、有效期、标定证据引用、求值器版本 | **v0.2** |
 
@@ -94,9 +95,11 @@
 
 **违反：** SPEC I9。
 
-**方案。** 扩展 canonical schema：`price_source_type`（成交 / 活跃报价 / 模型估值 / 曲线插值）、`credibility_tier`、允许同一键多源并存并保留来源标识。风险指标计算在混用不同 tier 时必须输出可信度标记。
+**方案。** R5a 采用 DataSource 级的 B′ 契约：封闭的 `PriceSourceType`（真实成交 / 活跃报价 / 模型估值 / 曲线插值）属于精确、不可变的 DataSource 版本；每个 dataset 必须语义同质，物理源内混合的不同价格语义必须拆成不同注册源。`FactSource` 绑定精确 DataSource 版本，记录类型与注册类型不相容、类型缺失或枚举越界均在数值引擎前失败关闭。canonical quote v1 的 16 列、schema id 与 hash 保持不变，快照通过 manifest 中的精确 DataSource 引用解析类型；既有未分类 source / fact / snapshot 不作推断，进入 typed 计算时明确失败。内部由曲线插值形成的价格由算法路径标记为 `CURVE_INTERPOLATION`，不得伪装成外部 DataSource 属性。风险指标输出稳定的来源类型摘要；混合类型只标记，不降级、不设阈值、不阻断。
 
-**归属：** R5。**点亮：** AC15。
+R5b 在 R5a 之后建立 `CoverageDeclaration`，R5c 在 R5a 之后建立 `DataHealthReport`；三轮分别冻结 base 与逐文件写路径，各自只点亮一条 AC。
+
+**归属：** R5a。**点亮：** AC15。
 
 ---
 
@@ -162,7 +165,9 @@
 | **R4c** | **Factor 身份与拓扑** | 全局 immutable `FactorId`、敏感度口径、稳定曲线节点定义及 asset ↔ Factor 双向索引；不产生数值 Exposure | AC05 |
 | **R4d-a** | **可验证风险输入与债券 KRD** | 完整 Bond 定价条款、verified curve points 与 Factor convention 执行；生成逐债券仓位 KRD 和债券子组合 totals；非债券敞口失败关闭 | —（AC16 前置） |
 | **R4d-b** | **具体期货 KRD 与全组合聚合** | 依赖 R4d-a；复用 R4a 的 exact FuturesContract / CTD materializer，内部生成期货 KRD 并与债券逐仓位结果完整聚合 | AC16 |
-| **R5** | 可信度与覆盖度 | canonical quote 加来源类型与可信度；`CoverageDeclaration` 成为组合级结果的必带元数据；`DataHealthReport` 以 AnalyticsService 形态落地；重跑 Phase 3A/3B 取证 | AC15 AC35 AC36 |
+| **R5a** | **价格来源类型与可信度标记** | 精确 DataSource 版本绑定封闭来源类型；Fact / verified snapshot 可解析该类型；内部曲线插值价格显式标记；混合来源的风险结果携带类型摘要。canonical quote v1/schema/hash 不变 | AC15 |
+| **R5b** | **组合覆盖度声明** | 依赖 R5a；所有多仓位聚合输出携带含分母、参与数与总额、缺失关键字段数及字段可信度分布的 `CoverageDeclaration`；机械门禁与真实负向 fixture 禁止裸组合数值 | AC35 |
+| **R5c** | **数据健康度预警** | 依赖 R5a；`DataHealthReport` 以 AnalyticsService 形态落地；阈值来自显式配置并进入结果证据；同一 UNKNOWN snapshot 健康度预警但不阻断，资本占用仍按 AC17 失败关闭 | AC36 |
 | **R6** | 角色与白名单 | 平台管理员与研究用户分离；数据源导入白名单；基础数据变更留痕 | AC37 |
 | **R7** | 一期收口 | **虚构市场零核心改动验证**（健康度指标）；全量重取证；MANUAL 走查 | AC04 AC11–AC13 AC30–AC33 |
 
