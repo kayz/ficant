@@ -55,15 +55,57 @@ fn futures_snapshot_binding_round_trips_on_request_and_result_contracts() {
             }],
             mixed: false,
         }),
+        coverage: Some(research::CoverageDeclaration {
+            imported_position_count: 2,
+            participating_position_count: 1,
+            imported_gross_economic_value_by_unit: vec![money("200")],
+            participating_gross_economic_value_by_unit: vec![money("80")],
+            missing_critical_field_record_count: 0,
+            source_confidence: Some(research::PriceSourceSummary {
+                counts: vec![research::PriceSourceCount {
+                    source_type: market::PriceSourceType::ActiveQuote as i32,
+                    record_count: 3,
+                }],
+                mixed: false,
+            }),
+            distinct_external_data_source_version_count: 1,
+        }),
         ..Default::default()
     };
     let decoded =
         research::PortfolioKeyRateExposure::decode(exposure.encode_to_vec().as_slice()).unwrap();
     assert_eq!(decoded.futures_data_snapshot_id, Some(snapshot));
+    let source_confidence = decoded.source_confidence.unwrap();
     assert_eq!(
-        decoded.source_confidence.unwrap().counts[0].source_type,
+        source_confidence.counts[0].source_type,
         market::PriceSourceType::ActiveQuote as i32
     );
+    let coverage = decoded.coverage.unwrap();
+    assert_eq!(coverage.imported_position_count, 2);
+    assert_eq!(coverage.participating_position_count, 1);
+    assert_eq!(
+        coverage.imported_gross_economic_value_by_unit[0],
+        money("200")
+    );
+    assert_eq!(
+        coverage.participating_gross_economic_value_by_unit[0],
+        money("80")
+    );
+    assert_eq!(coverage.source_confidence.unwrap(), source_confidence);
+    assert_eq!(coverage.distinct_external_data_source_version_count, 1);
+}
+
+fn money(coefficient: &str) -> core::DecimalValue {
+    core::DecimalValue {
+        coefficient: coefficient.to_owned(),
+        scale: 0,
+        unit: Some(core::UnitRef {
+            unit_id: Some(core::Ulid {
+                value: "01ARZ3NDEKTSV4RRFFQ69G5F0V".to_owned(),
+            }),
+            version: 1,
+        }),
+    }
 }
 
 fn point(id: &str, coefficient: i32) -> market::CurvePoint {

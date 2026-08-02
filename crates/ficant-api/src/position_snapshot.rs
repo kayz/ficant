@@ -11,14 +11,17 @@ use ficant_application::{
     PublishPositionSnapshot, map_domain_error,
 };
 use ficant_contracts::ficant::core::v1 as core;
+use ficant_contracts::ficant::market::v1 as market;
 use ficant_contracts::ficant::research::v1 as pb;
 use ficant_contracts::ficant::research::v1::position_snapshot_service_server::PositionSnapshotService;
+use ficant_domain::market::PriceSourceType;
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, LineageRef, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
 };
 use ficant_domain::research::{
-    AccountingBook, AccountingClassification, AccountingClassificationState, Position,
-    PositionHoldingForm, PositionInput, PositionSnapshot, PositionSnapshotInput,
+    AccountingBook, AccountingClassification, AccountingClassificationState, CoverageDeclaration,
+    Position, PositionHoldingForm, PositionInput, PositionSnapshot, PositionSnapshotInput,
+    PriceSourceSummary,
 };
 use ficant_domain::{ContentAddressed, Lineaged};
 use prost_types::Timestamp;
@@ -441,7 +444,7 @@ fn position(value: &Position) -> pb::Position {
 fn views(value: &ficant_application::PositionViews) -> pb::PositionViews {
     pb::PositionViews {
         snapshot_id: Some(ulid(value.snapshot.id())),
-        content_hash: Some(hash(value.snapshot.content_hash())),
+        content_hash: Some(hash(&value.content_hash)),
         lineage: value.snapshot.lineage().iter().map(lineage).collect(),
         positions: value
             .positions
@@ -456,15 +459,61 @@ fn views(value: &ficant_application::PositionViews) -> pb::PositionViews {
                 collateral_fact: position.collateral_fact,
             })
             .collect(),
+        coverage: Some(coverage(&value.coverage)),
     }
 }
 
 fn capital_use(value: &ficant_application::CapitalUse) -> pb::CapitalUse {
     pb::CapitalUse {
         snapshot_id: Some(ulid(value.snapshot.id())),
-        content_hash: Some(hash(value.snapshot.content_hash())),
+        content_hash: Some(hash(&value.content_hash)),
         lineage: value.snapshot.lineage().iter().map(lineage).collect(),
         total_capital_requirement: Some(decimal(&value.total_capital_requirement)),
+        coverage: Some(coverage(&value.coverage)),
+    }
+}
+
+fn coverage(value: &CoverageDeclaration) -> pb::CoverageDeclaration {
+    pb::CoverageDeclaration {
+        imported_position_count: value.imported_position_count(),
+        participating_position_count: value.participating_position_count(),
+        imported_gross_economic_value_by_unit: value
+            .imported_gross_economic_value_by_unit()
+            .iter()
+            .map(decimal)
+            .collect(),
+        participating_gross_economic_value_by_unit: value
+            .participating_gross_economic_value_by_unit()
+            .iter()
+            .map(decimal)
+            .collect(),
+        missing_critical_field_record_count: value.missing_critical_field_record_count(),
+        source_confidence: value.source_confidence().map(source_confidence),
+        distinct_external_data_source_version_count: value
+            .distinct_external_data_source_version_count(),
+    }
+}
+
+fn source_confidence(value: &PriceSourceSummary) -> pb::PriceSourceSummary {
+    pb::PriceSourceSummary {
+        counts: value
+            .counts()
+            .iter()
+            .map(|count| pb::PriceSourceCount {
+                source_type: price_source_type(count.source_type()) as i32,
+                record_count: count.record_count(),
+            })
+            .collect(),
+        mixed: value.mixed(),
+    }
+}
+
+const fn price_source_type(value: PriceSourceType) -> market::PriceSourceType {
+    match value {
+        PriceSourceType::RealTrade => market::PriceSourceType::RealTrade,
+        PriceSourceType::ActiveQuote => market::PriceSourceType::ActiveQuote,
+        PriceSourceType::ModelValuation => market::PriceSourceType::ModelValuation,
+        PriceSourceType::CurveInterpolation => market::PriceSourceType::CurveInterpolation,
     }
 }
 

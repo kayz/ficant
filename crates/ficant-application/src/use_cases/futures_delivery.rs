@@ -522,6 +522,7 @@ pub struct RegisteredFuturesDeliveryMaterialization {
     contract: FuturesContract,
     input_evidence_hashes: Vec<ContentHash>,
     lineage: Vec<LineageRef>,
+    data_source_ref: VersionRef,
     price_source_type: PriceSourceType,
     price_record_count: u64,
 }
@@ -550,6 +551,11 @@ impl RegisteredFuturesDeliveryMaterialization {
     #[must_use]
     pub fn lineage(&self) -> &[LineageRef] {
         &self.lineage
+    }
+
+    #[must_use]
+    pub fn data_source_ref(&self) -> &VersionRef {
+        &self.data_source_ref
     }
 
     #[must_use]
@@ -843,6 +849,7 @@ impl<'a> MaterializeRegisteredFuturesDelivery<'a> {
             contract: contract.clone(),
             input_evidence_hashes: evidence,
             lineage,
+            data_source_ref,
             price_source_type: PriceSourceType::ActiveQuote,
             price_record_count,
         })

@@ -4,6 +4,8 @@ use crate::primitives::{ContentHash, LineageRef, Ulid, UnitRef, Version, Version
 use crate::research::SensitivityDirection;
 use crate::{ContentAddressed, DomainErrorCode, DomainResult, Lineaged};
 
+use super::CoverageDeclaration;
+
 const FIXED_SCALE: i128 = 1_000_000_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -338,6 +340,7 @@ pub struct PortfolioKeyRateExposure {
     totals: Vec<FactorDv01>,
     algorithm: RiskAlgorithmBinding,
     source_confidence: PriceSourceSummary,
+    coverage: CoverageDeclaration,
     content_hash: ContentHash,
     lineage: Vec<LineageRef>,
 }
@@ -348,21 +351,26 @@ impl PortfolioKeyRateExposure {
         curve_snapshot_id: Ulid,
         positions: Vec<PositionKeyRateExposure>,
         algorithm: RiskAlgorithmBinding,
+        source_and_coverage: (PriceSourceSummary, CoverageDeclaration),
         lineage: Vec<LineageRef>,
     ) -> DomainResult<Self> {
+        let (source_confidence, coverage) = source_and_coverage;
         let curve_record_count =
             u64::try_from(positions.len()).map_err(|_| DomainErrorCode::InvalidValue)?;
-        let source_confidence = PriceSourceSummary::new(vec![PriceSourceCount::new(
+        let expected = PriceSourceSummary::new(vec![PriceSourceCount::new(
             PriceSourceType::CurveInterpolation,
             curve_record_count,
         )?])?;
+        if source_confidence != expected {
+            return Err(DomainErrorCode::BrokenLineage);
+        }
         Self::new_inner(
             position_snapshot_id,
             curve_snapshot_id,
             None,
             positions,
             algorithm,
-            source_confidence,
+            (source_confidence, coverage),
             lineage,
         )
     }
@@ -371,24 +379,34 @@ impl PortfolioKeyRateExposure {
         position_snapshot_id: Ulid,
         curve_snapshot_id: Ulid,
         futures_data_snapshot_id: Ulid,
-        active_quote_record_count: u64,
         positions: Vec<PositionKeyRateExposure>,
         algorithm: RiskAlgorithmBinding,
+        source_and_coverage: (PriceSourceSummary, CoverageDeclaration),
         lineage: Vec<LineageRef>,
     ) -> DomainResult<Self> {
+        let (source_confidence, coverage) = source_and_coverage;
+        let active_quote_record_count = source_confidence
+            .counts()
+            .iter()
+            .find(|count| count.source_type() == PriceSourceType::ActiveQuote)
+            .ok_or(DomainErrorCode::BrokenLineage)?
+            .record_count();
         let curve_record_count =
             u64::try_from(positions.len()).map_err(|_| DomainErrorCode::InvalidValue)?;
-        let source_confidence = PriceSourceSummary::new(vec![
+        let expected = PriceSourceSummary::new(vec![
             PriceSourceCount::new(PriceSourceType::ActiveQuote, active_quote_record_count)?,
             PriceSourceCount::new(PriceSourceType::CurveInterpolation, curve_record_count)?,
         ])?;
+        if source_confidence != expected {
+            return Err(DomainErrorCode::BrokenLineage);
+        }
         Self::new_inner(
             position_snapshot_id,
             curve_snapshot_id,
             Some(futures_data_snapshot_id),
             positions,
             algorithm,
-            source_confidence,
+            (source_confidence, coverage),
             lineage,
         )
     }
@@ -399,11 +417,15 @@ impl PortfolioKeyRateExposure {
         futures_data_snapshot_id: Option<Ulid>,
         positions: Vec<PositionKeyRateExposure>,
         algorithm: RiskAlgorithmBinding,
-        source_confidence: PriceSourceSummary,
+        source_and_coverage: (PriceSourceSummary, CoverageDeclaration),
         lineage: Vec<LineageRef>,
     ) -> DomainResult<Self> {
+        let (source_confidence, coverage) = source_and_coverage;
         if positions.is_empty()
             || lineage.is_empty()
+            || coverage.source_confidence() != Some(&source_confidence)
+            || coverage.participating_position_count()
+                != u64::try_from(positions.len()).map_err(|_| DomainErrorCode::InvalidValue)?
             || positions
                 .windows(2)
                 .any(|pair| pair[0].position_id() >= pair[1].position_id())
@@ -435,6 +457,7 @@ impl PortfolioKeyRateExposure {
             append(&mut bytes, &[price_source_type_code(count.source_type())]);
             append(&mut bytes, &count.record_count().to_be_bytes());
         }
+        append(&mut bytes, &coverage.canonical_bytes());
         for reference in &lineage {
             append_lineage(&mut bytes, reference);
         }
@@ -447,6 +470,7 @@ impl PortfolioKeyRateExposure {
             totals,
             algorithm,
             source_confidence,
+            coverage,
             content_hash,
             lineage,
         })
@@ -478,6 +502,10 @@ impl PortfolioKeyRateExposure {
 
     pub fn source_confidence(&self) -> &PriceSourceSummary {
         &self.source_confidence
+    }
+
+    pub fn coverage(&self) -> &CoverageDeclaration {
+        &self.coverage
     }
 }
 

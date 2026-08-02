@@ -8,7 +8,9 @@ use ficant_domain::primitives::{
     ContentHash, DecimalValue, LineageRef, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
 };
 use ficant_domain::research::{
-    FactorDv01, PortfolioKeyRateExposure, PositionKeyRateExposure, RiskAlgorithmBinding,
+    AccountingBook, AccountingClassification, AccountingClassificationState, CoverageDeclaration,
+    FactorDv01, PortfolioKeyRateExposure, Position, PositionHoldingForm, PositionInput,
+    PositionKeyRateExposure, PriceSourceCount, PriceSourceSummary, RiskAlgorithmBinding,
     scale_futures_key_rate_dv01,
 };
 
@@ -140,13 +142,15 @@ fn full_portfolio_hash_and_totals_commit_the_consumed_futures_snapshot() {
     )
     .unwrap();
     let data_snapshot = id('S');
+    let source_confidence = mixed_source_confidence();
+    let coverage = complete_coverage(source_confidence.clone());
     let portfolio = PortfolioKeyRateExposure::new_with_futures_data_snapshot(
         id('P'),
         id('C'),
         data_snapshot.clone(),
-        1,
         vec![bond.clone(), future.clone()],
         algorithm.clone(),
+        (source_confidence.clone(), coverage.clone()),
         vec![lineage('L')],
     )
     .unwrap();
@@ -170,13 +174,52 @@ fn full_portfolio_hash_and_totals_commit_the_consumed_futures_snapshot() {
         id('P'),
         id('C'),
         id('T'),
-        1,
         vec![bond, future],
         algorithm,
+        (source_confidence, coverage),
         vec![lineage('L')],
     )
     .unwrap();
     assert_ne!(portfolio.content_hash(), other.content_hash());
+}
+
+fn mixed_source_confidence() -> PriceSourceSummary {
+    PriceSourceSummary::new(vec![
+        PriceSourceCount::new(PriceSourceType::ActiveQuote, 1).unwrap(),
+        PriceSourceCount::new(PriceSourceType::CurveInterpolation, 2).unwrap(),
+    ])
+    .unwrap()
+}
+
+fn complete_coverage(source_confidence: PriceSourceSummary) -> CoverageDeclaration {
+    let positions = vec![coverage_position('B', 'I'), coverage_position('F', 'J')];
+    CoverageDeclaration::for_complete_positions(
+        &positions,
+        &[id('B'), id('F')],
+        Some(source_confidence),
+        1,
+    )
+    .unwrap()
+}
+
+fn coverage_position(position_suffix: char, instrument_suffix: char) -> Position {
+    let money = unit('C');
+    Position::new(PositionInput {
+        position_id: id(position_suffix),
+        instrument_ref: VersionRef::new(id(instrument_suffix), version()),
+        quantity: decimal("1", 0, unit('M')),
+        economic_value: decimal("100", 0, money.clone()),
+        economic_pnl: decimal("0", 0, money.clone()),
+        accounting_pnl: decimal("0", 0, money.clone()),
+        capital_requirement: decimal("1", 0, money),
+        accounting_classification: AccountingClassification::new(
+            AccountingClassificationState::Classified,
+            Some(AccountingBook::Ac),
+        )
+        .unwrap(),
+        holding_form: PositionHoldingForm::Owned,
+    })
+    .unwrap()
 }
 
 fn position(

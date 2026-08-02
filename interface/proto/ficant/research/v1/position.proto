@@ -4,6 +4,7 @@ package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
+import "ficant/research/v1/coverage.proto";
 
 enum AccountingClassificationState {
   ACCOUNTING_CLASSIFICATION_STATE_UNSPECIFIED = 0;
@@ -106,6 +107,7 @@ message PositionViews {
   ficant.core.v1.Sha256 content_hash = 2;
   repeated ficant.core.v1.LineageRef lineage = 3;
   repeated PositionView positions = 4;
+  CoverageDeclaration coverage = 5;
 }
 
 message GetPositionViewsRequest {
@@ -125,6 +127,7 @@ message CapitalUse {
   ficant.core.v1.Sha256 content_hash = 2;
   repeated ficant.core.v1.LineageRef lineage = 3;
   ficant.core.v1.DecimalValue total_capital_requirement = 4;
+  CoverageDeclaration coverage = 5;
 }
 
 message CalculateCapitalUseRequest {

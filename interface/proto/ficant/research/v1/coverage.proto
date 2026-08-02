@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package ficant.research.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/market/v1/data_source.proto";
+
+message PriceSourceCount {
+  ficant.market.v1.PriceSourceType source_type = 1;
+  uint64 record_count = 2;
+}
+
+message PriceSourceSummary {
+  repeated PriceSourceCount counts = 1;
+  bool mixed = 2;
+}
+
+message CoverageDeclaration {
+  uint64 imported_position_count = 1;
+  uint64 participating_position_count = 2;
+  repeated ficant.core.v1.DecimalValue imported_gross_economic_value_by_unit = 3;
+  repeated ficant.core.v1.DecimalValue participating_gross_economic_value_by_unit = 4;
+  uint64 missing_critical_field_record_count = 5;
+  PriceSourceSummary source_confidence = 6;
+  uint64 distinct_external_data_source_version_count = 7;
+}

@@ -151,6 +151,37 @@ impl ArtifactKind {
         }
     }
 }
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PriceSourceCount {
+    #[prost(enumeration="super::super::market::v1::PriceSourceType", tag="1")]
+    pub source_type: i32,
+    #[prost(uint64, tag="2")]
+    pub record_count: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PriceSourceSummary {
+    #[prost(message, repeated, tag="1")]
+    pub counts: ::prost::alloc::vec::Vec<PriceSourceCount>,
+    #[prost(bool, tag="2")]
+    pub mixed: bool,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CoverageDeclaration {
+    #[prost(uint64, tag="1")]
+    pub imported_position_count: u64,
+    #[prost(uint64, tag="2")]
+    pub participating_position_count: u64,
+    #[prost(message, repeated, tag="3")]
+    pub imported_gross_economic_value_by_unit: ::prost::alloc::vec::Vec<super::super::core::v1::DecimalValue>,
+    #[prost(message, repeated, tag="4")]
+    pub participating_gross_economic_value_by_unit: ::prost::alloc::vec::Vec<super::super::core::v1::DecimalValue>,
+    #[prost(uint64, tag="5")]
+    pub missing_critical_field_record_count: u64,
+    #[prost(message, optional, tag="6")]
+    pub source_confidence: ::core::option::Option<PriceSourceSummary>,
+    #[prost(uint64, tag="7")]
+    pub distinct_external_data_source_version_count: u64,
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TypedValue {
     #[prost(string, tag="1")]
@@ -883,20 +914,6 @@ pub struct PositionKeyRateExposure {
     #[prost(message, repeated, tag="5")]
     pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct PriceSourceCount {
-    #[prost(enumeration="super::super::market::v1::PriceSourceType", tag="1")]
-    pub source_type: i32,
-    #[prost(uint64, tag="2")]
-    pub record_count: u64,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PriceSourceSummary {
-    #[prost(message, repeated, tag="1")]
-    pub counts: ::prost::alloc::vec::Vec<PriceSourceCount>,
-    #[prost(bool, tag="2")]
-    pub mixed: bool,
-}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PortfolioKeyRateExposure {
     #[prost(message, optional, tag="1")]
@@ -917,6 +934,8 @@ pub struct PortfolioKeyRateExposure {
     pub futures_data_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
     #[prost(message, optional, tag="9")]
     pub source_confidence: ::core::option::Option<PriceSourceSummary>,
+    #[prost(message, optional, tag="10")]
+    pub coverage: ::core::option::Option<CoverageDeclaration>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CalculateKeyRateDv01Request {
@@ -1389,6 +1408,8 @@ pub struct PositionViews {
     pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
     #[prost(message, repeated, tag="4")]
     pub positions: ::prost::alloc::vec::Vec<PositionView>,
+    #[prost(message, optional, tag="5")]
+    pub coverage: ::core::option::Option<CoverageDeclaration>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetPositionViewsRequest {
@@ -1422,6 +1443,8 @@ pub struct CapitalUse {
     pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
     #[prost(message, optional, tag="4")]
     pub total_capital_requirement: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="5")]
+    pub coverage: ::core::option::Option<CoverageDeclaration>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CalculateCapitalUseRequest {
