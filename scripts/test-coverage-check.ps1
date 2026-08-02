@@ -46,7 +46,7 @@ function Remove-CoverageField {
 function Add-ReachableFixture {
     param(
         [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][ValidateSet('Composition', 'PerPosition')][string]$Kind
+        [Parameter(Mandatory)][ValidateSet('Composition', 'ScalarComposition', 'Unknown')][string]$Kind
     )
 
     $text = [System.IO.File]::ReadAllText($Path)
@@ -68,19 +68,41 @@ message GetBarePortfolioAggregateResponse {
 '@
         $method = '  rpc GetBarePortfolioAggregate(GetBarePortfolioAggregateRequest) returns (GetBarePortfolioAggregateResponse);'
     }
-    else {
+    elseif ($Kind -eq 'ScalarComposition') {
         $messages = @'
-message GetSinglePositionViewRequest {}
+message BareScalarAggregate {
+  ficant.core.v1.DecimalValue aggregate_risk = 1;
+}
 
-message GetSinglePositionViewResponse {
+message GetBareScalarAggregateRequest {}
+
+message GetBareScalarAggregateResponse {
   oneof result {
-    PositionView position = 1;
+    BareScalarAggregate aggregate = 1;
     ficant.core.v1.ErrorDetail error = 2;
   }
 }
 
 '@
-        $method = '  rpc GetSinglePositionView(GetSinglePositionViewRequest) returns (GetSinglePositionViewResponse);'
+        $method = '  rpc GetBareScalarAggregate(GetBareScalarAggregateRequest) returns (GetBareScalarAggregateResponse);'
+    }
+    else {
+        $messages = @'
+message UnclassifiedSuccessPayload {
+  string note = 1;
+}
+
+message GetUnclassifiedSuccessRequest {}
+
+message GetUnclassifiedSuccessResponse {
+  oneof result {
+    UnclassifiedSuccessPayload payload = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+'@
+        $method = '  rpc GetUnclassifiedSuccess(GetUnclassifiedSuccessRequest) returns (GetUnclassifiedSuccessResponse);'
     }
     $marker = 'service PositionSnapshotService {'
     if (-not $text.Contains($marker)) {
@@ -127,11 +149,17 @@ try {
     Add-ReachableFixture -Path (Join-Path $bareComposition 'proto\ficant\research\v1\position.proto') -Kind 'Composition'
     Invoke-CoverageFixture -Name 'new reachable bare composition output' -InterfaceRoot $bareComposition -ShouldPass $false
 
-    $perPosition = New-CoverageFixture -Name 'per-position'
-    Add-ReachableFixture -Path (Join-Path $perPosition 'proto\ficant\research\v1\position.proto') -Kind 'PerPosition'
-    Invoke-CoverageFixture -Name 'reachable per-position output' -InterfaceRoot $perPosition -ShouldPass $true
+    $scalarComposition = New-CoverageFixture -Name 'scalar-composition'
+    Add-ReachableFixture -Path (Join-Path $scalarComposition 'proto\ficant\research\v1\position.proto') -Kind 'ScalarComposition'
+    Invoke-CoverageFixture -Name 'scalar bare composition regression' -InterfaceRoot $scalarComposition -ShouldPass $false
 
-    Write-Host 'Coverage gate fixture tests passed: 4 real composition violations fail and 1 per-position output remains allowed.'
+    $unknownSuccess = New-CoverageFixture -Name 'unknown-success'
+    Add-ReachableFixture -Path (Join-Path $unknownSuccess 'proto\ficant\research\v1\position.proto') -Kind 'Unknown'
+    Invoke-CoverageFixture -Name 'success arm outside the closed inventory' -InterfaceRoot $unknownSuccess -ShouldPass $false
+
+    Invoke-CoverageFixture -Name 'all explicitly classified success arms' -InterfaceRoot $sourceInterface -ShouldPass $true
+
+    Write-Host 'Coverage gate fixture tests passed: 6 real violations fail, all 4 original negative fixtures still fail, and the explicitly classified base inventory passes.'
     exit 0
 }
 finally {
