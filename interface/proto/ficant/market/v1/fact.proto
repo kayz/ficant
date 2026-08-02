@@ -8,6 +8,7 @@ message FactSource {
   string source_id = 1;
   string external_id = 2;
   uint64 source_revision = 3;
+  ficant.core.v1.VersionRef data_source = 4;
 }
 
 // Cashflow records an external source fact. It never generates a schedule.

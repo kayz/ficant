@@ -5,10 +5,10 @@ use ficant_api::{
 };
 use ficant_application::ports::{
     AccessScope, AppendDefinitionVersion, CanonicalQuote, CanonicalSnapshotDecoder,
-    DefinitionIdentity, DefinitionRepository, DefinitionValue, InstrumentDefinition,
-    InstrumentSubtype, IntegrityEvent, IntegrityEventSink, RequiredVerifiedBlobRead,
-    SnapshotVerifiedReadMetadata, SnapshotVerifiedReadMetadataRepository, SubjectRepository,
-    VerifiedBlobPayload, VerifiedBlobReader, VerifiedBlobRole,
+    DecodedCanonicalQuotes, DefinitionIdentity, DefinitionRepository, DefinitionValue,
+    InstrumentDefinition, InstrumentSubtype, IntegrityEvent, IntegrityEventSink,
+    RequiredVerifiedBlobRead, SnapshotVerifiedReadMetadata, SnapshotVerifiedReadMetadataRepository,
+    SubjectRepository, VerifiedBlobPayload, VerifiedBlobReader, VerifiedBlobRole,
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_cgb_futures_pack::{CgbFuturesDeliveryRulePackParser, MARKET, RULE_TYPE, TYPE_URL};
@@ -175,16 +175,19 @@ impl CanonicalSnapshotDecoder for FixtureCanonicalSnapshotDecoder {
         snapshot: &DataSnapshot,
         parquet: &[u8],
         manifest: &[u8],
-    ) -> Result<Vec<CanonicalQuote>, ApplicationError> {
+    ) -> Result<DecodedCanonicalQuotes, ApplicationError> {
         assert_eq!(snapshot.id(), &id('Y'));
         assert_eq!(parquet, b"object-Y");
         assert_eq!(manifest, b"phase2e-manifest");
-        Ok(vec![
-            canonical_quote('Z', "995", 1),
-            canonical_quote('2', "102", 0),
-            canonical_quote('3', "100", 0),
-            canonical_quote('4', "100", 0),
-        ])
+        DecodedCanonicalQuotes::new(
+            VersionRef::new(id('S'), Version::new(1).expect("fixture version is valid")),
+            vec![
+                canonical_quote('Z', "995", 1),
+                canonical_quote('2', "102", 0),
+                canonical_quote('3', "100", 0),
+                canonical_quote('4', "100", 0),
+            ],
+        )
     }
 }
 

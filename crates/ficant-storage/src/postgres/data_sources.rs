@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use ficant_application::ports::{AccessScope, DataSourceRepository, RegisterDataSource};
 use ficant_application::{ApplicationError, ApplicationErrorCategory, map_domain_error};
 use ficant_domain::VersionedDefinition;
-use ficant_domain::market::{DataSource, DataSourceInput, DataSourceKind};
+use ficant_domain::market::{DataSource, DataSourceInput, DataSourceKind, PriceSourceType};
 use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid, Version, VersionRef};
 use sqlx::{Postgres, Transaction};
 
@@ -131,8 +131,8 @@ async fn insert_source(
     sqlx::query(
         "INSERT INTO data.sources
          (tenant_id, data_source_id, version, owner_id, kind, name, connection_binding,
-          dataset, canonical_schema_id, canonical_schema_hash)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+          dataset, canonical_schema_id, canonical_schema_hash, price_source_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
     )
     .bind(source.owner().tenant_id().as_str())
     .bind(source.id().as_str())
@@ -146,6 +146,7 @@ async fn insert_source(
     .bind(crate::s3::content_addressed::hash_hex(
         source.canonical_schema_hash(),
     ))
+    .bind(source.price_source_type().map(price_source_type_text))
     .execute(&mut **transaction)
     .await
     .map_err(map_sqlx_error)?;
@@ -160,7 +161,8 @@ async fn read_source(
 ) -> Result<Option<DataSource>, ApplicationError> {
     let row: Option<SourceRow> = sqlx::query_as(
         "SELECT owner_id::text, kind, name, connection_binding, dataset,
-                canonical_schema_id, decode(canonical_schema_hash::text, 'hex')
+                canonical_schema_id, decode(canonical_schema_hash::text, 'hex'),
+                price_source_type
          FROM data.sources
          WHERE tenant_id = $1 AND data_source_id = $2 AND version = $3",
     )
@@ -182,7 +184,8 @@ async fn read_source_in_transaction(
 ) -> Result<Option<DataSource>, ApplicationError> {
     let row: Option<SourceRow> = sqlx::query_as(
         "SELECT owner_id::text, kind, name, connection_binding, dataset,
-                canonical_schema_id, decode(canonical_schema_hash::text, 'hex')
+                canonical_schema_id, decode(canonical_schema_hash::text, 'hex'),
+                price_source_type
          FROM data.sources
          WHERE tenant_id = $1 AND data_source_id = $2 AND version = $3
          FOR SHARE",
@@ -197,7 +200,16 @@ async fn read_source_in_transaction(
         .transpose()
 }
 
-type SourceRow = (String, String, String, String, String, String, Vec<u8>);
+type SourceRow = (
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    Vec<u8>,
+    Option<String>,
+);
 
 fn decode_source(
     tenant: &str,
@@ -205,8 +217,9 @@ fn decode_source(
     version: u64,
     row: SourceRow,
 ) -> Result<DataSource, ApplicationError> {
-    let (owner_id, kind, name, connection_binding, dataset, schema_id, schema_hash) = row;
-    DataSource::new(DataSourceInput {
+    let (owner_id, kind, name, connection_binding, dataset, schema_id, schema_hash, source_type) =
+        row;
+    let source = DataSource::new(DataSourceInput {
         data_source_id: Ulid::new(source_id).map_err(map_domain_error)?,
         version: Version::new(version).map_err(map_domain_error)?,
         owner: OwnerRef::new(
@@ -220,7 +233,12 @@ fn decode_source(
         canonical_schema_id: schema_id,
         canonical_schema_hash: ContentHash::from_bytes(&schema_hash).map_err(map_domain_error)?,
     })
-    .map_err(map_domain_error)
+    .map_err(map_domain_error)?;
+    source_type.map_or(Ok(source.clone()), |value| {
+        source
+            .with_price_source_type(parse_price_source_type(&value)?)
+            .map_err(map_domain_error)
+    })
 }
 
 const fn kind_text(kind: DataSourceKind) -> &'static str {
@@ -234,6 +252,29 @@ fn parse_kind(value: &str) -> Result<DataSourceKind, ApplicationError> {
     match value {
         "FILE_NDJSON" => Ok(DataSourceKind::FileNdjson),
         "POSTGRES" => Ok(DataSourceKind::Postgres),
+        _ => Err(application_error(
+            ApplicationErrorCategory::ValidationFailed,
+            false,
+        )),
+    }
+}
+
+fn price_source_type_text(value: PriceSourceType) -> &'static str {
+    match value {
+        PriceSourceType::RealTrade => "REAL_TRADE",
+        PriceSourceType::ActiveQuote => "ACTIVE_QUOTE",
+        PriceSourceType::ModelValuation => "MODEL_VALUATION",
+        PriceSourceType::CurveInterpolation => {
+            unreachable!("internal curve interpolation cannot be persisted as a DataSource")
+        }
+    }
+}
+
+fn parse_price_source_type(value: &str) -> Result<PriceSourceType, ApplicationError> {
+    match value {
+        "REAL_TRADE" => Ok(PriceSourceType::RealTrade),
+        "ACTIVE_QUOTE" => Ok(PriceSourceType::ActiveQuote),
+        "MODEL_VALUATION" => Ok(PriceSourceType::ModelValuation),
         _ => Err(application_error(
             ApplicationErrorCategory::ValidationFailed,
             false,

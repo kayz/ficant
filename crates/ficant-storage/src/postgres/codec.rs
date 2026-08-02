@@ -647,11 +647,18 @@ pub(crate) fn encode_fact(value: &MarketFact) -> Vec<u8> {
             encoder.u64(value.sequence());
         }
         MarketFact::Quote(value) => {
-            encoder.u8(2);
+            encoder.u8(if value.source().data_source().is_some() {
+                12
+            } else {
+                2
+            });
             encoder.string(value.id().as_str());
             encode_version_ref(&mut encoder, value.instrument());
             encode_owner(&mut encoder, value.owner());
             encode_source(&mut encoder, value.source());
+            if let Some(reference) = value.source().data_source() {
+                encode_version_ref(&mut encoder, reference);
+            }
             encode_market_time(&mut encoder, value.observed_at());
             encode_market_time(&mut encoder, value.received_at());
             encode_optional_decimal(&mut encoder, value.bid());
@@ -659,22 +666,36 @@ pub(crate) fn encode_fact(value: &MarketFact) -> Vec<u8> {
             encode_optional_id(&mut encoder, value.supersedes_id());
         }
         MarketFact::Trade(value) => {
-            encoder.u8(3);
+            encoder.u8(if value.source().data_source().is_some() {
+                13
+            } else {
+                3
+            });
             encoder.string(value.id().as_str());
             encode_version_ref(&mut encoder, value.instrument());
             encode_owner(&mut encoder, value.owner());
             encode_source(&mut encoder, value.source());
+            if let Some(reference) = value.source().data_source() {
+                encode_version_ref(&mut encoder, reference);
+            }
             encode_market_time(&mut encoder, value.executed_at());
             encode_decimal(&mut encoder, value.price());
             encode_decimal(&mut encoder, value.quantity());
             encode_optional_id(&mut encoder, value.supersedes_id());
         }
         MarketFact::Valuation(value) => {
-            encoder.u8(4);
+            encoder.u8(if value.source().data_source().is_some() {
+                14
+            } else {
+                4
+            });
             encoder.string(value.id().as_str());
             encode_version_ref(&mut encoder, value.instrument());
             encode_owner(&mut encoder, value.owner());
             encode_source(&mut encoder, value.source());
+            if let Some(reference) = value.source().data_source() {
+                encode_version_ref(&mut encoder, reference);
+            }
             encode_market_time(&mut encoder, value.valuation_at());
             encoder.string(value.method());
             encode_version_ref(&mut encoder, value.rule_pack());
@@ -706,38 +727,50 @@ pub(crate) fn decode_fact(bytes: &[u8]) -> CodecResult<MarketFact> {
             })
             .map_err(ficant_application::map_domain_error)?,
         ),
-        2 => MarketFact::Quote(
-            Quote::new(QuoteInput {
-                quote_id: decode_ulid(&mut decoder)?,
-                instrument: decode_version_ref(&mut decoder)?,
-                owner: decode_owner(&mut decoder)?,
-                source: decode_source(&mut decoder)?,
-                observed_at: decode_market_time(&mut decoder)?,
-                received_at: decode_market_time(&mut decoder)?,
-                bid: decode_optional_decimal(&mut decoder)?,
-                ask: decode_optional_decimal(&mut decoder)?,
-                supersedes_id: decode_optional_id(&mut decoder)?,
-            })
-            .map_err(ficant_application::map_domain_error)?,
-        ),
-        3 => MarketFact::Trade(
-            Trade::new(TradeInput {
-                trade_id: decode_ulid(&mut decoder)?,
-                instrument: decode_version_ref(&mut decoder)?,
-                owner: decode_owner(&mut decoder)?,
-                source: decode_source(&mut decoder)?,
-                executed_at: decode_market_time(&mut decoder)?,
-                price: decode_decimal(&mut decoder)?,
-                quantity: decode_decimal(&mut decoder)?,
-                supersedes_id: decode_optional_id(&mut decoder)?,
-            })
-            .map_err(ficant_application::map_domain_error)?,
-        ),
-        4 => {
+        kind @ (2 | 12) => {
+            let quote_id = decode_ulid(&mut decoder)?;
+            let instrument = decode_version_ref(&mut decoder)?;
+            let owner = decode_owner(&mut decoder)?;
+            let source = decode_typed_source(&mut decoder, kind == 12)?;
+            MarketFact::Quote(
+                Quote::new(QuoteInput {
+                    quote_id,
+                    instrument,
+                    owner,
+                    source,
+                    observed_at: decode_market_time(&mut decoder)?,
+                    received_at: decode_market_time(&mut decoder)?,
+                    bid: decode_optional_decimal(&mut decoder)?,
+                    ask: decode_optional_decimal(&mut decoder)?,
+                    supersedes_id: decode_optional_id(&mut decoder)?,
+                })
+                .map_err(ficant_application::map_domain_error)?,
+            )
+        }
+        kind @ (3 | 13) => {
+            let trade_id = decode_ulid(&mut decoder)?;
+            let instrument = decode_version_ref(&mut decoder)?;
+            let owner = decode_owner(&mut decoder)?;
+            let source = decode_typed_source(&mut decoder, kind == 13)?;
+            MarketFact::Trade(
+                Trade::new(TradeInput {
+                    trade_id,
+                    instrument,
+                    owner,
+                    source,
+                    executed_at: decode_market_time(&mut decoder)?,
+                    price: decode_decimal(&mut decoder)?,
+                    quantity: decode_decimal(&mut decoder)?,
+                    supersedes_id: decode_optional_id(&mut decoder)?,
+                })
+                .map_err(ficant_application::map_domain_error)?,
+            )
+        }
+        kind @ (4 | 14) => {
             let valuation_id = decode_ulid(&mut decoder)?;
             let instrument = decode_version_ref(&mut decoder)?;
             let owner = decode_owner(&mut decoder)?;
-            let source = decode_source(&mut decoder)?;
+            let source = decode_typed_source(&mut decoder, kind == 14)?;
             let valuation_at = decode_market_time(&mut decoder)?;
             let method = decoder.string()?;
             let rule_pack = decode_version_ref(&mut decoder)?;
@@ -1292,6 +1325,20 @@ fn encode_source(encoder: &mut Encoder, value: &FactSource) {
 fn decode_source(decoder: &mut Decoder<'_>) -> CodecResult<FactSource> {
     FactSource::new(decoder.string()?, decoder.string()?, decoder.u64()?)
         .map_err(ficant_application::map_domain_error)
+}
+
+fn decode_typed_source(
+    decoder: &mut Decoder<'_>,
+    has_data_source: bool,
+) -> CodecResult<FactSource> {
+    let source = decode_source(decoder)?;
+    if has_data_source {
+        source
+            .with_data_source(decode_version_ref(decoder)?)
+            .map_err(ficant_application::map_domain_error)
+    } else {
+        Ok(source)
+    }
 }
 
 fn encode_optional_id(encoder: &mut Encoder, value: Option<&Ulid>) {

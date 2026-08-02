@@ -5,11 +5,11 @@ use std::task::{Context, Poll, Waker};
 use async_trait::async_trait;
 use ficant_application::ports::{
     AccessScope, AppendDefinitionVersion, CanonicalQuote, CanonicalSnapshotDecoder,
-    DefinitionIdentity, DefinitionRepository, DefinitionValue, FuturesDeliveryEngine,
-    FuturesDeliveryRuleParser, InstrumentDefinition, InstrumentSubtype, IntegrityEvent,
-    IntegrityEventSink, RequiredVerifiedBlobRead, SafeTraceContext, SnapshotVerifiedReadMetadata,
-    SnapshotVerifiedReadMetadataRepository, VerifiedBlobPayload, VerifiedBlobReader,
-    VerifiedBlobRole,
+    DecodedCanonicalQuotes, DefinitionIdentity, DefinitionRepository, DefinitionValue,
+    FuturesDeliveryEngine, FuturesDeliveryRuleParser, InstrumentDefinition, InstrumentSubtype,
+    IntegrityEvent, IntegrityEventSink, RequiredVerifiedBlobRead, SafeTraceContext,
+    SnapshotVerifiedReadMetadata, SnapshotVerifiedReadMetadataRepository, VerifiedBlobPayload,
+    VerifiedBlobReader, VerifiedBlobRole,
 };
 use ficant_application::{
     ApplicationError, ApplicationErrorCategory, CalculateFuturesDeliveryBasket,
@@ -332,7 +332,7 @@ impl CanonicalSnapshotDecoder for Quotes {
         snapshot: &ficant_domain::research::DataSnapshot,
         parquet: &[u8],
         manifest: &[u8],
-    ) -> Result<Vec<CanonicalQuote>, ApplicationError> {
+    ) -> Result<DecodedCanonicalQuotes, ApplicationError> {
         assert_eq!(snapshot.content_hash(), &ContentHash::digest(PARQUET));
         assert_eq!(parquet, PARQUET);
         assert_eq!(manifest, MANIFEST);
@@ -367,7 +367,7 @@ impl CanonicalSnapshotDecoder for Quotes {
                 price_unit(),
             ));
         }
-        Ok(quotes)
+        DecodedCanonicalQuotes::new(reference('S'), quotes)
     }
 }
 

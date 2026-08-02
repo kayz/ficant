@@ -8,6 +8,15 @@ pub enum DataSourceKind {
     Postgres,
 }
 
+/// Semantic provenance of price records supplied by one immutable `DataSource` version.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum PriceSourceType {
+    RealTrade,
+    ActiveQuote,
+    ModelValuation,
+    CurveInterpolation,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DataSource {
     data_source_id: Ulid,
@@ -19,6 +28,7 @@ pub struct DataSource {
     dataset: String,
     canonical_schema_id: String,
     canonical_schema_hash: ContentHash,
+    price_source_type: Option<PriceSourceType>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,7 +60,23 @@ impl DataSource {
             dataset: input.dataset,
             canonical_schema_id: input.canonical_schema_id,
             canonical_schema_hash: input.canonical_schema_hash,
+            price_source_type: None,
         })
+    }
+
+    /// Adds the semantic price type to a legacy-compatible source definition exactly once.
+    ///
+    /// `CurveInterpolation` is produced by ficant algorithms and cannot be registered as an
+    /// external source property.
+    pub fn with_price_source_type(mut self, value: PriceSourceType) -> DomainResult<Self> {
+        if self.price_source_type.is_some() {
+            return Err(DomainErrorCode::VersionConflict);
+        }
+        if value == PriceSourceType::CurveInterpolation {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        self.price_source_type = Some(value);
+        Ok(self)
     }
 
     pub fn id(&self) -> &Ulid {
@@ -83,6 +109,10 @@ impl DataSource {
 
     pub fn canonical_schema_hash(&self) -> &ContentHash {
         &self.canonical_schema_hash
+    }
+
+    pub const fn price_source_type(&self) -> Option<PriceSourceType> {
+        self.price_source_type
     }
 }
 

@@ -11,7 +11,7 @@ use ficant_domain::futures_delivery::{
 };
 use ficant_domain::market::{
     Bond, BondBusinessDayConvention, BondCouponFrequency, BondDayCountConvention, FuturesContract,
-    InstrumentKind, MarketRulePack,
+    InstrumentKind, MarketRulePack, PriceSourceType,
 };
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, LineageRef, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
@@ -21,13 +21,14 @@ use ficant_domain::{ContentAddressed, DomainErrorCode, Lineaged, VersionedDefini
 
 use crate::ports::{
     AccessScope, ApplicationResult, ArtifactRepository, BeginBlobStage, BlobStore, CanonicalQuote,
-    CanonicalSnapshotDecoder, DefinitionRepository, DefinitionValue, FuturesDeliveryArtifactCodec,
-    FuturesDeliveryEngine, FuturesDeliveryRuleParser, IdempotencyKey, InstrumentSubtype,
-    IntegrityEventSink, PublishArtifact, RequiredVerifiedBlobRead, SafeTraceContext,
-    SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader, VerifiedBlobRole,
+    CanonicalSnapshotDecoder, DataSourceRepository, DefinitionRepository, DefinitionValue,
+    FuturesDeliveryArtifactCodec, FuturesDeliveryEngine, FuturesDeliveryRuleParser, IdempotencyKey,
+    InstrumentSubtype, IntegrityEventSink, PublishArtifact, RequiredVerifiedBlobRead,
+    SafeTraceContext, SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader, VerifiedBlobRole,
     VerifiedReadResourceKind, VerifyBlobStage, definition_content_hash,
 };
 use crate::use_cases::bond_analytics::map_analytics_error;
+use crate::use_cases::data_sources::DataSourceUseCase;
 use crate::use_cases::verified_reads::{VerifiedSnapshotRead, VerifiedSnapshotReader};
 use crate::{ApplicationError, ApplicationErrorCategory, map_domain_error};
 
@@ -390,7 +391,8 @@ impl<'a> MaterializeFuturesDeliveryInputs<'a> {
             .decoder
             .decode_quotes(&snapshot, parquet.bytes(), manifest.bytes())
             .await?;
-        let quotes = exact_request_quotes(&snapshot, bindings, decoded)?;
+        let (_, decoded_quotes) = decoded.into_parts();
+        let quotes = exact_request_quotes(&snapshot, bindings, decoded_quotes)?;
         let request_bonds = self
             .validate_requested_bonds(scope, bindings, &quotes)
             .await?;
@@ -520,6 +522,8 @@ pub struct RegisteredFuturesDeliveryMaterialization {
     contract: FuturesContract,
     input_evidence_hashes: Vec<ContentHash>,
     lineage: Vec<LineageRef>,
+    price_source_type: PriceSourceType,
+    price_record_count: u64,
 }
 
 impl RegisteredFuturesDeliveryMaterialization {
@@ -547,11 +551,22 @@ impl RegisteredFuturesDeliveryMaterialization {
     pub fn lineage(&self) -> &[LineageRef] {
         &self.lineage
     }
+
+    #[must_use]
+    pub const fn price_source_type(&self) -> PriceSourceType {
+        self.price_source_type
+    }
+
+    #[must_use]
+    pub const fn price_record_count(&self) -> u64 {
+        self.price_record_count
+    }
 }
 
 /// Builds one complete concrete-futures delivery basket without caller-supplied market values.
 pub struct MaterializeRegisteredFuturesDelivery<'a> {
     definitions: &'a dyn DefinitionRepository,
+    data_sources: &'a dyn DataSourceRepository,
     snapshots: VerifiedSnapshotReader<'a>,
     decoder: &'a dyn CanonicalSnapshotDecoder,
     parser: &'a dyn FuturesDeliveryRuleParser,
@@ -561,6 +576,7 @@ impl<'a> MaterializeRegisteredFuturesDelivery<'a> {
     #[allow(clippy::too_many_arguments)]
     pub const fn new(
         definitions: &'a dyn DefinitionRepository,
+        data_sources: &'a dyn DataSourceRepository,
         snapshot_metadata: &'a dyn SnapshotVerifiedReadMetadataRepository,
         blob_reader: &'a dyn VerifiedBlobReader,
         integrity_events: &'a dyn IntegrityEventSink,
@@ -569,6 +585,7 @@ impl<'a> MaterializeRegisteredFuturesDelivery<'a> {
     ) -> Self {
         Self {
             definitions,
+            data_sources,
             snapshots: VerifiedSnapshotReader::new(
                 snapshot_metadata,
                 blob_reader,
@@ -628,8 +645,6 @@ impl<'a> MaterializeRegisteredFuturesDelivery<'a> {
         {
             return Err(lineage_incomplete());
         }
-        let product = self.parser.parse_product_code(product_code)?;
-
         let rule_value = self
             .definitions
             .get_version(
@@ -646,14 +661,12 @@ impl<'a> MaterializeRegisteredFuturesDelivery<'a> {
             contract.rule_pack().clone(),
             rule_pack.content_hash().clone(),
         );
-        validate_delivery_rule_pack(scope, &rule_binding, valuation_at, &rule_pack, self.parser)?;
         if rule_pack.owner() != owner {
             return Err(lineage_incomplete());
         }
         let content = rule_pack
             .content()
             .ok_or_else(|| ApplicationError::rule_pack_item_missing("context.rule_pack.content"))?;
-        let rule = self.parser.parse_for_portfolio_risk(content, product)?;
 
         let verified = self
             .snapshots
@@ -679,7 +692,20 @@ impl<'a> MaterializeRegisteredFuturesDelivery<'a> {
             .decoder
             .decode_quotes(&snapshot, parquet.bytes(), manifest.bytes())
             .await?;
-        let quotes = exact_midpoint_quotes(&snapshot, valuation_at, price_unit, decoded)?;
+        let (data_source_ref, decoded_quotes) = decoded.into_parts();
+        let data_source = DataSourceUseCase::new(self.data_sources)
+            .get_exact(scope, &data_source_ref)
+            .await?;
+        if data_source.owner() != owner
+            || data_source.price_source_type() != Some(PriceSourceType::ActiveQuote)
+        {
+            return Err(lineage_incomplete());
+        }
+
+        let product = self.parser.parse_product_code(product_code)?;
+        validate_delivery_rule_pack(scope, &rule_binding, valuation_at, &rule_pack, self.parser)?;
+        let rule = self.parser.parse_for_portfolio_risk(content, product)?;
+        let quotes = exact_midpoint_quotes(&snapshot, valuation_at, price_unit, decoded_quotes)?;
         let futures_quote = quotes
             .get(futures_contract_ref)
             .ok_or_else(lineage_incomplete)?;
@@ -730,6 +756,7 @@ impl<'a> MaterializeRegisteredFuturesDelivery<'a> {
                 Some(snapshot.content_hash().clone()),
             )
             .map_err(map_domain_error)?,
+            LineageRef::versioned(data_source_ref.id().clone(), data_source_ref.version()),
         ];
         for (reference, quote) in &quotes {
             if reference == futures_contract_ref {
@@ -797,6 +824,10 @@ impl<'a> MaterializeRegisteredFuturesDelivery<'a> {
         if inputs.is_empty() {
             return Err(invalid());
         }
+        let price_record_count = u64::try_from(inputs.len())
+            .map_err(|_| invalid())?
+            .checked_add(1)
+            .ok_or_else(invalid)?;
         inputs.sort_by(|left, right| left.bond().version_ref().cmp(right.bond().version_ref()));
         evidence.extend(inputs.iter().map(FuturesDeliverableInput::fingerprint));
         evidence.sort_unstable();
@@ -812,6 +843,8 @@ impl<'a> MaterializeRegisteredFuturesDelivery<'a> {
             contract: contract.clone(),
             input_evidence_hashes: evidence,
             lineage,
+            price_source_type: PriceSourceType::ActiveQuote,
+            price_record_count,
         })
     }
 }

@@ -20,6 +20,7 @@ pub use use_cases::carry_roll::{
     CARRY_ROLL_MEDIA_TYPE, CalculateCarryRoll, CarryRollReplay, PublishCarryRoll, ReplayCarryRoll,
 };
 pub use use_cases::data_snapshot::{DataSnapshotPayloads, PublishDataSnapshot};
+pub use use_cases::data_sources::DataSourceUseCase;
 pub use use_cases::factor_topology::FactorTopologyUseCase;
 pub use use_cases::futures_delivery::{
     CalculateFuturesDeliveryBasket, FUTURES_DELIVERY_MEDIA_TYPE, FuturesDeliveryCandidateBinding,

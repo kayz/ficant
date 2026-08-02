@@ -264,6 +264,132 @@ fn factor_registry_service_has_exact_unary_rpcs() {
 }
 
 #[test]
+fn r5a_price_source_contracts_are_exact() {
+    let descriptor_set = descriptor_set();
+    let messages = top_level_messages(descriptor_set);
+    let enums = top_level_enums(descriptor_set);
+
+    assert_enum(
+        &enums,
+        "ficant.market.v1.PriceSourceType",
+        &[
+            ("PRICE_SOURCE_TYPE_UNSPECIFIED", 0),
+            ("PRICE_SOURCE_TYPE_REAL_TRADE", 1),
+            ("PRICE_SOURCE_TYPE_ACTIVE_QUOTE", 2),
+            ("PRICE_SOURCE_TYPE_MODEL_VALUATION", 3),
+            ("PRICE_SOURCE_TYPE_CURVE_INTERPOLATION", 4),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.market.v1.DataSourceKind",
+        &[
+            ("DATA_SOURCE_KIND_UNSPECIFIED", 0),
+            ("DATA_SOURCE_KIND_FILE_NDJSON", 1),
+            ("DATA_SOURCE_KIND_POSTGRES", 2),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.market.v1.DataSourceDefinition",
+        &[
+            ExpectedField::message("data_source", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::enumeration("kind", ".ficant.market.v1.DataSourceKind"),
+            ExpectedField::scalar("name", Type::String),
+            ExpectedField::scalar("connection_binding", Type::String),
+            ExpectedField::scalar("dataset", Type::String),
+            ExpectedField::scalar("canonical_schema_id", Type::String),
+            ExpectedField::message("canonical_schema_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::enumeration("price_source_type", ".ficant.market.v1.PriceSourceType"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.market.v1.FactSource",
+        &[
+            ExpectedField::scalar("source_id", Type::String),
+            ExpectedField::scalar("external_id", Type::String),
+            ExpectedField::scalar("source_revision", Type::Uint64),
+            ExpectedField::message("data_source", ".ficant.core.v1.VersionRef"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.market.v1.RegisterDataSourceRequest",
+        &[
+            ExpectedField::scalar("idempotency_key", Type::String),
+            ExpectedField::scalar("expected_latest_version", Type::Uint64),
+            ExpectedField::message("definition", ".ficant.market.v1.DataSourceDefinition"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.market.v1.RegisterDataSourceResponse",
+        &[
+            ExpectedField::oneof_message(
+                "definition",
+                ".ficant.market.v1.DataSourceDefinition",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.market.v1.GetDataSourceRequest",
+        &[ExpectedField::message(
+            "data_source",
+            ".ficant.core.v1.VersionRef",
+        )],
+    );
+    assert_fields(
+        &messages,
+        "ficant.market.v1.GetDataSourceResponse",
+        &[
+            ExpectedField::oneof_message(
+                "definition",
+                ".ficant.market.v1.DataSourceDefinition",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.PriceSourceCount",
+        &[
+            ExpectedField::enumeration("source_type", ".ficant.market.v1.PriceSourceType"),
+            ExpectedField::scalar("record_count", Type::Uint64),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.PriceSourceSummary",
+        &[
+            ExpectedField::repeated_message("counts", ".ficant.research.v1.PriceSourceCount"),
+            ExpectedField::scalar("mixed", Type::Bool),
+        ],
+    );
+    assert_exact_service(
+        descriptor_set,
+        "ficant.market.v1.DataSourceRegistryService",
+        &[
+            ExpectedMethod::new(
+                "RegisterDataSource",
+                ".ficant.market.v1.RegisterDataSourceRequest",
+                ".ficant.market.v1.RegisterDataSourceResponse",
+            ),
+            ExpectedMethod::new(
+                "GetDataSource",
+                ".ficant.market.v1.GetDataSourceRequest",
+                ".ficant.market.v1.GetDataSourceResponse",
+            ),
+        ],
+    );
+}
+
+#[test]
 fn r4d_a_bond_curve_and_portfolio_risk_contracts_are_exact() {
     let descriptor_set = descriptor_set();
     let messages = top_level_messages(descriptor_set);
@@ -329,6 +455,10 @@ fn r4d_a_bond_curve_and_portfolio_risk_contracts_are_exact() {
             ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
             ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
             ExpectedField::message("futures_data_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message(
+                "source_confidence",
+                ".ficant.research.v1.PriceSourceSummary",
+            ),
         ],
     );
     assert_fields(
@@ -3139,6 +3269,7 @@ fn expected_service_fqns() -> BTreeSet<String> {
         "ficant.core.v1.RegistryService".to_owned(),
         "ficant.market.v1.MarketDefinitionService".to_owned(),
         "ficant.market.v1.MarketFactService".to_owned(),
+        "ficant.market.v1.DataSourceRegistryService".to_owned(),
         "ficant.research.v1.SnapshotService".to_owned(),
         "ficant.research.v1.PositionSnapshotService".to_owned(),
         "ficant.research.v1.FactorRegistryService".to_owned(),

@@ -883,6 +883,20 @@ pub struct PositionKeyRateExposure {
     #[prost(message, repeated, tag="5")]
     pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
 }
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PriceSourceCount {
+    #[prost(enumeration="super::super::market::v1::PriceSourceType", tag="1")]
+    pub source_type: i32,
+    #[prost(uint64, tag="2")]
+    pub record_count: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PriceSourceSummary {
+    #[prost(message, repeated, tag="1")]
+    pub counts: ::prost::alloc::vec::Vec<PriceSourceCount>,
+    #[prost(bool, tag="2")]
+    pub mixed: bool,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PortfolioKeyRateExposure {
     #[prost(message, optional, tag="1")]
@@ -901,6 +915,8 @@ pub struct PortfolioKeyRateExposure {
     pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
     #[prost(message, optional, tag="8")]
     pub futures_data_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="9")]
+    pub source_confidence: ::core::option::Option<PriceSourceSummary>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CalculateKeyRateDv01Request {

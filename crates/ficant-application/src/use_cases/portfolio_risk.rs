@@ -11,7 +11,7 @@ use ficant_domain::curves::{
 use ficant_domain::futures_delivery::FuturesDeliveryRule;
 use ficant_domain::market::{
     BondBusinessDayConvention, BondCouponFrequency, BondDayCountConvention, Calendar,
-    MarketRulePack, Unit,
+    MarketRulePack, PriceSourceType, Unit,
 };
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, LineageRef, MarketTime, Ulid, UnitRef, Version, VersionRef,
@@ -26,11 +26,12 @@ use ficant_domain::{ContentAddressed, VersionedDefinition};
 
 use crate::ports::{
     AccessScope, ApplicationResult, BondAnalyticsEngine, CanonicalSnapshotDecoder,
-    CurvePointSetDecoder, CurveSnapshotMetadataRepository, DefinitionRepository, DefinitionValue,
-    FactorTopologyRepository, FuturesDeliveryEngine, FuturesDeliveryRuleParser, InstrumentSubtype,
-    IntegrityEventSink, PositionSnapshotRepository, RequiredVerifiedBlobRead, SafeTraceContext,
-    SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader, VerifiedBlobRole,
-    VerifiedReadResourceKind, YieldCurveEngine, definition_content_hash,
+    CurvePointSetDecoder, CurveSnapshotMetadataRepository, DataSourceRepository,
+    DefinitionRepository, DefinitionValue, FactorTopologyRepository, FuturesDeliveryEngine,
+    FuturesDeliveryRuleParser, InstrumentSubtype, IntegrityEventSink, PositionSnapshotRepository,
+    RequiredVerifiedBlobRead, SafeTraceContext, SnapshotVerifiedReadMetadataRepository,
+    VerifiedBlobReader, VerifiedBlobRole, VerifiedReadResourceKind, YieldCurveEngine,
+    definition_content_hash,
 };
 use crate::use_cases::bond_analytics::map_analytics_error;
 use crate::use_cases::futures_delivery::{
@@ -149,6 +150,7 @@ pub struct CalculateBondKeyRateDv01<'a> {
     bond_engine: &'a dyn BondAnalyticsEngine,
     futures_snapshot_metadata: Option<&'a dyn SnapshotVerifiedReadMetadataRepository>,
     futures_snapshot_decoder: Option<&'a dyn CanonicalSnapshotDecoder>,
+    data_sources: Option<&'a dyn DataSourceRepository>,
     futures_rule_parser: Option<&'a dyn FuturesDeliveryRuleParser>,
     futures_engine: Option<&'a dyn FuturesDeliveryEngine>,
 }
@@ -178,6 +180,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             bond_engine,
             futures_snapshot_metadata: None,
             futures_snapshot_decoder: None,
+            data_sources: None,
             futures_rule_parser: None,
             futures_engine: None,
         }
@@ -196,6 +199,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
         bond_engine: &'a dyn BondAnalyticsEngine,
         futures_snapshot_metadata: &'a dyn SnapshotVerifiedReadMetadataRepository,
         futures_snapshot_decoder: &'a dyn CanonicalSnapshotDecoder,
+        data_sources: &'a dyn DataSourceRepository,
         futures_rule_parser: &'a dyn FuturesDeliveryRuleParser,
         futures_engine: &'a dyn FuturesDeliveryEngine,
     ) -> Self {
@@ -211,6 +215,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             bond_engine,
             futures_snapshot_metadata: Some(futures_snapshot_metadata),
             futures_snapshot_decoder: Some(futures_snapshot_decoder),
+            data_sources: Some(data_sources),
             futures_rule_parser: Some(futures_rule_parser),
             futures_engine: Some(futures_engine),
         }
@@ -346,6 +351,14 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
                 .then_with(|| left.version().cmp(&right.version()))
         });
 
+        let active_quote_record_count = selected.iter().try_fold(0_u64, |total, position| {
+            let increment = match position {
+                SelectedRiskPosition::Bond(_) => 0,
+                SelectedRiskPosition::Futures(value) => value.price_record_count,
+            };
+            total.checked_add(increment).ok_or_else(validation)
+        })?;
+
         let mut exposures = Vec::with_capacity(selected.len());
         for position in selected {
             exposures.push(match position {
@@ -382,6 +395,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
                 snapshot.id().clone(),
                 curve.id().clone(),
                 data_snapshot_id,
+                active_quote_record_count,
                 exposures,
                 algorithm,
                 lineage,
@@ -719,9 +733,11 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             .clone();
         let snapshot_metadata = self.futures_snapshot_metadata.ok_or_else(validation)?;
         let snapshot_decoder = self.futures_snapshot_decoder.ok_or_else(validation)?;
+        let data_sources = self.data_sources.ok_or_else(validation)?;
         let rule_parser = self.futures_rule_parser.ok_or_else(validation)?;
         let materialization = MaterializeRegisteredFuturesDelivery::new(
             self.definitions,
+            data_sources,
             snapshot_metadata,
             self.blobs,
             self.integrity_events,
@@ -738,6 +754,9 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             trace_for(command)?,
         )
         .await?;
+        if materialization.price_source_type() != PriceSourceType::ActiveQuote {
+            return Err(lineage());
+        }
         let price_unit_ref = materialization
             .contract()
             .price_unit()
@@ -949,6 +968,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             input_evidence_hashes: evidence,
             lineage,
             materialization_lineage: position.materialization.lineage().to_vec(),
+            price_record_count: position.materialization.price_record_count(),
         })
     }
 
@@ -1318,6 +1338,7 @@ struct SelectedFuturesPosition {
     input_evidence_hashes: Vec<ContentHash>,
     lineage: Vec<LineageRef>,
     materialization_lineage: Vec<LineageRef>,
+    price_record_count: u64,
 }
 
 struct AxisPoint {

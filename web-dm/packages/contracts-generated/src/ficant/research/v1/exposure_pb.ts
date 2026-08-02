@@ -8,13 +8,15 @@ import type { DecimalValue, LineageRef, MarketTime, Sha256, Ulid, UnitRef, Versi
 import { file_ficant_core_v1_common } from "../../core/v1/common_pb";
 import type { ErrorDetail } from "../../core/v1/error_pb";
 import { file_ficant_core_v1_error } from "../../core/v1/error_pb";
+import type { PriceSourceType } from "../../market/v1/data_source_pb";
+import { file_ficant_market_v1_data_source } from "../../market/v1/data_source_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file ficant/research/v1/exposure.proto.
  */
 export const file_ficant_research_v1_exposure: GenFile = /*@__PURE__*/
-  fileDesc("CiFmaWNhbnQvcmVzZWFyY2gvdjEvZXhwb3N1cmUucHJvdG8SEmZpY2FudC5yZXNlYXJjaC52MSJjChRSaXNrQWxnb3JpdGhtQmluZGluZxIUCgxhbGdvcml0aG1faWQYASABKAkSGQoRYWxnb3JpdGhtX3ZlcnNpb24YAiABKA0SGgoSY29udmVudGlvbl9wcm9maWxlGAMgASgJIoMBCgpGYWN0b3JEdjAxEhEKCWZhY3Rvcl9pZBgBIAEoCRI2ChZmYWN0b3JfZGVmaW5pdGlvbl9oYXNoGAIgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EioKBGR2MDEYAyABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUiggIKF1Bvc2l0aW9uS2V5UmF0ZUV4cG9zdXJlEikKC3Bvc2l0aW9uX2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIuCgppbnN0cnVtZW50GAIgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIxCglleHBvc3VyZXMYAyADKAsyHi5maWNhbnQucmVzZWFyY2gudjEuRmFjdG9yRHYwMRIsCgxjb250ZW50X2hhc2gYBCABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSKwoHbGluZWFnZRgFIAMoCzIaLmZpY2FudC5jb3JlLnYxLkxpbmVhZ2VSZWYivwMKGFBvcnRmb2xpb0tleVJhdGVFeHBvc3VyZRIyChRwb3NpdGlvbl9zbmFwc2hvdF9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSLwoRY3VydmVfc25hcHNob3RfaWQYAiABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEj4KCXBvc2l0aW9ucxgDIAMoCzIrLmZpY2FudC5yZXNlYXJjaC52MS5Qb3NpdGlvbktleVJhdGVFeHBvc3VyZRIuCgZ0b3RhbHMYBCADKAsyHi5maWNhbnQucmVzZWFyY2gudjEuRmFjdG9yRHYwMRI7CglhbGdvcml0aG0YBSABKAsyKC5maWNhbnQucmVzZWFyY2gudjEuUmlza0FsZ29yaXRobUJpbmRpbmcSLAoMY29udGVudF9oYXNoGAYgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EisKB2xpbmVhZ2UYByADKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmEjYKGGZ1dHVyZXNfZGF0YV9zbmFwc2hvdF9pZBgIIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQiygIKG0NhbGN1bGF0ZUtleVJhdGVEdjAxUmVxdWVzdBIyChRwb3NpdGlvbl9zbmFwc2hvdF9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSMAoMa25vd2xlZGdlX2F0GAIgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRIwCgx2YWx1YXRpb25fYXQYAyABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEi8KEWN1cnZlX3NuYXBzaG90X2lkGAQgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIqCglkdjAxX3VuaXQYBSABKAsyFy5maWNhbnQuY29yZS52MS5Vbml0UmVmEjYKGGZ1dHVyZXNfZGF0YV9zbmFwc2hvdF9pZBgGIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQimAEKHENhbGN1bGF0ZUtleVJhdGVEdjAxUmVzcG9uc2USQAoIZXhwb3N1cmUYASABKAsyLC5maWNhbnQucmVzZWFyY2gudjEuUG9ydGZvbGlvS2V5UmF0ZUV4cG9zdXJlSAASLAoFZXJyb3IYAiABKAsyGy5maWNhbnQuY29yZS52MS5FcnJvckRldGFpbEgAQggKBnJlc3VsdDKRAQoUUG9ydGZvbGlvUmlza1NlcnZpY2USeQoUQ2FsY3VsYXRlS2V5UmF0ZUR2MDESLy5maWNhbnQucmVzZWFyY2gudjEuQ2FsY3VsYXRlS2V5UmF0ZUR2MDFSZXF1ZXN0GjAuZmljYW50LnJlc2VhcmNoLnYxLkNhbGN1bGF0ZUtleVJhdGVEdjAxUmVzcG9uc2ViBnByb3RvMw", [file_ficant_core_v1_common, file_ficant_core_v1_error]);
+  fileDesc("CiFmaWNhbnQvcmVzZWFyY2gvdjEvZXhwb3N1cmUucHJvdG8SEmZpY2FudC5yZXNlYXJjaC52MSJjChRSaXNrQWxnb3JpdGhtQmluZGluZxIUCgxhbGdvcml0aG1faWQYASABKAkSGQoRYWxnb3JpdGhtX3ZlcnNpb24YAiABKA0SGgoSY29udmVudGlvbl9wcm9maWxlGAMgASgJIoMBCgpGYWN0b3JEdjAxEhEKCWZhY3Rvcl9pZBgBIAEoCRI2ChZmYWN0b3JfZGVmaW5pdGlvbl9oYXNoGAIgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EioKBGR2MDEYAyABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUiggIKF1Bvc2l0aW9uS2V5UmF0ZUV4cG9zdXJlEikKC3Bvc2l0aW9uX2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIuCgppbnN0cnVtZW50GAIgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIxCglleHBvc3VyZXMYAyADKAsyHi5maWNhbnQucmVzZWFyY2gudjEuRmFjdG9yRHYwMRIsCgxjb250ZW50X2hhc2gYBCABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSKwoHbGluZWFnZRgFIAMoCzIaLmZpY2FudC5jb3JlLnYxLkxpbmVhZ2VSZWYiYAoQUHJpY2VTb3VyY2VDb3VudBI2Cgtzb3VyY2VfdHlwZRgBIAEoDjIhLmZpY2FudC5tYXJrZXQudjEuUHJpY2VTb3VyY2VUeXBlEhQKDHJlY29yZF9jb3VudBgCIAEoBCJZChJQcmljZVNvdXJjZVN1bW1hcnkSNAoGY291bnRzGAEgAygLMiQuZmljYW50LnJlc2VhcmNoLnYxLlByaWNlU291cmNlQ291bnQSDQoFbWl4ZWQYAiABKAgiggQKGFBvcnRmb2xpb0tleVJhdGVFeHBvc3VyZRIyChRwb3NpdGlvbl9zbmFwc2hvdF9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSLwoRY3VydmVfc25hcHNob3RfaWQYAiABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEj4KCXBvc2l0aW9ucxgDIAMoCzIrLmZpY2FudC5yZXNlYXJjaC52MS5Qb3NpdGlvbktleVJhdGVFeHBvc3VyZRIuCgZ0b3RhbHMYBCADKAsyHi5maWNhbnQucmVzZWFyY2gudjEuRmFjdG9yRHYwMRI7CglhbGdvcml0aG0YBSABKAsyKC5maWNhbnQucmVzZWFyY2gudjEuUmlza0FsZ29yaXRobUJpbmRpbmcSLAoMY29udGVudF9oYXNoGAYgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EisKB2xpbmVhZ2UYByADKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmEjYKGGZ1dHVyZXNfZGF0YV9zbmFwc2hvdF9pZBgIIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSQQoRc291cmNlX2NvbmZpZGVuY2UYCSABKAsyJi5maWNhbnQucmVzZWFyY2gudjEuUHJpY2VTb3VyY2VTdW1tYXJ5IsoCChtDYWxjdWxhdGVLZXlSYXRlRHYwMVJlcXVlc3QSMgoUcG9zaXRpb25fc25hcHNob3RfaWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEjAKDGtub3dsZWRnZV9hdBgCIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSMAoMdmFsdWF0aW9uX2F0GAMgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRIvChFjdXJ2ZV9zbmFwc2hvdF9pZBgEIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSKgoJZHYwMV91bml0GAUgASgLMhcuZmljYW50LmNvcmUudjEuVW5pdFJlZhI2ChhmdXR1cmVzX2RhdGFfc25hcHNob3RfaWQYBiABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkIpgBChxDYWxjdWxhdGVLZXlSYXRlRHYwMVJlc3BvbnNlEkAKCGV4cG9zdXJlGAEgASgLMiwuZmljYW50LnJlc2VhcmNoLnYxLlBvcnRmb2xpb0tleVJhdGVFeHBvc3VyZUgAEiwKBWVycm9yGAIgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHQykQEKFFBvcnRmb2xpb1Jpc2tTZXJ2aWNlEnkKFENhbGN1bGF0ZUtleVJhdGVEdjAxEi8uZmljYW50LnJlc2VhcmNoLnYxLkNhbGN1bGF0ZUtleVJhdGVEdjAxUmVxdWVzdBowLmZpY2FudC5yZXNlYXJjaC52MS5DYWxjdWxhdGVLZXlSYXRlRHYwMVJlc3BvbnNlYgZwcm90bzM", [file_ficant_core_v1_common, file_ficant_core_v1_error, file_ficant_market_v1_data_source]);
 
 /**
  * @generated from message ficant.research.v1.RiskAlgorithmBinding
@@ -108,6 +110,50 @@ export const PositionKeyRateExposureSchema: GenMessage<PositionKeyRateExposure> 
   messageDesc(file_ficant_research_v1_exposure, 2);
 
 /**
+ * @generated from message ficant.research.v1.PriceSourceCount
+ */
+export type PriceSourceCount = Message<"ficant.research.v1.PriceSourceCount"> & {
+  /**
+   * @generated from field: ficant.market.v1.PriceSourceType source_type = 1;
+   */
+  sourceType: PriceSourceType;
+
+  /**
+   * @generated from field: uint64 record_count = 2;
+   */
+  recordCount: bigint;
+};
+
+/**
+ * Describes the message ficant.research.v1.PriceSourceCount.
+ * Use `create(PriceSourceCountSchema)` to create a new message.
+ */
+export const PriceSourceCountSchema: GenMessage<PriceSourceCount> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_exposure, 3);
+
+/**
+ * @generated from message ficant.research.v1.PriceSourceSummary
+ */
+export type PriceSourceSummary = Message<"ficant.research.v1.PriceSourceSummary"> & {
+  /**
+   * @generated from field: repeated ficant.research.v1.PriceSourceCount counts = 1;
+   */
+  counts: PriceSourceCount[];
+
+  /**
+   * @generated from field: bool mixed = 2;
+   */
+  mixed: boolean;
+};
+
+/**
+ * Describes the message ficant.research.v1.PriceSourceSummary.
+ * Use `create(PriceSourceSummarySchema)` to create a new message.
+ */
+export const PriceSourceSummarySchema: GenMessage<PriceSourceSummary> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_exposure, 4);
+
+/**
  * @generated from message ficant.research.v1.PortfolioKeyRateExposure
  */
 export type PortfolioKeyRateExposure = Message<"ficant.research.v1.PortfolioKeyRateExposure"> & {
@@ -150,6 +196,11 @@ export type PortfolioKeyRateExposure = Message<"ficant.research.v1.PortfolioKeyR
    * @generated from field: ficant.core.v1.Ulid futures_data_snapshot_id = 8;
    */
   futuresDataSnapshotId?: Ulid;
+
+  /**
+   * @generated from field: ficant.research.v1.PriceSourceSummary source_confidence = 9;
+   */
+  sourceConfidence?: PriceSourceSummary;
 };
 
 /**
@@ -157,7 +208,7 @@ export type PortfolioKeyRateExposure = Message<"ficant.research.v1.PortfolioKeyR
  * Use `create(PortfolioKeyRateExposureSchema)` to create a new message.
  */
 export const PortfolioKeyRateExposureSchema: GenMessage<PortfolioKeyRateExposure> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_exposure, 3);
+  messageDesc(file_ficant_research_v1_exposure, 5);
 
 /**
  * @generated from message ficant.research.v1.CalculateKeyRateDv01Request
@@ -199,7 +250,7 @@ export type CalculateKeyRateDv01Request = Message<"ficant.research.v1.CalculateK
  * Use `create(CalculateKeyRateDv01RequestSchema)` to create a new message.
  */
 export const CalculateKeyRateDv01RequestSchema: GenMessage<CalculateKeyRateDv01Request> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_exposure, 4);
+  messageDesc(file_ficant_research_v1_exposure, 6);
 
 /**
  * @generated from message ficant.research.v1.CalculateKeyRateDv01Response
@@ -228,7 +279,7 @@ export type CalculateKeyRateDv01Response = Message<"ficant.research.v1.Calculate
  * Use `create(CalculateKeyRateDv01ResponseSchema)` to create a new message.
  */
 export const CalculateKeyRateDv01ResponseSchema: GenMessage<CalculateKeyRateDv01Response> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_exposure, 5);
+  messageDesc(file_ficant_research_v1_exposure, 7);
 
 /**
  * @generated from service ficant.research.v1.PortfolioRiskService

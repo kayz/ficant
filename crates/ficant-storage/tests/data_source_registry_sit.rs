@@ -2,7 +2,7 @@ mod support;
 
 use ficant_application::ApplicationErrorCategory;
 use ficant_application::ports::{DataSourceRepository, IdempotencyKey, RegisterDataSource};
-use ficant_domain::market::{DataSource, DataSourceInput, DataSourceKind};
+use ficant_domain::market::{DataSource, DataSourceInput, DataSourceKind, PriceSourceType};
 use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid, Version, VersionRef};
 
 #[tokio::test]
@@ -14,7 +14,13 @@ async fn data_source_registration_is_append_only_idempotent_and_scope_bound() {
     let owner = owner();
     let scope = support::access_scope(&owner);
 
-    let first = source(owner.clone(), 1, DataSourceKind::FileNdjson, "source-file");
+    let first = source(
+        owner.clone(),
+        1,
+        DataSourceKind::FileNdjson,
+        "source-file",
+        PriceSourceType::ActiveQuote,
+    );
     let command = RegisterDataSource::new(
         scope.clone(),
         None,
@@ -33,6 +39,7 @@ async fn data_source_registration_is_append_only_idempotent_and_scope_bound() {
             1,
             DataSourceKind::FileNdjson,
             "other-binding",
+            PriceSourceType::ActiveQuote,
         ),
         IdempotencyKey::new("phase3a-source-v1").unwrap(),
     )
@@ -46,7 +53,13 @@ async fn data_source_registration_is_append_only_idempotent_and_scope_bound() {
         ApplicationErrorCategory::AlreadyExists
     );
 
-    let second = source(owner.clone(), 2, DataSourceKind::Postgres, "source-pg");
+    let second = source(
+        owner.clone(),
+        2,
+        DataSourceKind::Postgres,
+        "source-pg",
+        PriceSourceType::RealTrade,
+    );
     let append = RegisterDataSource::new(
         scope.clone(),
         Some(Version::new(1).unwrap()),
@@ -64,6 +77,18 @@ async fn data_source_registration_is_append_only_idempotent_and_scope_bound() {
         .await
         .unwrap();
     assert_eq!(exact, Some(first));
+    assert_eq!(
+        repository
+            .get_exact(
+                &scope,
+                VersionRef::new(second.id().clone(), Version::new(2).unwrap()),
+            )
+            .await
+            .unwrap()
+            .unwrap()
+            .price_source_type(),
+        Some(PriceSourceType::RealTrade)
+    );
 
     let forbidden_scope = ficant_application::ports::AccessScope::new(
         owner.tenant_id().clone(),
@@ -81,7 +106,13 @@ async fn data_source_registration_is_append_only_idempotent_and_scope_bound() {
     assert_eq!(forbidden.category(), ApplicationErrorCategory::Forbidden);
 }
 
-fn source(owner: OwnerRef, version: u64, kind: DataSourceKind, binding: &str) -> DataSource {
+fn source(
+    owner: OwnerRef,
+    version: u64,
+    kind: DataSourceKind,
+    binding: &str,
+    source_type: PriceSourceType,
+) -> DataSource {
     DataSource::new(DataSourceInput {
         data_source_id: Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F10").unwrap(),
         version: Version::new(version).unwrap(),
@@ -93,6 +124,8 @@ fn source(owner: OwnerRef, version: u64, kind: DataSourceKind, binding: &str) ->
         canonical_schema_id: "ficant.market.quote.canonical.v1".to_owned(),
         canonical_schema_hash: ContentHash::digest(b"canonical-schema"),
     })
+    .unwrap()
+    .with_price_source_type(source_type)
     .unwrap()
 }
 

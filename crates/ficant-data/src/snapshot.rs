@@ -172,6 +172,11 @@ impl SnapshotManifest {
     }
 
     #[must_use]
+    pub const fn data_source_version(&self) -> u64 {
+        self.data_source.version
+    }
+
+    #[must_use]
     pub fn instrument_mapping_digest(&self) -> &str {
         &self.instrument_mapping_digest
     }

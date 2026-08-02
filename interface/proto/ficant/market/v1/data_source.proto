@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package ficant.market.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+
+enum DataSourceKind {
+  DATA_SOURCE_KIND_UNSPECIFIED = 0;
+  DATA_SOURCE_KIND_FILE_NDJSON = 1;
+  DATA_SOURCE_KIND_POSTGRES = 2;
+}
+
+enum PriceSourceType {
+  PRICE_SOURCE_TYPE_UNSPECIFIED = 0;
+  PRICE_SOURCE_TYPE_REAL_TRADE = 1;
+  PRICE_SOURCE_TYPE_ACTIVE_QUOTE = 2;
+  PRICE_SOURCE_TYPE_MODEL_VALUATION = 3;
+  PRICE_SOURCE_TYPE_CURVE_INTERPOLATION = 4;
+}
+
+message DataSourceDefinition {
+  ficant.core.v1.VersionRef data_source = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  DataSourceKind kind = 3;
+  string name = 4;
+  string connection_binding = 5;
+  string dataset = 6;
+  string canonical_schema_id = 7;
+  ficant.core.v1.Sha256 canonical_schema_hash = 8;
+  PriceSourceType price_source_type = 9;
+}
+
+message RegisterDataSourceRequest {
+  string idempotency_key = 1;
+  uint64 expected_latest_version = 2;
+  DataSourceDefinition definition = 3;
+}
+
+message RegisterDataSourceResponse {
+  oneof result {
+    DataSourceDefinition definition = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message GetDataSourceRequest {
+  ficant.core.v1.VersionRef data_source = 1;
+}
+
+message GetDataSourceResponse {
+  oneof result {
+    DataSourceDefinition definition = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+service DataSourceRegistryService {
+  rpc RegisterDataSource(RegisterDataSourceRequest) returns (RegisterDataSourceResponse);
+  rpc GetDataSource(GetDataSourceRequest) returns (GetDataSourceResponse);
+}

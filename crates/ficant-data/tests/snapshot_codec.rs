@@ -14,7 +14,7 @@ use ficant_domain::market::{
 };
 use ficant_domain::primitives::{EffectivePeriod, MarketTime, OwnerRef, Ulid, Version, VersionRef};
 use ficant_domain::research::{DataSnapshot, DataSnapshotInput};
-use ficant_domain::{ContentAddressed, Lineaged};
+use ficant_domain::{ContentAddressed, Lineaged, VersionedDefinition};
 use parquet::arrow::arrow_reader::{ArrowReaderOptions, ParquetRecordBatchReaderBuilder};
 use parquet::basic::Compression;
 
@@ -91,6 +91,10 @@ async fn deterministic_parquet_manifest_and_verified_round_trip_are_exact() {
     assert_eq!(
         decoded.manifest().data_source_id(),
         request.source().id().as_str()
+    );
+    assert_eq!(
+        decoded.manifest().data_source_version(),
+        request.source().version()
     );
     assert_eq!(
         decoded.manifest().instrument_mapping_digest(),

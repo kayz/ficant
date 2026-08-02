@@ -1,7 +1,9 @@
 use chrono::{NaiveDate, TimeZone, Utc};
 use ficant_domain::ContentAddressed;
 use ficant_domain::analytics::FixedDecimal;
-use ficant_domain::market::{FuturesContract, Instrument, InstrumentInput, InstrumentKind};
+use ficant_domain::market::{
+    FuturesContract, Instrument, InstrumentInput, InstrumentKind, PriceSourceType,
+};
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, LineageRef, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
 };
@@ -142,6 +144,7 @@ fn full_portfolio_hash_and_totals_commit_the_consumed_futures_snapshot() {
         id('P'),
         id('C'),
         data_snapshot.clone(),
+        1,
         vec![bond.clone(), future.clone()],
         algorithm.clone(),
         vec![lineage('L')],
@@ -150,11 +153,24 @@ fn full_portfolio_hash_and_totals_commit_the_consumed_futures_snapshot() {
     assert_eq!(portfolio.futures_data_snapshot_id(), Some(&data_snapshot));
     assert_eq!(portfolio.positions().len(), 2);
     assert_eq!(portfolio.totals()[0].value(), fixed("150000000000"));
+    assert_eq!(
+        portfolio
+            .source_confidence()
+            .counts()
+            .iter()
+            .map(|value| (value.source_type(), value.record_count()))
+            .collect::<Vec<_>>(),
+        vec![
+            (PriceSourceType::ActiveQuote, 1),
+            (PriceSourceType::CurveInterpolation, 2),
+        ]
+    );
 
     let other = PortfolioKeyRateExposure::new_with_futures_data_snapshot(
         id('P'),
         id('C'),
         id('T'),
+        1,
         vec![bond, future],
         algorithm,
         vec![lineage('L')],

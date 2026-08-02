@@ -476,12 +476,13 @@ async fn insert_fact(
             .map_err(map_sqlx_error)?;
         }
         MarketFact::Quote(value) => {
+            let data_source = value.source().data_source();
             sqlx::query(
                 "INSERT INTO market.quotes
                  (tenant_id, quote_id, owner_id, instrument_id, instrument_version,
                   fact_time, received_at, source_id, external_id, source_revision,
-                  supersedes_id, payload)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+                  supersedes_id, payload, data_source_id, data_source_version)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
             )
             .bind(value.owner().tenant_id().as_str())
             .bind(value.id().as_str())
@@ -499,16 +500,24 @@ async fn insert_fact(
                     .map(ficant_domain::primitives::Ulid::as_str),
             )
             .bind(payload)
+            .bind(data_source.map(|reference| reference.id().as_str()))
+            .bind(
+                data_source
+                    .map(|reference| version_i64(reference.version().get()))
+                    .transpose()?,
+            )
             .execute(&mut **transaction)
             .await
             .map_err(map_sqlx_error)?;
         }
         MarketFact::Trade(value) => {
+            let data_source = value.source().data_source();
             sqlx::query(
                 "INSERT INTO market.trades
                  (tenant_id, trade_id, owner_id, instrument_id, instrument_version,
-                  fact_time, source_id, external_id, source_revision, supersedes_id, payload)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+                  fact_time, source_id, external_id, source_revision, supersedes_id, payload,
+                  data_source_id, data_source_version)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
             )
             .bind(value.owner().tenant_id().as_str())
             .bind(value.id().as_str())
@@ -525,17 +534,24 @@ async fn insert_fact(
                     .map(ficant_domain::primitives::Ulid::as_str),
             )
             .bind(payload)
+            .bind(data_source.map(|reference| reference.id().as_str()))
+            .bind(
+                data_source
+                    .map(|reference| version_i64(reference.version().get()))
+                    .transpose()?,
+            )
             .execute(&mut **transaction)
             .await
             .map_err(map_sqlx_error)?;
         }
         MarketFact::Valuation(value) => {
+            let data_source = value.source().data_source();
             sqlx::query(
                 "INSERT INTO market.valuations
                  (tenant_id, valuation_id, owner_id, instrument_id, instrument_version,
                   fact_time, source_id, external_id, source_revision, supersedes_id,
-                  rule_pack_id, rule_pack_version, payload)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+                  rule_pack_id, rule_pack_version, payload, data_source_id, data_source_version)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
             )
             .bind(value.owner().tenant_id().as_str())
             .bind(value.id().as_str())
@@ -554,6 +570,12 @@ async fn insert_fact(
             .bind(value.rule_pack().id().as_str())
             .bind(version_i64(value.rule_pack().version().get())?)
             .bind(payload)
+            .bind(data_source.map(|reference| reference.id().as_str()))
+            .bind(
+                data_source
+                    .map(|reference| version_i64(reference.version().get()))
+                    .transpose()?,
+            )
             .execute(&mut **transaction)
             .await
             .map_err(map_sqlx_error)?;

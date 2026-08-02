@@ -24,27 +24,32 @@ _sym_db = _symbol_database.Default()
 
 from ficant.core.v1 import common_pb2 as ficant_dot_core_dot_v1_dot_common__pb2
 from ficant.core.v1 import error_pb2 as ficant_dot_core_dot_v1_dot_error__pb2
+from ficant.market.v1 import data_source_pb2 as ficant_dot_market_dot_v1_dot_data__source__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!ficant/research/v1/exposure.proto\x12\x12\x66icant.research.v1\x1a\x1b\x66icant/core/v1/common.proto\x1a\x1a\x66icant/core/v1/error.proto\"\x95\x01\n\x14RiskAlgorithmBinding\x12!\n\x0c\x61lgorithm_id\x18\x01 \x01(\tR\x0b\x61lgorithmId\x12+\n\x11\x61lgorithm_version\x18\x02 \x01(\rR\x10\x61lgorithmVersion\x12-\n\x12\x63onvention_profile\x18\x03 \x01(\tR\x11\x63onventionProfile\"\xa9\x01\n\nFactorDv01\x12\x1b\n\tfactor_id\x18\x01 \x01(\tR\x08\x66\x61\x63torId\x12L\n\x16\x66\x61\x63tor_definition_hash\x18\x02 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x14\x66\x61\x63torDefinitionHash\x12\x30\n\x04\x64v01\x18\x03 \x01(\x0b\x32\x1c.ficant.core.v1.DecimalValueR\x04\x64v01\"\xbb\x02\n\x17PositionKeyRateExposure\x12\x35\n\x0bposition_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\npositionId\x12:\n\ninstrument\x18\x02 \x01(\x0b\x32\x1a.ficant.core.v1.VersionRefR\ninstrument\x12<\n\texposures\x18\x03 \x03(\x0b\x32\x1e.ficant.research.v1.FactorDv01R\texposures\x12\x39\n\x0c\x63ontent_hash\x18\x04 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0b\x63ontentHash\x12\x34\n\x07lineage\x18\x05 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x07lineage\"\xaf\x04\n\x18PortfolioKeyRateExposure\x12\x46\n\x14position_snapshot_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x12positionSnapshotId\x12@\n\x11\x63urve_snapshot_id\x18\x02 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0f\x63urveSnapshotId\x12I\n\tpositions\x18\x03 \x03(\x0b\x32+.ficant.research.v1.PositionKeyRateExposureR\tpositions\x12\x36\n\x06totals\x18\x04 \x03(\x0b\x32\x1e.ficant.research.v1.FactorDv01R\x06totals\x12\x46\n\talgorithm\x18\x05 \x01(\x0b\x32(.ficant.research.v1.RiskAlgorithmBindingR\talgorithm\x12\x39\n\x0c\x63ontent_hash\x18\x06 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0b\x63ontentHash\x12\x34\n\x07lineage\x18\x07 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x07lineage\x12M\n\x18\x66utures_data_snapshot_id\x18\x08 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x15\x66uturesDataSnapshotId\"\xaa\x03\n\x1b\x43\x61lculateKeyRateDv01Request\x12\x46\n\x14position_snapshot_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x12positionSnapshotId\x12=\n\x0cknowledge_at\x18\x02 \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\x0bknowledgeAt\x12=\n\x0cvaluation_at\x18\x03 \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\x0bvaluationAt\x12@\n\x11\x63urve_snapshot_id\x18\x04 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0f\x63urveSnapshotId\x12\x34\n\tdv01_unit\x18\x05 \x01(\x0b\x32\x17.ficant.core.v1.UnitRefR\x08\x64v01Unit\x12M\n\x18\x66utures_data_snapshot_id\x18\x06 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x15\x66uturesDataSnapshotId\"\xa9\x01\n\x1c\x43\x61lculateKeyRateDv01Response\x12J\n\x08\x65xposure\x18\x01 \x01(\x0b\x32,.ficant.research.v1.PortfolioKeyRateExposureH\x00R\x08\x65xposure\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result2\x91\x01\n\x14PortfolioRiskService\x12y\n\x14\x43\x61lculateKeyRateDv01\x12/.ficant.research.v1.CalculateKeyRateDv01Request\x1a\x30.ficant.research.v1.CalculateKeyRateDv01Responseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!ficant/research/v1/exposure.proto\x12\x12\x66icant.research.v1\x1a\x1b\x66icant/core/v1/common.proto\x1a\x1a\x66icant/core/v1/error.proto\x1a\"ficant/market/v1/data_source.proto\"\x95\x01\n\x14RiskAlgorithmBinding\x12!\n\x0c\x61lgorithm_id\x18\x01 \x01(\tR\x0b\x61lgorithmId\x12+\n\x11\x61lgorithm_version\x18\x02 \x01(\rR\x10\x61lgorithmVersion\x12-\n\x12\x63onvention_profile\x18\x03 \x01(\tR\x11\x63onventionProfile\"\xa9\x01\n\nFactorDv01\x12\x1b\n\tfactor_id\x18\x01 \x01(\tR\x08\x66\x61\x63torId\x12L\n\x16\x66\x61\x63tor_definition_hash\x18\x02 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x14\x66\x61\x63torDefinitionHash\x12\x30\n\x04\x64v01\x18\x03 \x01(\x0b\x32\x1c.ficant.core.v1.DecimalValueR\x04\x64v01\"\xbb\x02\n\x17PositionKeyRateExposure\x12\x35\n\x0bposition_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\npositionId\x12:\n\ninstrument\x18\x02 \x01(\x0b\x32\x1a.ficant.core.v1.VersionRefR\ninstrument\x12<\n\texposures\x18\x03 \x03(\x0b\x32\x1e.ficant.research.v1.FactorDv01R\texposures\x12\x39\n\x0c\x63ontent_hash\x18\x04 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0b\x63ontentHash\x12\x34\n\x07lineage\x18\x05 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x07lineage\"y\n\x10PriceSourceCount\x12\x42\n\x0bsource_type\x18\x01 \x01(\x0e\x32!.ficant.market.v1.PriceSourceTypeR\nsourceType\x12!\n\x0crecord_count\x18\x02 \x01(\x04R\x0brecordCount\"h\n\x12PriceSourceSummary\x12<\n\x06\x63ounts\x18\x01 \x03(\x0b\x32$.ficant.research.v1.PriceSourceCountR\x06\x63ounts\x12\x14\n\x05mixed\x18\x02 \x01(\x08R\x05mixed\"\x84\x05\n\x18PortfolioKeyRateExposure\x12\x46\n\x14position_snapshot_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x12positionSnapshotId\x12@\n\x11\x63urve_snapshot_id\x18\x02 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0f\x63urveSnapshotId\x12I\n\tpositions\x18\x03 \x03(\x0b\x32+.ficant.research.v1.PositionKeyRateExposureR\tpositions\x12\x36\n\x06totals\x18\x04 \x03(\x0b\x32\x1e.ficant.research.v1.FactorDv01R\x06totals\x12\x46\n\talgorithm\x18\x05 \x01(\x0b\x32(.ficant.research.v1.RiskAlgorithmBindingR\talgorithm\x12\x39\n\x0c\x63ontent_hash\x18\x06 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0b\x63ontentHash\x12\x34\n\x07lineage\x18\x07 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x07lineage\x12M\n\x18\x66utures_data_snapshot_id\x18\x08 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x15\x66uturesDataSnapshotId\x12S\n\x11source_confidence\x18\t \x01(\x0b\x32&.ficant.research.v1.PriceSourceSummaryR\x10sourceConfidence\"\xaa\x03\n\x1b\x43\x61lculateKeyRateDv01Request\x12\x46\n\x14position_snapshot_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x12positionSnapshotId\x12=\n\x0cknowledge_at\x18\x02 \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\x0bknowledgeAt\x12=\n\x0cvaluation_at\x18\x03 \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\x0bvaluationAt\x12@\n\x11\x63urve_snapshot_id\x18\x04 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0f\x63urveSnapshotId\x12\x34\n\tdv01_unit\x18\x05 \x01(\x0b\x32\x17.ficant.core.v1.UnitRefR\x08\x64v01Unit\x12M\n\x18\x66utures_data_snapshot_id\x18\x06 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x15\x66uturesDataSnapshotId\"\xa9\x01\n\x1c\x43\x61lculateKeyRateDv01Response\x12J\n\x08\x65xposure\x18\x01 \x01(\x0b\x32,.ficant.research.v1.PortfolioKeyRateExposureH\x00R\x08\x65xposure\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result2\x91\x01\n\x14PortfolioRiskService\x12y\n\x14\x43\x61lculateKeyRateDv01\x12/.ficant.research.v1.CalculateKeyRateDv01Request\x1a\x30.ficant.research.v1.CalculateKeyRateDv01Responseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'ficant.research.v1.exposure_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_RISKALGORITHMBINDING']._serialized_start=115
-  _globals['_RISKALGORITHMBINDING']._serialized_end=264
-  _globals['_FACTORDV01']._serialized_start=267
-  _globals['_FACTORDV01']._serialized_end=436
-  _globals['_POSITIONKEYRATEEXPOSURE']._serialized_start=439
-  _globals['_POSITIONKEYRATEEXPOSURE']._serialized_end=754
-  _globals['_PORTFOLIOKEYRATEEXPOSURE']._serialized_start=757
-  _globals['_PORTFOLIOKEYRATEEXPOSURE']._serialized_end=1316
-  _globals['_CALCULATEKEYRATEDV01REQUEST']._serialized_start=1319
-  _globals['_CALCULATEKEYRATEDV01REQUEST']._serialized_end=1745
-  _globals['_CALCULATEKEYRATEDV01RESPONSE']._serialized_start=1748
-  _globals['_CALCULATEKEYRATEDV01RESPONSE']._serialized_end=1917
-  _globals['_PORTFOLIORISKSERVICE']._serialized_start=1920
-  _globals['_PORTFOLIORISKSERVICE']._serialized_end=2065
+  _globals['_RISKALGORITHMBINDING']._serialized_start=151
+  _globals['_RISKALGORITHMBINDING']._serialized_end=300
+  _globals['_FACTORDV01']._serialized_start=303
+  _globals['_FACTORDV01']._serialized_end=472
+  _globals['_POSITIONKEYRATEEXPOSURE']._serialized_start=475
+  _globals['_POSITIONKEYRATEEXPOSURE']._serialized_end=790
+  _globals['_PRICESOURCECOUNT']._serialized_start=792
+  _globals['_PRICESOURCECOUNT']._serialized_end=913
+  _globals['_PRICESOURCESUMMARY']._serialized_start=915
+  _globals['_PRICESOURCESUMMARY']._serialized_end=1019
+  _globals['_PORTFOLIOKEYRATEEXPOSURE']._serialized_start=1022
+  _globals['_PORTFOLIOKEYRATEEXPOSURE']._serialized_end=1666
+  _globals['_CALCULATEKEYRATEDV01REQUEST']._serialized_start=1669
+  _globals['_CALCULATEKEYRATEDV01REQUEST']._serialized_end=2095
+  _globals['_CALCULATEKEYRATEDV01RESPONSE']._serialized_start=2098
+  _globals['_CALCULATEKEYRATEDV01RESPONSE']._serialized_end=2267
+  _globals['_PORTFOLIORISKSERVICE']._serialized_start=2270
+  _globals['_PORTFOLIORISKSERVICE']._serialized_end=2415
 # @@protoc_insertion_point(module_scope)
