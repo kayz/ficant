@@ -43,5 +43,5 @@ finally {
     $env:FICANT_DESCRIPTOR_INPUT = $previousDescriptorInput
 }
 
-Write-Host 'Coverage descriptor gate passed: 3 reachable composition carriers require CoverageDeclaration; per-position payloads remain outside the inventory.'
+Write-Host 'Coverage descriptor gate passed: all 66 reachable success arms are explicitly classified; 3 composition carriers require CoverageDeclaration.'
 exit 0

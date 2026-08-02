@@ -16,7 +16,7 @@
 
 **Acceptance sentence：**
 
-> 对同一 verified PositionSnapshot，`CalculateKeyRateDv01`、`GetPositionViews` 与成功的 `CalculateCapitalUse` 均返回非空 `CoverageDeclaration`：声明给出已导入分母、实际参与数、按 exact UnitRef 稳定分组的已导入与参与仓位毛经济价值、缺失关键字段记录数、实际消费的 R5a 价格来源分布及不同外部 DataSource exact version 数。组合 KRD 的 coverage 来源分布与顶层 `source_confidence` 逐项相同且来自同一次解析；bond-only 为内部曲线来源且外部源数为 0，Bond + exact Futures 为 `ACTIVE_QUOTE + CURVE_INTERPOLATION` 且外部源数为 1。删除任一现存组合 carrier 的 coverage，或新增一个不带 coverage 的组合成功输出，机械门禁均 exit 1；逐仓位输出不被误报。任一会让已声明范围内结果错误的关键字段缺失仍在聚合前失败关闭，AC17 的 UNKNOWN 会计分类仍不返回 `CapitalUse` 或覆盖声明。Golden、Oracle、Phase 2C/2D matrix、canonical quote v1/schema/hash、R5a `PriceSourceType`、C++/C ABI、定价公式、迁移集合、allowlist 与 UI 均不变。
+> 对同一 verified PositionSnapshot，`CalculateKeyRateDv01`、`GetPositionViews` 与成功的 `CalculateCapitalUse` 均返回非空 `CoverageDeclaration`：声明给出已导入分母、实际参与数、按 exact UnitRef 稳定分组的已导入与参与仓位毛经济价值、缺失关键字段记录数、实际消费的 R5a 价格来源分布及不同外部 DataSource exact version 数。组合 KRD 的 coverage 来源分布与顶层 `source_confidence` 逐项相同且来自同一次解析；bond-only 为内部曲线来源且外部源数为 0，Bond + exact Futures 为 `ACTIVE_QUOTE + CURVE_INTERPOLATION` 且外部源数为 1。全部 66 个现存 RPC success arm 均在闭集 inventory 中显式分类为组合级或非组合级；删除任一现存组合 carrier 的 coverage，或新增任一未分类 success arm，机械门禁均 exit 1。显式分类的非组合输出不被误报。任一会让已声明范围内结果错误的关键字段缺失仍在聚合前失败关闭，AC17 的 UNKNOWN 会计分类仍不返回 `CapitalUse` 或覆盖声明。Golden、Oracle、Phase 2C/2D matrix、canonical quote v1/schema/hash、R5a `PriceSourceType`、C++/C ABI、定价公式、迁移集合、allowlist 与 UI 均不变。
 
 ## 2. 验收
 
@@ -26,7 +26,7 @@
 | AC35 · 分母与总额 | 由同一 verified PositionSnapshot 派生 `imported_position_count` 与 `participating_position_count`。两组 gross economic value 对每只仓位的 `economic_value` 取绝对值后按 exact UnitRef 分组精确相加，按 `(unit_id, version)` 排序；不得跨 UnitRef 相加、做 FX、用净额抵消或猜测未导入分母。 |
 | AC35 · 关键字段 | “关键”只由当前 carrier 实际消费的合同推导：缺失会令该仓位无法正确进入本次聚合的字段即关键。现有成功路径不建立 partial-result 语义；关键字段缺失仍失败关闭，所以成功声明的 `missing_critical_field_record_count` 为 0。合法业务排除（例如 reverse-repo collateral 不进入 position exposure）不是缺失。 |
 | AC35 · 可信度同源 | `PortfolioKeyRateExposure.coverage.source_confidence` 与既有字段 9 `source_confidence` 逐项相同，计数与 `mixed` 只解析一次；构造不一致 pair 必须失败。`distinct_external_data_source_version_count` 对实际消费的 external DataSource exact VersionRef 去重，内部 `CURVE_INTERPOLATION` 不计入。 |
-| AC35 · 裸值全称 | coverage 门禁冻结三个组合 carrier 的完整 inventory，并遍历其 RPC 成功 arm。删除任一 coverage 或加入可达的裸组合 carrier 均 exit 1；真实逐仓位 fixture 保持 exit 0。 |
+| AC35 · 裸值全称 | coverage 门禁闭集枚举全部 66 个现存 RPC success arm，并逐项显式分类为 3 个组合级或 63 个非组合级；未知 arm 默认失败。删除任一 coverage、加入标量裸组合或加入任意 inventory 外 success arm 均 exit 1；当前已分类 inventory exit 0。 |
 | AC17 · 回归 | 同一含 UNKNOWN 会计分类的 snapshot：`CalculateCapitalUse` 仍返回既有 typed failure，不能返回部分金额、零金额或带 coverage 的成功值；`GetPositionViews` 的非资本视图行为保持。 |
 
 R5b 闸门：
@@ -40,7 +40,7 @@ R5b 闸门：
 7. external source count 按实际消费的 `VersionRef(id, version)` 去重，不按来源类型数、quote 行数、DataSnapshot 数或 lineage 总数计数。bond-only 的内部曲线插值为 0；当前一个 verified futures snapshot 绑定一个 external DataSource exact version，因此混合 KRD 为 1。
 8. coverage、两组金额、来源分布与 external source count 全部进入组合结果 content hash。`PortfolioKeyRateExposure` 继续使用结果 hash；`PositionViews` 与 `CapitalUse` 的既有字段 2 从“直接复用 snapshot hash”收紧为各自结果 hash，包含 snapshot hash、输出内容与 coverage。lineage 仍来自同一已验证输入，不为派生 coverage 伪造新外部引用。
 9. `PriceSourceCount` 与 `PriceSourceSummary` 的 FQN、字段号、枚举类型和 wire bytes 全部冻结。为解除 `exposure.proto ↔ coverage.proto` 的循环依赖，它们只做同 package 源文件迁移至 `coverage.proto`；不得复制第二套 message、改 FQN 或改 tag。descriptor 必须证明 R5a 字段 9 的类型仍为 `.ficant.research.v1.PriceSourceSummary`。
-10. coverage gate 必须从 descriptor 而不是文件名或散文推断合同；现有 service / success-arm inventory 与三个 carrier 集合都精确冻结。配套 fixture 至少覆盖三个“删除 coverage → exit 1”、一个“新增裸组合成功 payload → exit 1”和一个“逐仓位 payload → exit 0”。不得增加跳过项、例外 allowlist 或靠改 expected 删除 carrier。
+10. coverage gate 必须从 descriptor 而不是文件名、字段形状启发式或散文推断合同；全部现存 RPC success arm 组成闭集 inventory，每一项显式分类为组合级或非组合级，未知项默认失败。三个组合 carrier 集合精确冻结。配套 fixture 覆盖三个“删除 coverage → exit 1”、原有“新增裸组合成功 payload → exit 1”、标量裸组合回归、inventory 外全新 success arm，以及已分类 base inventory 正向通过。不得增加跳过项、例外 allowlist 或靠改 expected 删除 carrier。
 11. AC17 的 UNKNOWN regression 必须在 coverage 形成前返回既有错误；不得把失败改写成 `missing_critical_field_record_count = 1` 的部分成功。CapitalUse 的 Decimal 与 UnitRef 结果、PositionViews 三类视图、Portfolio KRD / totals 与 R5a marker 均须在响应外逐位复核，证明 coverage 不进入数值公式。
 12. descriptor、`check-coverage.ps1`、`test-coverage-check.ps1`、`check-fast.ps1` 与 `check.ps1` 都是自管门禁，base-to-candidate diff 必须单独呈现且只能扩大覆盖。不得修改 expected、Oracle、Golden、matrix、canonical hash、allowlist、既有分层断言或容差制造通过。
 
@@ -86,6 +86,8 @@ R5b 闸门：
 - **已裁决——分布必须带分母：** Human 批准 Coverage 同时携带 imported / participating count 与按 exact UnitRef 分组的 imported / participating gross economic value。不同 UnitRef 不换算；不从已导入分母推断组织分母。
 - **已裁决——AC15 单一事实源：** Coverage 吸收 R5a 已产出的 `PriceSourceSummary`，不另算第二份结论；同时携带消费到的不同 external DataSource exact version 数。顶层 AC15 marker 与 coverage 不一致的构造必须失败。
 - **执行期事前授权——补齐生成树：** 2026-08-02 Human 在候选首次写入前授权精确新增 `python/node-contracts/src/ficant_contracts/generated/ficant/research/v1/coverage_pb2_grpc.py`。边界仅为固定 Buf Python gRPC 插件在两棵确定性证明树中逐位相同的 159 字节无 service stub；不得手写 service、修改 `interface/buf.gen.yaml`、插件版本、revision、参数或其他生成路径。原 §6 冻结清单保持原文，本条是唯一扩权事实。
+- **执行期授权——收紧新门禁 inventory：** 2026-08-03 Human 授权修改本轮新建 coverage gate 的 expected / inventory 与负向 fixture。触发事实是旧门禁对对抗性标量裸组合 success arm 错误 exit 0，而非被测业务代码或正向测试失败；变更把 success arm 判据从形状识别改成 66 项显式分类闭集，未知默认失败，接受集合严格收缩。三个删 coverage 与原裸组合四个既有负向 fixture 全部保留并继续 exit 1；同一 forward-only 补提交新增标量回归与 inventory 外未知 arm 两项负向 fixture，其他业务、descriptor 字段断言与期望均不变。这不是 rebaseline。
+- **待 authority 固化——新门禁收紧判别测试：** 后续 authority 应与 PR #12 两款并列记录：仅当负向 fixture 证明门禁漏报、变更后接受集合严格收缩、漏报 fixture 与修复同一提交且其余断言保持时，才允许修改本轮新建门禁的 expected / inventory；每次收紧须机械重跑全部既有负向 fixture。本公共 brief 只记录 Human 建议与本轮事实，不代替 authority 裁决。
 - **待 authority 单独签字——AC35“输出”口径：** AC35 的“不带声明的裸数值不出现在任何输出中”在本轮只声明服务端成功响应；WebApp / 报告呈现层的裸值防护不在 R5b，须另行冻结与判断。该限定语必须在 AC35 authority 批准时由 Human 单独签字并写入裁决记录，不得与实现候选的验收动作合并批准；在此之前公共 brief 只记录待决口径，不能冒充已批准。
 - **authority 边界：** agent 不修改私有 authority。公共候选未来 rebase merge 后，authority 必须以新 public SHA 重新冻结，Human 单独签署上述“输出”限定语后才能逐条批准 AC35，并把 MANUAL 中“尚无 CoverageDeclaration”改为本轮真实边界。若批准，进度由 v0.1 `18 / 30` 变为 `19 / 30`、全表由 `18 / 36` 变为 `19 / 36`；该动作不点亮 AC36。
 
@@ -165,7 +167,7 @@ R5b 闸门：
 
 - domain / contract RED：只加入 `r5b_coverage_contracts` 与 descriptor 断言，预期因不存在 Coverage 类型及三个字段而非零；转绿后必须同时证明计数、gross 分组、排序、source mismatch 拒绝与 content hash 变化，才形成 contract checkpoint。
 - application RED：在既有 position / R4d-a / R4d-b fixture 上先断言三条 coverage，预期因 use case 未派生而非零；转绿后必须证明三 carrier、合法排除、external exact source 去重及 AC17 UNKNOWN 拒绝，才形成 application checkpoint。
-- transport / gate RED：先加入 wire mapping、descriptor inventory 与五类负向 fixture；预期因字段未生成且裸 carrier 可通过而非零。生成输出、API 映射、coverage gate 与两个统一入口全部转绿后才形成 transport / gate checkpoint。
+- transport / gate RED：先加入 wire mapping、descriptor inventory 与初始五类 fixture；预期因字段未生成且裸 carrier 可通过而非零。审查期又以标量裸组合 fixture 真实证明旧门禁漏报（exit 0），其修复不是 checkpoint；生成输出、API 映射、66 项闭集 inventory、六个负向 fixture与两个统一入口全部转绿后才形成最终 transport / gate checkpoint。
 
 **最终针对性命令（实现获单独授权后，必须在同一候选逐条执行并填真实结果）：**
 
@@ -200,12 +202,13 @@ R5b 闸门：
 - domain / contract RED：`cargo test --offline --locked -p ficant-domain --test r5b_coverage_contracts` exit 1；首个真实错误为 `CoverageDeclaration` 尚不存在，且既有组合构造器缺少新参数。RED 未作为 checkpoint。
 - descriptor RED：在实现字段前注入固定 Buf 1.56.0 执行 `cargo test --offline --locked -p ficant-contract-tests --test descriptor_inventory`，exit 1，`15 / 18` 通过；三个失败精确指向不存在的 `CoverageDeclaration` 与三个 carrier 字段。RED 未作为 checkpoint。
 - application RED：先把 coverage 断言加入既有应用层 fixture，`cargo test --offline --locked -p ficant-application --test r4d_a_bond_krd_contracts` exit 1；首个真实错误为既有 application 构造调用缺少 source / coverage。RED 未作为 checkpoint。
+- 审查期门禁漏报 RED：在提交 `9d94ed4baa152d075c87a45afb0490723c66efe4` 的门禁上，向临时 descriptor 注入可达 `BareScalarAggregate { DecimalValue aggregate_risk = 1; }` 且不带 coverage；`check-coverage.ps1` 错误 exit 0（期望 1）。该对抗 fixture 触发 Human 授权收紧 expected / inventory，不是被测代码失败，也未作为 checkpoint。修复后同形 fixture 与完全未知 success arm 均真实 exit 1。
 
 **forward-only checkpoints：**
 
 - contract checkpoint：domain 值对象及 protobuf 字段完成后，`r5b_coverage_contracts` `2 / 2`；计数、exact UnitRef gross 分组、稳定顺序、source mismatch 拒绝及 hash 变化均转绿。
 - application checkpoint：三条 use case 从同一 verified snapshot 派生 coverage；bond-only 与 Bond + exact Futures 的 source / external exact VersionRef 计数、合法排除及 AC17 UNKNOWN 失败关闭均在既有 R4d fixture 上转绿。
-- transport / gate checkpoint：生成输出、三处 API 映射、descriptor 全量 inventory、coverage gate 与五类 fixture 转绿；三个现存组合 carrier 的 inventory 精确为 3，逐仓位 success payload 不被误报。
+- transport / gate checkpoint：生成输出、三处 API 映射、descriptor 全量 inventory 与 coverage gate 转绿；66 个 success arm 明确分类为 3 个组合级、63 个非组合级，未知默认失败。六个负向 fixture 全部 exit 1，已分类 base inventory exit 0。
 
 **最终针对性结果（同一工作树当前候选）：**
 
@@ -223,8 +226,8 @@ R5b 闸门：
 | 固定 Buf 1.56.0：`buf format --diff --exit-code interface`；`buf lint interface` | 两条均 exit 0 |
 | 固定 Buf 1.56.0：`cargo test --offline --locked -p ficant-contract-tests --test descriptor_inventory` | exit 0；`19 / 19` |
 | `uv run --offline --locked --project python python -m pytest python/tests/test_contract_import.py -q` | exit 0；`1 / 1` |
-| `pwsh -NoProfile -NonInteractive -File scripts/check-coverage.ps1` | exit 0；目标 descriptor 判据 `1 / 1`（其余 18 filtered） |
-| `pwsh -NoProfile -NonInteractive -File scripts/test-coverage-check.ps1` | exit 0；三个删字段与一个新增裸组合 fixture 均真实 exit 1，逐仓位 fixture exit 0 |
+| `pwsh -NoProfile -NonInteractive -File scripts/check-coverage.ps1` | exit 0；目标 descriptor 判据 `1 / 1`（其余 18 filtered）；66 个 success arm 闭集分类完整，组合 carrier `3` |
+| `pwsh -NoProfile -NonInteractive -File scripts/test-coverage-check.ps1` | exit 0；三个删字段、原新增裸组合、标量裸组合回归及 inventory 外未知 arm 共六项均真实 exit 1；已分类 base inventory exit 0 |
 | `pwsh -NoProfile -NonInteractive -File scripts/check-layering.ps1` | exit 0；AC03、AC01、C++/FFI、funding、tax 与 allowlist 计数均为 0 |
 | `pwsh -NoProfile -NonInteractive -File scripts/test-layering-check.ps1` | exit 0；`51` assertions |
 | `cargo test --offline --locked -p ficant-storage --test migration_acceptance -- --test-threads=1` | exit 0；`4 / 4`；只验证既有 PostgreSQL migration `0001–0017`，migration tree 未改 |
@@ -233,12 +236,12 @@ R5b 闸门：
 
 **完整本地检查：**
 
-- `pwsh -NoProfile -NonInteractive -File scripts/check.ps1`：最终运行 exit 0。严格 Clippy、Rust 全量测试、descriptor `19 / 19`、C++ `8 / 8`、主 matrix `36 / 36`、Phase 2B `16 / 16`、Phase 2C `18 / 18` 与 Oracle `3 / 3`、Phase 2D `18 / 18` 与 Oracle `3 / 3`、Python、Phase 2E live、Phase 3A、Web typecheck / build 与 Web `35` tests 全部通过。
-- 导入六个 Windows User 级 `FICANT_TEST_*` 变量且未输出值后，`pwsh -NoProfile -NonInteractive -File scripts/check.ps1 -IncludeIntegration`：exit 0。migration `4 / 4`、lease queue `1 / 1`、execution closure `3 / 3`、worker `1 / 1`、Phase 1 `1 / 1`、negative invariants `13 / 13`、Phase 2B / 2C / 2D 各 `1 / 1`、Phase 3A registry / dual-source 各 `1 / 1`、Phase 3B codec `3 / 3` 与 publication `1 / 1` 全部通过。
+- 在 coverage gate 收紧为 66 项闭集、六个负向 fixture 全部就位后，`pwsh -NoProfile -NonInteractive -File scripts/check.ps1` 最终运行 exit 0。严格 Clippy、Rust 全量测试、descriptor `19 / 19`、C++ `8 / 8`、主 matrix `36 / 36`、Phase 2B `16 / 16`、Phase 2C `18 / 18` 与 Oracle `3 / 3`、Phase 2D `18 / 18` 与 Oracle `3 / 3`、Python、Phase 2E live、Phase 3A、Web typecheck / build 与 Web `35` tests 全部通过。
+- 在同一收紧后候选上导入六个 Windows User 级 `FICANT_TEST_*` 变量且未输出值后，`pwsh -NoProfile -NonInteractive -File scripts/check.ps1 -IncludeIntegration`：exit 0。migration `4 / 4`、lease queue `1 / 1`、execution closure `3 / 3`、worker `1 / 1`、Phase 1 `1 / 1`、negative invariants `13 / 13`、Phase 2B / 2C / 2D 各 `1 / 1`、Phase 3A registry / dual-source 各 `1 / 1`、Phase 3B codec `3 / 3` 与 publication `1 / 1` 全部通过。
 - 首次完整检查在 strict Clippy 因冗余 `.into_iter()` 与构造器参数过多 exit 1；以删除冗余调用、把 source + coverage 组成同一受校验值并移除可推导参数 forward-only 修复，未增加 lint allow。第二次完整检查在 Web typecheck 因专用 worktree尚无 `web-dm/node_modules`、找不到 `tsc` exit 1；以 Node 22.17.0 执行 `corepack pnpm@10.12.4 install --offline --frozen-lockfile`，exit 0，`178 / 178` 从离线 store 复用、download `0`、lockfile 未变。两次失败均未修改 expected、Oracle、Golden、matrix、canonical、allowlist、门禁断言或容差。
-- 本节首次证据转录后，以及补齐 Python gRPC stub 并更新本节证据后，均在固定 Buf 1.56.0 与 Node 22.17.0 环境执行 `pwsh -NoProfile -NonInteractive -File scripts/check-fast.ps1`；两次均 exit 0。最终一次 coverage descriptor `1 / 1`、五类 fixture、Rust format / workspace check / 非环境测试、storage、Phase 3A `5 / 5` 与 Phase 3B `3 / 3` 全部通过。
+- 本节首次证据转录后、补齐 Python gRPC stub 后及 coverage gate 收紧后，均在固定 Buf 1.56.0 与 Node 22.17.0 环境执行 `pwsh -NoProfile -NonInteractive -File scripts/check-fast.ps1`；三次均 exit 0。最终一次 coverage descriptor `1 / 1`、六个负向 fixture与已分类 base 正向 fixture、Rust format / workspace check / 非环境测试、storage、Phase 3A `5 / 5` 与 Phase 3B `3 / 3` 全部通过。
 
-**范围与受保护事实复核：** `HEAD == origin/main ==` 冻结 base `1b5e2661de4616e8ccc80822acc8e116be3433ea`；§6 冻结清单保持 `35` 项原文不变，加上 §5 唯一事前扩权后，有效写路径为 `36` 项；实际 tracked + untracked changed-path 集合精确 `36 / 36`，extra `0`、missing `0`，`git diff --check` exit 0。上述 `25 / 25` 个冻结 blob / tree OID 逐项与 base 一致，`git diff --quiet <base> -- <path>` 均 exit 0；`scripts/layering-allowlist.json` 内容仍精确为 `[]`。公共候选未改 authority；AC35 的 acceptance sentence 已由实现与机械判据满足，但在公共候选 rebase merge、authority 精确绑定、Human 单独签署“输出”限定语并逐条批准前，只能称为本地自测候选，不能宣称 AC35 已正式点亮。
+**范围与受保护事实复核：** 2026-08-03 push 前再次 `git fetch --prune origin`，确认公共 `origin/main` 仍精确为冻结 base `1b5e2661de4616e8ccc80822acc8e116be3433ea`；当前候选是该 base 的 forward-only 后继，`git merge-base HEAD origin/main` 仍为该 base。§6 冻结清单保持 `35` 项原文不变，加上 §5 唯一事前扩权后，有效写路径为 `36` 项；实际 tracked + untracked changed-path 集合精确 `36 / 36`，extra `0`、missing `0`，`git diff --check` exit 0。上述 `25 / 25` 个冻结 blob / tree OID 逐项与 base 一致，`git diff --quiet <base> -- <path>` 均 exit 0；`scripts/layering-allowlist.json` 内容仍精确为 `[]`。公共候选未改 authority；AC35 的 acceptance sentence 已由实现与机械判据满足，但在公共候选 rebase merge、authority 精确绑定、Human 单独签署“输出”限定语并逐条批准前，只能称为本地自测候选，不能宣称 AC35 已正式点亮。
 
 ## 7. 残余风险
 
@@ -247,6 +250,6 @@ R5b 闸门：
 - 当前三个成功 carrier 对关键字段全部失败关闭，所以 `missing_critical_field_record_count` 只能为 0。非零值保留给未来经 Human 冻结的 partial-coverage 语义；R5b 不能拿字段存在本身宣称已经支持跳过坏仓位。
 - gross economic value 是已导入 PositionSnapshot 内的覆盖分母，不是可审计的组织总资产，也不证明未导入数据为零。多 UnitRef 列表不做 FX，因此消费者不能自行把不同元素相加成单一百分比。
 - server / wire 合同能阻止服务端返回裸组合 payload，但本轮不验证 Web/UI 或报告是否丢弃 coverage 后单独渲染数值；该呈现义务仍是显式后续债务，不能用 AC35 追认。
-- coverage gate 与 descriptor expected 都是实施者可写的自管门禁。其安全性依赖独立 diff 审阅和保留负向 fixture；任何 carrier inventory 缩减、新例外、跳过或“测试专用”旁路均须停止返回 Human。
+- coverage gate 与 descriptor expected 都是实施者可写的自管门禁。其安全性依赖闭集默认失败、独立 diff 审阅和保留负向 fixture；任何 carrier / success-arm inventory 缩减、新例外、跳过、重新引入形状猜测或“测试专用”旁路均须停止返回 Human。§5 记载的收紧规则仍待 authority 正式固化。
 - R5b 不改变数值，但把 PositionViews / CapitalUse 的 `content_hash` 收紧为结果 hash；依赖其旧值等于 PositionSnapshot hash 的未登记 consumer 会受影响。descriptor、API 与 MANUAL 必须明确新语义，不能保留旧 hash 又让 coverage 游离于身份之外。
 - R5c 不是 R5b 的机械续写：它仍需独立冻结健康服务边界、阈值分层及“预警不改变数值”的证据。R5b 完成只点亮 AC35，不点亮或预先实现 AC36。
