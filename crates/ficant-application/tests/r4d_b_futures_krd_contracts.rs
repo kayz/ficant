@@ -40,11 +40,12 @@ use ficant_domain::primitives::{
     Version, VersionRef,
 };
 use ficant_domain::research::{
-    AccountingClassification, AccountingClassificationState, CurveNodeDefinition,
-    CurveNodeDefinitionInput, CurveRebuildPolicy, DataSnapshot, DataSnapshotInput,
-    FactorDefinition, FactorDefinitionInput, FactorTarget, FactorTargetBinding, Position,
-    PositionHoldingForm, PositionInput, PositionSnapshot, PositionSnapshotInput, SecondOrderPolicy,
-    SensitivityConvention, SensitivityDirection,
+    AccountingClassification, AccountingClassificationState, CoverageDeclaration,
+    CurveNodeDefinition, CurveNodeDefinitionInput, CurveRebuildPolicy, DataSnapshot,
+    DataSnapshotInput, FactorDefinition, FactorDefinitionInput, FactorTarget, FactorTargetBinding,
+    Position, PositionHoldingForm, PositionInput, PositionSnapshot, PositionSnapshotInput,
+    PriceSourceCount, PriceSourceSummary, SecondOrderPolicy, SensitivityConvention,
+    SensitivityDirection,
 };
 use ficant_domain::{ContentAddressed, Lineaged, VersionedDefinition};
 
@@ -60,30 +61,7 @@ async fn mixed_portfolio_uses_one_fixed_ctd_and_exact_contract_scaling() {
     let fixture = Fixture::new(true, false, calls.clone());
     let result = fixture.execute(true).await.unwrap();
 
-    assert_eq!(
-        result.algorithm().algorithm_id(),
-        "ficant.fixed-income.portfolio-key-rate-yield"
-    );
-    assert_eq!(result.algorithm().algorithm_version(), 1);
-    assert_eq!(
-        result.algorithm().convention_profile(),
-        "linear-ytm-fixed-base-ctd-v1"
-    );
-    assert_eq!(result.futures_data_snapshot_id(), Some(fixture.data.id()));
-    assert_eq!(result.positions().len(), 2);
-    assert!(result.source_confidence().mixed());
-    assert_eq!(
-        result
-            .source_confidence()
-            .counts()
-            .iter()
-            .map(|value| (value.source_type(), value.record_count()))
-            .collect::<Vec<_>>(),
-        vec![
-            (PriceSourceType::ActiveQuote, 3),
-            (PriceSourceType::CurveInterpolation, 2),
-        ]
-    );
+    assert_mixed_result_contract(&fixture, &result);
     assert!(result.lineage().iter().any(|reference| {
         reference.object_id() == &id('8') && reference.version() == Some(version())
     }));
@@ -141,14 +119,81 @@ async fn mixed_portfolio_uses_one_fixed_ctd_and_exact_contract_scaling() {
             .unwrap();
         assert_eq!(total.value(), expected);
     }
+    assert_source_count_changes_hash(&fixture, &result);
+}
+
+fn assert_mixed_result_contract(
+    fixture: &Fixture,
+    result: &ficant_domain::research::PortfolioKeyRateExposure,
+) {
+    assert_eq!(
+        result.algorithm().algorithm_id(),
+        "ficant.fixed-income.portfolio-key-rate-yield"
+    );
+    assert_eq!(result.algorithm().algorithm_version(), 1);
+    assert_eq!(
+        result.algorithm().convention_profile(),
+        "linear-ytm-fixed-base-ctd-v1"
+    );
+    assert_eq!(result.futures_data_snapshot_id(), Some(fixture.data.id()));
+    assert_eq!(result.positions().len(), 2);
+    assert!(result.source_confidence().mixed());
+    assert_eq!(result.coverage().imported_position_count(), 2);
+    assert_eq!(result.coverage().participating_position_count(), 2);
+    assert_eq!(
+        result.coverage().source_confidence(),
+        Some(result.source_confidence())
+    );
+    assert_eq!(
+        result
+            .coverage()
+            .distinct_external_data_source_version_count(),
+        1
+    );
+    assert_eq!(
+        result
+            .source_confidence()
+            .counts()
+            .iter()
+            .map(|value| (value.source_type(), value.record_count()))
+            .collect::<Vec<_>>(),
+        vec![
+            (PriceSourceType::ActiveQuote, 3),
+            (PriceSourceType::CurveInterpolation, 2),
+        ]
+    );
+}
+
+fn assert_source_count_changes_hash(
+    fixture: &Fixture,
+    result: &ficant_domain::research::PortfolioKeyRateExposure,
+) {
+    let contrasting_source_confidence = PriceSourceSummary::new(vec![
+        PriceSourceCount::new(PriceSourceType::ActiveQuote, 4).unwrap(),
+        PriceSourceCount::new(PriceSourceType::CurveInterpolation, 2).unwrap(),
+    ])
+    .unwrap();
+    let mut participating_position_ids = result
+        .positions()
+        .iter()
+        .map(|position| position.position_id().clone())
+        .collect::<Vec<_>>();
+    participating_position_ids.sort_unstable();
+    let contrasting_coverage = CoverageDeclaration::for_complete_positions(
+        fixture.snapshot.positions(),
+        &participating_position_ids,
+        Some(contrasting_source_confidence.clone()),
+        1,
+    )
+    .unwrap();
     let source_count_contrast =
         ficant_domain::research::PortfolioKeyRateExposure::new_with_futures_data_snapshot(
             result.position_snapshot_id().clone(),
             result.curve_snapshot_id().clone(),
             result.futures_data_snapshot_id().unwrap().clone(),
-            4,
             result.positions().to_vec(),
             result.algorithm().clone(),
+            (contrasting_source_confidence, contrasting_coverage),
             result.lineage().to_vec(),
         )
         .unwrap();
@@ -163,6 +208,14 @@ async fn bond_only_result_marks_internal_curve_interpolation_without_mixing() {
     let result = fixture.execute(false).await.unwrap();
 
     assert!(!result.source_confidence().mixed());
+    assert_eq!(result.coverage().imported_position_count(), 1);
+    assert_eq!(result.coverage().participating_position_count(), 1);
+    assert_eq!(
+        result
+            .coverage()
+            .distinct_external_data_source_version_count(),
+        0
+    );
     assert_eq!(
         result.source_confidence().counts()[0].source_type(),
         PriceSourceType::CurveInterpolation

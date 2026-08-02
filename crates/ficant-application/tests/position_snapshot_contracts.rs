@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use chrono::{NaiveDate, TimeZone, Utc};
 use ficant_application::ports::{AccessScope, ApplicationResult, PositionSnapshotRepository};
 use ficant_application::{ApplicationErrorCategory, ApplicationErrorDetail, PositionViewsUseCase};
+use ficant_domain::ContentAddressed;
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, LineageRef, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
 };
@@ -63,6 +64,10 @@ async fn unknown_classification_fails_closed_and_reverse_repo_is_not_liquidity()
         .views(&scope, snapshot.id().clone(), time(2))
         .await
         .unwrap();
+    assert_eq!(views.coverage.imported_position_count(), 1);
+    assert_eq!(views.coverage.participating_position_count(), 1);
+    assert_eq!(views.coverage.missing_critical_field_record_count(), 0);
+    assert!(views.coverage.source_confidence().is_none());
     assert_eq!(
         (
             views.positions[0].included_in_position_exposure,
@@ -73,7 +78,41 @@ async fn unknown_classification_fails_closed_and_reverse_repo_is_not_liquidity()
     );
 }
 
+#[tokio::test]
+async fn complete_snapshot_returns_coverage_on_views_and_capital_use() {
+    let snapshot = snapshot_with_classification(AccountingClassificationState::Classified);
+    let scope = AccessScope::new(id('T'), id('A'), vec![id('N')]).unwrap();
+    let repository = Repository {
+        snapshot: snapshot.clone(),
+    };
+    let use_case = PositionViewsUseCase::new(&repository);
+
+    let views = use_case
+        .views(&scope, snapshot.id().clone(), time(2))
+        .await
+        .unwrap();
+    let capital = use_case
+        .capital_use(&scope, snapshot.id().clone(), time(2))
+        .await
+        .unwrap();
+
+    for coverage in [&views.coverage, &capital.coverage] {
+        assert_eq!(coverage.imported_position_count(), 1);
+        assert_eq!(coverage.participating_position_count(), 1);
+        assert_eq!(coverage.missing_critical_field_record_count(), 0);
+        assert!(coverage.source_confidence().is_none());
+        assert_eq!(coverage.distinct_external_data_source_version_count(), 0);
+    }
+    assert_eq!(capital.total_capital_requirement.coefficient(), "3");
+    assert_ne!(views.content_hash, *snapshot.content_hash());
+    assert_ne!(capital.content_hash, *snapshot.content_hash());
+}
+
 fn snapshot() -> PositionSnapshot {
+    snapshot_with_classification(AccountingClassificationState::Unknown)
+}
+
+fn snapshot_with_classification(state: AccountingClassificationState) -> PositionSnapshot {
     let unit = UnitRef::new(id('M'), Version::new(1).unwrap());
     let decimal = |value| DecimalValue::new(value, 0, unit.clone()).unwrap();
     let position = Position::new(PositionInput {
@@ -85,8 +124,9 @@ fn snapshot() -> PositionSnapshot {
         accounting_pnl: decimal("1"),
         capital_requirement: decimal("3"),
         accounting_classification: AccountingClassification::new(
-            AccountingClassificationState::Unknown,
-            None,
+            state,
+            matches!(state, AccountingClassificationState::Classified)
+                .then_some(ficant_domain::research::AccountingBook::Ac),
         )
         .unwrap(),
         holding_form: PositionHoldingForm::ReverseRepoCollateral,

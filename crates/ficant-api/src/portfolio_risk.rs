@@ -18,9 +18,12 @@ use ficant_contracts::ficant::research::v1 as pb;
 use ficant_contracts::ficant::research::v1::portfolio_risk_service_server::PortfolioRiskService;
 use ficant_domain::market::PriceSourceType;
 use ficant_domain::primitives::{
-    ContentHash, LineageRef, MarketTime, Ulid, UnitRef, Version, VersionRef,
+    ContentHash, DecimalValue, LineageRef, MarketTime, Ulid, UnitRef, Version, VersionRef,
 };
-use ficant_domain::research::{FactorDv01, PortfolioKeyRateExposure, PositionKeyRateExposure};
+use ficant_domain::research::{
+    CoverageDeclaration, FactorDv01, PortfolioKeyRateExposure, PositionKeyRateExposure,
+    PriceSourceSummary,
+};
 use ficant_domain::{ContentAddressed, Lineaged};
 use tonic::{Request, Response, Status};
 
@@ -200,18 +203,43 @@ fn portfolio(value: &PortfolioKeyRateExposure) -> pb::PortfolioKeyRateExposure {
         content_hash: Some(hash(value.content_hash())),
         lineage: value.lineage().iter().map(lineage).collect(),
         futures_data_snapshot_id: value.futures_data_snapshot_id().map(ulid),
-        source_confidence: Some(pb::PriceSourceSummary {
-            counts: value
-                .source_confidence()
-                .counts()
-                .iter()
-                .map(|count| pb::PriceSourceCount {
-                    source_type: price_source_type(count.source_type()) as i32,
-                    record_count: count.record_count(),
-                })
-                .collect(),
-            mixed: value.source_confidence().mixed(),
-        }),
+        source_confidence: Some(source_confidence(value.source_confidence())),
+        coverage: Some(coverage(value.coverage())),
+    }
+}
+
+fn coverage(value: &CoverageDeclaration) -> pb::CoverageDeclaration {
+    pb::CoverageDeclaration {
+        imported_position_count: value.imported_position_count(),
+        participating_position_count: value.participating_position_count(),
+        imported_gross_economic_value_by_unit: value
+            .imported_gross_economic_value_by_unit()
+            .iter()
+            .map(decimal)
+            .collect(),
+        participating_gross_economic_value_by_unit: value
+            .participating_gross_economic_value_by_unit()
+            .iter()
+            .map(decimal)
+            .collect(),
+        missing_critical_field_record_count: value.missing_critical_field_record_count(),
+        source_confidence: value.source_confidence().map(source_confidence),
+        distinct_external_data_source_version_count: value
+            .distinct_external_data_source_version_count(),
+    }
+}
+
+fn source_confidence(value: &PriceSourceSummary) -> pb::PriceSourceSummary {
+    pb::PriceSourceSummary {
+        counts: value
+            .counts()
+            .iter()
+            .map(|count| pb::PriceSourceCount {
+                source_type: price_source_type(count.source_type()) as i32,
+                record_count: count.record_count(),
+            })
+            .collect(),
+        mixed: value.mixed(),
     }
 }
 
@@ -265,6 +293,14 @@ fn unit(value: &UnitRef) -> core::UnitRef {
     core::UnitRef {
         unit_id: Some(ulid(value.unit_id())),
         version: value.version().get(),
+    }
+}
+
+fn decimal(value: &DecimalValue) -> core::DecimalValue {
+    core::DecimalValue {
+        coefficient: value.coefficient().to_owned(),
+        scale: value.scale(),
+        unit: Some(unit(value.unit())),
     }
 }
 

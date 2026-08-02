@@ -4,13 +4,16 @@ use ficant_domain::analytics::FixedDecimal;
 use ficant_domain::market::{
     ArtifactInputKind, Bond, BondBusinessDayConvention, BondCouponFrequency,
     BondDayCountConvention, BondPricingTerms, BondTaxAttributes, CurveSnapshot, CurveSnapshotInput,
-    IncomeTaxStatus, Instrument, InstrumentInput, InstrumentKind, ValueAddedTaxStatus,
+    IncomeTaxStatus, Instrument, InstrumentInput, InstrumentKind, PriceSourceType,
+    ValueAddedTaxStatus,
 };
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, LineageRef, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
 };
 use ficant_domain::research::{
-    FactorDv01, PortfolioKeyRateExposure, PositionKeyRateExposure, RiskAlgorithmBinding,
+    AccountingBook, AccountingClassification, AccountingClassificationState, CoverageDeclaration,
+    FactorDv01, PortfolioKeyRateExposure, Position, PositionHoldingForm, PositionInput,
+    PositionKeyRateExposure, PriceSourceCount, PriceSourceSummary, RiskAlgorithmBinding,
     SensitivityDirection, aggregate_bond_key_rate_exposures, key_rate_dv01,
 };
 
@@ -136,11 +139,14 @@ fn portfolio_content_hash_commits_complete_lineage_refs() {
         "linear-ytm-registered-bond-v1",
     )
     .unwrap();
+    let source_confidence = curve_source_confidence();
+    let coverage = complete_coverage(source_confidence.clone());
     let portfolio_a = PortfolioKeyRateExposure::new(
         id('S'),
         id('T'),
         vec![p1.clone(), p2.clone()],
         algorithm.clone(),
+        (source_confidence.clone(), coverage.clone()),
         vec![
             LineageRef::new(
                 id('C'),
@@ -156,6 +162,7 @@ fn portfolio_content_hash_commits_complete_lineage_refs() {
         id('T'),
         vec![p1, p2],
         algorithm,
+        (source_confidence, coverage),
         vec![
             LineageRef::new(
                 id('C'),
@@ -171,6 +178,44 @@ fn portfolio_content_hash_commits_complete_lineage_refs() {
         portfolio_b.content_hash(),
         "portfolio content hash must commit the complete lineage ref, not only its object id"
     );
+}
+
+fn curve_source_confidence() -> PriceSourceSummary {
+    PriceSourceSummary::new(vec![
+        PriceSourceCount::new(PriceSourceType::CurveInterpolation, 2).unwrap(),
+    ])
+    .unwrap()
+}
+
+fn complete_coverage(source_confidence: PriceSourceSummary) -> CoverageDeclaration {
+    let positions = vec![coverage_position('P', 'I'), coverage_position('Q', 'J')];
+    CoverageDeclaration::for_complete_positions(
+        &positions,
+        &[id('P'), id('Q')],
+        Some(source_confidence),
+        0,
+    )
+    .unwrap()
+}
+
+fn coverage_position(position_suffix: char, instrument_suffix: char) -> Position {
+    let money = unit('C');
+    Position::new(PositionInput {
+        position_id: id(position_suffix),
+        instrument_ref: VersionRef::new(id(instrument_suffix), version()),
+        quantity: decimal("1", 0, unit('U')),
+        economic_value: decimal("100", 0, money.clone()),
+        economic_pnl: decimal("0", 0, money.clone()),
+        accounting_pnl: decimal("0", 0, money.clone()),
+        capital_requirement: decimal("1", 0, money),
+        accounting_classification: AccountingClassification::new(
+            AccountingClassificationState::Classified,
+            Some(AccountingBook::Ac),
+        )
+        .unwrap(),
+        holding_form: PositionHoldingForm::Owned,
+    })
+    .unwrap()
 }
 
 fn bond_position_exposures() -> (

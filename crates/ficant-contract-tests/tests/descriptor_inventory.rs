@@ -371,6 +371,28 @@ fn r5a_price_source_contracts_are_exact() {
             ExpectedField::scalar("mixed", Type::Bool),
         ],
     );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.CoverageDeclaration",
+        &[
+            ExpectedField::scalar("imported_position_count", Type::Uint64),
+            ExpectedField::scalar("participating_position_count", Type::Uint64),
+            ExpectedField::repeated_message(
+                "imported_gross_economic_value_by_unit",
+                ".ficant.core.v1.DecimalValue",
+            ),
+            ExpectedField::repeated_message(
+                "participating_gross_economic_value_by_unit",
+                ".ficant.core.v1.DecimalValue",
+            ),
+            ExpectedField::scalar("missing_critical_field_record_count", Type::Uint64),
+            ExpectedField::message(
+                "source_confidence",
+                ".ficant.research.v1.PriceSourceSummary",
+            ),
+            ExpectedField::scalar("distinct_external_data_source_version_count", Type::Uint64),
+        ],
+    );
     assert_exact_service(
         descriptor_set,
         "ficant.market.v1.DataSourceRegistryService",
@@ -459,6 +481,7 @@ fn r4d_a_bond_curve_and_portfolio_risk_contracts_are_exact() {
                 "source_confidence",
                 ".ficant.research.v1.PriceSourceSummary",
             ),
+            ExpectedField::message("coverage", ".ficant.research.v1.CoverageDeclaration"),
         ],
     );
     assert_fields(
@@ -656,8 +679,13 @@ fn build_descriptor() -> FileDescriptorSet {
 
     let descriptor_path = descriptor_path();
     let _ = fs::remove_file(&descriptor_path);
+    let descriptor_input = std::env::var_os("FICANT_DESCRIPTOR_INPUT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("interface"));
     let output = Command::new(&buf)
-        .args(["build", "interface", "--as-file-descriptor-set", "-o"])
+        .arg("build")
+        .arg(&descriptor_input)
+        .args(["--as-file-descriptor-set", "-o"])
         .arg(&descriptor_path)
         .current_dir(repo_root)
         .output()
@@ -674,6 +702,83 @@ fn build_descriptor() -> FileDescriptorSet {
     fs::remove_file(&descriptor_path).expect("descriptor test must clean its /tmp output");
     FileDescriptorSet::decode(bytes.as_slice())
         .expect("Buf output must decode as FileDescriptorSet")
+}
+
+#[test]
+fn composition_level_outputs_have_coverage() {
+    let descriptor_set = descriptor_set();
+    let messages = top_level_messages(descriptor_set);
+    let services = top_level_services(descriptor_set);
+    let mut reachable_payloads = BTreeSet::new();
+
+    for service in services.values() {
+        for method in &service.method {
+            let response_name = method.output_type().trim_start_matches('.');
+            let response = messages
+                .get(response_name)
+                .unwrap_or_else(|| panic!("missing RPC response message {response_name}"));
+            for field in &response.field {
+                if field.r#type() == Type::Message
+                    && field.type_name() != ".ficant.core.v1.ErrorDetail"
+                {
+                    reachable_payloads.insert(field.type_name().trim_start_matches('.').to_owned());
+                }
+            }
+        }
+    }
+
+    let actual = reachable_payloads
+        .into_iter()
+        .filter(|name| {
+            messages
+                .get(name)
+                .is_some_and(|message| is_composition_level_output(message))
+        })
+        .collect::<BTreeSet<_>>();
+    let expected = BTreeSet::from([
+        "ficant.research.v1.CapitalUse".to_owned(),
+        "ficant.research.v1.PortfolioKeyRateExposure".to_owned(),
+        "ficant.research.v1.PositionViews".to_owned(),
+    ]);
+    assert_eq!(
+        actual, expected,
+        "the reachable composition-output inventory must remain exact"
+    );
+
+    for (carrier, tag) in [
+        ("ficant.research.v1.PortfolioKeyRateExposure", 10),
+        ("ficant.research.v1.PositionViews", 5),
+        ("ficant.research.v1.CapitalUse", 5),
+    ] {
+        let message = messages
+            .get(carrier)
+            .unwrap_or_else(|| panic!("missing composition carrier {carrier}"));
+        let coverage = message
+            .field
+            .iter()
+            .find(|field| field.name() == "coverage")
+            .unwrap_or_else(|| panic!("{carrier} must carry CoverageDeclaration"));
+        assert_eq!(coverage.number(), tag, "{carrier}.coverage tag changed");
+        assert_eq!(coverage.r#type(), Type::Message);
+        assert_eq!(
+            coverage.type_name(),
+            ".ficant.research.v1.CoverageDeclaration",
+            "{carrier}.coverage must use the shared declaration"
+        );
+        assert_ne!(coverage.label(), Label::Repeated);
+    }
+}
+
+fn is_composition_level_output(message: &DescriptorProto) -> bool {
+    message.field.iter().any(|field| {
+        (field.label() == Label::Repeated
+            && matches!(
+                field.type_name(),
+                ".ficant.research.v1.PositionKeyRateExposure" | ".ficant.research.v1.PositionView"
+            ))
+            || (field.name() == "total_capital_requirement"
+                && field.type_name() == ".ficant.core.v1.DecimalValue")
+    })
 }
 
 fn descriptor_path() -> PathBuf {
@@ -3004,6 +3109,7 @@ fn assert_position_snapshot_contract(messages: &BTreeMap<String, &DescriptorProt
             ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
             ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
             ExpectedField::repeated_message("positions", ".ficant.research.v1.PositionView"),
+            ExpectedField::message("coverage", ".ficant.research.v1.CoverageDeclaration"),
         ],
     );
     assert_fields(
@@ -3014,6 +3120,7 @@ fn assert_position_snapshot_contract(messages: &BTreeMap<String, &DescriptorProt
             ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
             ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
             ExpectedField::message("total_capital_requirement", ".ficant.core.v1.DecimalValue"),
+            ExpectedField::message("coverage", ".ficant.research.v1.CoverageDeclaration"),
         ],
     );
     for (request, response, success, success_type) in [

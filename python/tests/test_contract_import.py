@@ -31,6 +31,13 @@ from ficant.market.v1.rule_pb2 import MarketRulePack  # noqa: E402
 from ficant.rates.v1.analytics_pb2 import AnalyzeBondRequest  # noqa: E402
 from ficant.rates.v1.analytics_pb2_grpc import RatesAnalyticsServiceStub  # noqa: E402
 from ficant.research.v1.experiment_pb2 import ExperimentRun  # noqa: E402
+from ficant.research.v1.coverage_pb2 import (  # noqa: E402
+    CoverageDeclaration,
+    PriceSourceSummary,
+)
+from ficant.research.v1 import coverage_pb2_grpc  # noqa: E402
+from ficant.research.v1.exposure_pb2 import PortfolioKeyRateExposure  # noqa: E402
+from ficant.research.v1.position_pb2 import CapitalUse, PositionViews  # noqa: E402
 
 
 def test_representative_generated_messages_import_from_one_descriptor() -> None:
@@ -49,6 +56,14 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
         ]
     )
     tax_attributes = BondTaxAttributes()
+    coverage = CoverageDeclaration(
+        imported_position_count=2,
+        participating_position_count=1,
+        source_confidence=PriceSourceSummary(),
+    )
+    portfolio = PortfolioKeyRateExposure(coverage=coverage)
+    views = PositionViews(coverage=coverage)
+    capital = CapitalUse(coverage=coverage)
 
     assert instrument.DESCRIPTOR.full_name == "ficant.market.v1.Instrument"
     assert decimal.DESCRIPTOR.full_name == "ficant.core.v1.DecimalValue"
@@ -64,3 +79,10 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert tax_pack.DESCRIPTOR.full_name == "ficant.market.v1.TaxRulePack"
     assert tax_pack.coupon_rules[0].rates[0].DESCRIPTOR.full_name == "ficant.market.v1.SubjectCouponTaxRate"
     assert tax_attributes.DESCRIPTOR.full_name == "ficant.market.v1.BondTaxAttributes"
+    assert coverage.DESCRIPTOR.full_name == "ficant.research.v1.CoverageDeclaration"
+    assert coverage_pb2_grpc.__name__ == "ficant.research.v1.coverage_pb2_grpc"
+    assert portfolio.coverage.imported_position_count == 2
+    assert views.coverage.participating_position_count == 1
+    assert capital.coverage.source_confidence.DESCRIPTOR.full_name == (
+        "ficant.research.v1.PriceSourceSummary"
+    )

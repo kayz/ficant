@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{Datelike, Days, Months, NaiveDate, Weekday};
 use ficant_domain::analytics::{
@@ -17,9 +17,10 @@ use ficant_domain::primitives::{
     ContentHash, DecimalValue, LineageRef, MarketTime, Ulid, UnitRef, Version, VersionRef,
 };
 use ficant_domain::research::{
-    CurveNodeDefinition, CurveNodeRef, CurveRebuildPolicy, FactorDefinition, FactorDv01,
-    FactorTarget, FactorTargetBinding, InstrumentFactorTarget, PortfolioKeyRateExposure, Position,
-    PositionKeyRateExposure, PositionSnapshot, RiskAlgorithmBinding, SecondOrderPolicy,
+    CoverageDeclaration, CurveNodeDefinition, CurveNodeRef, CurveRebuildPolicy, FactorDefinition,
+    FactorDv01, FactorTarget, FactorTargetBinding, InstrumentFactorTarget,
+    PortfolioKeyRateExposure, Position, PositionKeyRateExposure, PositionSnapshot,
+    PriceSourceCount, PriceSourceSummary, RiskAlgorithmBinding, SecondOrderPolicy,
     SensitivityDirection, key_rate_dv01, scale_futures_key_rate_dv01,
 };
 use ficant_domain::{ContentAddressed, VersionedDefinition};
@@ -326,7 +327,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             });
         }
 
-        let mut lineage = vec![
+        let mut lineage_refs = vec![
             LineageRef::new(
                 snapshot.id().clone(),
                 None,
@@ -339,13 +340,13 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
         for position in &selected {
             if let SelectedRiskPosition::Futures(value) = position {
                 for reference in &value.materialization_lineage {
-                    if !lineage.contains(reference) {
-                        lineage.push(reference.clone());
+                    if !lineage_refs.contains(reference) {
+                        lineage_refs.push(reference.clone());
                     }
                 }
             }
         }
-        lineage.sort_by(|left, right| {
+        lineage_refs.sort_by(|left, right| {
             left.object_id()
                 .cmp(right.object_id())
                 .then_with(|| left.version().cmp(&right.version()))
@@ -358,6 +359,50 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             };
             total.checked_add(increment).ok_or_else(validation)
         })?;
+        let mut participating_position_ids = selected
+            .iter()
+            .map(|position| match position {
+                SelectedRiskPosition::Bond(value) => value.position_id.clone(),
+                SelectedRiskPosition::Futures(value) => value.position_id.clone(),
+            })
+            .collect::<Vec<_>>();
+        participating_position_ids.sort_unstable();
+        if participating_position_ids
+            .windows(2)
+            .any(|pair| pair[0] == pair[1])
+        {
+            return Err(lineage());
+        }
+        let external_data_sources = selected
+            .iter()
+            .filter_map(|position| match position {
+                SelectedRiskPosition::Bond(_) => None,
+                SelectedRiskPosition::Futures(value) => Some(value.data_source_ref.clone()),
+            })
+            .collect::<BTreeSet<_>>();
+        let curve_record_count = u64::try_from(selected.len()).map_err(|_| validation())?;
+        let source_confidence = if has_futures {
+            PriceSourceSummary::new(vec![
+                PriceSourceCount::new(PriceSourceType::ActiveQuote, active_quote_record_count)
+                    .map_err(map_domain_error)?,
+                PriceSourceCount::new(PriceSourceType::CurveInterpolation, curve_record_count)
+                    .map_err(map_domain_error)?,
+            ])
+            .map_err(map_domain_error)?
+        } else {
+            PriceSourceSummary::new(vec![
+                PriceSourceCount::new(PriceSourceType::CurveInterpolation, curve_record_count)
+                    .map_err(map_domain_error)?,
+            ])
+            .map_err(map_domain_error)?
+        };
+        let coverage = CoverageDeclaration::for_complete_positions(
+            snapshot.positions(),
+            &participating_position_ids,
+            Some(source_confidence.clone()),
+            u64::try_from(external_data_sources.len()).map_err(|_| validation())?,
+        )
+        .map_err(map_domain_error)?;
 
         let mut exposures = Vec::with_capacity(selected.len());
         for position in selected {
@@ -395,17 +440,18 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
                 snapshot.id().clone(),
                 curve.id().clone(),
                 data_snapshot_id,
-                active_quote_record_count,
                 exposures,
                 algorithm,
-                lineage,
+                (source_confidence, coverage),
+                lineage_refs,
             ),
             None => PortfolioKeyRateExposure::new(
                 snapshot.id().clone(),
                 curve.id().clone(),
                 exposures,
                 algorithm,
-                lineage,
+                (source_confidence, coverage),
+                lineage_refs,
             ),
         }
         .map_err(map_domain_error)
@@ -968,6 +1014,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             input_evidence_hashes: evidence,
             lineage,
             materialization_lineage: position.materialization.lineage().to_vec(),
+            data_source_ref: position.materialization.data_source_ref().clone(),
             price_record_count: position.materialization.price_record_count(),
         })
     }
@@ -1338,6 +1385,7 @@ struct SelectedFuturesPosition {
     input_evidence_hashes: Vec<ContentHash>,
     lineage: Vec<LineageRef>,
     materialization_lineage: Vec<LineageRef>,
+    data_source_ref: VersionRef,
     price_record_count: u64,
 }
 

@@ -46,6 +46,7 @@ async fn materializes_two_bonds_three_factors_exact_totals_and_fails_before_unsu
     let result = fixture.execute().await.unwrap();
     assert_eq!(result.positions().len(), 2);
     assert_eq!(result.totals().len(), 3);
+    assert_complete_bond_coverage(&result);
     for position in result.positions() {
         assert_eq!(
             position
@@ -138,6 +139,21 @@ async fn materializes_two_bonds_three_factors_exact_totals_and_fails_before_unsu
     assert_eq!(error.category(), ApplicationErrorCategory::ValidationFailed);
     assert_eq!(rejected_calls.curve.load(Ordering::SeqCst), 0);
     assert_eq!(rejected_calls.bond.load(Ordering::SeqCst), 0);
+}
+
+fn assert_complete_bond_coverage(result: &ficant_domain::research::PortfolioKeyRateExposure) {
+    assert_eq!(result.coverage().imported_position_count(), 2);
+    assert_eq!(result.coverage().participating_position_count(), 2);
+    assert_eq!(
+        result.coverage().source_confidence(),
+        Some(result.source_confidence())
+    );
+    assert_eq!(
+        result
+            .coverage()
+            .distinct_external_data_source_version_count(),
+        0
+    );
 }
 
 #[tokio::test]
