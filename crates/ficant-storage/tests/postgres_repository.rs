@@ -2,20 +2,21 @@ mod support;
 
 use ficant_application::ports::{
     AppendDefinitionVersion, AppendJournalEvent, AppendMarketFact, ArtifactRepository,
-    BeginBlobStage, BlobStore, CreateExperimentRun, DefinitionIdentity, DefinitionKind,
-    DefinitionRepository, DefinitionValue, ExperimentRepository, IdempotencyKey,
+    BeginBlobStage, BlobStore, CreateExperimentRun, DataSourceRepository, DefinitionIdentity,
+    DefinitionKind, DefinitionRepository, DefinitionValue, ExperimentRepository, IdempotencyKey,
     InstrumentDefinition, MarketFact, MarketFactFieldRole, MarketFactRepository,
     MarketFactRulePackResolver, MarketFactUnitResolver, MarketFactWindow,
     MarketRunRulePackResolver, PageRequest, PublishArtifact, PublishCurveSnapshot,
-    PublishSignalSet, PublishSnapshot, RunJournalRepository, SignalRepository, SnapshotBlobRole,
-    SnapshotValue, TransitionExperimentRun, VerifiedBlobRef, VerifiedSnapshotBlob,
-    VerifiedSnapshotProof, VerifyBlobStage,
+    PublishSignalSet, PublishSnapshot, RegisterDataSource, RunJournalRepository, SignalRepository,
+    SnapshotBlobRole, SnapshotValue, TransitionExperimentRun, VerifiedBlobRef,
+    VerifiedSnapshotBlob, VerifiedSnapshotProof, VerifyBlobStage,
 };
 use ficant_domain::ContentAddressed;
 use ficant_domain::market::{
-    ArtifactInputKind, Calendar, CalendarInput, CurveSnapshot, CurveSnapshotInput, FactSource,
-    Instrument, InstrumentInput, InstrumentKind, MarketRulePack, MarketRulePackInput, Quote,
-    QuoteInput, Unit, UnitInput, Valuation, ValuationInput, VerificationStatus,
+    ArtifactInputKind, Calendar, CalendarInput, CurveSnapshot, CurveSnapshotInput, DataSource,
+    DataSourceInput, DataSourceKind, FactSource, Instrument, InstrumentInput, InstrumentKind,
+    MarketRulePack, MarketRulePackInput, PriceSourceType, Quote, QuoteInput, Unit, UnitInput,
+    Valuation, ValuationInput, VerificationStatus,
 };
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, EffectivePeriod, LineageRef, MarketTime, OwnerRef, Ulid, UnitRef,
@@ -481,6 +482,105 @@ async fn market_fact_query_uses_scoped_aead_cursor_across_pages() {
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F09").unwrap(),
     );
     assert!(PageRequest::new(support::access_scope(&denied), Some(cursor), 1).is_err());
+}
+
+#[tokio::test]
+async fn typed_quote_source_round_trips_the_exact_registered_data_source_ref() {
+    let pool = support::postgres_pool().await;
+    support::reset_postgres(&pool).await;
+    support::migrate(&pool).await;
+    let repository = support::repository(pool.clone());
+    let owner = test_owner();
+    let scope = support::access_scope(&owner);
+    let definitions = seed_market_definitions(&repository, &owner).await;
+    let source = DataSource::new(DataSourceInput {
+        data_source_id: Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F72").unwrap(),
+        version: Version::new(1).unwrap(),
+        owner: owner.clone(),
+        kind: DataSourceKind::FileNdjson,
+        name: "R5a typed quote source".to_owned(),
+        connection_binding: "r5a-typed-quotes".to_owned(),
+        dataset: "r5a_typed_quotes".to_owned(),
+        canonical_schema_id: "ficant.market.quote.canonical.v1".to_owned(),
+        canonical_schema_hash: ContentHash::digest(b"r5a-typed-quote-schema"),
+    })
+    .unwrap()
+    .with_price_source_type(PriceSourceType::ActiveQuote)
+    .unwrap();
+    repository
+        .register(
+            RegisterDataSource::new(
+                scope.clone(),
+                None,
+                source.clone(),
+                IdempotencyKey::new("repo:r5a-source:v1").unwrap(),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let source_ref = VersionRef::new(source.id().clone(), Version::new(1).unwrap());
+    let fact = MarketFact::Quote(
+        Quote::new(QuoteInput {
+            quote_id: Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F73").unwrap(),
+            instrument: definitions.instrument.clone(),
+            owner: owner.clone(),
+            source: FactSource::new("fixture-feed", "typed-quote", 1)
+                .unwrap()
+                .with_data_source(source_ref.clone())
+                .unwrap(),
+            received_at: market_time(8),
+            observed_at: market_time(8),
+            bid: Some(DecimalValue::new("210", 4, definitions.price.clone()).unwrap()),
+            ask: Some(DecimalValue::new("220", 4, definitions.price.clone()).unwrap()),
+            supersedes_id: None,
+        })
+        .unwrap(),
+    );
+    repository
+        .append_fact(
+            AppendMarketFact::new(
+                MarketFactRulePackResolver::new(&repository)
+                    .resolve(
+                        &scope,
+                        MarketFactUnitResolver::new(&repository)
+                            .resolve(&scope, fact.clone())
+                            .await
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap(),
+                IdempotencyKey::new("repo:r5a-typed-quote").unwrap(),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let page = repository
+        .query_instrument_window(
+            &scope,
+            MarketFactWindow::new(
+                definitions.instrument,
+                market_time(7),
+                market_time(9),
+                PageRequest::new(scope.clone(), None, 10).unwrap(),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.items(), &[fact]);
+    let persisted: (Option<String>, Option<i64>) = sqlx::query_as(
+        "SELECT data_source_id, data_source_version FROM market.quotes
+         WHERE tenant_id = $1 AND quote_id = $2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind("01ARZ3NDEKTSV4RRFFQ69G5F73")
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(persisted.0.as_deref(), Some(source_ref.id().as_str()));
+    assert_eq!(persisted.1, Some(1));
 }
 
 #[tokio::test]

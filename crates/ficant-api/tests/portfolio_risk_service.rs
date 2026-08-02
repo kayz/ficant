@@ -48,11 +48,22 @@ fn futures_snapshot_binding_round_trips_on_request_and_result_contracts() {
 
     let exposure = research::PortfolioKeyRateExposure {
         futures_data_snapshot_id: Some(snapshot.clone()),
+        source_confidence: Some(research::PriceSourceSummary {
+            counts: vec![research::PriceSourceCount {
+                source_type: market::PriceSourceType::ActiveQuote as i32,
+                record_count: 3,
+            }],
+            mixed: false,
+        }),
         ..Default::default()
     };
     let decoded =
         research::PortfolioKeyRateExposure::decode(exposure.encode_to_vec().as_slice()).unwrap();
     assert_eq!(decoded.futures_data_snapshot_id, Some(snapshot));
+    assert_eq!(
+        decoded.source_confidence.unwrap().counts[0].source_type,
+        market::PriceSourceType::ActiveQuote as i32
+    );
 }
 
 fn point(id: &str, coefficient: i32) -> market::CurvePoint {

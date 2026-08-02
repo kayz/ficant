@@ -26,7 +26,7 @@ const KEY: &str = "3031323334353637383961626364656630313233343536373839616263646
 #[tokio::test]
 async fn production_composition_exposes_portfolio_risk_and_rejects_malformed_input_before_io() {
     let settings = ServerSettings::try_from_values(&values()).unwrap();
-    let (_, _, _, _, _, _, service) =
+    let (_, _, _, _, _, _, service, _) =
         build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk(
             &settings,
         )

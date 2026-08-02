@@ -44,6 +44,135 @@ pub mod cgb_futures_product_rule {
         ResidualMaxMonthsUnbounded(bool),
     }
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DataSourceDefinition {
+    #[prost(message, optional, tag="1")]
+    pub data_source: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="2")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(enumeration="DataSourceKind", tag="3")]
+    pub kind: i32,
+    #[prost(string, tag="4")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag="5")]
+    pub connection_binding: ::prost::alloc::string::String,
+    #[prost(string, tag="6")]
+    pub dataset: ::prost::alloc::string::String,
+    #[prost(string, tag="7")]
+    pub canonical_schema_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="8")]
+    pub canonical_schema_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(enumeration="PriceSourceType", tag="9")]
+    pub price_source_type: i32,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RegisterDataSourceRequest {
+    #[prost(string, tag="1")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(uint64, tag="2")]
+    pub expected_latest_version: u64,
+    #[prost(message, optional, tag="3")]
+    pub definition: ::core::option::Option<DataSourceDefinition>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RegisterDataSourceResponse {
+    #[prost(oneof="register_data_source_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<register_data_source_response::Result>,
+}
+/// Nested message and enum types in `RegisterDataSourceResponse`.
+pub mod register_data_source_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Definition(super::DataSourceDefinition),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetDataSourceRequest {
+    #[prost(message, optional, tag="1")]
+    pub data_source: ::core::option::Option<super::super::core::v1::VersionRef>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetDataSourceResponse {
+    #[prost(oneof="get_data_source_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_data_source_response::Result>,
+}
+/// Nested message and enum types in `GetDataSourceResponse`.
+pub mod get_data_source_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Definition(super::DataSourceDefinition),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum DataSourceKind {
+    Unspecified = 0,
+    FileNdjson = 1,
+    Postgres = 2,
+}
+impl DataSourceKind {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "DATA_SOURCE_KIND_UNSPECIFIED",
+            Self::FileNdjson => "DATA_SOURCE_KIND_FILE_NDJSON",
+            Self::Postgres => "DATA_SOURCE_KIND_POSTGRES",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "DATA_SOURCE_KIND_UNSPECIFIED" => Some(Self::Unspecified),
+            "DATA_SOURCE_KIND_FILE_NDJSON" => Some(Self::FileNdjson),
+            "DATA_SOURCE_KIND_POSTGRES" => Some(Self::Postgres),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PriceSourceType {
+    Unspecified = 0,
+    RealTrade = 1,
+    ActiveQuote = 2,
+    ModelValuation = 3,
+    CurveInterpolation = 4,
+}
+impl PriceSourceType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PRICE_SOURCE_TYPE_UNSPECIFIED",
+            Self::RealTrade => "PRICE_SOURCE_TYPE_REAL_TRADE",
+            Self::ActiveQuote => "PRICE_SOURCE_TYPE_ACTIVE_QUOTE",
+            Self::ModelValuation => "PRICE_SOURCE_TYPE_MODEL_VALUATION",
+            Self::CurveInterpolation => "PRICE_SOURCE_TYPE_CURVE_INTERPOLATION",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PRICE_SOURCE_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "PRICE_SOURCE_TYPE_REAL_TRADE" => Some(Self::RealTrade),
+            "PRICE_SOURCE_TYPE_ACTIVE_QUOTE" => Some(Self::ActiveQuote),
+            "PRICE_SOURCE_TYPE_MODEL_VALUATION" => Some(Self::ModelValuation),
+            "PRICE_SOURCE_TYPE_CURVE_INTERPOLATION" => Some(Self::CurveInterpolation),
+            _ => None,
+        }
+    }
+}
 /// Instrument is an immutable definition version.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Instrument {
@@ -547,6 +676,8 @@ pub struct FactSource {
     pub external_id: ::prost::alloc::string::String,
     #[prost(uint64, tag="3")]
     pub source_revision: u64,
+    #[prost(message, optional, tag="4")]
+    pub data_source: ::core::option::Option<super::super::core::v1::VersionRef>,
 }
 /// Cashflow records an external source fact. It never generates a schedule.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

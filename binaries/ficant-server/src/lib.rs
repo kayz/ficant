@@ -1,15 +1,15 @@
 use ficant_api::{
-    CanonicalCurvePointSetDecoder, CanonicalSnapshotCodecAdapter, ExperimentGrpcService,
-    FactorRegistryGrpcService, GrpcWebServeError, GrpcWebServerConfig, PlatformApplication,
-    PlatformGrpcService, PlatformPort, PortfolioRiskGrpcService, PositionSnapshotGrpcService,
-    RatesGrpcService, SessionPolicy, SubjectRegistryGrpcService, SystemClock,
-    TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
+    CanonicalCurvePointSetDecoder, CanonicalSnapshotCodecAdapter, DataSourceRegistryGrpcService,
+    ExperimentGrpcService, FactorRegistryGrpcService, GrpcWebServeError, GrpcWebServerConfig,
+    PlatformApplication, PlatformGrpcService, PlatformPort, PortfolioRiskGrpcService,
+    PositionSnapshotGrpcService, RatesGrpcService, SessionPolicy, SubjectRegistryGrpcService,
+    SystemClock, TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
     serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk,
 };
 use ficant_application::ports::{
     AccessScope, AeadCursorCodec, ArtifactRepository, BlobStore, CursorKey,
-    CurveSnapshotMetadataRepository, DefinitionRepository, ExperimentRepository,
-    FactorTopologyRepository, IntegrityEventSink, Phase4ExecutionRepository,
+    CurveSnapshotMetadataRepository, DataSourceRepository, DefinitionRepository,
+    ExperimentRepository, FactorTopologyRepository, IntegrityEventSink, Phase4ExecutionRepository,
     PositionSnapshotRepository, RunJournalRepository, SnapshotRepository,
     SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobReader,
 };
@@ -405,6 +405,7 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
         PositionSnapshotGrpcService,
         FactorRegistryGrpcService,
         PortfolioRiskGrpcService,
+        DataSourceRegistryGrpcService,
     ),
     ServerError,
 > {
@@ -437,6 +438,7 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
     let snapshot_repository: Arc<dyn SnapshotRepository> = repository.clone();
     let position_repository: Arc<dyn PositionSnapshotRepository> = repository.clone();
     let factor_repository: Arc<dyn FactorTopologyRepository> = repository.clone();
+    let data_source_repository: Arc<dyn DataSourceRepository> = repository.clone();
     let curve_repository: Arc<dyn CurveSnapshotMetadataRepository> = repository.clone();
     let artifacts: Arc<dyn ArtifactRepository> = repository.clone();
     let definitions: Arc<dyn DefinitionRepository> = repository.clone();
@@ -490,10 +492,11 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
     .map_err(config)?;
     let portfolio_risk = PortfolioRiskGrpcService::new(
         Arc::clone(&application),
-        access_scope,
+        access_scope.clone(),
         position_repository,
         curve_repository,
         definitions,
+        data_source_repository.clone(),
         factor_repository.clone(),
         blobs,
         build_integrity_event_sink(),
@@ -504,6 +507,13 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
         Arc::new(CanonicalSnapshotCodecAdapter),
         Arc::new(CgbFuturesDeliveryRulePackParser),
         Arc::new(NativeFuturesDeliveryEngine),
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+    let data_sources = DataSourceRegistryGrpcService::new(
+        Arc::clone(&application),
+        access_scope,
+        data_source_repository,
         &settings.trace_key,
     )
     .map_err(config)?;
@@ -527,6 +537,7 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
         positions,
         factors,
         portfolio_risk,
+        data_sources,
     ))
 }
 
@@ -548,7 +559,7 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors(
     ),
     ServerError,
 > {
-    let (platform, rates, experiment, registry, positions, factors, _) =
+    let (platform, rates, experiment, registry, positions, factors, _, _) =
         build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk(
             settings,
         )?;
@@ -674,7 +685,7 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         .filter_map(|key| env::var(key).ok().map(|value| ((*key).to_owned(), value)))
         .collect();
     let settings = ServerSettings::try_from_values(&values)?;
-    let (platform, rates, experiment, registry, positions, factors, portfolio_risk) =
+    let (platform, rates, experiment, registry, positions, factors, portfolio_risk, data_sources) =
         build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk(
             &settings,
         )?;
@@ -690,6 +701,7 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         positions,
         factors,
         portfolio_risk,
+        data_sources,
     )
     .await?;
     Ok(())

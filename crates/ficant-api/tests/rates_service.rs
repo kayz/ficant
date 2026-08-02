@@ -5,11 +5,12 @@ use ficant_api::{
 };
 use ficant_application::ports::{
     AccessScope, AppendDefinitionVersion, BondAnalyticsEngine, CanonicalQuote,
-    CanonicalSnapshotDecoder, CarryRollEngine, DefinitionIdentity, DefinitionRepository,
-    DefinitionValue, FuturesDeliveryEngine, FuturesDeliveryRuleParser, FuturesHedgeEngine,
-    InstrumentDefinition, InstrumentSubtype, IntegrityEvent, IntegrityEventSink,
-    RequiredVerifiedBlobRead, SnapshotVerifiedReadMetadata, SnapshotVerifiedReadMetadataRepository,
-    SubjectRepository, VerifiedBlobPayload, VerifiedBlobReader, VerifiedBlobRole, YieldCurveEngine,
+    CanonicalSnapshotDecoder, CarryRollEngine, DecodedCanonicalQuotes, DefinitionIdentity,
+    DefinitionRepository, DefinitionValue, FuturesDeliveryEngine, FuturesDeliveryRuleParser,
+    FuturesHedgeEngine, InstrumentDefinition, InstrumentSubtype, IntegrityEvent,
+    IntegrityEventSink, RequiredVerifiedBlobRead, SnapshotVerifiedReadMetadata,
+    SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobPayload,
+    VerifiedBlobReader, VerifiedBlobRole, YieldCurveEngine,
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_cgb_futures_pack::CgbFuturesDeliveryRulePackParser;
@@ -293,30 +294,33 @@ impl CanonicalSnapshotDecoder for FixtureCanonicalSnapshotDecoder {
         snapshot: &DataSnapshot,
         parquet: &[u8],
         manifest: &[u8],
-    ) -> Result<Vec<CanonicalQuote>, ApplicationError> {
+    ) -> Result<DecodedCanonicalQuotes, ApplicationError> {
         assert_eq!(snapshot.id(), &id('E'));
         assert_eq!(parquet, b"snapshot");
         assert_eq!(manifest, b"manifest");
-        Ok(vec![
-            CanonicalQuote::new(
-                VersionRef::new(id('D'), version(1)),
-                domain_time(20),
-                domain_time(20),
-                NaiveDate::from_ymd_opt(2026, 7, 20).unwrap(),
-                Some(fixed_decimal("10125", 2)),
-                None,
-                UnitRef::new(id('P'), version(1)),
-            ),
-            CanonicalQuote::new(
-                VersionRef::new(id('C'), version(1)),
-                domain_time(20),
-                domain_time(20),
-                NaiveDate::from_ymd_opt(2026, 7, 20).unwrap(),
-                None,
-                Some(fixed_decimal("995", 1)),
-                UnitRef::new(id('P'), version(1)),
-            ),
-        ])
+        DecodedCanonicalQuotes::new(
+            VersionRef::new(id('S'), version(1)),
+            vec![
+                CanonicalQuote::new(
+                    VersionRef::new(id('D'), version(1)),
+                    domain_time(20),
+                    domain_time(20),
+                    NaiveDate::from_ymd_opt(2026, 7, 20).unwrap(),
+                    Some(fixed_decimal("10125", 2)),
+                    None,
+                    UnitRef::new(id('P'), version(1)),
+                ),
+                CanonicalQuote::new(
+                    VersionRef::new(id('C'), version(1)),
+                    domain_time(20),
+                    domain_time(20),
+                    NaiveDate::from_ymd_opt(2026, 7, 20).unwrap(),
+                    None,
+                    Some(fixed_decimal("995", 1)),
+                    UnitRef::new(id('P'), version(1)),
+                ),
+            ],
+        )
     }
 }
 

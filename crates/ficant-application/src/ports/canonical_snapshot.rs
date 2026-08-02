@@ -5,6 +5,8 @@ use ficant_domain::primitives::{MarketTime, UnitRef, VersionRef};
 use ficant_domain::research::DataSnapshot;
 
 use super::ApplicationResult;
+use crate::map_domain_error;
+use ficant_domain::DomainErrorCode;
 
 /// One provider-neutral two-time quote projected from a verified canonical snapshot.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -77,6 +79,47 @@ impl CanonicalQuote {
     }
 }
 
+/// One verified canonical quote projection plus the exact immutable `DataSource` version declared
+/// by its canonical manifest.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DecodedCanonicalQuotes {
+    data_source: VersionRef,
+    quotes: Vec<CanonicalQuote>,
+}
+
+impl DecodedCanonicalQuotes {
+    /// Binds one non-empty quote projection to its exact manifest source.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation failure for an empty projection, which cannot supply a typed price
+    /// record to any calculation.
+    pub fn new(data_source: VersionRef, quotes: Vec<CanonicalQuote>) -> ApplicationResult<Self> {
+        if quotes.is_empty() {
+            return Err(map_domain_error(DomainErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            data_source,
+            quotes,
+        })
+    }
+
+    #[must_use]
+    pub fn data_source(&self) -> &VersionRef {
+        &self.data_source
+    }
+
+    #[must_use]
+    pub fn quotes(&self) -> &[CanonicalQuote] {
+        &self.quotes
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (VersionRef, Vec<CanonicalQuote>) {
+        (self.data_source, self.quotes)
+    }
+}
+
 /// Decodes only the quote projection needed by futures-delivery materialization.
 ///
 /// The adapter receives bytes only after both snapshot roles have passed required-read
@@ -94,5 +137,5 @@ pub trait CanonicalSnapshotDecoder: Send + Sync {
         snapshot: &DataSnapshot,
         parquet: &[u8],
         manifest: &[u8],
-    ) -> ApplicationResult<Vec<CanonicalQuote>>;
+    ) -> ApplicationResult<DecodedCanonicalQuotes>;
 }

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use chrono::{NaiveDate, TimeZone, Utc};
 use ficant_application::ports::{
     AccessScope, BondAnalyticsEngine, CanonicalSnapshotDecoder, CurvePointSetDecoder,
-    CurveSnapshotMetadataRepository, DefinitionRepository, FactorTopologyRepository,
-    FuturesDeliveryEngine, FuturesDeliveryRuleParser, IntegrityEventSink,
+    CurveSnapshotMetadataRepository, DataSourceRepository, DefinitionRepository,
+    FactorTopologyRepository, FuturesDeliveryEngine, FuturesDeliveryRuleParser, IntegrityEventSink,
     PositionSnapshotRepository, SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader,
     YieldCurveEngine,
 };
@@ -13,8 +13,10 @@ use ficant_application::{
     CalculateBondKeyRateDv01Command, map_domain_error,
 };
 use ficant_contracts::ficant::core::v1 as core;
+use ficant_contracts::ficant::market::v1 as market;
 use ficant_contracts::ficant::research::v1 as pb;
 use ficant_contracts::ficant::research::v1::portfolio_risk_service_server::PortfolioRiskService;
+use ficant_domain::market::PriceSourceType;
 use ficant_domain::primitives::{
     ContentHash, LineageRef, MarketTime, Ulid, UnitRef, Version, VersionRef,
 };
@@ -35,6 +37,7 @@ pub struct PortfolioRiskGrpcService {
     positions: Arc<dyn PositionSnapshotRepository>,
     curves: Arc<dyn CurveSnapshotMetadataRepository>,
     definitions: Arc<dyn DefinitionRepository>,
+    data_sources: Arc<dyn DataSourceRepository>,
     factors: Arc<dyn FactorTopologyRepository>,
     blobs: Arc<dyn VerifiedBlobReader>,
     integrity_events: Arc<dyn IntegrityEventSink>,
@@ -61,6 +64,7 @@ impl PortfolioRiskGrpcService {
         positions: Arc<dyn PositionSnapshotRepository>,
         curves: Arc<dyn CurveSnapshotMetadataRepository>,
         definitions: Arc<dyn DefinitionRepository>,
+        data_sources: Arc<dyn DataSourceRepository>,
         factors: Arc<dyn FactorTopologyRepository>,
         blobs: Arc<dyn VerifiedBlobReader>,
         integrity_events: Arc<dyn IntegrityEventSink>,
@@ -79,6 +83,7 @@ impl PortfolioRiskGrpcService {
             positions,
             curves,
             definitions,
+            data_sources,
             factors,
             blobs,
             integrity_events,
@@ -130,6 +135,7 @@ impl PortfolioRiskService for PortfolioRiskGrpcService {
                         self.bond_engine.as_ref(),
                         self.futures_snapshot_metadata.as_ref(),
                         self.futures_snapshot_decoder.as_ref(),
+                        self.data_sources.as_ref(),
                         self.futures_rule_parser.as_ref(),
                         self.futures_engine.as_ref(),
                     )
@@ -194,6 +200,27 @@ fn portfolio(value: &PortfolioKeyRateExposure) -> pb::PortfolioKeyRateExposure {
         content_hash: Some(hash(value.content_hash())),
         lineage: value.lineage().iter().map(lineage).collect(),
         futures_data_snapshot_id: value.futures_data_snapshot_id().map(ulid),
+        source_confidence: Some(pb::PriceSourceSummary {
+            counts: value
+                .source_confidence()
+                .counts()
+                .iter()
+                .map(|count| pb::PriceSourceCount {
+                    source_type: price_source_type(count.source_type()) as i32,
+                    record_count: count.record_count(),
+                })
+                .collect(),
+            mixed: value.source_confidence().mixed(),
+        }),
+    }
+}
+
+const fn price_source_type(value: PriceSourceType) -> market::PriceSourceType {
+    match value {
+        PriceSourceType::RealTrade => market::PriceSourceType::RealTrade,
+        PriceSourceType::ActiveQuote => market::PriceSourceType::ActiveQuote,
+        PriceSourceType::ModelValuation => market::PriceSourceType::ModelValuation,
+        PriceSourceType::CurveInterpolation => market::PriceSourceType::CurveInterpolation,
     }
 }
 

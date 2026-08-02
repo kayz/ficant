@@ -18,7 +18,7 @@ pub use bond::{
 pub use calendar::{Calendar, CalendarInput, CalendarSession};
 pub use cashflow::{Cashflow, CashflowInput, CashflowType};
 pub use curve_snapshot::{ArtifactInputKind, CurveSnapshot, CurveSnapshotInput};
-pub use data_source::{DataSource, DataSourceInput, DataSourceKind};
+pub use data_source::{DataSource, DataSourceInput, DataSourceKind, PriceSourceType};
 pub use futures_contract::FuturesContract;
 pub use instrument::{Instrument, InstrumentInput, InstrumentKind};
 pub use market_rule_pack::{
@@ -37,6 +37,7 @@ pub struct FactSource {
     source_id: String,
     external_id: String,
     source_revision: u64,
+    data_source: Option<crate::primitives::VersionRef>,
 }
 
 impl FactSource {
@@ -56,7 +57,19 @@ impl FactSource {
             source_id,
             external_id,
             source_revision,
+            data_source: None,
         })
+    }
+
+    pub fn with_data_source(
+        mut self,
+        data_source: crate::primitives::VersionRef,
+    ) -> DomainResult<Self> {
+        if self.data_source.is_some() {
+            return Err(DomainErrorCode::VersionConflict);
+        }
+        self.data_source = Some(data_source);
+        Ok(self)
     }
 
     pub fn source_id(&self) -> &str {
@@ -69,6 +82,10 @@ impl FactSource {
 
     pub fn source_revision(&self) -> u64 {
         self.source_revision
+    }
+
+    pub fn data_source(&self) -> Option<&crate::primitives::VersionRef> {
+        self.data_source.as_ref()
     }
 }
 

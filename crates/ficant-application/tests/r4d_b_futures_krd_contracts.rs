@@ -6,10 +6,11 @@ use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
 use ficant_application::ports::{
     AccessScope, AppendDefinitionVersion, ApplicationResult, BondAnalyticsEngine, CanonicalQuote,
     CanonicalSnapshotDecoder, CurvePointSetDecoder, CurveSnapshotMetadata,
-    CurveSnapshotMetadataRepository, DecodedCurvePoint, DecodedCurvePointSet, DefinitionIdentity,
-    DefinitionRepository, DefinitionValue, FactorTopologyRepository, FuturesDeliveryEngine,
-    FuturesDeliveryRuleParser, IdempotencyKey, IntegrityEvent, IntegrityEventSink,
-    PositionSnapshotRepository, RequiredVerifiedBlobRead, SnapshotVerifiedReadMetadata,
+    CurveSnapshotMetadataRepository, DataSourceRepository, DecodedCanonicalQuotes,
+    DecodedCurvePoint, DecodedCurvePointSet, DefinitionIdentity, DefinitionRepository,
+    DefinitionValue, FactorTopologyRepository, FuturesDeliveryEngine, FuturesDeliveryRuleParser,
+    IdempotencyKey, IntegrityEvent, IntegrityEventSink, PositionSnapshotRepository,
+    RegisterDataSource, RequiredVerifiedBlobRead, SnapshotVerifiedReadMetadata,
     SnapshotVerifiedReadMetadataRepository, VerifiedBlobPayload, VerifiedBlobReader,
     VerifiedBlobRole, YieldCurveEngine,
 };
@@ -17,7 +18,6 @@ use ficant_application::{
     ApplicationError, ApplicationErrorCategory, CalculateBondKeyRateDv01,
     CalculateBondKeyRateDv01Command,
 };
-use ficant_domain::ContentAddressed;
 use ficant_domain::analytics::{
     AnalyticsError, AnalyticsMeasures, BondAnalyticsInput, BondAnalyticsResult, CalendarResolution,
     DerivedCashflow, FixedDecimal,
@@ -30,9 +30,10 @@ use ficant_domain::futures_delivery::{
 use ficant_domain::market::{
     ArtifactInputKind, Bond, BondBusinessDayConvention, BondCouponFrequency,
     BondDayCountConvention, BondPricingTerms, BondTaxAttributes, Calendar, CalendarInput,
-    CalendarSession, CurveSnapshot, CurveSnapshotInput, FuturesContract, IncomeTaxStatus,
-    Instrument, InstrumentInput, InstrumentKind, MarketRulePack, MarketRulePackInput,
-    RulePackContent, Unit, UnitInput, ValueAddedTaxStatus, VerificationStatus,
+    CalendarSession, CurveSnapshot, CurveSnapshotInput, DataSource, DataSourceInput,
+    DataSourceKind, FuturesContract, IncomeTaxStatus, Instrument, InstrumentInput, InstrumentKind,
+    MarketRulePack, MarketRulePackInput, PriceSourceType, RulePackContent, Unit, UnitInput,
+    ValueAddedTaxStatus, VerificationStatus,
 };
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, EffectivePeriod, LineageRef, MarketTime, OwnerRef, Ulid, UnitRef,
@@ -45,6 +46,7 @@ use ficant_domain::research::{
     PositionHoldingForm, PositionInput, PositionSnapshot, PositionSnapshotInput, SecondOrderPolicy,
     SensitivityConvention, SensitivityDirection,
 };
+use ficant_domain::{ContentAddressed, Lineaged, VersionedDefinition};
 
 const CURVE_BYTES: &[u8] = b"canonical-r4d-b-curve";
 const PARQUET: &[u8] = b"canonical-r4d-b-quotes";
@@ -69,6 +71,22 @@ async fn mixed_portfolio_uses_one_fixed_ctd_and_exact_contract_scaling() {
     );
     assert_eq!(result.futures_data_snapshot_id(), Some(fixture.data.id()));
     assert_eq!(result.positions().len(), 2);
+    assert!(result.source_confidence().mixed());
+    assert_eq!(
+        result
+            .source_confidence()
+            .counts()
+            .iter()
+            .map(|value| (value.source_type(), value.record_count()))
+            .collect::<Vec<_>>(),
+        vec![
+            (PriceSourceType::ActiveQuote, 3),
+            (PriceSourceType::CurveInterpolation, 2),
+        ]
+    );
+    assert!(result.lineage().iter().any(|reference| {
+        reference.object_id() == &id('8') && reference.version() == Some(version())
+    }));
     assert_eq!(
         calls.delivery.load(Ordering::SeqCst),
         2,
@@ -122,6 +140,58 @@ async fn mixed_portfolio_uses_one_fixed_ctd_and_exact_contract_scaling() {
             .try_fold(FixedDecimal::ZERO, FixedDecimal::checked_add)
             .unwrap();
         assert_eq!(total.value(), expected);
+    }
+    let source_count_contrast =
+        ficant_domain::research::PortfolioKeyRateExposure::new_with_futures_data_snapshot(
+            result.position_snapshot_id().clone(),
+            result.curve_snapshot_id().clone(),
+            result.futures_data_snapshot_id().unwrap().clone(),
+            4,
+            result.positions().to_vec(),
+            result.algorithm().clone(),
+            result.lineage().to_vec(),
+        )
+        .unwrap();
+    assert_eq!(source_count_contrast.positions(), result.positions());
+    assert_eq!(source_count_contrast.totals(), result.totals());
+    assert_ne!(source_count_contrast.content_hash(), result.content_hash());
+}
+
+#[tokio::test]
+async fn bond_only_result_marks_internal_curve_interpolation_without_mixing() {
+    let fixture = Fixture::bond_only(Calls::default());
+    let result = fixture.execute(false).await.unwrap();
+
+    assert!(!result.source_confidence().mixed());
+    assert_eq!(
+        result.source_confidence().counts()[0].source_type(),
+        PriceSourceType::CurveInterpolation
+    );
+    assert_eq!(result.source_confidence().counts()[0].record_count(), 1);
+}
+
+#[tokio::test]
+async fn missing_untyped_or_non_quote_sources_fail_before_every_numerical_engine() {
+    for fixture in [
+        Fixture::missing_data_source(Calls::default()),
+        Fixture::untyped_data_source(Calls::default()),
+        Fixture::wrong_data_source_type(Calls::default()),
+        Fixture::wrong_data_source_owner(Calls::default()),
+        Fixture::wrong_data_source_version(Calls::default()),
+    ] {
+        let calls = fixture.calls.clone();
+        let error = fixture.execute(true).await.unwrap_err();
+        assert!(matches!(
+            error.category(),
+            ApplicationErrorCategory::NotFound
+                | ApplicationErrorCategory::ValidationFailed
+                | ApplicationErrorCategory::LineageIncomplete
+                | ApplicationErrorCategory::Forbidden
+        ));
+        assert_eq!(calls.parser.load(Ordering::SeqCst), 0);
+        assert_eq!(calls.delivery.load(Ordering::SeqCst), 0);
+        assert_eq!(calls.curve.load(Ordering::SeqCst), 0);
+        assert_eq!(calls.bond.load(Ordering::SeqCst), 0);
     }
 }
 
@@ -188,6 +258,7 @@ struct Fixture {
     nodes: Vec<CurveNodeDefinition>,
     factors: Vec<FactorDefinition>,
     missing_binding: MissingBinding,
+    data_source: Option<DataSource>,
     calls: Calls,
 }
 
@@ -214,6 +285,44 @@ impl Fixture {
 
     fn missing_futures_binding(calls: Calls) -> Self {
         Self::build(true, true, MissingBinding::Futures, calls)
+    }
+
+    fn missing_data_source(calls: Calls) -> Self {
+        let mut fixture = Self::build(false, true, MissingBinding::None, calls);
+        fixture.data_source = None;
+        fixture
+    }
+
+    fn untyped_data_source(calls: Calls) -> Self {
+        let mut fixture = Self::build(false, true, MissingBinding::None, calls);
+        fixture.data_source = Some(data_source(None));
+        fixture
+    }
+
+    fn wrong_data_source_type(calls: Calls) -> Self {
+        let mut fixture = Self::build(false, true, MissingBinding::None, calls);
+        fixture.data_source = Some(data_source(Some(PriceSourceType::ModelValuation)));
+        fixture
+    }
+
+    fn wrong_data_source_owner(calls: Calls) -> Self {
+        let mut fixture = Self::build(false, true, MissingBinding::None, calls);
+        fixture.data_source = Some(data_source_with(
+            OwnerRef::new(owner().tenant_id().clone(), id('C')),
+            version(),
+            Some(PriceSourceType::ActiveQuote),
+        ));
+        fixture
+    }
+
+    fn wrong_data_source_version(calls: Calls) -> Self {
+        let mut fixture = Self::build(false, true, MissingBinding::None, calls);
+        fixture.data_source = Some(data_source_with(
+            owner(),
+            Version::new(2).unwrap(),
+            Some(PriceSourceType::ActiveQuote),
+        ));
+        fixture
     }
 
     #[allow(clippy::too_many_lines)]
@@ -357,6 +466,7 @@ impl Fixture {
             nodes,
             factors,
             missing_binding,
+            data_source: Some(data_source(Some(PriceSourceType::ActiveQuote))),
             calls,
         }
     }
@@ -384,7 +494,7 @@ impl Fixture {
             )?
         };
         CalculateBondKeyRateDv01::new_with_futures(
-            self, self, self, self, self, self, self, self, self, self, self, self, self,
+            self, self, self, self, self, self, self, self, self, self, self, self, self, self,
         )
         .execute(&self.scope, command)
         .await
@@ -480,6 +590,24 @@ impl DefinitionRepository for Fixture {
         _: MarketTime,
     ) -> ApplicationResult<Option<DefinitionValue>> {
         Err(unavailable())
+    }
+}
+
+#[async_trait]
+impl DataSourceRepository for Fixture {
+    async fn register(&self, _: RegisterDataSource) -> Result<DataSource, ApplicationError> {
+        Err(unavailable())
+    }
+
+    async fn get_exact(
+        &self,
+        _: &AccessScope,
+        reference: VersionRef,
+    ) -> Result<Option<DataSource>, ApplicationError> {
+        Ok(self.data_source.as_ref().and_then(|source| {
+            (source.id() == reference.id() && source.version() == reference.version().get())
+                .then(|| source.clone())
+        }))
     }
 }
 
@@ -602,15 +730,18 @@ impl CanonicalSnapshotDecoder for Fixture {
         snapshot: &DataSnapshot,
         parquet: &[u8],
         manifest: &[u8],
-    ) -> ApplicationResult<Vec<CanonicalQuote>> {
+    ) -> ApplicationResult<DecodedCanonicalQuotes> {
         assert_eq!(snapshot, &self.data);
         assert_eq!(parquet, PARQUET);
         assert_eq!(manifest, MANIFEST);
-        Ok(vec![
-            quote('B', 100, 102),
-            quote('G', 101, 103),
-            quote('F', 99, 101),
-        ])
+        DecodedCanonicalQuotes::new(
+            VersionRef::new(id('8'), version()),
+            vec![
+                quote('B', 100, 102),
+                quote('G', 101, 103),
+                quote('F', 99, 101),
+            ],
+        )
     }
 }
 
@@ -958,6 +1089,32 @@ fn quote(suffix: char, bid: i128, ask: i128) -> CanonicalQuote {
         Some(fixed(ask)),
         unit_ref('P'),
     )
+}
+
+fn data_source(source_type: Option<PriceSourceType>) -> DataSource {
+    data_source_with(owner(), version(), source_type)
+}
+
+fn data_source_with(
+    source_owner: OwnerRef,
+    source_version: Version,
+    source_type: Option<PriceSourceType>,
+) -> DataSource {
+    let source = DataSource::new(DataSourceInput {
+        data_source_id: id('8'),
+        version: source_version,
+        owner: source_owner,
+        kind: DataSourceKind::FileNdjson,
+        name: "R4d-b canonical quote fixture".to_owned(),
+        connection_binding: "r4d-b-quotes".to_owned(),
+        dataset: "r4d_b_quotes".to_owned(),
+        canonical_schema_id: "ficant.market.quote.canonical.v1".to_owned(),
+        canonical_schema_hash: ContentHash::digest(b"r4d-b-schema"),
+    })
+    .unwrap();
+    source_type.map_or(source.clone(), |value| {
+        source.with_price_source_type(value).unwrap()
+    })
 }
 
 fn time(hour: u32) -> MarketTime {

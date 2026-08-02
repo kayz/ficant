@@ -1,9 +1,62 @@
 use crate::analytics::FixedDecimal;
+use crate::market::PriceSourceType;
 use crate::primitives::{ContentHash, LineageRef, Ulid, UnitRef, Version, VersionRef};
 use crate::research::SensitivityDirection;
 use crate::{ContentAddressed, DomainErrorCode, DomainResult, Lineaged};
 
 const FIXED_SCALE: i128 = 1_000_000_000_000;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PriceSourceCount {
+    source_type: PriceSourceType,
+    record_count: u64,
+}
+
+impl PriceSourceCount {
+    pub fn new(source_type: PriceSourceType, record_count: u64) -> DomainResult<Self> {
+        if record_count == 0 {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        Ok(Self {
+            source_type,
+            record_count,
+        })
+    }
+
+    pub const fn source_type(&self) -> PriceSourceType {
+        self.source_type
+    }
+
+    pub const fn record_count(&self) -> u64 {
+        self.record_count
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PriceSourceSummary {
+    counts: Vec<PriceSourceCount>,
+}
+
+impl PriceSourceSummary {
+    pub fn new(counts: Vec<PriceSourceCount>) -> DomainResult<Self> {
+        if counts.is_empty()
+            || counts
+                .windows(2)
+                .any(|pair| pair[0].source_type() >= pair[1].source_type())
+        {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        Ok(Self { counts })
+    }
+
+    pub fn counts(&self) -> &[PriceSourceCount] {
+        &self.counts
+    }
+
+    pub fn mixed(&self) -> bool {
+        self.counts.len() > 1
+    }
+}
 
 /// Calculates price sensitivity per one basis point using the frozen R4d-a direction formula.
 pub fn key_rate_dv01(
@@ -284,6 +337,7 @@ pub struct PortfolioKeyRateExposure {
     positions: Vec<PositionKeyRateExposure>,
     totals: Vec<FactorDv01>,
     algorithm: RiskAlgorithmBinding,
+    source_confidence: PriceSourceSummary,
     content_hash: ContentHash,
     lineage: Vec<LineageRef>,
 }
@@ -296,12 +350,19 @@ impl PortfolioKeyRateExposure {
         algorithm: RiskAlgorithmBinding,
         lineage: Vec<LineageRef>,
     ) -> DomainResult<Self> {
+        let curve_record_count =
+            u64::try_from(positions.len()).map_err(|_| DomainErrorCode::InvalidValue)?;
+        let source_confidence = PriceSourceSummary::new(vec![PriceSourceCount::new(
+            PriceSourceType::CurveInterpolation,
+            curve_record_count,
+        )?])?;
         Self::new_inner(
             position_snapshot_id,
             curve_snapshot_id,
             None,
             positions,
             algorithm,
+            source_confidence,
             lineage,
         )
     }
@@ -310,16 +371,24 @@ impl PortfolioKeyRateExposure {
         position_snapshot_id: Ulid,
         curve_snapshot_id: Ulid,
         futures_data_snapshot_id: Ulid,
+        active_quote_record_count: u64,
         positions: Vec<PositionKeyRateExposure>,
         algorithm: RiskAlgorithmBinding,
         lineage: Vec<LineageRef>,
     ) -> DomainResult<Self> {
+        let curve_record_count =
+            u64::try_from(positions.len()).map_err(|_| DomainErrorCode::InvalidValue)?;
+        let source_confidence = PriceSourceSummary::new(vec![
+            PriceSourceCount::new(PriceSourceType::ActiveQuote, active_quote_record_count)?,
+            PriceSourceCount::new(PriceSourceType::CurveInterpolation, curve_record_count)?,
+        ])?;
         Self::new_inner(
             position_snapshot_id,
             curve_snapshot_id,
             Some(futures_data_snapshot_id),
             positions,
             algorithm,
+            source_confidence,
             lineage,
         )
     }
@@ -330,6 +399,7 @@ impl PortfolioKeyRateExposure {
         futures_data_snapshot_id: Option<Ulid>,
         positions: Vec<PositionKeyRateExposure>,
         algorithm: RiskAlgorithmBinding,
+        source_confidence: PriceSourceSummary,
         lineage: Vec<LineageRef>,
     ) -> DomainResult<Self> {
         if positions.is_empty()
@@ -361,6 +431,10 @@ impl PortfolioKeyRateExposure {
         append(&mut bytes, algorithm.algorithm_id().as_bytes());
         append(&mut bytes, &algorithm.algorithm_version().to_be_bytes());
         append(&mut bytes, algorithm.convention_profile().as_bytes());
+        for count in source_confidence.counts() {
+            append(&mut bytes, &[price_source_type_code(count.source_type())]);
+            append(&mut bytes, &count.record_count().to_be_bytes());
+        }
         for reference in &lineage {
             append_lineage(&mut bytes, reference);
         }
@@ -372,6 +446,7 @@ impl PortfolioKeyRateExposure {
             positions,
             totals,
             algorithm,
+            source_confidence,
             content_hash,
             lineage,
         })
@@ -399,6 +474,19 @@ impl PortfolioKeyRateExposure {
 
     pub fn algorithm(&self) -> &RiskAlgorithmBinding {
         &self.algorithm
+    }
+
+    pub fn source_confidence(&self) -> &PriceSourceSummary {
+        &self.source_confidence
+    }
+}
+
+const fn price_source_type_code(source_type: PriceSourceType) -> u8 {
+    match source_type {
+        PriceSourceType::RealTrade => 1,
+        PriceSourceType::ActiveQuote => 2,
+        PriceSourceType::ModelValuation => 3,
+        PriceSourceType::CurveInterpolation => 4,
     }
 }
 

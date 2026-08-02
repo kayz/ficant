@@ -39,7 +39,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
 
-    let expected_migration_versions = (1_i64..=20).collect::<Vec<_>>();
+    let expected_migration_versions = (1_i64..=21).collect::<Vec<_>>();
     let applied_before_repeat: Vec<(i64, bool)> =
         sqlx::query_as("SELECT version, success FROM public._sqlx_migrations ORDER BY version")
             .fetch_all(&pool)
@@ -87,6 +87,14 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
             .count(),
         1,
         "0020 must be recorded exactly once after its successful application"
+    );
+    assert_eq!(
+        applied_before_repeat
+            .iter()
+            .filter(|(version, success)| *version == 21 && *success)
+            .count(),
+        1,
+        "0021 must be recorded exactly once after its successful application"
     );
 
     let rows = sqlx::query(
@@ -273,6 +281,35 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     .await
     .expect("0020 Futures risk constraints must be observable");
     assert_eq!(futures_risk_constraints, 2);
+    let source_confidence_columns: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM information_schema.columns
+         WHERE (table_schema = 'data' AND table_name = 'sources'
+                AND column_name = 'price_source_type' AND is_nullable = 'YES')
+            OR (table_schema = 'market' AND table_name = ANY($1)
+                AND column_name = ANY($2) AND is_nullable = 'YES')",
+    )
+    .bind(["quotes", "trades", "valuations"])
+    .bind(["data_source_id", "data_source_version"])
+    .fetch_one(&pool)
+    .await
+    .expect("0021 nullable source-confidence columns must be observable");
+    assert_eq!(source_confidence_columns, 7);
+    let source_confidence_constraints: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pg_constraint WHERE conname = ANY($1)",
+    )
+    .bind([
+        "sources_price_source_type_check",
+        "quotes_data_source_shape_check",
+        "quotes_data_source_fkey",
+        "trades_data_source_shape_check",
+        "trades_data_source_fkey",
+        "valuations_data_source_shape_check",
+        "valuations_data_source_fkey",
+    ])
+    .fetch_one(&pool)
+    .await
+    .expect("0021 source-type, all-or-none, and exact-version FK constraints must be observable");
+    assert_eq!(source_confidence_constraints, 7);
 
     let fixture =
         std::env::temp_dir().join(format!("ficant-failing-migration-{}", std::process::id()));
@@ -563,6 +600,81 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
             .expect("0020 failure history must be queryable");
     assert_eq!(failed_0020_history, 0);
     std::fs::remove_dir_all(fixture).expect("0020 migration fixture must be removed");
+
+    pool.close().await;
+    let pool = support::postgres_pool().await;
+    support::reset_postgres(&pool).await;
+    let fixture = std::env::temp_dir().join(format!(
+        "ficant-failing-0021-migration-{}",
+        std::process::id()
+    ));
+    if fixture.exists() {
+        std::fs::remove_dir_all(&fixture).expect("stale 0021 migration fixture must be removable");
+    }
+    std::fs::create_dir(&fixture).expect("0021 migration fixture directory must be creatable");
+    for version in 1..=20 {
+        let prefix = format!("{version:04}_");
+        let migration = std::fs::read_dir(&source)
+            .expect("migration source must be readable")
+            .filter_map(Result::ok)
+            .find(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+            .expect("each 0001..0020 migration must exist");
+        std::fs::copy(migration.path(), fixture.join(migration.file_name()))
+            .expect("pre-0021 migration must copy without mutation");
+    }
+    let pre_0021 = sqlx::migrate::Migrator::new(fixture.clone())
+        .await
+        .expect("pre-0021 migration fixture must load");
+    pre_0021
+        .run(&pool)
+        .await
+        .expect("0001..0020 migrations must apply before the 0021 failure check");
+    let original_0021 = std::fs::read_to_string(source.join("0021_price_source_confidence.sql"))
+        .expect("0021 migration source must be readable");
+    std::fs::write(
+        fixture.join("0021_price_source_confidence.sql"),
+        format!("{original_0021}\nINSERT INTO data.sources(unknown_column) VALUES ('x');\n"),
+    )
+    .expect("failing 0021 migration fixture must be writable");
+    let failing_0021 = sqlx::migrate::Migrator::new(fixture.clone())
+        .await
+        .expect("failing 0021 migration fixture must load");
+    assert!(failing_0021.run(&pool).await.is_err());
+    let source_columns_after_failure: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM information_schema.columns
+         WHERE (table_schema = 'data' AND table_name = 'sources'
+                AND column_name = 'price_source_type')
+            OR (table_schema = 'market' AND table_name = ANY($1)
+                AND column_name = ANY($2))",
+    )
+    .bind(["quotes", "trades", "valuations"])
+    .bind(["data_source_id", "data_source_version"])
+    .fetch_one(&pool)
+    .await
+    .expect("0021 rollback columns must be observable");
+    assert_eq!(source_columns_after_failure, 0);
+    let source_constraints_after_failure: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM pg_constraint WHERE conname = ANY($1)")
+            .bind([
+                "sources_price_source_type_check",
+                "quotes_data_source_shape_check",
+                "quotes_data_source_fkey",
+                "trades_data_source_shape_check",
+                "trades_data_source_fkey",
+                "valuations_data_source_shape_check",
+                "valuations_data_source_fkey",
+            ])
+            .fetch_one(&pool)
+            .await
+            .expect("0021 rollback constraints must be observable");
+    assert_eq!(source_constraints_after_failure, 0);
+    let failed_0021_history: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM public._sqlx_migrations WHERE version = 21")
+            .fetch_one(&pool)
+            .await
+            .expect("0021 failure history must be queryable");
+    assert_eq!(failed_0021_history, 0);
+    std::fs::remove_dir_all(fixture).expect("0021 migration fixture must be removed");
 }
 
 #[tokio::test]

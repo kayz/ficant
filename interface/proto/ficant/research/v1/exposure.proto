@@ -4,6 +4,7 @@ package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
+import "ficant/market/v1/data_source.proto";
 
 message RiskAlgorithmBinding {
   string algorithm_id = 1;
@@ -25,6 +26,16 @@ message PositionKeyRateExposure {
   repeated ficant.core.v1.LineageRef lineage = 5;
 }
 
+message PriceSourceCount {
+  ficant.market.v1.PriceSourceType source_type = 1;
+  uint64 record_count = 2;
+}
+
+message PriceSourceSummary {
+  repeated PriceSourceCount counts = 1;
+  bool mixed = 2;
+}
+
 message PortfolioKeyRateExposure {
   ficant.core.v1.Ulid position_snapshot_id = 1;
   ficant.core.v1.Ulid curve_snapshot_id = 2;
@@ -34,6 +45,7 @@ message PortfolioKeyRateExposure {
   ficant.core.v1.Sha256 content_hash = 6;
   repeated ficant.core.v1.LineageRef lineage = 7;
   ficant.core.v1.Ulid futures_data_snapshot_id = 8;
+  PriceSourceSummary source_confidence = 9;
 }
 
 message CalculateKeyRateDv01Request {

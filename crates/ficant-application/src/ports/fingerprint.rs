@@ -159,6 +159,9 @@ fn source_bytes(source: &FactSource) -> Vec<u8> {
     value.field(2, source.source_id().as_bytes());
     value.field(3, source.external_id().as_bytes());
     value.u64(4, source.source_revision());
+    if let Some(reference) = source.data_source() {
+        value.field(5, &version_ref_bytes(reference));
+    }
     value.into_bytes()
 }
 

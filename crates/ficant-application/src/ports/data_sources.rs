@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ficant_domain::VersionedDefinition;
-use ficant_domain::market::{DataSource, DataSourceKind};
+use ficant_domain::market::{DataSource, DataSourceKind, PriceSourceType};
 use ficant_domain::primitives::{Version, VersionRef};
 
 use super::fingerprint::{FingerprintBuilder, owner_bytes};
@@ -54,6 +54,12 @@ impl RegisterDataSource {
         canonical.field(10, value.dataset().as_bytes());
         canonical.field(11, value.canonical_schema_id().as_bytes());
         canonical.field(12, value.canonical_schema_hash().as_bytes());
+        canonical.optional_u64(
+            13,
+            value
+                .price_source_type()
+                .map(|source_type| u64::from(price_source_type_code(source_type))),
+        );
         let fingerprint = canonical.finish();
 
         Ok(Self {
@@ -106,5 +112,14 @@ const fn data_source_kind_code(kind: DataSourceKind) -> u8 {
     match kind {
         DataSourceKind::FileNdjson => 1,
         DataSourceKind::Postgres => 2,
+    }
+}
+
+pub(crate) const fn price_source_type_code(source_type: PriceSourceType) -> u8 {
+    match source_type {
+        PriceSourceType::RealTrade => 1,
+        PriceSourceType::ActiveQuote => 2,
+        PriceSourceType::ModelValuation => 3,
+        PriceSourceType::CurveInterpolation => 4,
     }
 }

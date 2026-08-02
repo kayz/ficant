@@ -1,10 +1,12 @@
 use async_trait::async_trait;
 use chrono_tz::Tz;
-use ficant_application::ports::{ApplicationResult, CanonicalQuote, CanonicalSnapshotDecoder};
+use ficant_application::ports::{
+    ApplicationResult, CanonicalQuote, CanonicalSnapshotDecoder, DecodedCanonicalQuotes,
+};
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_data::CanonicalSnapshotCodec;
 use ficant_domain::analytics::{DECIMAL_SCALE, FixedDecimal};
-use ficant_domain::primitives::{DecimalValue, MarketTime};
+use ficant_domain::primitives::{DecimalValue, MarketTime, Ulid, Version, VersionRef};
 use ficant_domain::research::DataSnapshot;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -17,10 +19,16 @@ impl CanonicalSnapshotDecoder for CanonicalSnapshotCodecAdapter {
         snapshot: &DataSnapshot,
         parquet: &[u8],
         manifest: &[u8],
-    ) -> ApplicationResult<Vec<CanonicalQuote>> {
+    ) -> ApplicationResult<DecodedCanonicalQuotes> {
         let verified = CanonicalSnapshotCodec
             .decode_verified(snapshot.clone(), parquet, manifest)
             .map_err(integrity_failure)?;
+        let data_source = VersionRef::new(
+            Ulid::new(verified.manifest().data_source_id())
+                .map_err(|_| integrity_failure(ficant_data::DataError::SnapshotIntegrityFailed))?,
+            Version::new(verified.manifest().data_source_version())
+                .map_err(|_| integrity_failure(ficant_data::DataError::SnapshotIntegrityFailed))?,
+        );
         let visible_timezone = snapshot
             .visible_at()
             .market_timezone()
@@ -31,7 +39,7 @@ impl CanonicalSnapshotDecoder for CanonicalSnapshotCodecAdapter {
             .market_timezone()
             .parse::<Tz>()
             .map_err(|_| integrity_failure(ficant_data::DataError::SnapshotIntegrityFailed))?;
-        verified
+        let quotes = verified
             .quotes()
             .map_err(integrity_failure)?
             .into_iter()
@@ -61,7 +69,8 @@ impl CanonicalSnapshotDecoder for CanonicalSnapshotCodecAdapter {
                     quote.unit().clone(),
                 ))
             })
-            .collect()
+            .collect::<ApplicationResult<Vec<_>>>()?;
+        DecodedCanonicalQuotes::new(data_source, quotes)
     }
 }
 

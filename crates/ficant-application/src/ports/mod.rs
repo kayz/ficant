@@ -34,7 +34,7 @@ pub use analytics::{
 };
 pub use artifacts::{ArtifactRepository, PublishArtifact};
 pub use blob_store::{BeginBlobStage, BlobStore, StagedBlobRef, VerifiedBlobRef, VerifyBlobStage};
-pub use canonical_snapshot::{CanonicalQuote, CanonicalSnapshotDecoder};
+pub use canonical_snapshot::{CanonicalQuote, CanonicalSnapshotDecoder, DecodedCanonicalQuotes};
 pub use cursor::{AeadCursorCodec, Cursor, CursorKey};
 pub use curve_points::{
     CURVE_POINT_SCHEMA, CurvePointSetDecoder, CurveSnapshotMetadata,
