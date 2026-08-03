@@ -23,6 +23,7 @@ plugins:
       - ficant.research.v1.PositionSnapshotService
       - ficant.research.v1.FactorRegistryService
       - ficant.research.v1.PortfolioRiskService
+      - ficant.research.v1.DataHealthService
       - ficant.market.v1.DataSourceRegistryService
   - remote: buf.build/bufbuild/es:v2.5.2
     revision: 1

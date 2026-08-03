@@ -412,6 +412,136 @@ fn r5a_price_source_contracts_are_exact() {
 }
 
 #[test]
+fn r5c_data_health_contracts_are_exact() {
+    let descriptor_set = descriptor_set();
+    let messages = top_level_messages(descriptor_set);
+    let enums = top_level_enums(descriptor_set);
+
+    assert_enum(
+        &enums,
+        "ficant.research.v1.DataHealthState",
+        &[
+            ("DATA_HEALTH_STATE_UNSPECIFIED", 0),
+            ("DATA_HEALTH_STATE_HEALTHY", 1),
+            ("DATA_HEALTH_STATE_WARNING", 2),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.research.v1.PositionSetState",
+        &[
+            ("POSITION_SET_STATE_UNSPECIFIED", 0),
+            ("POSITION_SET_STATE_NON_EMPTY", 1),
+            ("POSITION_SET_STATE_VERIFIED_EMPTY", 2),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.research.v1.DataHealthIssueCode",
+        &[
+            ("DATA_HEALTH_ISSUE_CODE_UNSPECIFIED", 0),
+            ("DATA_HEALTH_ISSUE_CODE_EMPTY_POSITIONS", 1),
+            (
+                "DATA_HEALTH_ISSUE_CODE_UNKNOWN_ACCOUNTING_CLASSIFICATION",
+                2,
+            ),
+            ("DATA_HEALTH_ISSUE_CODE_STALE_POSITION_SNAPSHOT", 3),
+            ("DATA_HEALTH_ISSUE_CODE_UNTYPED_PRICE_SOURCE", 4),
+            ("DATA_HEALTH_ISSUE_CODE_MODEL_VALUATION_SHARE", 5),
+            ("DATA_HEALTH_ISSUE_CODE_STALE_DATA_SNAPSHOT", 6),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.DataHealthThresholdProfile",
+        &[
+            ExpectedField::message("profile_ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::scalar("max_position_snapshot_age_seconds", Type::Uint64),
+            ExpectedField::scalar("unknown_accounting_warning_basis_points", Type::Uint32),
+            ExpectedField::scalar("max_data_snapshot_age_seconds", Type::Uint64),
+            ExpectedField::scalar("model_valuation_warning_basis_points", Type::Uint32),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.DataHealthIssue",
+        &[
+            ExpectedField::enumeration("code", ".ficant.research.v1.DataHealthIssueCode"),
+            ExpectedField::repeated_message("affected_position_ids", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("data_source_ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::scalar("record_count", Type::Uint64),
+            ExpectedField::scalar("ratio_basis_points", Type::Uint32),
+            ExpectedField::scalar("observed_age_seconds", Type::Uint64),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.GetDataHealthReportRequest",
+        &[
+            ExpectedField::message("subject_ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("position_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("data_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("evaluated_at", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message(
+                "threshold_profile",
+                ".ficant.research.v1.DataHealthThresholdProfile",
+            ),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.DataHealthReport",
+        &[
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::message("subject_ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("evaluated_at", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("position_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("position_snapshot_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("data_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("data_snapshot_manifest_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("data_source_ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message(
+                "threshold_profile",
+                ".ficant.research.v1.DataHealthThresholdProfile",
+            ),
+            ExpectedField::enumeration("state", ".ficant.research.v1.DataHealthState"),
+            ExpectedField::repeated_message("issues", ".ficant.research.v1.DataHealthIssue"),
+            ExpectedField::scalar("price_evidence_evaluated", Type::Bool),
+            ExpectedField::enumeration(
+                "position_set_state",
+                ".ficant.research.v1.PositionSetState",
+            ),
+            ExpectedField::message("coverage", ".ficant.research.v1.CoverageDeclaration"),
+            ExpectedField::message("request_fingerprint", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.GetDataHealthReportResponse",
+        &[
+            ExpectedField::oneof_message(
+                "report",
+                ".ficant.research.v1.DataHealthReport",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+        ],
+    );
+    assert_exact_service(
+        descriptor_set,
+        "ficant.research.v1.DataHealthService",
+        &[ExpectedMethod::new(
+            "GetDataHealthReport",
+            ".ficant.research.v1.GetDataHealthReportRequest",
+            ".ficant.research.v1.GetDataHealthReportResponse",
+        )],
+    );
+}
+
+#[test]
 fn r4d_a_bond_curve_and_portfolio_risk_contracts_are_exact() {
     let descriptor_set = descriptor_set();
     let messages = top_level_messages(descriptor_set);
@@ -722,7 +852,7 @@ fn composition_level_outputs_have_coverage() {
         .sum::<usize>();
     assert_eq!(
         classified_non_composition_count, 63,
-        "every non-composition success arm must select one of the four closed reasons"
+        "every non-composition success arm must select one of the three closed reasons"
     );
     let expected_keys = expected.keys().cloned().collect::<BTreeSet<_>>();
     assert_eq!(
@@ -745,6 +875,7 @@ fn composition_level_outputs_have_coverage() {
         composition_carriers,
         BTreeSet::from([
             "ficant.research.v1.CapitalUse".to_owned(),
+            "ficant.research.v1.DataHealthReport".to_owned(),
             "ficant.research.v1.PortfolioKeyRateExposure".to_owned(),
             "ficant.research.v1.PositionViews".to_owned(),
         ]),
@@ -755,6 +886,7 @@ fn composition_level_outputs_have_coverage() {
         ("ficant.research.v1.PortfolioKeyRateExposure", 10),
         ("ficant.research.v1.PositionViews", 5),
         ("ficant.research.v1.CapitalUse", 5),
+        ("ficant.research.v1.DataHealthReport", 14),
     ] {
         let message = messages
             .get(carrier)
@@ -783,15 +915,13 @@ enum SuccessArmClass {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NonCompositionReason {
-    SinglePosition,
     NoNumericAggregate,
     RegistryMetadata,
     AckOrEcho,
 }
 
 impl NonCompositionReason {
-    const ALL: [Self; 4] = [
-        Self::SinglePosition,
+    const ALL: [Self; 3] = [
         Self::NoNumericAggregate,
         Self::RegistryMetadata,
         Self::AckOrEcho,
@@ -897,6 +1027,7 @@ fn expected_success_arms() -> BTreeMap<String, SuccessArmClass> {
         ("ficant.research.v1.ArtifactService/PublishSignalSet:response->ficant.research.v1.PublishSignalSetResponse", NonComposition(AckOrEcho)),
         ("ficant.research.v1.ArtifactService/ReadArtifactLineage:response->ficant.research.v1.ReadArtifactLineageResponse", NonComposition(RegistryMetadata)),
         ("ficant.research.v1.ArtifactService/ReadSignalSetLineage:response->ficant.research.v1.ReadSignalSetLineageResponse", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.DataHealthService/GetDataHealthReport:report->ficant.research.v1.DataHealthReport", SuccessArmClass::Composition),
         ("ficant.research.v1.ExperimentService/CompareGraphRuns:response->ficant.research.v1.CompareGraphRunsResponse", NonComposition(NoNumericAggregate)),
         ("ficant.research.v1.ExperimentService/CreateRun:response->ficant.research.v1.CreateRunResponse", NonComposition(AckOrEcho)),
         ("ficant.research.v1.ExperimentService/GetGraphRun:response->ficant.research.v1.GetGraphRunResponse", NonComposition(RegistryMetadata)),
@@ -3531,6 +3662,7 @@ fn expected_service_fqns() -> BTreeSet<String> {
         "ficant.research.v1.PortfolioRiskService".to_owned(),
         "ficant.research.v1.ExperimentService".to_owned(),
         "ficant.research.v1.ArtifactService".to_owned(),
+        "ficant.research.v1.DataHealthService".to_owned(),
         "ficant.app.v1.PlatformService".to_owned(),
         "ficant.rates.v1.RatesAnalyticsService".to_owned(),
     ])

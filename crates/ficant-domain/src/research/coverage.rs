@@ -4,7 +4,7 @@ use crate::market::PriceSourceType;
 use crate::primitives::{DecimalValue, Ulid, UnitRef};
 use crate::{DomainErrorCode, DomainResult};
 
-use super::{Position, PriceSourceSummary};
+use super::{Position, PriceSourceSummary, VerifiedEmptyPositionSnapshot};
 
 /// The exact imported and participating boundary for one multi-position result.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -19,6 +19,22 @@ pub struct CoverageDeclaration {
 }
 
 impl CoverageDeclaration {
+    /// Constructs the only valid zero-denominator declaration.
+    ///
+    /// The capability can only be produced after a `PositionSnapshot` content hash is
+    /// reverified and the immutable payload is confirmed to contain no positions.
+    pub fn for_verified_empty(_verified: &VerifiedEmptyPositionSnapshot) -> Self {
+        Self {
+            imported_position_count: 0,
+            participating_position_count: 0,
+            imported_gross_economic_value_by_unit: Vec::new(),
+            participating_gross_economic_value_by_unit: Vec::new(),
+            missing_critical_field_record_count: 0,
+            source_confidence: None,
+            distinct_external_data_source_version_count: 0,
+        }
+    }
+
     /// Derives a complete-input declaration from one verified position snapshot.
     ///
     /// Participating ids must be unique, sorted, and a non-empty subset of the imported

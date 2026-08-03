@@ -145,6 +145,10 @@ try {
     Remove-CoverageField -Path (Join-Path $capitalMissing 'proto\ficant\research\v1\position.proto') -Message 'CapitalUse' -Tag 5
     Invoke-CoverageFixture -Name 'capital coverage removed' -InterfaceRoot $capitalMissing -ShouldPass $false
 
+    $healthMissing = New-CoverageFixture -Name 'health-missing'
+    Remove-CoverageField -Path (Join-Path $healthMissing 'proto\ficant\research\v1\health.proto') -Message 'DataHealthReport' -Tag 14
+    Invoke-CoverageFixture -Name 'data health coverage removed' -InterfaceRoot $healthMissing -ShouldPass $false
+
     $bareComposition = New-CoverageFixture -Name 'bare-composition'
     Add-ReachableFixture -Path (Join-Path $bareComposition 'proto\ficant\research\v1\position.proto') -Kind 'Composition'
     Invoke-CoverageFixture -Name 'new reachable bare composition output' -InterfaceRoot $bareComposition -ShouldPass $false
@@ -159,7 +163,7 @@ try {
 
     Invoke-CoverageFixture -Name 'all explicitly classified success arms' -InterfaceRoot $sourceInterface -ShouldPass $true
 
-    Write-Host 'Coverage gate fixture tests passed: 6 real violations fail, all 4 original negative fixtures still fail, and the explicitly classified base inventory passes.'
+    Write-Host 'Coverage gate fixture tests passed: 7 real violations fail, all 6 pre-R5c negative fixtures still fail, and the explicitly classified base inventory passes.'
     exit 0
 }
 finally {

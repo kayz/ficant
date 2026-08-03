@@ -3,6 +3,7 @@
 mod canonical_snapshot;
 mod core_error;
 mod curve_points;
+mod data_health;
 mod data_source_registry;
 mod error;
 mod experiment;
@@ -18,6 +19,7 @@ mod subject_registry;
 pub use canonical_snapshot::CanonicalSnapshotCodecAdapter;
 pub use core_error::CoreBusinessErrorMapper;
 pub use curve_points::CanonicalCurvePointSetDecoder;
+pub use data_health::DataHealthGrpcService;
 pub use data_source_registry::DataSourceRegistryGrpcService;
 pub use error::{PlatformFailure, PlatformFailureCode, SafeErrorMapper};
 pub use experiment::{ExperimentGrpcService, TrustedExperimentScope, TrustedNodeCatalog};
@@ -28,6 +30,7 @@ pub use grpc_web::{
     serve_grpc_web_with_rates_and_experiment_and_registry,
     serve_grpc_web_with_rates_and_experiment_and_registry_and_positions,
     serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk,
+    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk_and_data_health,
 };
 pub use portfolio_risk::PortfolioRiskGrpcService;
 pub use position_snapshot::PositionSnapshotGrpcService;

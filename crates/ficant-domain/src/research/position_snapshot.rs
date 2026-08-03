@@ -166,7 +166,7 @@ impl PositionSnapshot {
         if input.observed_at.instant() > input.visible_at.instant() {
             return Err(DomainErrorCode::InvalidEffectiveTime);
         }
-        if input.lineage.is_empty() || input.positions.is_empty() {
+        if input.lineage.is_empty() {
             return Err(DomainErrorCode::BrokenLineage);
         }
         if input

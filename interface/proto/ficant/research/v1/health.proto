@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package ficant.research.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+import "ficant/research/v1/coverage.proto";
+
+message DataHealthThresholdProfile {
+  ficant.core.v1.VersionRef profile_ref = 1;
+  uint64 max_position_snapshot_age_seconds = 2;
+  uint32 unknown_accounting_warning_basis_points = 3;
+  uint64 max_data_snapshot_age_seconds = 4;
+  uint32 model_valuation_warning_basis_points = 5;
+  ficant.core.v1.Sha256 content_hash = 6;
+}
+
+enum DataHealthState {
+  DATA_HEALTH_STATE_UNSPECIFIED = 0;
+  DATA_HEALTH_STATE_HEALTHY = 1;
+  DATA_HEALTH_STATE_WARNING = 2;
+}
+
+enum PositionSetState {
+  POSITION_SET_STATE_UNSPECIFIED = 0;
+  POSITION_SET_STATE_NON_EMPTY = 1;
+  POSITION_SET_STATE_VERIFIED_EMPTY = 2;
+}
+
+enum DataHealthIssueCode {
+  DATA_HEALTH_ISSUE_CODE_UNSPECIFIED = 0;
+  DATA_HEALTH_ISSUE_CODE_EMPTY_POSITIONS = 1;
+  DATA_HEALTH_ISSUE_CODE_UNKNOWN_ACCOUNTING_CLASSIFICATION = 2;
+  DATA_HEALTH_ISSUE_CODE_STALE_POSITION_SNAPSHOT = 3;
+  DATA_HEALTH_ISSUE_CODE_UNTYPED_PRICE_SOURCE = 4;
+  DATA_HEALTH_ISSUE_CODE_MODEL_VALUATION_SHARE = 5;
+  DATA_HEALTH_ISSUE_CODE_STALE_DATA_SNAPSHOT = 6;
+}
+
+message DataHealthIssue {
+  DataHealthIssueCode code = 1;
+  repeated ficant.core.v1.Ulid affected_position_ids = 2;
+  ficant.core.v1.VersionRef data_source_ref = 3;
+  uint64 record_count = 4;
+  uint32 ratio_basis_points = 5;
+  uint64 observed_age_seconds = 6;
+}
+
+message GetDataHealthReportRequest {
+  ficant.core.v1.VersionRef subject_ref = 1;
+  ficant.core.v1.Ulid position_snapshot_id = 2;
+  ficant.core.v1.Ulid data_snapshot_id = 3;
+  ficant.core.v1.MarketTime evaluated_at = 4;
+  DataHealthThresholdProfile threshold_profile = 5;
+}
+
+message DataHealthReport {
+  ficant.core.v1.OwnerRef owner = 1;
+  ficant.core.v1.VersionRef subject_ref = 2;
+  ficant.core.v1.MarketTime evaluated_at = 3;
+  ficant.core.v1.Ulid position_snapshot_id = 4;
+  ficant.core.v1.Sha256 position_snapshot_hash = 5;
+  ficant.core.v1.Ulid data_snapshot_id = 6;
+  ficant.core.v1.Sha256 data_snapshot_manifest_hash = 7;
+  ficant.core.v1.VersionRef data_source_ref = 8;
+  DataHealthThresholdProfile threshold_profile = 9;
+  DataHealthState state = 10;
+  repeated DataHealthIssue issues = 11;
+  bool price_evidence_evaluated = 12;
+  PositionSetState position_set_state = 13;
+  CoverageDeclaration coverage = 14;
+  ficant.core.v1.Sha256 request_fingerprint = 15;
+  ficant.core.v1.Sha256 content_hash = 16;
+  repeated ficant.core.v1.LineageRef lineage = 17;
+}
+
+message GetDataHealthReportResponse {
+  oneof result {
+    DataHealthReport report = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+service DataHealthService {
+  rpc GetDataHealthReport(GetDataHealthReportRequest) returns (GetDataHealthReportResponse);
+}

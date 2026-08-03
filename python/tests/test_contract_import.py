@@ -37,6 +37,12 @@ from ficant.research.v1.coverage_pb2 import (  # noqa: E402
 )
 from ficant.research.v1 import coverage_pb2_grpc  # noqa: E402
 from ficant.research.v1.exposure_pb2 import PortfolioKeyRateExposure  # noqa: E402
+from ficant.research.v1.health_pb2 import (  # noqa: E402
+    DataHealthReport,
+    DataHealthThresholdProfile,
+    POSITION_SET_STATE_VERIFIED_EMPTY,
+)
+from ficant.research.v1.health_pb2_grpc import DataHealthServiceStub  # noqa: E402
 from ficant.research.v1.position_pb2 import CapitalUse, PositionViews  # noqa: E402
 
 
@@ -64,6 +70,11 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     portfolio = PortfolioKeyRateExposure(coverage=coverage)
     views = PositionViews(coverage=coverage)
     capital = CapitalUse(coverage=coverage)
+    health = DataHealthReport(
+        threshold_profile=DataHealthThresholdProfile(),
+        position_set_state=POSITION_SET_STATE_VERIFIED_EMPTY,
+        coverage=CoverageDeclaration(),
+    )
 
     assert instrument.DESCRIPTOR.full_name == "ficant.market.v1.Instrument"
     assert decimal.DESCRIPTOR.full_name == "ficant.core.v1.DecimalValue"
@@ -86,3 +97,7 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert capital.coverage.source_confidence.DESCRIPTOR.full_name == (
         "ficant.research.v1.PriceSourceSummary"
     )
+    assert health.DESCRIPTOR.full_name == "ficant.research.v1.DataHealthReport"
+    assert health.position_set_state == POSITION_SET_STATE_VERIFIED_EMPTY
+    assert health.HasField("coverage")
+    assert DataHealthServiceStub.__name__ == "DataHealthServiceStub"
