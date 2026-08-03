@@ -711,6 +711,19 @@ fn composition_level_outputs_have_coverage() {
     let services = top_level_services(descriptor_set);
     let actual = reachable_success_arms(&messages, &services);
     let expected = expected_success_arms();
+    let classified_non_composition_count = NonCompositionReason::ALL
+        .iter()
+        .map(|reason| {
+            expected
+                .values()
+                .filter(|class| **class == SuccessArmClass::NonComposition(*reason))
+                .count()
+        })
+        .sum::<usize>();
+    assert_eq!(
+        classified_non_composition_count, 63,
+        "every non-composition success arm must select one of the four closed reasons"
+    );
     let expected_keys = expected.keys().cloned().collect::<BTreeSet<_>>();
     assert_eq!(
         actual, expected_keys,
@@ -765,7 +778,24 @@ fn composition_level_outputs_have_coverage() {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SuccessArmClass {
     Composition,
-    NonComposition,
+    NonComposition(NonCompositionReason),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NonCompositionReason {
+    SinglePosition,
+    NoNumericAggregate,
+    RegistryMetadata,
+    AckOrEcho,
+}
+
+impl NonCompositionReason {
+    const ALL: [Self; 4] = [
+        Self::SinglePosition,
+        Self::NoNumericAggregate,
+        Self::RegistryMetadata,
+        Self::AckOrEcho,
+    ];
 }
 
 fn reachable_success_arms(
@@ -823,73 +853,76 @@ fn reachable_success_arms(
 }
 
 fn expected_success_arms() -> BTreeMap<String, SuccessArmClass> {
+    use NonCompositionReason::{AckOrEcho, NoNumericAggregate, RegistryMetadata};
+    use SuccessArmClass::NonComposition;
+
     [
-        ("ficant.app.v1.PlatformService/AuthorizeAppLaunch:grant->ficant.app.v1.AppLaunchGrant", SuccessArmClass::NonComposition),
-        ("ficant.app.v1.PlatformService/GetAppRegistry:registry->ficant.app.v1.AppRegistry", SuccessArmClass::NonComposition),
-        ("ficant.app.v1.PlatformService/GetCurrentSession:session->ficant.app.v1.Session", SuccessArmClass::NonComposition),
-        ("ficant.app.v1.PlatformService/RefreshAppLaunch:grant->ficant.app.v1.AppLaunchGrant", SuccessArmClass::NonComposition),
-        ("ficant.app.v1.PlatformService/RefreshSession:session->ficant.app.v1.Session", SuccessArmClass::NonComposition),
-        ("ficant.app.v1.PlatformService/RevokeAppLaunch:revocation->ficant.app.v1.AppLaunchRevocation", SuccessArmClass::NonComposition),
-        ("ficant.app.v1.PlatformService/RevokeSession:revocation->ficant.app.v1.SessionRevocation", SuccessArmClass::NonComposition),
-        ("ficant.core.v1.RegistryService/GetSubject:subject->ficant.core.v1.SubjectRecord", SuccessArmClass::NonComposition),
-        ("ficant.core.v1.RegistryService/GetSubjectState:snapshot->ficant.core.v1.SubjectStateSnapshot", SuccessArmClass::NonComposition),
-        ("ficant.core.v1.RegistryService/RegisterSubject:subject->ficant.core.v1.SubjectRecord", SuccessArmClass::NonComposition),
-        ("ficant.core.v1.RegistryService/RegisterSubjectState:snapshot->ficant.core.v1.SubjectStateSnapshot", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.DataSourceRegistryService/GetDataSource:definition->ficant.market.v1.DataSourceDefinition", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.DataSourceRegistryService/RegisterDataSource:definition->ficant.market.v1.DataSourceDefinition", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketDefinitionService/AppendBond:response->ficant.market.v1.AppendBondResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketDefinitionService/AppendCalendar:response->ficant.market.v1.AppendCalendarResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketDefinitionService/AppendFuturesContract:response->ficant.market.v1.AppendFuturesContractResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketDefinitionService/AppendInstrument:response->ficant.market.v1.AppendInstrumentResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketDefinitionService/AppendMarketRulePack:response->ficant.market.v1.AppendMarketRulePackResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketDefinitionService/AppendUnit:response->ficant.market.v1.AppendUnitResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketDefinitionService/GetDefinitionVersion:response->ficant.market.v1.GetDefinitionVersionResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketDefinitionService/ListDefinitionVersions:response->ficant.market.v1.ListDefinitionVersionsResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketDefinitionService/ResolveDefinitionAsOf:response->ficant.market.v1.ResolveDefinitionAsOfResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketFactService/AppendCashflow:response->ficant.market.v1.AppendCashflowResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketFactService/AppendQuote:response->ficant.market.v1.AppendQuoteResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketFactService/AppendTrade:response->ficant.market.v1.AppendTradeResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketFactService/AppendValuation:response->ficant.market.v1.AppendValuationResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketFactService/GetCurveSnapshot:response->ficant.market.v1.GetCurveSnapshotResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketFactService/PublishCurveSnapshot:response->ficant.market.v1.PublishCurveSnapshotResponse", SuccessArmClass::NonComposition),
-        ("ficant.market.v1.MarketFactService/QueryInstrumentFacts:response->ficant.market.v1.QueryInstrumentFactsResponse", SuccessArmClass::NonComposition),
-        ("ficant.rates.v1.RatesAnalyticsService/AnalyzeBond:analysis->ficant.rates.v1.AnalyzeBondResult", SuccessArmClass::NonComposition),
-        ("ficant.rates.v1.RatesAnalyticsService/AnalyzeCarryRoll:analysis->ficant.rates.v1.AnalyzeCarryRollResult", SuccessArmClass::NonComposition),
-        ("ficant.rates.v1.RatesAnalyticsService/AnalyzeFuturesDelivery:analysis->ficant.rates.v1.AnalyzeFuturesDeliveryResult", SuccessArmClass::NonComposition),
-        ("ficant.rates.v1.RatesAnalyticsService/AnalyzeFuturesHedge:analysis->ficant.rates.v1.AnalyzeFuturesHedgeResult", SuccessArmClass::NonComposition),
-        ("ficant.rates.v1.RatesAnalyticsService/InterpolateYieldCurve:point->ficant.rates.v1.InterpolateYieldCurveResult", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ArtifactService/GetArtifact:response->ficant.research.v1.GetArtifactResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ArtifactService/GetSignalSet:response->ficant.research.v1.GetSignalSetResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ArtifactService/PublishArtifact:response->ficant.research.v1.PublishArtifactResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ArtifactService/PublishSignalSet:response->ficant.research.v1.PublishSignalSetResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ArtifactService/ReadArtifactLineage:response->ficant.research.v1.ReadArtifactLineageResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ArtifactService/ReadSignalSetLineage:response->ficant.research.v1.ReadSignalSetLineageResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ExperimentService/CompareGraphRuns:response->ficant.research.v1.CompareGraphRunsResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ExperimentService/CreateRun:response->ficant.research.v1.CreateRunResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ExperimentService/GetGraphRun:response->ficant.research.v1.GetGraphRunResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ExperimentService/GetRun:response->ficant.research.v1.GetRunResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ExperimentService/ListNodeOutputManifests:response->ficant.research.v1.ListNodeOutputManifestsResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ExperimentService/ReadNodeOutput:response->ficant.research.v1.ReadNodeOutputResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ExperimentService/ReadRunJournal:response->ficant.research.v1.ReadRunJournalResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ExperimentService/SubmitGraphRun:response->ficant.research.v1.SubmitGraphRunResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ExperimentService/TraceGraphOutput:response->ficant.research.v1.TraceGraphOutputResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.ExperimentService/TransitionRun:response->ficant.research.v1.TransitionRunResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.FactorRegistryService/BindFactorTarget:binding->ficant.research.v1.FactorTargetBinding", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.FactorRegistryService/GetFactorDefinition:definition->ficant.research.v1.FactorDefinition", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.FactorRegistryService/GetFactorTargets:bindings->ficant.research.v1.FactorTargetBindings", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.FactorRegistryService/GetTargetFactors:definitions->ficant.research.v1.FactorDefinitions", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.FactorRegistryService/RegisterCurveNodeDefinition:definition->ficant.research.v1.CurveNodeDefinition", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.FactorRegistryService/RegisterFactorDefinition:definition->ficant.research.v1.FactorDefinition", SuccessArmClass::NonComposition),
+        ("ficant.app.v1.PlatformService/AuthorizeAppLaunch:grant->ficant.app.v1.AppLaunchGrant", NonComposition(AckOrEcho)),
+        ("ficant.app.v1.PlatformService/GetAppRegistry:registry->ficant.app.v1.AppRegistry", NonComposition(RegistryMetadata)),
+        ("ficant.app.v1.PlatformService/GetCurrentSession:session->ficant.app.v1.Session", NonComposition(RegistryMetadata)),
+        ("ficant.app.v1.PlatformService/RefreshAppLaunch:grant->ficant.app.v1.AppLaunchGrant", NonComposition(AckOrEcho)),
+        ("ficant.app.v1.PlatformService/RefreshSession:session->ficant.app.v1.Session", NonComposition(AckOrEcho)),
+        ("ficant.app.v1.PlatformService/RevokeAppLaunch:revocation->ficant.app.v1.AppLaunchRevocation", NonComposition(AckOrEcho)),
+        ("ficant.app.v1.PlatformService/RevokeSession:revocation->ficant.app.v1.SessionRevocation", NonComposition(AckOrEcho)),
+        ("ficant.core.v1.RegistryService/GetSubject:subject->ficant.core.v1.SubjectRecord", NonComposition(RegistryMetadata)),
+        ("ficant.core.v1.RegistryService/GetSubjectState:snapshot->ficant.core.v1.SubjectStateSnapshot", NonComposition(RegistryMetadata)),
+        ("ficant.core.v1.RegistryService/RegisterSubject:subject->ficant.core.v1.SubjectRecord", NonComposition(AckOrEcho)),
+        ("ficant.core.v1.RegistryService/RegisterSubjectState:snapshot->ficant.core.v1.SubjectStateSnapshot", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.DataSourceRegistryService/GetDataSource:definition->ficant.market.v1.DataSourceDefinition", NonComposition(RegistryMetadata)),
+        ("ficant.market.v1.DataSourceRegistryService/RegisterDataSource:definition->ficant.market.v1.DataSourceDefinition", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketDefinitionService/AppendBond:response->ficant.market.v1.AppendBondResponse", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketDefinitionService/AppendCalendar:response->ficant.market.v1.AppendCalendarResponse", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketDefinitionService/AppendFuturesContract:response->ficant.market.v1.AppendFuturesContractResponse", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketDefinitionService/AppendInstrument:response->ficant.market.v1.AppendInstrumentResponse", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketDefinitionService/AppendMarketRulePack:response->ficant.market.v1.AppendMarketRulePackResponse", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketDefinitionService/AppendUnit:response->ficant.market.v1.AppendUnitResponse", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketDefinitionService/GetDefinitionVersion:response->ficant.market.v1.GetDefinitionVersionResponse", NonComposition(RegistryMetadata)),
+        ("ficant.market.v1.MarketDefinitionService/ListDefinitionVersions:response->ficant.market.v1.ListDefinitionVersionsResponse", NonComposition(RegistryMetadata)),
+        ("ficant.market.v1.MarketDefinitionService/ResolveDefinitionAsOf:response->ficant.market.v1.ResolveDefinitionAsOfResponse", NonComposition(RegistryMetadata)),
+        ("ficant.market.v1.MarketFactService/AppendCashflow:response->ficant.market.v1.AppendCashflowResponse", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketFactService/AppendQuote:response->ficant.market.v1.AppendQuoteResponse", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketFactService/AppendTrade:response->ficant.market.v1.AppendTradeResponse", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketFactService/AppendValuation:response->ficant.market.v1.AppendValuationResponse", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketFactService/GetCurveSnapshot:response->ficant.market.v1.GetCurveSnapshotResponse", NonComposition(NoNumericAggregate)),
+        ("ficant.market.v1.MarketFactService/PublishCurveSnapshot:response->ficant.market.v1.PublishCurveSnapshotResponse", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketFactService/QueryInstrumentFacts:response->ficant.market.v1.QueryInstrumentFactsResponse", NonComposition(NoNumericAggregate)),
+        ("ficant.rates.v1.RatesAnalyticsService/AnalyzeBond:analysis->ficant.rates.v1.AnalyzeBondResult", NonComposition(NoNumericAggregate)),
+        ("ficant.rates.v1.RatesAnalyticsService/AnalyzeCarryRoll:analysis->ficant.rates.v1.AnalyzeCarryRollResult", NonComposition(NoNumericAggregate)),
+        ("ficant.rates.v1.RatesAnalyticsService/AnalyzeFuturesDelivery:analysis->ficant.rates.v1.AnalyzeFuturesDeliveryResult", NonComposition(NoNumericAggregate)),
+        ("ficant.rates.v1.RatesAnalyticsService/AnalyzeFuturesHedge:analysis->ficant.rates.v1.AnalyzeFuturesHedgeResult", NonComposition(NoNumericAggregate)),
+        ("ficant.rates.v1.RatesAnalyticsService/InterpolateYieldCurve:point->ficant.rates.v1.InterpolateYieldCurveResult", NonComposition(NoNumericAggregate)),
+        ("ficant.research.v1.ArtifactService/GetArtifact:response->ficant.research.v1.GetArtifactResponse", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ArtifactService/GetSignalSet:response->ficant.research.v1.GetSignalSetResponse", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ArtifactService/PublishArtifact:response->ficant.research.v1.PublishArtifactResponse", NonComposition(AckOrEcho)),
+        ("ficant.research.v1.ArtifactService/PublishSignalSet:response->ficant.research.v1.PublishSignalSetResponse", NonComposition(AckOrEcho)),
+        ("ficant.research.v1.ArtifactService/ReadArtifactLineage:response->ficant.research.v1.ReadArtifactLineageResponse", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ArtifactService/ReadSignalSetLineage:response->ficant.research.v1.ReadSignalSetLineageResponse", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ExperimentService/CompareGraphRuns:response->ficant.research.v1.CompareGraphRunsResponse", NonComposition(NoNumericAggregate)),
+        ("ficant.research.v1.ExperimentService/CreateRun:response->ficant.research.v1.CreateRunResponse", NonComposition(AckOrEcho)),
+        ("ficant.research.v1.ExperimentService/GetGraphRun:response->ficant.research.v1.GetGraphRunResponse", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ExperimentService/GetRun:response->ficant.research.v1.GetRunResponse", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ExperimentService/ListNodeOutputManifests:response->ficant.research.v1.ListNodeOutputManifestsResponse", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ExperimentService/ReadNodeOutput:response->ficant.research.v1.ReadNodeOutputResponse", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ExperimentService/ReadRunJournal:response->ficant.research.v1.ReadRunJournalResponse", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ExperimentService/SubmitGraphRun:response->ficant.research.v1.SubmitGraphRunResponse", NonComposition(AckOrEcho)),
+        ("ficant.research.v1.ExperimentService/TraceGraphOutput:response->ficant.research.v1.TraceGraphOutputResponse", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ExperimentService/TransitionRun:response->ficant.research.v1.TransitionRunResponse", NonComposition(AckOrEcho)),
+        ("ficant.research.v1.FactorRegistryService/BindFactorTarget:binding->ficant.research.v1.FactorTargetBinding", NonComposition(AckOrEcho)),
+        ("ficant.research.v1.FactorRegistryService/GetFactorDefinition:definition->ficant.research.v1.FactorDefinition", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.FactorRegistryService/GetFactorTargets:bindings->ficant.research.v1.FactorTargetBindings", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.FactorRegistryService/GetTargetFactors:definitions->ficant.research.v1.FactorDefinitions", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.FactorRegistryService/RegisterCurveNodeDefinition:definition->ficant.research.v1.CurveNodeDefinition", NonComposition(AckOrEcho)),
+        ("ficant.research.v1.FactorRegistryService/RegisterFactorDefinition:definition->ficant.research.v1.FactorDefinition", NonComposition(AckOrEcho)),
         ("ficant.research.v1.PortfolioRiskService/CalculateKeyRateDv01:exposure->ficant.research.v1.PortfolioKeyRateExposure", SuccessArmClass::Composition),
         ("ficant.research.v1.PositionSnapshotService/CalculateCapitalUse:capital_use->ficant.research.v1.CapitalUse", SuccessArmClass::Composition),
-        ("ficant.research.v1.PositionSnapshotService/GetPositionSnapshot:snapshot->ficant.research.v1.PositionSnapshot", SuccessArmClass::NonComposition),
+        ("ficant.research.v1.PositionSnapshotService/GetPositionSnapshot:snapshot->ficant.research.v1.PositionSnapshot", NonComposition(NoNumericAggregate)),
         ("ficant.research.v1.PositionSnapshotService/GetPositionViews:views->ficant.research.v1.PositionViews", SuccessArmClass::Composition),
-        ("ficant.research.v1.PositionSnapshotService/PublishPositionSnapshot:snapshot->ficant.research.v1.PositionSnapshot", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.PositionSnapshotService/ResolvePositionSnapshot:snapshot->ficant.research.v1.PositionSnapshot", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.SnapshotService/GetSnapshot:data_snapshot->ficant.research.v1.DataSnapshot", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.SnapshotService/GetSnapshot:universe_snapshot->ficant.research.v1.UniverseSnapshot", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.SnapshotService/PublishDataSnapshot:response->ficant.research.v1.PublishDataSnapshotResponse", SuccessArmClass::NonComposition),
-        ("ficant.research.v1.SnapshotService/PublishUniverseSnapshot:response->ficant.research.v1.PublishUniverseSnapshotResponse", SuccessArmClass::NonComposition),
+        ("ficant.research.v1.PositionSnapshotService/PublishPositionSnapshot:snapshot->ficant.research.v1.PositionSnapshot", NonComposition(AckOrEcho)),
+        ("ficant.research.v1.PositionSnapshotService/ResolvePositionSnapshot:snapshot->ficant.research.v1.PositionSnapshot", NonComposition(NoNumericAggregate)),
+        ("ficant.research.v1.SnapshotService/GetSnapshot:data_snapshot->ficant.research.v1.DataSnapshot", NonComposition(NoNumericAggregate)),
+        ("ficant.research.v1.SnapshotService/GetSnapshot:universe_snapshot->ficant.research.v1.UniverseSnapshot", NonComposition(NoNumericAggregate)),
+        ("ficant.research.v1.SnapshotService/PublishDataSnapshot:response->ficant.research.v1.PublishDataSnapshotResponse", NonComposition(AckOrEcho)),
+        ("ficant.research.v1.SnapshotService/PublishUniverseSnapshot:response->ficant.research.v1.PublishUniverseSnapshotResponse", NonComposition(AckOrEcho)),
     ]
     .into_iter()
     .map(|(arm, class)| (arm.to_owned(), class))
