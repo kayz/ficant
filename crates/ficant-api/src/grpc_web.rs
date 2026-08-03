@@ -493,6 +493,57 @@ pub async fn serve_grpc_web_with_rates_and_experiment_and_registry_and_positions
     Ok(())
 }
 
+/// Serves the complete production API, including the stateless Data Health query service.
+///
+/// # Errors
+///
+/// Returns an error for an invalid exact CORS origin or a transport failure.
+#[allow(clippy::too_many_arguments)]
+pub async fn serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk_and_data_health(
+    config: GrpcWebServerConfig,
+    platform: PlatformGrpcService,
+    rates: crate::rates::RatesGrpcService,
+    experiment: crate::experiment::ExperimentGrpcService,
+    registry: crate::subject_registry::SubjectRegistryGrpcService,
+    positions: crate::position_snapshot::PositionSnapshotGrpcService,
+    factors: crate::factor_registry::FactorRegistryGrpcService,
+    portfolio_risk: crate::portfolio_risk::PortfolioRiskGrpcService,
+    data_sources: crate::data_source_registry::DataSourceRegistryGrpcService,
+    data_health: crate::data_health::DataHealthGrpcService,
+) -> Result<(), GrpcWebServeError> {
+    use ficant_contracts::ficant::core::v1::registry_service_server::RegistryServiceServer;
+    use ficant_contracts::ficant::market::v1::data_source_registry_service_server::DataSourceRegistryServiceServer;
+    use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsServiceServer;
+    use ficant_contracts::ficant::research::v1::data_health_service_server::DataHealthServiceServer;
+    use ficant_contracts::ficant::research::v1::experiment_service_server::ExperimentServiceServer;
+    use ficant_contracts::ficant::research::v1::factor_registry_service_server::FactorRegistryServiceServer;
+    use ficant_contracts::ficant::research::v1::portfolio_risk_service_server::PortfolioRiskServiceServer;
+    use ficant_contracts::ficant::research::v1::position_snapshot_service_server::PositionSnapshotServiceServer;
+
+    let cors = ExactCorsLayer::try_new(&config.allowed_origins)?;
+    let base = PlatformRatesExperimentRegistryPositionFactorRiskService {
+        platform: PlatformServiceServer::new(platform),
+        rates: RatesAnalyticsServiceServer::new(rates),
+        experiment: ExperimentServiceServer::new(experiment),
+        registry: RegistryServiceServer::new(registry),
+        positions: PositionSnapshotServiceServer::new(positions),
+        factors: FactorRegistryServiceServer::new(factors),
+        portfolio_risk: PortfolioRiskServiceServer::new(portfolio_risk),
+        data_sources: DataSourceRegistryServiceServer::new(data_sources),
+    };
+    let service = CompleteProductionService {
+        base,
+        data_health: DataHealthServiceServer::new(data_health),
+    };
+    let service = GrpcWebLayer::new().layer(service);
+    let service = cors.layer(service);
+    Server::builder()
+        .accept_http1(true)
+        .serve(config.bind, service)
+        .await?;
+    Ok(())
+}
+
 #[derive(Clone, Debug)]
 struct PlatformRatesExperimentService<P, R, E> {
     platform: P,
@@ -528,6 +579,49 @@ struct PlatformRatesExperimentRegistryPositionFactorRiskService<P, R, E, G, S, F
     factors: F,
     portfolio_risk: K,
     data_sources: D,
+}
+
+#[derive(Clone, Debug)]
+struct CompleteProductionService<B, H> {
+    base: B,
+    data_health: H,
+}
+
+impl<B, H, RequestBody> Service<HttpRequest<RequestBody>> for CompleteProductionService<B, H>
+where
+    B: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>> + Send + 'static,
+    H: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = B::Error>
+        + Send
+        + 'static,
+    B::Future: Send + 'static,
+    H::Future: Send + 'static,
+    B::Error: Send + 'static,
+    RequestBody: Send + 'static,
+{
+    type Response = HttpResponse<Body>;
+    type Error = B::Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, context: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        match self.base.poll_ready(context) {
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+            Poll::Pending => return Poll::Pending,
+        }
+        self.data_health.poll_ready(context)
+    }
+
+    fn call(&mut self, request: HttpRequest<RequestBody>) -> Self::Future {
+        if request
+            .uri()
+            .path()
+            .starts_with("/ficant.research.v1.DataHealthService/")
+        {
+            Box::pin(self.data_health.call(request))
+        } else {
+            Box::pin(self.base.call(request))
+        }
+    }
 }
 
 impl<P, R, E, G, S, F, K, D, RequestBody> Service<HttpRequest<RequestBody>>

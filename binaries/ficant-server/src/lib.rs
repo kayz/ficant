@@ -1,10 +1,11 @@
 use ficant_api::{
-    CanonicalCurvePointSetDecoder, CanonicalSnapshotCodecAdapter, DataSourceRegistryGrpcService,
-    ExperimentGrpcService, FactorRegistryGrpcService, GrpcWebServeError, GrpcWebServerConfig,
-    PlatformApplication, PlatformGrpcService, PlatformPort, PortfolioRiskGrpcService,
-    PositionSnapshotGrpcService, RatesGrpcService, SessionPolicy, SubjectRegistryGrpcService,
-    SystemClock, TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
-    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk,
+    CanonicalCurvePointSetDecoder, CanonicalSnapshotCodecAdapter, DataHealthGrpcService,
+    DataSourceRegistryGrpcService, ExperimentGrpcService, FactorRegistryGrpcService,
+    GrpcWebServeError, GrpcWebServerConfig, PlatformApplication, PlatformGrpcService, PlatformPort,
+    PortfolioRiskGrpcService, PositionSnapshotGrpcService, RatesGrpcService, SessionPolicy,
+    SubjectRegistryGrpcService, SystemClock, TrustedExperimentScope, TrustedIdentity,
+    TrustedNodeCatalog,
+    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk_and_data_health,
 };
 use ficant_application::ports::{
     AccessScope, AeadCursorCodec, ArtifactRepository, BlobStore, CursorKey,
@@ -409,6 +410,51 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
     ),
     ServerError,
 > {
+    let (
+        platform,
+        rates,
+        experiment,
+        registry,
+        positions,
+        factors,
+        portfolio_risk,
+        data_sources,
+        _,
+    ) = build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk_and_data_health(settings)?;
+    Ok((
+        platform,
+        rates,
+        experiment,
+        registry,
+        positions,
+        factors,
+        portfolio_risk,
+        data_sources,
+    ))
+}
+
+/// Composes the complete production service set, including the stateless Data Health query.
+///
+/// # Errors
+///
+/// Returns a redacted composition error when trusted configuration or adapters cannot be built.
+#[allow(clippy::type_complexity, clippy::too_many_lines)]
+pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk_and_data_health(
+    settings: &ServerSettings,
+) -> Result<
+    (
+        PlatformGrpcService,
+        RatesGrpcService,
+        ExperimentGrpcService,
+        SubjectRegistryGrpcService,
+        PositionSnapshotGrpcService,
+        FactorRegistryGrpcService,
+        PortfolioRiskGrpcService,
+        DataSourceRegistryGrpcService,
+        DataHealthGrpcService,
+    ),
+    ServerError,
+> {
     let application = build_platform_application(settings)?;
     let platform =
         PlatformGrpcService::new(Arc::clone(&application), &settings.trace_key).map_err(config)?;
@@ -490,6 +536,18 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
         &settings.trace_key,
     )
     .map_err(config)?;
+    let data_health = DataHealthGrpcService::new(
+        Arc::clone(&application),
+        access_scope.clone(),
+        position_repository.clone(),
+        snapshots.clone(),
+        blobs.clone(),
+        build_integrity_event_sink(),
+        Arc::new(CanonicalSnapshotCodecAdapter),
+        data_source_repository.clone(),
+        &settings.trace_key,
+    )
+    .map_err(config)?;
     let portfolio_risk = PortfolioRiskGrpcService::new(
         Arc::clone(&application),
         access_scope.clone(),
@@ -538,6 +596,7 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
         factors,
         portfolio_risk,
         data_sources,
+        data_health,
     ))
 }
 
@@ -685,11 +744,18 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         .filter_map(|key| env::var(key).ok().map(|value| ((*key).to_owned(), value)))
         .collect();
     let settings = ServerSettings::try_from_values(&values)?;
-    let (platform, rates, experiment, registry, positions, factors, portfolio_risk, data_sources) =
-        build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk(
-            &settings,
-        )?;
-    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk(
+    let (
+        platform,
+        rates,
+        experiment,
+        registry,
+        positions,
+        factors,
+        portfolio_risk,
+        data_sources,
+        data_health,
+    ) = build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk_and_data_health(&settings)?;
+    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk_and_data_health(
         GrpcWebServerConfig {
             bind: settings.bind,
             allowed_origins: settings.allowed_origins.clone(),
@@ -702,6 +768,7 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         factors,
         portfolio_risk,
         data_sources,
+        data_health,
     )
     .await?;
     Ok(())

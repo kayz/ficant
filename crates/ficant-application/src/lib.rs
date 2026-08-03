@@ -19,6 +19,7 @@ pub use use_cases::bond_analytics::{
 pub use use_cases::carry_roll::{
     CARRY_ROLL_MEDIA_TYPE, CalculateCarryRoll, CarryRollReplay, PublishCarryRoll, ReplayCarryRoll,
 };
+pub use use_cases::data_health::{DataHealthQuery, GetDataHealthReport};
 pub use use_cases::data_snapshot::{DataSnapshotPayloads, PublishDataSnapshot};
 pub use use_cases::data_sources::DataSourceUseCase;
 pub use use_cases::factor_topology::FactorTopologyUseCase;

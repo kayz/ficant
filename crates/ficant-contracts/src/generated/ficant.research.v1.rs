@@ -1266,6 +1266,200 @@ impl SecondOrderPolicy {
         }
     }
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DataHealthThresholdProfile {
+    #[prost(message, optional, tag="1")]
+    pub profile_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(uint64, tag="2")]
+    pub max_position_snapshot_age_seconds: u64,
+    #[prost(uint32, tag="3")]
+    pub unknown_accounting_warning_basis_points: u32,
+    #[prost(uint64, tag="4")]
+    pub max_data_snapshot_age_seconds: u64,
+    #[prost(uint32, tag="5")]
+    pub model_valuation_warning_basis_points: u32,
+    #[prost(message, optional, tag="6")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DataHealthIssue {
+    #[prost(enumeration="DataHealthIssueCode", tag="1")]
+    pub code: i32,
+    #[prost(message, repeated, tag="2")]
+    pub affected_position_ids: ::prost::alloc::vec::Vec<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="3")]
+    pub data_source_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(uint64, tag="4")]
+    pub record_count: u64,
+    #[prost(uint32, tag="5")]
+    pub ratio_basis_points: u32,
+    #[prost(uint64, tag="6")]
+    pub observed_age_seconds: u64,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetDataHealthReportRequest {
+    #[prost(message, optional, tag="1")]
+    pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="2")]
+    pub position_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="3")]
+    pub data_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="4")]
+    pub evaluated_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="5")]
+    pub threshold_profile: ::core::option::Option<DataHealthThresholdProfile>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DataHealthReport {
+    #[prost(message, optional, tag="1")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, optional, tag="2")]
+    pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="3")]
+    pub evaluated_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="4")]
+    pub position_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="5")]
+    pub position_snapshot_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="6")]
+    pub data_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="7")]
+    pub data_snapshot_manifest_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="8")]
+    pub data_source_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="9")]
+    pub threshold_profile: ::core::option::Option<DataHealthThresholdProfile>,
+    #[prost(enumeration="DataHealthState", tag="10")]
+    pub state: i32,
+    #[prost(message, repeated, tag="11")]
+    pub issues: ::prost::alloc::vec::Vec<DataHealthIssue>,
+    #[prost(bool, tag="12")]
+    pub price_evidence_evaluated: bool,
+    #[prost(enumeration="PositionSetState", tag="13")]
+    pub position_set_state: i32,
+    #[prost(message, optional, tag="14")]
+    pub coverage: ::core::option::Option<CoverageDeclaration>,
+    #[prost(message, optional, tag="15")]
+    pub request_fingerprint: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="16")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, repeated, tag="17")]
+    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetDataHealthReportResponse {
+    #[prost(oneof="get_data_health_report_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_data_health_report_response::Result>,
+}
+/// Nested message and enum types in `GetDataHealthReportResponse`.
+pub mod get_data_health_report_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Report(super::DataHealthReport),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum DataHealthState {
+    Unspecified = 0,
+    Healthy = 1,
+    Warning = 2,
+}
+impl DataHealthState {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "DATA_HEALTH_STATE_UNSPECIFIED",
+            Self::Healthy => "DATA_HEALTH_STATE_HEALTHY",
+            Self::Warning => "DATA_HEALTH_STATE_WARNING",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "DATA_HEALTH_STATE_UNSPECIFIED" => Some(Self::Unspecified),
+            "DATA_HEALTH_STATE_HEALTHY" => Some(Self::Healthy),
+            "DATA_HEALTH_STATE_WARNING" => Some(Self::Warning),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PositionSetState {
+    Unspecified = 0,
+    NonEmpty = 1,
+    VerifiedEmpty = 2,
+}
+impl PositionSetState {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "POSITION_SET_STATE_UNSPECIFIED",
+            Self::NonEmpty => "POSITION_SET_STATE_NON_EMPTY",
+            Self::VerifiedEmpty => "POSITION_SET_STATE_VERIFIED_EMPTY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "POSITION_SET_STATE_UNSPECIFIED" => Some(Self::Unspecified),
+            "POSITION_SET_STATE_NON_EMPTY" => Some(Self::NonEmpty),
+            "POSITION_SET_STATE_VERIFIED_EMPTY" => Some(Self::VerifiedEmpty),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum DataHealthIssueCode {
+    Unspecified = 0,
+    EmptyPositions = 1,
+    UnknownAccountingClassification = 2,
+    StalePositionSnapshot = 3,
+    UntypedPriceSource = 4,
+    ModelValuationShare = 5,
+    StaleDataSnapshot = 6,
+}
+impl DataHealthIssueCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "DATA_HEALTH_ISSUE_CODE_UNSPECIFIED",
+            Self::EmptyPositions => "DATA_HEALTH_ISSUE_CODE_EMPTY_POSITIONS",
+            Self::UnknownAccountingClassification => "DATA_HEALTH_ISSUE_CODE_UNKNOWN_ACCOUNTING_CLASSIFICATION",
+            Self::StalePositionSnapshot => "DATA_HEALTH_ISSUE_CODE_STALE_POSITION_SNAPSHOT",
+            Self::UntypedPriceSource => "DATA_HEALTH_ISSUE_CODE_UNTYPED_PRICE_SOURCE",
+            Self::ModelValuationShare => "DATA_HEALTH_ISSUE_CODE_MODEL_VALUATION_SHARE",
+            Self::StaleDataSnapshot => "DATA_HEALTH_ISSUE_CODE_STALE_DATA_SNAPSHOT",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "DATA_HEALTH_ISSUE_CODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "DATA_HEALTH_ISSUE_CODE_EMPTY_POSITIONS" => Some(Self::EmptyPositions),
+            "DATA_HEALTH_ISSUE_CODE_UNKNOWN_ACCOUNTING_CLASSIFICATION" => Some(Self::UnknownAccountingClassification),
+            "DATA_HEALTH_ISSUE_CODE_STALE_POSITION_SNAPSHOT" => Some(Self::StalePositionSnapshot),
+            "DATA_HEALTH_ISSUE_CODE_UNTYPED_PRICE_SOURCE" => Some(Self::UntypedPriceSource),
+            "DATA_HEALTH_ISSUE_CODE_MODEL_VALUATION_SHARE" => Some(Self::ModelValuationShare),
+            "DATA_HEALTH_ISSUE_CODE_STALE_DATA_SNAPSHOT" => Some(Self::StaleDataSnapshot),
+            _ => None,
+        }
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AccountingClassification {
     #[prost(enumeration="AccountingClassificationState", tag="1")]

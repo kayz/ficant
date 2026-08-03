@@ -82,6 +82,52 @@ async fn position_snapshot_reads_are_scoped_and_resolve_the_latest_visible_revis
     );
 }
 
+#[tokio::test]
+async fn verified_empty_position_snapshot_publishes_and_round_trips_exactly() {
+    let pool = support::postgres_pool().await;
+    support::reset_postgres(&pool).await;
+    support::migrate(&pool).await;
+    let repository = support::repository(pool.clone());
+    let owner = OwnerRef::new(id('T'), id('N'));
+    let subject = VersionRef::new(id('S'), Version::new(1).unwrap());
+    sqlx::query(
+        "INSERT INTO core.subject_versions (subject_id, version, display_name, market_codes, tool_codes, funding_tier, value_added_tax_profile, income_tax_profile, assessment_mechanism, liability_profile) VALUES ($1, $2, 'Empty position test', ARRAY['CN'], ARRAY['positions'], 'DR_AVAILABLE', '', '', 'test', 'test')",
+    )
+    .bind(subject.id().as_str())
+    .bind(1_i64)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO market.units (tenant_id, unit_id, version, owner_id, code, dimension, scale, precision, payload) VALUES ($1, $2, 1, $3, 'LINEAGE', 'test', 0, 1, '\\x01')",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(id('K').as_str())
+    .bind(owner.owner_id().as_str())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let empty = empty_snapshot(id('A'), owner.clone(), subject.clone(), 8, 9);
+    publish(&pool, &repository, &owner, empty.clone(), "position:empty").await;
+    let scope = support::access_scope(&owner);
+
+    assert_eq!(
+        repository
+            .get_position_snapshot(&scope, empty.id().clone(), market_time(10))
+            .await
+            .unwrap(),
+        Some(empty.clone())
+    );
+    assert_eq!(
+        repository
+            .resolve_position_snapshot(&scope, subject, market_time(8), market_time(10))
+            .await
+            .unwrap(),
+        Some(empty)
+    );
+}
+
 async fn publish(
     pool: &sqlx::PgPool,
     repository: &ficant_storage::postgres::PostgresRepository,
@@ -166,6 +212,27 @@ fn snapshot(
         content_hash: ContentHash::digest(b"placeholder"),
         lineage: vec![LineageRef::versioned(id('K'), Version::new(1).unwrap())],
         positions: vec![position],
+    };
+    input.content_hash = PositionSnapshot::content_hash_for(&input);
+    PositionSnapshot::new(input).unwrap()
+}
+
+fn empty_snapshot(
+    snapshot_id: Ulid,
+    owner: OwnerRef,
+    subject_ref: VersionRef,
+    observed_hour: u32,
+    visible_hour: u32,
+) -> PositionSnapshot {
+    let mut input = PositionSnapshotInput {
+        snapshot_id,
+        owner,
+        subject_ref,
+        observed_at: market_time(observed_hour),
+        visible_at: market_time(visible_hour),
+        content_hash: ContentHash::digest(b"placeholder"),
+        lineage: vec![LineageRef::versioned(id('K'), Version::new(1).unwrap())],
+        positions: Vec::new(),
     };
     input.content_hash = PositionSnapshot::content_hash_for(&input);
     PositionSnapshot::new(input).unwrap()

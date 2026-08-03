@@ -1,5 +1,6 @@
 mod artifact;
 mod coverage;
+mod data_health;
 mod data_snapshot;
 mod experiment_run;
 mod exposure;
@@ -12,6 +13,12 @@ mod universe_snapshot;
 
 pub use artifact::{Artifact, ArtifactKind};
 pub use coverage::CoverageDeclaration;
+pub use data_health::{
+    DataHealthIssue, DataHealthIssueCode, DataHealthPriceEvidence, DataHealthPriceEvidenceInput,
+    DataHealthReport, DataHealthReportInput, DataHealthState, DataHealthThresholdProfile,
+    DataHealthThresholdProfileInput, PositionHealthEvaluation, PositionSetState,
+    VerifiedEmptyPositionSnapshot, evaluate_position_snapshot,
+};
 pub use data_snapshot::{DataSnapshot, DataSnapshotInput};
 pub use experiment_run::{ExperimentRun, ExperimentRunInput, RunState};
 pub use exposure::{

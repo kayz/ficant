@@ -1,5 +1,6 @@
 pub mod bond_analytics;
 pub mod carry_roll;
+pub mod data_health;
 pub mod data_snapshot;
 pub mod data_sources;
 pub mod factor_topology;
