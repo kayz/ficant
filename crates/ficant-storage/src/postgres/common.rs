@@ -274,6 +274,9 @@ async fn lineage_target_exists(
                  SELECT NULL::bigint, content_hash::text FROM research.position_snapshots
                   WHERE tenant_id = $1 AND snapshot_id = $2
                  UNION ALL
+                 SELECT NULL::bigint, content_hash::text FROM research.data_health_threshold_profiles
+                  WHERE tenant_id = $1 AND profile_snapshot_id = $2
+                 UNION ALL
                  SELECT NULL::bigint, content_hash::text FROM research.artifacts
                   WHERE tenant_id = $1 AND artifact_id = $2
                  UNION ALL

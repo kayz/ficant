@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use ficant_domain::primitives::{ContentHash, LineageRef, OwnerRef, Ulid};
-use ficant_domain::research::{DataSnapshot, PositionSnapshot, UniverseSnapshot};
+use ficant_domain::research::{
+    DataHealthThresholdProfile, DataSnapshot, PositionSnapshot, UniverseSnapshot,
+};
 use ficant_domain::{ContentAddressed, DomainErrorCode, Lineaged};
 
 use super::blob_store::{VerifiedBlobRef, VerifyBlobStage};
@@ -11,6 +13,7 @@ use crate::map_domain_error;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SnapshotValue {
     Data(DataSnapshot),
+    DataHealthThresholdProfile(DataHealthThresholdProfile),
     Position(PositionSnapshot),
     Universe(UniverseSnapshot),
 }
@@ -20,6 +23,7 @@ impl SnapshotValue {
     pub fn id(&self) -> &Ulid {
         match self {
             Self::Data(value) => value.id(),
+            Self::DataHealthThresholdProfile(value) => value.id(),
             Self::Position(value) => value.id(),
             Self::Universe(value) => value.id(),
         }
@@ -29,6 +33,7 @@ impl SnapshotValue {
     pub fn content_hash(&self) -> &ContentHash {
         match self {
             Self::Data(value) => value.content_hash(),
+            Self::DataHealthThresholdProfile(value) => value.content_hash(),
             Self::Position(value) => value.content_hash(),
             Self::Universe(value) => value.content_hash(),
         }
@@ -38,6 +43,7 @@ impl SnapshotValue {
     pub fn owner(&self) -> &OwnerRef {
         match self {
             Self::Data(value) => value.owner(),
+            Self::DataHealthThresholdProfile(value) => value.owner(),
             Self::Position(value) => value.owner(),
             Self::Universe(value) => value.owner(),
         }
@@ -47,6 +53,7 @@ impl SnapshotValue {
     pub fn lineage(&self) -> &[LineageRef] {
         match self {
             Self::Data(value) => value.lineage(),
+            Self::DataHealthThresholdProfile(value) => value.lineage(),
             Self::Position(value) => value.lineage(),
             Self::Universe(value) => value.lineage(),
         }
@@ -56,6 +63,12 @@ impl SnapshotValue {
 impl From<DataSnapshot> for SnapshotValue {
     fn from(value: DataSnapshot) -> Self {
         Self::Data(value)
+    }
+}
+
+impl From<DataHealthThresholdProfile> for SnapshotValue {
+    fn from(value: DataHealthThresholdProfile) -> Self {
+        Self::DataHealthThresholdProfile(value)
     }
 }
 
@@ -75,6 +88,7 @@ impl From<UniverseSnapshot> for SnapshotValue {
 pub enum SnapshotBlobRole {
     DataParquet,
     DataManifest,
+    DataHealthThresholdProfilePayload,
     PositionPayload,
     UniverseMembersManifest,
 }
@@ -82,6 +96,7 @@ pub enum SnapshotBlobRole {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SnapshotProofKind {
     Data,
+    DataHealthThresholdProfile,
     Position,
     Universe,
 }
@@ -91,6 +106,7 @@ impl SnapshotBlobRole {
         match self {
             Self::DataParquet => 1,
             Self::DataManifest => 2,
+            Self::DataHealthThresholdProfilePayload => 5,
             Self::PositionPayload => 4,
             Self::UniverseMembersManifest => 3,
         }
@@ -140,6 +156,9 @@ enum StagedSnapshotProofInner {
     Universe {
         members_manifest: StagedSnapshotBlob,
     },
+    DataHealthThresholdProfile {
+        payload: StagedSnapshotBlob,
+    },
     Position {
         payload: StagedSnapshotBlob,
     },
@@ -152,6 +171,9 @@ pub(crate) enum StagedSnapshotProofParts {
     },
     Universe {
         members_manifest: StagedSnapshotBlob,
+    },
+    DataHealthThresholdProfile {
+        payload: StagedSnapshotBlob,
     },
     Position {
         payload: StagedSnapshotBlob,
@@ -204,10 +226,26 @@ impl StagedSnapshotProof {
         Ok(proof)
     }
 
+    /// Creates the sole staged proof allowed for a platform data-health profile payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation failure unless the payload has the dedicated profile role.
+    pub fn data_health_threshold_profile(payload: StagedSnapshotBlob) -> ApplicationResult<Self> {
+        let proof = Self {
+            inner: StagedSnapshotProofInner::DataHealthThresholdProfile { payload },
+        };
+        proof.validate_shape()?;
+        Ok(proof)
+    }
+
     #[must_use]
     pub fn kind(&self) -> SnapshotProofKind {
         match self.inner {
             StagedSnapshotProofInner::Data { .. } => SnapshotProofKind::Data,
+            StagedSnapshotProofInner::DataHealthThresholdProfile { .. } => {
+                SnapshotProofKind::DataHealthThresholdProfile
+            }
             StagedSnapshotProofInner::Universe { .. } => SnapshotProofKind::Universe,
             StagedSnapshotProofInner::Position { .. } => SnapshotProofKind::Position,
         }
@@ -226,7 +264,8 @@ impl StagedSnapshotProof {
             StagedSnapshotProofInner::Universe { members_manifest } => {
                 [Some(members_manifest), None]
             }
-            StagedSnapshotProofInner::Position { payload } => [Some(payload), None],
+            StagedSnapshotProofInner::DataHealthThresholdProfile { payload }
+            | StagedSnapshotProofInner::Position { payload } => [Some(payload), None],
         };
         blobs.into_iter().flatten()
     }
@@ -249,6 +288,10 @@ impl StagedSnapshotProof {
             (SnapshotValue::Position(value), StagedSnapshotProofInner::Position { payload }) => {
                 validate_staged_blob(payload, value.owner(), value.content_hash())
             }
+            (
+                SnapshotValue::DataHealthThresholdProfile(value),
+                StagedSnapshotProofInner::DataHealthThresholdProfile { payload },
+            ) => validate_staged_blob(payload, value.owner(), value.content_hash()),
             _ => Err(map_domain_error(DomainErrorCode::BrokenLineage)),
         }
     }
@@ -262,7 +305,8 @@ impl StagedSnapshotProof {
             StagedSnapshotProofInner::Universe { members_manifest } => {
                 members_manifest.verification.scope() == expected
             }
-            StagedSnapshotProofInner::Position { payload } => {
+            StagedSnapshotProofInner::DataHealthThresholdProfile { payload }
+            | StagedSnapshotProofInner::Position { payload } => {
                 payload.verification.scope() == expected
             }
         }
@@ -289,6 +333,11 @@ impl StagedSnapshotProof {
                     return Err(map_domain_error(DomainErrorCode::InvalidValue));
                 }
             }
+            StagedSnapshotProofInner::DataHealthThresholdProfile { payload } => {
+                if payload.role != SnapshotBlobRole::DataHealthThresholdProfilePayload {
+                    return Err(map_domain_error(DomainErrorCode::InvalidValue));
+                }
+            }
         }
         Ok(())
     }
@@ -303,6 +352,9 @@ impl StagedSnapshotProof {
             }
             StagedSnapshotProofInner::Position { payload } => {
                 StagedSnapshotProofParts::Position { payload }
+            }
+            StagedSnapshotProofInner::DataHealthThresholdProfile { payload } => {
+                StagedSnapshotProofParts::DataHealthThresholdProfile { payload }
             }
         }
     }
@@ -382,6 +434,9 @@ enum VerifiedSnapshotProofInner {
     Universe {
         members_manifest: VerifiedSnapshotBlob,
     },
+    DataHealthThresholdProfile {
+        payload: VerifiedSnapshotBlob,
+    },
     Position {
         payload: VerifiedSnapshotBlob,
     },
@@ -430,10 +485,26 @@ impl VerifiedSnapshotProof {
         Ok(proof)
     }
 
+    /// Creates the sole durable proof allowed for a platform data-health profile payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation failure unless the payload has the dedicated profile role.
+    pub fn data_health_threshold_profile(payload: VerifiedSnapshotBlob) -> ApplicationResult<Self> {
+        let proof = Self {
+            inner: VerifiedSnapshotProofInner::DataHealthThresholdProfile { payload },
+        };
+        proof.validate_shape()?;
+        Ok(proof)
+    }
+
     #[must_use]
     pub fn kind(&self) -> SnapshotProofKind {
         match self.inner {
             VerifiedSnapshotProofInner::Data { .. } => SnapshotProofKind::Data,
+            VerifiedSnapshotProofInner::DataHealthThresholdProfile { .. } => {
+                SnapshotProofKind::DataHealthThresholdProfile
+            }
             VerifiedSnapshotProofInner::Universe { .. } => SnapshotProofKind::Universe,
             VerifiedSnapshotProofInner::Position { .. } => SnapshotProofKind::Position,
         }
@@ -452,7 +523,8 @@ impl VerifiedSnapshotProof {
             VerifiedSnapshotProofInner::Universe { members_manifest } => {
                 [Some(members_manifest), None]
             }
-            VerifiedSnapshotProofInner::Position { payload } => [Some(payload), None],
+            VerifiedSnapshotProofInner::DataHealthThresholdProfile { payload }
+            | VerifiedSnapshotProofInner::Position { payload } => [Some(payload), None],
         };
         blobs.into_iter().flatten()
     }
@@ -482,6 +554,10 @@ impl VerifiedSnapshotProof {
             (SnapshotValue::Position(value), VerifiedSnapshotProofInner::Position { payload }) => {
                 validate_verified_snapshot_blob(payload, value.owner(), value.content_hash())
             }
+            (
+                SnapshotValue::DataHealthThresholdProfile(value),
+                VerifiedSnapshotProofInner::DataHealthThresholdProfile { payload },
+            ) => validate_verified_snapshot_blob(payload, value.owner(), value.content_hash()),
             _ => Err(map_domain_error(DomainErrorCode::BrokenLineage)),
         }
     }
@@ -490,7 +566,8 @@ impl VerifiedSnapshotProof {
         match &self.inner {
             VerifiedSnapshotProofInner::Data { parquet, .. } => parquet,
             VerifiedSnapshotProofInner::Universe { members_manifest } => members_manifest,
-            VerifiedSnapshotProofInner::Position { payload } => payload,
+            VerifiedSnapshotProofInner::DataHealthThresholdProfile { payload }
+            | VerifiedSnapshotProofInner::Position { payload } => payload,
         }
     }
 
@@ -511,6 +588,11 @@ impl VerifiedSnapshotProof {
             }
             VerifiedSnapshotProofInner::Position { payload } => {
                 if payload.role != SnapshotBlobRole::PositionPayload {
+                    return Err(map_domain_error(DomainErrorCode::InvalidValue));
+                }
+            }
+            VerifiedSnapshotProofInner::DataHealthThresholdProfile { payload } => {
+                if payload.role != SnapshotBlobRole::DataHealthThresholdProfilePayload {
                     return Err(map_domain_error(DomainErrorCode::InvalidValue));
                 }
             }
@@ -565,6 +647,10 @@ impl PublishSnapshot {
             VerifiedSnapshotProofInner::Position { payload } => {
                 canonical.field(6, b"position");
                 append_snapshot_blob_fingerprint(&mut canonical, 40, payload);
+            }
+            VerifiedSnapshotProofInner::DataHealthThresholdProfile { payload } => {
+                canonical.field(6, b"data-health-threshold-profile");
+                append_snapshot_blob_fingerprint(&mut canonical, 50, payload);
             }
         }
         let fingerprint = canonical.finish();

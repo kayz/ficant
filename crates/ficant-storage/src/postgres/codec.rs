@@ -18,12 +18,13 @@ use ficant_domain::primitives::{
 };
 use ficant_domain::research::{
     AccountingBook, AccountingClassification, AccountingClassificationState, Artifact,
-    ArtifactKind, DataSnapshot, DataSnapshotInput, DeterminismClass, ExperimentRun,
-    ExperimentRunInput, FilesystemPermission, GraphExternalInput, GraphExternalInputBinding,
-    JournalEventType, NodePermissions, PortType, Position, PositionHoldingForm, PositionInput,
-    PositionSnapshot, PositionSnapshotInput, ResearchEdge, ResearchGraph, ResearchGraphInput,
-    ResearchNode, ResearchNodeContract, ResearchNodeContractInput, ResourceLimits, RunJournal,
-    RunJournalInput, RunState, SignalSet, SignalSetInput, TypedValue, UniverseSnapshot,
+    ArtifactKind, DataHealthThresholdProfile, DataHealthThresholdProfileInput, DataSnapshot,
+    DataSnapshotInput, DeterminismClass, ExperimentRun, ExperimentRunInput, FilesystemPermission,
+    GraphExternalInput, GraphExternalInputBinding, JournalEventType, NodePermissions, PortType,
+    Position, PositionHoldingForm, PositionInput, PositionSnapshot, PositionSnapshotInput,
+    ResearchEdge, ResearchGraph, ResearchGraphInput, ResearchNode, ResearchNodeContract,
+    ResearchNodeContractInput, ResourceLimits, RunJournal, RunJournalInput, RunState, SignalSet,
+    SignalSetInput, TypedValue, UniverseSnapshot,
 };
 use ficant_domain::{ContentAddressed, Lineaged, VersionedDefinition};
 use sqlx::types::chrono::{DateTime, NaiveDate, NaiveTime, Utc};
@@ -871,6 +872,21 @@ pub(crate) fn encode_snapshot(value: &SnapshotValue) -> Vec<u8> {
             encoder.bytes(value.content_hash().as_bytes());
             encode_lineage(&mut encoder, value.lineage());
         }
+        SnapshotValue::DataHealthThresholdProfile(value) => {
+            encoder.u8(4);
+            encoder.string(value.id().as_str());
+            encode_owner(&mut encoder, value.owner());
+            encode_version_ref(&mut encoder, value.profile_ref());
+            encode_market_time(&mut encoder, value.visible_at());
+            encode_market_time(&mut encoder, value.effective_from());
+            encode_market_time(&mut encoder, value.effective_to());
+            encoder.u64(value.max_position_snapshot_age_seconds());
+            encoder.u32(value.unknown_accounting_warning_basis_points());
+            encoder.u64(value.max_data_snapshot_age_seconds());
+            encoder.u32(value.model_valuation_warning_basis_points());
+            encoder.bytes(value.content_hash().as_bytes());
+            encode_lineage(&mut encoder, value.lineage());
+        }
         SnapshotValue::Position(value) => {
             encoder.u8(3);
             encoder.string(value.id().as_str());
@@ -964,6 +980,23 @@ pub(crate) fn decode_snapshot(bytes: &[u8]) -> CodecResult<SnapshotValue> {
             )
         }
         3 => SnapshotValue::Position(decode_position_snapshot(&mut decoder)?),
+        4 => SnapshotValue::DataHealthThresholdProfile(
+            DataHealthThresholdProfile::new(DataHealthThresholdProfileInput {
+                profile_snapshot_id: decode_ulid(&mut decoder)?,
+                owner: decode_owner(&mut decoder)?,
+                profile_ref: decode_version_ref(&mut decoder)?,
+                visible_at: decode_market_time(&mut decoder)?,
+                effective_from: decode_market_time(&mut decoder)?,
+                effective_to: decode_market_time(&mut decoder)?,
+                max_position_snapshot_age_seconds: decoder.u64()?,
+                unknown_accounting_warning_basis_points: decoder.u32()?,
+                max_data_snapshot_age_seconds: decoder.u64()?,
+                model_valuation_warning_basis_points: decoder.u32()?,
+                content_hash: decode_hash(&mut decoder)?,
+                lineage: decode_lineage(&mut decoder)?,
+            })
+            .map_err(ficant_application::map_domain_error)?,
+        ),
         _ => return Err(codec_error()),
     };
     decoder.end()?;

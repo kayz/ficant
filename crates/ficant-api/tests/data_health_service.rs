@@ -101,6 +101,96 @@ fn hash(byte: u8) -> core::Sha256 {
 mod wire_byte_regression {
     include!("../../ficant-application/tests/r4d_b_futures_krd_contracts.rs");
 
+    #[async_trait::async_trait]
+    impl ficant_application::ports::DataHealthThresholdProfileRepository for Fixture {
+        async fn get_exact(
+            &self,
+            _: &ficant_application::ports::AccessScope,
+            reference: VersionRef,
+            knowledge_at: MarketTime,
+        ) -> ficant_application::ports::ApplicationResult<
+            Option<ficant_domain::research::DataHealthThresholdProfile>,
+        > {
+            let profile = health_profile();
+            Ok((reference == *profile.profile_ref()
+                && profile.visible_at().instant() <= knowledge_at.instant())
+            .then_some(profile))
+        }
+
+        async fn resolve_active(
+            &self,
+            _: &ficant_application::ports::AccessScope,
+            owner: OwnerRef,
+            evaluated_at: MarketTime,
+        ) -> ficant_application::ports::ApplicationResult<
+            Option<ficant_domain::research::DataHealthThresholdProfile>,
+        > {
+            let profile = health_profile();
+            Ok((owner == *profile.owner()
+                && profile.visible_at().instant() <= evaluated_at.instant()
+                && profile.effective_from().instant() <= evaluated_at.instant()
+                && evaluated_at.instant() < profile.effective_to().instant())
+            .then_some(profile))
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ficant_application::ports::SnapshotRepository for Fixture {
+        async fn publish_verified_manifest(
+            &self,
+            _: ficant_application::ports::PublishSnapshot,
+        ) -> ficant_application::ports::ApplicationResult<ficant_application::ports::SnapshotValue>
+        {
+            unreachable!("read-only adapter fixture")
+        }
+
+        async fn get_by_id(
+            &self,
+            _: &ficant_application::ports::AccessScope,
+            _: Ulid,
+        ) -> ficant_application::ports::ApplicationResult<
+            Option<ficant_application::ports::SnapshotValue>,
+        > {
+            unreachable!("read-only adapter fixture")
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ficant_application::ports::BlobStore for Fixture {
+        async fn begin_stage(
+            &self,
+            _: ficant_application::ports::BeginBlobStage,
+        ) -> ficant_application::ports::ApplicationResult<ficant_application::ports::StagedBlobRef>
+        {
+            unreachable!("read-only adapter fixture")
+        }
+
+        async fn append_chunk(
+            &self,
+            _: &ficant_application::ports::AccessScope,
+            _: &ficant_application::ports::StagedBlobRef,
+            _: Vec<u8>,
+        ) -> ficant_application::ports::ApplicationResult<()> {
+            unreachable!("read-only adapter fixture")
+        }
+
+        async fn verify_and_promote(
+            &self,
+            _: ficant_application::ports::VerifyBlobStage,
+        ) -> ficant_application::ports::ApplicationResult<ficant_application::ports::VerifiedBlobRef>
+        {
+            unreachable!("read-only adapter fixture")
+        }
+
+        async fn discard_stage(
+            &self,
+            _: &ficant_application::ports::AccessScope,
+            _: &ficant_application::ports::StagedBlobRef,
+        ) -> ficant_application::ports::ApplicationResult<()> {
+            unreachable!("read-only adapter fixture")
+        }
+    }
+
     use ficant_api::{
         DataHealthGrpcService, PlatformApplication, PlatformPort, PortfolioRiskGrpcService,
         SessionPolicy, SystemClock, TrustedIdentity,
@@ -191,9 +281,24 @@ mod wire_byte_regression {
             fixture.clone(),
             fixture.clone(),
             fixture.clone(),
+            fixture.clone(),
+            fixture.clone(),
+            fixture.clone(),
             TRACE_KEY,
         )
         .unwrap();
+
+        let unauthorized_publish = health
+            .publish_data_health_threshold_profile(Request::new(
+                research_pb::PublishDataHealthThresholdProfileRequest::default(),
+            ))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(matches!(
+            unauthorized_publish.result,
+            Some(research_pb::publish_data_health_threshold_profile_response::Result::Error(_))
+        ));
 
         let frozen_request = krd_request(&fixture).encode_to_vec();
         let before = portfolio
@@ -339,16 +444,6 @@ mod wire_byte_regression {
     }
 
     fn health_request(fixture: &Fixture) -> research_pb::GetDataHealthReportRequest {
-        let mut input = ficant_domain::research::DataHealthThresholdProfileInput {
-            profile_ref: VersionRef::new(id('P'), version()),
-            max_position_snapshot_age_seconds: 5_400,
-            unknown_accounting_warning_basis_points: 1,
-            max_data_snapshot_age_seconds: 5_400,
-            model_valuation_warning_basis_points: 1,
-            content_hash: ContentHash::digest(b"pending"),
-        };
-        input.content_hash =
-            ficant_domain::research::DataHealthThresholdProfile::content_hash_for(&input);
         research_pb::GetDataHealthReportRequest {
             subject_ref: Some(core_pb::VersionRef {
                 id: Some(proto_ulid(fixture.snapshot.subject_ref().id())),
@@ -357,30 +452,32 @@ mod wire_byte_regression {
             position_snapshot_id: Some(proto_ulid(fixture.snapshot.id())),
             data_snapshot_id: None,
             evaluated_at: Some(proto_time(2)),
-            threshold_profile: Some(research_pb::DataHealthThresholdProfile {
-                profile_ref: Some(core_pb::VersionRef {
-                    id: Some(proto_ulid(input.profile_ref.id())),
-                    version: input.profile_ref.version().get(),
-                }),
-                max_position_snapshot_age_seconds: input.max_position_snapshot_age_seconds,
-                unknown_accounting_warning_basis_points: input
-                    .unknown_accounting_warning_basis_points,
-                max_data_snapshot_age_seconds: input.max_data_snapshot_age_seconds,
-                model_valuation_warning_basis_points: input.model_valuation_warning_basis_points,
-                content_hash: Some(proto_hash(&input.content_hash)),
-            }),
         }
+    }
+
+    fn health_profile() -> ficant_domain::research::DataHealthThresholdProfile {
+        let mut input = ficant_domain::research::DataHealthThresholdProfileInput {
+            profile_snapshot_id: id('H'),
+            owner: owner(),
+            profile_ref: VersionRef::new(id('P'), version()),
+            visible_at: time(0),
+            effective_from: time(0),
+            effective_to: time(10),
+            max_position_snapshot_age_seconds: 5_400,
+            unknown_accounting_warning_basis_points: 1,
+            max_data_snapshot_age_seconds: 5_400,
+            model_valuation_warning_basis_points: 1,
+            content_hash: ContentHash::digest(b"pending"),
+            lineage: Vec::new(),
+        };
+        input.content_hash =
+            ficant_domain::research::DataHealthThresholdProfile::content_hash_for(&input);
+        ficant_domain::research::DataHealthThresholdProfile::new(input).unwrap()
     }
 
     fn proto_ulid(value: &Ulid) -> core_pb::Ulid {
         core_pb::Ulid {
             value: value.to_string(),
-        }
-    }
-
-    fn proto_hash(value: &ContentHash) -> core_pb::Sha256 {
-        core_pb::Sha256 {
-            value: value.as_bytes().to_vec(),
         }
     }
 

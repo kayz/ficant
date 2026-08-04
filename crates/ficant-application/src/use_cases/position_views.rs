@@ -133,7 +133,9 @@ impl<'a> PublishPositionSnapshot<'a> {
         )?;
         match self.snapshots.publish_verified_manifest(command).await? {
             SnapshotValue::Position(snapshot) => Ok(snapshot),
-            SnapshotValue::Data(_) | SnapshotValue::Universe(_) => Err(validation()),
+            SnapshotValue::Data(_)
+            | SnapshotValue::DataHealthThresholdProfile(_)
+            | SnapshotValue::Universe(_) => Err(validation()),
         }
     }
 }

@@ -461,6 +461,12 @@ fn r5c_data_health_contracts_are_exact() {
             ExpectedField::scalar("max_data_snapshot_age_seconds", Type::Uint64),
             ExpectedField::scalar("model_valuation_warning_basis_points", Type::Uint32),
             ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("profile_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::message("visible_at", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("effective_from", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("effective_to", ".ficant.core.v1.MarketTime"),
+            ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
         ],
     );
     assert_fields(
@@ -483,10 +489,34 @@ fn r5c_data_health_contracts_are_exact() {
             ExpectedField::message("position_snapshot_id", ".ficant.core.v1.Ulid"),
             ExpectedField::message("data_snapshot_id", ".ficant.core.v1.Ulid"),
             ExpectedField::message("evaluated_at", ".ficant.core.v1.MarketTime"),
+        ],
+    );
+    assert_reserved_tag(
+        &messages,
+        "ficant.research.v1.GetDataHealthReportRequest",
+        5,
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.PublishDataHealthThresholdProfileRequest",
+        &[
+            ExpectedField::scalar("idempotency_key", Type::String),
             ExpectedField::message(
                 "threshold_profile",
                 ".ficant.research.v1.DataHealthThresholdProfile",
             ),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.research.v1.PublishDataHealthThresholdProfileResponse",
+        &[
+            ExpectedField::oneof_message(
+                "threshold_profile",
+                ".ficant.research.v1.DataHealthThresholdProfile",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
         ],
     );
     assert_fields(
@@ -533,11 +563,18 @@ fn r5c_data_health_contracts_are_exact() {
     assert_exact_service(
         descriptor_set,
         "ficant.research.v1.DataHealthService",
-        &[ExpectedMethod::new(
-            "GetDataHealthReport",
-            ".ficant.research.v1.GetDataHealthReportRequest",
-            ".ficant.research.v1.GetDataHealthReportResponse",
-        )],
+        &[
+            ExpectedMethod::new(
+                "PublishDataHealthThresholdProfile",
+                ".ficant.research.v1.PublishDataHealthThresholdProfileRequest",
+                ".ficant.research.v1.PublishDataHealthThresholdProfileResponse",
+            ),
+            ExpectedMethod::new(
+                "GetDataHealthReport",
+                ".ficant.research.v1.GetDataHealthReportRequest",
+                ".ficant.research.v1.GetDataHealthReportResponse",
+            ),
+        ],
     );
 }
 
@@ -851,7 +888,7 @@ fn composition_level_outputs_have_coverage() {
         })
         .sum::<usize>();
     assert_eq!(
-        classified_non_composition_count, 63,
+        classified_non_composition_count, 64,
         "every non-composition success arm must select one of the three closed reasons"
     );
     let expected_keys = expected.keys().cloned().collect::<BTreeSet<_>>();
@@ -1028,6 +1065,7 @@ fn expected_success_arms() -> BTreeMap<String, SuccessArmClass> {
         ("ficant.research.v1.ArtifactService/ReadArtifactLineage:response->ficant.research.v1.ReadArtifactLineageResponse", NonComposition(RegistryMetadata)),
         ("ficant.research.v1.ArtifactService/ReadSignalSetLineage:response->ficant.research.v1.ReadSignalSetLineageResponse", NonComposition(RegistryMetadata)),
         ("ficant.research.v1.DataHealthService/GetDataHealthReport:report->ficant.research.v1.DataHealthReport", SuccessArmClass::Composition),
+        ("ficant.research.v1.DataHealthService/PublishDataHealthThresholdProfile:threshold_profile->ficant.research.v1.DataHealthThresholdProfile", NonComposition(AckOrEcho)),
         ("ficant.research.v1.ExperimentService/CompareGraphRuns:response->ficant.research.v1.CompareGraphRunsResponse", NonComposition(NoNumericAggregate)),
         ("ficant.research.v1.ExperimentService/CreateRun:response->ficant.research.v1.CreateRunResponse", NonComposition(AckOrEcho)),
         ("ficant.research.v1.ExperimentService/GetGraphRun:response->ficant.research.v1.GetGraphRunResponse", NonComposition(RegistryMetadata)),

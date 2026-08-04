@@ -1266,7 +1266,7 @@ impl SecondOrderPolicy {
         }
     }
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DataHealthThresholdProfile {
     #[prost(message, optional, tag="1")]
     pub profile_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
@@ -1280,6 +1280,18 @@ pub struct DataHealthThresholdProfile {
     pub model_valuation_warning_basis_points: u32,
     #[prost(message, optional, tag="6")]
     pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="7")]
+    pub profile_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="8")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, optional, tag="9")]
+    pub visible_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="10")]
+    pub effective_from: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="11")]
+    pub effective_to: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, repeated, tag="12")]
+    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DataHealthIssue {
@@ -1306,8 +1318,28 @@ pub struct GetDataHealthReportRequest {
     pub data_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
     #[prost(message, optional, tag="4")]
     pub evaluated_at: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(message, optional, tag="5")]
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PublishDataHealthThresholdProfileRequest {
+    #[prost(string, tag="1")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
     pub threshold_profile: ::core::option::Option<DataHealthThresholdProfile>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PublishDataHealthThresholdProfileResponse {
+    #[prost(oneof="publish_data_health_threshold_profile_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<publish_data_health_threshold_profile_response::Result>,
+}
+/// Nested message and enum types in `PublishDataHealthThresholdProfileResponse`.
+pub mod publish_data_health_threshold_profile_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        ThresholdProfile(super::DataHealthThresholdProfile),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DataHealthReport {

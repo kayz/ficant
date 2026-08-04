@@ -6,9 +6,12 @@ use ficant_domain::research::{
 use ficant_domain::{ContentAddressed, Lineaged, VersionedDefinition};
 
 use crate::ports::{
-    AccessScope, ApplicationResult, CanonicalSnapshotDecoder, DataSourceRepository,
-    IntegrityEventSink, PositionSnapshotRepository, SafeTraceContext,
-    SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader,
+    AccessScope, ApplicationResult, BeginBlobStage, BlobStore, CanonicalSnapshotDecoder,
+    DataHealthThresholdProfileRepository, DataSourceRepository, IdempotencyKey, IntegrityEventSink,
+    PositionSnapshotRepository, PublishSnapshot, SafeTraceContext, SnapshotBlobRole,
+    SnapshotRepository, SnapshotValue, SnapshotVerifiedReadMetadataRepository, StagedSnapshotBlob,
+    StagedSnapshotProof, VerifiedBlobReader, VerifiedSnapshotBlob, VerifiedSnapshotProof,
+    VerifyBlobStage,
 };
 use crate::use_cases::verified_reads::{VerifiedSnapshotRead, VerifiedSnapshotReader};
 use crate::{ApplicationError, ApplicationErrorCategory, map_domain_error};
@@ -19,7 +22,6 @@ pub struct DataHealthQuery {
     position_snapshot_id: Ulid,
     data_snapshot_id: Option<Ulid>,
     evaluated_at: MarketTime,
-    threshold_profile: DataHealthThresholdProfile,
 }
 
 impl DataHealthQuery {
@@ -29,14 +31,12 @@ impl DataHealthQuery {
         position_snapshot_id: Ulid,
         data_snapshot_id: Option<Ulid>,
         evaluated_at: MarketTime,
-        threshold_profile: DataHealthThresholdProfile,
     ) -> Self {
         Self {
             subject_ref,
             position_snapshot_id,
             data_snapshot_id,
             evaluated_at,
-            threshold_profile,
         }
     }
 
@@ -59,10 +59,114 @@ impl DataHealthQuery {
     pub fn evaluated_at(&self) -> &MarketTime {
         &self.evaluated_at
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct DataHealthThresholdProfilePayload {
+    profile: DataHealthThresholdProfile,
+    idempotency_key: IdempotencyKey,
+}
+
+impl DataHealthThresholdProfilePayload {
+    /// Binds an immutable platform profile to one idempotent publication intent.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation failure when the canonical payload does not reproduce the declared
+    /// content hash.
+    pub fn new(
+        profile: DataHealthThresholdProfile,
+        idempotency_key: IdempotencyKey,
+    ) -> ApplicationResult<Self> {
+        let bytes = profile.canonical_bytes();
+        if bytes.is_empty() || ContentHash::digest(&bytes) != *profile.content_hash() {
+            return Err(validation());
+        }
+        Ok(Self {
+            profile,
+            idempotency_key,
+        })
+    }
 
     #[must_use]
-    pub fn threshold_profile(&self) -> &DataHealthThresholdProfile {
-        &self.threshold_profile
+    pub fn profile(&self) -> &DataHealthThresholdProfile {
+        &self.profile
+    }
+}
+
+pub struct PublishDataHealthThresholdProfile<'a> {
+    blob_store: &'a dyn BlobStore,
+    snapshots: &'a dyn SnapshotRepository,
+}
+
+impl<'a> PublishDataHealthThresholdProfile<'a> {
+    /// Composes the verified-blob publication path.
+    #[must_use]
+    pub fn new(blob_store: &'a dyn BlobStore, snapshots: &'a dyn SnapshotRepository) -> Self {
+        Self {
+            blob_store,
+            snapshots,
+        }
+    }
+
+    /// Publishes the profile only after its canonical bytes have been staged and verified.
+    ///
+    /// # Errors
+    ///
+    /// Returns a safe application error for authorization, hash, storage, proof, lineage, or
+    /// immutable-identity failures.
+    pub async fn execute(
+        &self,
+        scope: &AccessScope,
+        payload: DataHealthThresholdProfilePayload,
+    ) -> ApplicationResult<DataHealthThresholdProfile> {
+        scope.authorize(payload.profile.owner())?;
+        let bytes = payload.profile.canonical_bytes();
+        let expected_hash = payload.profile.content_hash().clone();
+        if ContentHash::digest(&bytes) != expected_hash {
+            return Err(validation());
+        }
+        let size = u64::try_from(bytes.len()).map_err(|_| validation())?;
+        let staged_id = self
+            .blob_store
+            .begin_stage(BeginBlobStage::new(
+                scope.clone(),
+                payload.profile.owner().clone(),
+                size,
+                payload
+                    .idempotency_key
+                    .scoped("data-health-profile-stage")?,
+            )?)
+            .await?;
+        if let Err(error) = self.blob_store.append_chunk(scope, &staged_id, bytes).await {
+            let _ = self.blob_store.discard_stage(scope, &staged_id).await;
+            return Err(error);
+        }
+        let staged = StagedSnapshotBlob::new(
+            SnapshotBlobRole::DataHealthThresholdProfilePayload,
+            VerifyBlobStage::new(scope.clone(), staged_id, expected_hash, size)?,
+        );
+        let _proof = StagedSnapshotProof::data_health_threshold_profile(staged.clone())?;
+        let promoted = self
+            .blob_store
+            .verify_and_promote(staged.verification().clone())
+            .await?;
+        let proof = VerifiedSnapshotProof::data_health_threshold_profile(
+            VerifiedSnapshotBlob::from_staged(staged, promoted)?,
+        )?;
+        let command = PublishSnapshot::new(
+            SnapshotValue::DataHealthThresholdProfile(payload.profile),
+            proof,
+            payload
+                .idempotency_key
+                .scoped("data-health-profile-metadata")?,
+        )?;
+        match self.snapshots.publish_verified_manifest(command).await? {
+            SnapshotValue::DataHealthThresholdProfile(profile) => Ok(profile),
+            SnapshotValue::Data(_) | SnapshotValue::Position(_) | SnapshotValue::Universe(_) => {
+                Err(validation())
+            }
+        }
     }
 }
 
@@ -77,6 +181,7 @@ pub struct GetDataHealthReport<'a> {
     integrity_events: &'a dyn IntegrityEventSink,
     decoder: &'a dyn CanonicalSnapshotDecoder,
     data_sources: &'a dyn DataSourceRepository,
+    threshold_profiles: &'a dyn DataHealthThresholdProfileRepository,
 }
 
 impl<'a> GetDataHealthReport<'a> {
@@ -88,6 +193,7 @@ impl<'a> GetDataHealthReport<'a> {
         integrity_events: &'a dyn IntegrityEventSink,
         decoder: &'a dyn CanonicalSnapshotDecoder,
         data_sources: &'a dyn DataSourceRepository,
+        threshold_profiles: &'a dyn DataHealthThresholdProfileRepository,
     ) -> Self {
         Self {
             positions,
@@ -96,6 +202,7 @@ impl<'a> GetDataHealthReport<'a> {
             integrity_events,
             decoder,
             data_sources,
+            threshold_profiles,
         }
     }
 
@@ -129,8 +236,22 @@ impl<'a> GetDataHealthReport<'a> {
         {
             return Err(lineage());
         }
+        let threshold_profile = self
+            .threshold_profiles
+            .resolve_active(scope, snapshot.owner().clone(), query.evaluated_at.clone())
+            .await?
+            .ok_or_else(|| {
+                ApplicationError::rule_pack_item_missing("platform.data_health.threshold_profile")
+            })?;
+        if threshold_profile.owner() != snapshot.owner()
+            || threshold_profile.visible_at().instant() > query.evaluated_at.instant()
+            || threshold_profile.effective_from().instant() > query.evaluated_at.instant()
+            || threshold_profile.effective_to().instant() <= query.evaluated_at.instant()
+        {
+            return Err(lineage());
+        }
         let evaluation =
-            evaluate_position_snapshot(&snapshot, &query.threshold_profile, &query.evaluated_at)
+            evaluate_position_snapshot(&snapshot, &threshold_profile, &query.evaluated_at)
                 .map_err(map_domain_error)?;
         let price_evidence = match query.data_snapshot_id.as_ref() {
             Some(data_snapshot_id) => Some(
@@ -143,7 +264,7 @@ impl<'a> GetDataHealthReport<'a> {
             position_snapshot: snapshot,
             evaluated_at: query.evaluated_at,
             position_evaluation: evaluation,
-            threshold_profile: query.threshold_profile,
+            threshold_profile,
             price_evidence,
         })
         .map_err(map_domain_error)
@@ -237,10 +358,7 @@ fn trace_for(query: &DataHealthQuery) -> ApplicationResult<SafeTraceContext> {
             .timestamp_subsec_nanos()
             .to_be_bytes(),
     );
-    append(
-        &mut bytes,
-        query.threshold_profile.content_hash().as_bytes(),
-    );
+    append(&mut bytes, b"platform-resolved-profile");
     let digest = ContentHash::digest(&bytes);
     let token =
         digest.as_bytes()[..16]

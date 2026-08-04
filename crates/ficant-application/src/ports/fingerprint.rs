@@ -488,6 +488,13 @@ fn valuation_bytes(fact: &Valuation) -> Vec<u8> {
 pub(crate) fn snapshot_bytes(snapshot: &SnapshotValue) -> Vec<u8> {
     match snapshot {
         SnapshotValue::Data(value) => data_snapshot_bytes(value),
+        SnapshotValue::DataHealthThresholdProfile(value) => {
+            let mut fingerprint =
+                FingerprintBuilder::new("snapshot/data-health-threshold-profile/v1");
+            fingerprint.field(2, &value.canonical_bytes());
+            fingerprint.field(3, value.content_hash().as_bytes());
+            fingerprint.into_bytes()
+        }
         SnapshotValue::Position(value) => {
             let mut fingerprint = FingerprintBuilder::new("snapshot/position/v1");
             fingerprint.field(2, value.id().as_str().as_bytes());

@@ -9,10 +9,11 @@ use ficant_api::{
 };
 use ficant_application::ports::{
     AccessScope, AeadCursorCodec, ArtifactRepository, BlobStore, CursorKey,
-    CurveSnapshotMetadataRepository, DataSourceRepository, DefinitionRepository,
-    ExperimentRepository, FactorTopologyRepository, IntegrityEventSink, Phase4ExecutionRepository,
-    PositionSnapshotRepository, RunJournalRepository, SnapshotRepository,
-    SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobReader,
+    CurveSnapshotMetadataRepository, DataHealthThresholdProfileRepository, DataSourceRepository,
+    DefinitionRepository, ExperimentRepository, FactorTopologyRepository, IntegrityEventSink,
+    Phase4ExecutionRepository, PositionSnapshotRepository, RunJournalRepository,
+    SnapshotRepository, SnapshotVerifiedReadMetadataRepository, SubjectRepository,
+    VerifiedBlobReader,
 };
 use ficant_application::{ApplicationError, map_runtime_error};
 use ficant_cgb_futures_pack::CgbFuturesDeliveryRulePackParser;
@@ -485,6 +486,8 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
     let position_repository: Arc<dyn PositionSnapshotRepository> = repository.clone();
     let factor_repository: Arc<dyn FactorTopologyRepository> = repository.clone();
     let data_source_repository: Arc<dyn DataSourceRepository> = repository.clone();
+    let data_health_profile_repository: Arc<dyn DataHealthThresholdProfileRepository> =
+        repository.clone();
     let curve_repository: Arc<dyn CurveSnapshotMetadataRepository> = repository.clone();
     let artifacts: Arc<dyn ArtifactRepository> = repository.clone();
     let definitions: Arc<dyn DefinitionRepository> = repository.clone();
@@ -531,8 +534,8 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
         Arc::clone(&application),
         access_scope.clone(),
         position_repository.clone(),
-        snapshot_repository,
-        writable_blobs,
+        snapshot_repository.clone(),
+        writable_blobs.clone(),
         &settings.trace_key,
     )
     .map_err(config)?;
@@ -545,6 +548,9 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
         build_integrity_event_sink(),
         Arc::new(CanonicalSnapshotCodecAdapter),
         data_source_repository.clone(),
+        data_health_profile_repository,
+        snapshot_repository,
+        writable_blobs,
         &settings.trace_key,
     )
     .map_err(config)?;
