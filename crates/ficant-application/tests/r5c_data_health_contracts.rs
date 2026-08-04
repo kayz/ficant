@@ -3,11 +3,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use ficant_application::ports::{
-    AccessScope, ApplicationResult, CanonicalQuote, CanonicalSnapshotDecoder, DataSourceRepository,
-    DecodedCanonicalQuotes, IntegrityEvent, IntegrityEventSink, PositionSnapshotRepository,
-    RegisterDataSource, RequiredVerifiedBlobRead, SnapshotVerifiedReadMetadata,
-    SnapshotVerifiedReadMetadataRepository, VerifiedBlobPayload, VerifiedBlobReader,
-    VerifiedBlobRole,
+    AccessScope, ApplicationResult, CanonicalQuote, CanonicalSnapshotDecoder,
+    DataHealthThresholdProfileRepository, DataSourceRepository, DecodedCanonicalQuotes,
+    IntegrityEvent, IntegrityEventSink, PositionSnapshotRepository, RegisterDataSource,
+    RequiredVerifiedBlobRead, SnapshotVerifiedReadMetadata, SnapshotVerifiedReadMetadataRepository,
+    VerifiedBlobPayload, VerifiedBlobReader, VerifiedBlobRole,
 };
 use ficant_application::{
     ApplicationError, ApplicationErrorDetail, DataHealthQuery, GetDataHealthReport,
@@ -118,7 +118,6 @@ async fn exact_subject_owner_and_visible_time_drift_fail_closed() {
         id('S'),
         None,
         time(200),
-        profile(),
     );
     assert!(
         use_case(&fixture)
@@ -134,14 +133,32 @@ async fn exact_subject_owner_and_visible_time_drift_fail_closed() {
     );
 }
 
+#[tokio::test]
+async fn missing_platform_threshold_profile_fails_closed() {
+    let mut fixture = Fixture::new(Some(PriceSourceType::ActiveQuote));
+    fixture.profile = None;
+    let error = use_case(&fixture)
+        .execute(&scope(), query(None, 200))
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error.detail(),
+        Some(ApplicationErrorDetail::RulePackItemMissing { path })
+            if path == "platform.data_health.threshold_profile"
+    ));
+}
+
 fn use_case(fixture: &Fixture) -> GetDataHealthReport<'_> {
-    GetDataHealthReport::new(fixture, fixture, fixture, fixture, fixture, fixture)
+    GetDataHealthReport::new(
+        fixture, fixture, fixture, fixture, fixture, fixture, fixture,
+    )
 }
 
 struct Fixture {
     position: PositionSnapshot,
     data: DataSnapshot,
     source: DataSource,
+    profile: Option<DataHealthThresholdProfile>,
     metadata_calls: AtomicUsize,
     decode_calls: AtomicUsize,
     source_calls: AtomicUsize,
@@ -168,10 +185,45 @@ impl Fixture {
             position: position_snapshot(),
             data: data_snapshot(),
             source,
+            profile: Some(profile()),
             metadata_calls: AtomicUsize::new(0),
             decode_calls: AtomicUsize::new(0),
             source_calls: AtomicUsize::new(0),
         }
+    }
+}
+
+#[async_trait]
+impl DataHealthThresholdProfileRepository for Fixture {
+    async fn get_exact(
+        &self,
+        _: &AccessScope,
+        reference: VersionRef,
+        _: MarketTime,
+    ) -> ApplicationResult<Option<DataHealthThresholdProfile>> {
+        Ok(self
+            .profile
+            .as_ref()
+            .filter(|profile| reference == *profile.profile_ref())
+            .cloned())
+    }
+
+    async fn resolve_active(
+        &self,
+        _: &AccessScope,
+        owner: OwnerRef,
+        evaluated_at: MarketTime,
+    ) -> ApplicationResult<Option<DataHealthThresholdProfile>> {
+        Ok(self
+            .profile
+            .as_ref()
+            .filter(|profile| {
+                owner == *profile.owner()
+                    && profile.visible_at().instant() <= evaluated_at.instant()
+                    && profile.effective_from().instant() <= evaluated_at.instant()
+                    && evaluated_at.instant() < profile.effective_to().instant()
+            })
+            .cloned())
     }
 }
 
@@ -358,18 +410,23 @@ fn query(data_snapshot_id: Option<Ulid>, evaluated_seconds: i64) -> DataHealthQu
         id('S'),
         data_snapshot_id,
         time(evaluated_seconds),
-        profile(),
     )
 }
 
 fn profile() -> DataHealthThresholdProfile {
     let mut input = DataHealthThresholdProfileInput {
+        profile_snapshot_id: id('H'),
+        owner: owner(),
         profile_ref: VersionRef::new(id('P'), version()),
+        visible_at: time(0),
+        effective_from: time(0),
+        effective_to: time(10_000),
         max_position_snapshot_age_seconds: 100,
         unknown_accounting_warning_basis_points: 5_000,
         max_data_snapshot_age_seconds: 100,
         model_valuation_warning_basis_points: 5_000,
         content_hash: ContentHash::digest(b"pending"),
+        lineage: Vec::new(),
     };
     input.content_hash = DataHealthThresholdProfile::content_hash_for(&input);
     DataHealthThresholdProfile::new(input).unwrap()
@@ -424,6 +481,39 @@ fn id(suffix: char) -> Ulid {
 // varies only accounting-classification and freshness facts on the immutable PositionSnapshot.
 mod krd_health_regression {
     include!("r4d_b_futures_krd_contracts.rs");
+
+    #[async_trait::async_trait]
+    impl ficant_application::ports::DataHealthThresholdProfileRepository for Fixture {
+        async fn get_exact(
+            &self,
+            _: &ficant_application::ports::AccessScope,
+            reference: VersionRef,
+            knowledge_at: MarketTime,
+        ) -> ficant_application::ports::ApplicationResult<
+            Option<ficant_domain::research::DataHealthThresholdProfile>,
+        > {
+            let profile = health_profile();
+            Ok((reference == *profile.profile_ref()
+                && profile.visible_at().instant() <= knowledge_at.instant())
+            .then_some(profile))
+        }
+
+        async fn resolve_active(
+            &self,
+            _: &ficant_application::ports::AccessScope,
+            owner: OwnerRef,
+            evaluated_at: MarketTime,
+        ) -> ficant_application::ports::ApplicationResult<
+            Option<ficant_domain::research::DataHealthThresholdProfile>,
+        > {
+            let profile = health_profile();
+            Ok((owner == *profile.owner()
+                && profile.visible_at().instant() <= evaluated_at.instant()
+                && profile.effective_from().instant() <= evaluated_at.instant()
+                && evaluated_at.instant() < profile.effective_to().instant())
+            .then_some(profile))
+        }
+    }
 
     #[tokio::test]
     async fn worst_health_is_non_blocking_side_effect_free_and_never_degrades_krd() {
@@ -516,7 +606,7 @@ mod krd_health_regression {
 
     async fn health_report(fixture: &Fixture) -> ficant_domain::research::DataHealthReport {
         ficant_application::GetDataHealthReport::new(
-            fixture, fixture, fixture, fixture, fixture, fixture,
+            fixture, fixture, fixture, fixture, fixture, fixture, fixture,
         )
         .execute(
             &fixture.scope,
@@ -525,7 +615,6 @@ mod krd_health_regression {
                 fixture.snapshot.id().clone(),
                 None,
                 time(2),
-                health_profile(),
             ),
         )
         .await
@@ -534,12 +623,18 @@ mod krd_health_regression {
 
     fn health_profile() -> ficant_domain::research::DataHealthThresholdProfile {
         let mut input = ficant_domain::research::DataHealthThresholdProfileInput {
+            profile_snapshot_id: id('H'),
+            owner: owner(),
             profile_ref: VersionRef::new(id('P'), version()),
+            visible_at: time(0),
+            effective_from: time(0),
+            effective_to: time_for(2026, 8, 4, 0),
             max_position_snapshot_age_seconds: 5_400,
             unknown_accounting_warning_basis_points: 1,
             max_data_snapshot_age_seconds: 5_400,
             model_valuation_warning_basis_points: 1,
             content_hash: ContentHash::digest(b"pending"),
+            lineage: Vec::new(),
         };
         input.content_hash =
             ficant_domain::research::DataHealthThresholdProfile::content_hash_for(&input);

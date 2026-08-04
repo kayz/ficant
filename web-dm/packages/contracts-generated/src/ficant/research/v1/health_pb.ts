@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ficant/research/v1/health.proto.
  */
 export const file_ficant_research_v1_health: GenFile = /*@__PURE__*/
-  fileDesc("Ch9maWNhbnQvcmVzZWFyY2gvdjEvaGVhbHRoLnByb3RvEhJmaWNhbnQucmVzZWFyY2gudjEirAIKGkRhdGFIZWFsdGhUaHJlc2hvbGRQcm9maWxlEi8KC3Byb2ZpbGVfcmVmGAEgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIpCiFtYXhfcG9zaXRpb25fc25hcHNob3RfYWdlX3NlY29uZHMYAiABKAQSLwondW5rbm93bl9hY2NvdW50aW5nX3dhcm5pbmdfYmFzaXNfcG9pbnRzGAMgASgNEiUKHW1heF9kYXRhX3NuYXBzaG90X2FnZV9zZWNvbmRzGAQgASgEEiwKJG1vZGVsX3ZhbHVhdGlvbl93YXJuaW5nX2Jhc2lzX3BvaW50cxgFIAEoDRIsCgxjb250ZW50X2hhc2gYBiABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYiggIKD0RhdGFIZWFsdGhJc3N1ZRI1CgRjb2RlGAEgASgOMicuZmljYW50LnJlc2VhcmNoLnYxLkRhdGFIZWFsdGhJc3N1ZUNvZGUSMwoVYWZmZWN0ZWRfcG9zaXRpb25faWRzGAIgAygLMhQuZmljYW50LmNvcmUudjEuVWxpZBIzCg9kYXRhX3NvdXJjZV9yZWYYAyABKAsyGi5maWNhbnQuY29yZS52MS5WZXJzaW9uUmVmEhQKDHJlY29yZF9jb3VudBgEIAEoBBIaChJyYXRpb19iYXNpc19wb2ludHMYBSABKA0SHAoUb2JzZXJ2ZWRfYWdlX3NlY29uZHMYBiABKAQirgIKGkdldERhdGFIZWFsdGhSZXBvcnRSZXF1ZXN0Ei8KC3N1YmplY3RfcmVmGAEgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIyChRwb3NpdGlvbl9zbmFwc2hvdF9pZBgCIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSLgoQZGF0YV9zbmFwc2hvdF9pZBgDIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSMAoMZXZhbHVhdGVkX2F0GAQgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRJJChF0aHJlc2hvbGRfcHJvZmlsZRgFIAEoCzIuLmZpY2FudC5yZXNlYXJjaC52MS5EYXRhSGVhbHRoVGhyZXNob2xkUHJvZmlsZSKPBwoQRGF0YUhlYWx0aFJlcG9ydBInCgVvd25lchgBIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEi8KC3N1YmplY3RfcmVmGAIgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIwCgxldmFsdWF0ZWRfYXQYAyABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEjIKFHBvc2l0aW9uX3NuYXBzaG90X2lkGAQgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBI2ChZwb3NpdGlvbl9zbmFwc2hvdF9oYXNoGAUgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2Ei4KEGRhdGFfc25hcHNob3RfaWQYBiABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEjsKG2RhdGFfc25hcHNob3RfbWFuaWZlc3RfaGFzaBgHIAEoCzIWLmZpY2FudC5jb3JlLnYxLlNoYTI1NhIzCg9kYXRhX3NvdXJjZV9yZWYYCCABKAsyGi5maWNhbnQuY29yZS52MS5WZXJzaW9uUmVmEkkKEXRocmVzaG9sZF9wcm9maWxlGAkgASgLMi4uZmljYW50LnJlc2VhcmNoLnYxLkRhdGFIZWFsdGhUaHJlc2hvbGRQcm9maWxlEjIKBXN0YXRlGAogASgOMiMuZmljYW50LnJlc2VhcmNoLnYxLkRhdGFIZWFsdGhTdGF0ZRIzCgZpc3N1ZXMYCyADKAsyIy5maWNhbnQucmVzZWFyY2gudjEuRGF0YUhlYWx0aElzc3VlEiAKGHByaWNlX2V2aWRlbmNlX2V2YWx1YXRlZBgMIAEoCBJAChJwb3NpdGlvbl9zZXRfc3RhdGUYDSABKA4yJC5maWNhbnQucmVzZWFyY2gudjEuUG9zaXRpb25TZXRTdGF0ZRI5Cghjb3ZlcmFnZRgOIAEoCzInLmZpY2FudC5yZXNlYXJjaC52MS5Db3ZlcmFnZURlY2xhcmF0aW9uEjMKE3JlcXVlc3RfZmluZ2VycHJpbnQYDyABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSLAoMY29udGVudF9oYXNoGBAgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EisKB2xpbmVhZ2UYESADKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmIo0BChtHZXREYXRhSGVhbHRoUmVwb3J0UmVzcG9uc2USNgoGcmVwb3J0GAEgASgLMiQuZmljYW50LnJlc2VhcmNoLnYxLkRhdGFIZWFsdGhSZXBvcnRIABIsCgVlcnJvchgCIAEoCzIbLmZpY2FudC5jb3JlLnYxLkVycm9yRGV0YWlsSABCCAoGcmVzdWx0KnIKD0RhdGFIZWFsdGhTdGF0ZRIhCh1EQVRBX0hFQUxUSF9TVEFURV9VTlNQRUNJRklFRBAAEh0KGURBVEFfSEVBTFRIX1NUQVRFX0hFQUxUSFkQARIdChlEQVRBX0hFQUxUSF9TVEFURV9XQVJOSU5HEAIqfwoQUG9zaXRpb25TZXRTdGF0ZRIiCh5QT1NJVElPTl9TRVRfU1RBVEVfVU5TUEVDSUZJRUQQABIgChxQT1NJVElPTl9TRVRfU1RBVEVfTk9OX0VNUFRZEAESJQohUE9TSVRJT05fU0VUX1NUQVRFX1ZFUklGSUVEX0VNUFRZEAIq7gIKE0RhdGFIZWFsdGhJc3N1ZUNvZGUSJgoiREFUQV9IRUFMVEhfSVNTVUVfQ09ERV9VTlNQRUNJRklFRBAAEioKJkRBVEFfSEVBTFRIX0lTU1VFX0NPREVfRU1QVFlfUE9TSVRJT05TEAESPAo4REFUQV9IRUFMVEhfSVNTVUVfQ09ERV9VTktOT1dOX0FDQ09VTlRJTkdfQ0xBU1NJRklDQVRJT04QAhIyCi5EQVRBX0hFQUxUSF9JU1NVRV9DT0RFX1NUQUxFX1BPU0lUSU9OX1NOQVBTSE9UEAMSLworREFUQV9IRUFMVEhfSVNTVUVfQ09ERV9VTlRZUEVEX1BSSUNFX1NPVVJDRRAEEjAKLERBVEFfSEVBTFRIX0lTU1VFX0NPREVfTU9ERUxfVkFMVUFUSU9OX1NIQVJFEAUSLgoqREFUQV9IRUFMVEhfSVNTVUVfQ09ERV9TVEFMRV9EQVRBX1NOQVBTSE9UEAYyiwEKEURhdGFIZWFsdGhTZXJ2aWNlEnYKE0dldERhdGFIZWFsdGhSZXBvcnQSLi5maWNhbnQucmVzZWFyY2gudjEuR2V0RGF0YUhlYWx0aFJlcG9ydFJlcXVlc3QaLy5maWNhbnQucmVzZWFyY2gudjEuR2V0RGF0YUhlYWx0aFJlcG9ydFJlc3BvbnNlYgZwcm90bzM", [file_ficant_core_v1_common, file_ficant_core_v1_error, file_ficant_research_v1_coverage]);
+  fileDesc("Ch9maWNhbnQvcmVzZWFyY2gvdjEvaGVhbHRoLnByb3RvEhJmaWNhbnQucmVzZWFyY2gudjEiywQKGkRhdGFIZWFsdGhUaHJlc2hvbGRQcm9maWxlEi8KC3Byb2ZpbGVfcmVmGAEgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIpCiFtYXhfcG9zaXRpb25fc25hcHNob3RfYWdlX3NlY29uZHMYAiABKAQSLwondW5rbm93bl9hY2NvdW50aW5nX3dhcm5pbmdfYmFzaXNfcG9pbnRzGAMgASgNEiUKHW1heF9kYXRhX3NuYXBzaG90X2FnZV9zZWNvbmRzGAQgASgEEiwKJG1vZGVsX3ZhbHVhdGlvbl93YXJuaW5nX2Jhc2lzX3BvaW50cxgFIAEoDRIsCgxjb250ZW50X2hhc2gYBiABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSMQoTcHJvZmlsZV9zbmFwc2hvdF9pZBgHIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSJwoFb3duZXIYCCABKAsyGC5maWNhbnQuY29yZS52MS5Pd25lclJlZhIuCgp2aXNpYmxlX2F0GAkgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRIyCg5lZmZlY3RpdmVfZnJvbRgKIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSMAoMZWZmZWN0aXZlX3RvGAsgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRIrCgdsaW5lYWdlGAwgAygLMhouZmljYW50LmNvcmUudjEuTGluZWFnZVJlZiKCAgoPRGF0YUhlYWx0aElzc3VlEjUKBGNvZGUYASABKA4yJy5maWNhbnQucmVzZWFyY2gudjEuRGF0YUhlYWx0aElzc3VlQ29kZRIzChVhZmZlY3RlZF9wb3NpdGlvbl9pZHMYAiADKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEjMKD2RhdGFfc291cmNlX3JlZhgDIAEoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYSFAoMcmVjb3JkX2NvdW50GAQgASgEEhoKEnJhdGlvX2Jhc2lzX3BvaW50cxgFIAEoDRIcChRvYnNlcnZlZF9hZ2Vfc2Vjb25kcxgGIAEoBCLpAQoaR2V0RGF0YUhlYWx0aFJlcG9ydFJlcXVlc3QSLwoLc3ViamVjdF9yZWYYASABKAsyGi5maWNhbnQuY29yZS52MS5WZXJzaW9uUmVmEjIKFHBvc2l0aW9uX3NuYXBzaG90X2lkGAIgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIuChBkYXRhX3NuYXBzaG90X2lkGAMgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIwCgxldmFsdWF0ZWRfYXQYBCABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lSgQIBRAGIo4BCihQdWJsaXNoRGF0YUhlYWx0aFRocmVzaG9sZFByb2ZpbGVSZXF1ZXN0EhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoCRJJChF0aHJlc2hvbGRfcHJvZmlsZRgCIAEoCzIuLmZpY2FudC5yZXNlYXJjaC52MS5EYXRhSGVhbHRoVGhyZXNob2xkUHJvZmlsZSKwAQopUHVibGlzaERhdGFIZWFsdGhUaHJlc2hvbGRQcm9maWxlUmVzcG9uc2USSwoRdGhyZXNob2xkX3Byb2ZpbGUYASABKAsyLi5maWNhbnQucmVzZWFyY2gudjEuRGF0YUhlYWx0aFRocmVzaG9sZFByb2ZpbGVIABIsCgVlcnJvchgCIAEoCzIbLmZpY2FudC5jb3JlLnYxLkVycm9yRGV0YWlsSABCCAoGcmVzdWx0Io8HChBEYXRhSGVhbHRoUmVwb3J0EicKBW93bmVyGAEgASgLMhguZmljYW50LmNvcmUudjEuT3duZXJSZWYSLwoLc3ViamVjdF9yZWYYAiABKAsyGi5maWNhbnQuY29yZS52MS5WZXJzaW9uUmVmEjAKDGV2YWx1YXRlZF9hdBgDIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSMgoUcG9zaXRpb25fc25hcHNob3RfaWQYBCABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEjYKFnBvc2l0aW9uX3NuYXBzaG90X2hhc2gYBSABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSLgoQZGF0YV9zbmFwc2hvdF9pZBgGIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSOwobZGF0YV9zbmFwc2hvdF9tYW5pZmVzdF9oYXNoGAcgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EjMKD2RhdGFfc291cmNlX3JlZhgIIAEoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYSSQoRdGhyZXNob2xkX3Byb2ZpbGUYCSABKAsyLi5maWNhbnQucmVzZWFyY2gudjEuRGF0YUhlYWx0aFRocmVzaG9sZFByb2ZpbGUSMgoFc3RhdGUYCiABKA4yIy5maWNhbnQucmVzZWFyY2gudjEuRGF0YUhlYWx0aFN0YXRlEjMKBmlzc3VlcxgLIAMoCzIjLmZpY2FudC5yZXNlYXJjaC52MS5EYXRhSGVhbHRoSXNzdWUSIAoYcHJpY2VfZXZpZGVuY2VfZXZhbHVhdGVkGAwgASgIEkAKEnBvc2l0aW9uX3NldF9zdGF0ZRgNIAEoDjIkLmZpY2FudC5yZXNlYXJjaC52MS5Qb3NpdGlvblNldFN0YXRlEjkKCGNvdmVyYWdlGA4gASgLMicuZmljYW50LnJlc2VhcmNoLnYxLkNvdmVyYWdlRGVjbGFyYXRpb24SMwoTcmVxdWVzdF9maW5nZXJwcmludBgPIAEoCzIWLmZpY2FudC5jb3JlLnYxLlNoYTI1NhIsCgxjb250ZW50X2hhc2gYECABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSKwoHbGluZWFnZRgRIAMoCzIaLmZpY2FudC5jb3JlLnYxLkxpbmVhZ2VSZWYijQEKG0dldERhdGFIZWFsdGhSZXBvcnRSZXNwb25zZRI2CgZyZXBvcnQYASABKAsyJC5maWNhbnQucmVzZWFyY2gudjEuRGF0YUhlYWx0aFJlcG9ydEgAEiwKBWVycm9yGAIgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHQqcgoPRGF0YUhlYWx0aFN0YXRlEiEKHURBVEFfSEVBTFRIX1NUQVRFX1VOU1BFQ0lGSUVEEAASHQoZREFUQV9IRUFMVEhfU1RBVEVfSEVBTFRIWRABEh0KGURBVEFfSEVBTFRIX1NUQVRFX1dBUk5JTkcQAip/ChBQb3NpdGlvblNldFN0YXRlEiIKHlBPU0lUSU9OX1NFVF9TVEFURV9VTlNQRUNJRklFRBAAEiAKHFBPU0lUSU9OX1NFVF9TVEFURV9OT05fRU1QVFkQARIlCiFQT1NJVElPTl9TRVRfU1RBVEVfVkVSSUZJRURfRU1QVFkQAiruAgoTRGF0YUhlYWx0aElzc3VlQ29kZRImCiJEQVRBX0hFQUxUSF9JU1NVRV9DT0RFX1VOU1BFQ0lGSUVEEAASKgomREFUQV9IRUFMVEhfSVNTVUVfQ09ERV9FTVBUWV9QT1NJVElPTlMQARI8CjhEQVRBX0hFQUxUSF9JU1NVRV9DT0RFX1VOS05PV05fQUNDT1VOVElOR19DTEFTU0lGSUNBVElPThACEjIKLkRBVEFfSEVBTFRIX0lTU1VFX0NPREVfU1RBTEVfUE9TSVRJT05fU05BUFNIT1QQAxIvCitEQVRBX0hFQUxUSF9JU1NVRV9DT0RFX1VOVFlQRURfUFJJQ0VfU09VUkNFEAQSMAosREFUQV9IRUFMVEhfSVNTVUVfQ09ERV9NT0RFTF9WQUxVQVRJT05fU0hBUkUQBRIuCipEQVRBX0hFQUxUSF9JU1NVRV9DT0RFX1NUQUxFX0RBVEFfU05BUFNIT1QQBjKuAgoRRGF0YUhlYWx0aFNlcnZpY2USoAEKIVB1Ymxpc2hEYXRhSGVhbHRoVGhyZXNob2xkUHJvZmlsZRI8LmZpY2FudC5yZXNlYXJjaC52MS5QdWJsaXNoRGF0YUhlYWx0aFRocmVzaG9sZFByb2ZpbGVSZXF1ZXN0Gj0uZmljYW50LnJlc2VhcmNoLnYxLlB1Ymxpc2hEYXRhSGVhbHRoVGhyZXNob2xkUHJvZmlsZVJlc3BvbnNlEnYKE0dldERhdGFIZWFsdGhSZXBvcnQSLi5maWNhbnQucmVzZWFyY2gudjEuR2V0RGF0YUhlYWx0aFJlcG9ydFJlcXVlc3QaLy5maWNhbnQucmVzZWFyY2gudjEuR2V0RGF0YUhlYWx0aFJlcG9ydFJlc3BvbnNlYgZwcm90bzM", [file_ficant_core_v1_common, file_ficant_core_v1_error, file_ficant_research_v1_coverage]);
 
 /**
  * @generated from message ficant.research.v1.DataHealthThresholdProfile
@@ -51,6 +51,36 @@ export type DataHealthThresholdProfile = Message<"ficant.research.v1.DataHealthT
    * @generated from field: ficant.core.v1.Sha256 content_hash = 6;
    */
   contentHash?: Sha256;
+
+  /**
+   * @generated from field: ficant.core.v1.Ulid profile_snapshot_id = 7;
+   */
+  profileSnapshotId?: Ulid;
+
+  /**
+   * @generated from field: ficant.core.v1.OwnerRef owner = 8;
+   */
+  owner?: OwnerRef;
+
+  /**
+   * @generated from field: ficant.core.v1.MarketTime visible_at = 9;
+   */
+  visibleAt?: MarketTime;
+
+  /**
+   * @generated from field: ficant.core.v1.MarketTime effective_from = 10;
+   */
+  effectiveFrom?: MarketTime;
+
+  /**
+   * @generated from field: ficant.core.v1.MarketTime effective_to = 11;
+   */
+  effectiveTo?: MarketTime;
+
+  /**
+   * @generated from field: repeated ficant.core.v1.LineageRef lineage = 12;
+   */
+  lineage: LineageRef[];
 };
 
 /**
@@ -125,11 +155,6 @@ export type GetDataHealthReportRequest = Message<"ficant.research.v1.GetDataHeal
    * @generated from field: ficant.core.v1.MarketTime evaluated_at = 4;
    */
   evaluatedAt?: MarketTime;
-
-  /**
-   * @generated from field: ficant.research.v1.DataHealthThresholdProfile threshold_profile = 5;
-   */
-  thresholdProfile?: DataHealthThresholdProfile;
 };
 
 /**
@@ -138,6 +163,57 @@ export type GetDataHealthReportRequest = Message<"ficant.research.v1.GetDataHeal
  */
 export const GetDataHealthReportRequestSchema: GenMessage<GetDataHealthReportRequest> = /*@__PURE__*/
   messageDesc(file_ficant_research_v1_health, 2);
+
+/**
+ * @generated from message ficant.research.v1.PublishDataHealthThresholdProfileRequest
+ */
+export type PublishDataHealthThresholdProfileRequest = Message<"ficant.research.v1.PublishDataHealthThresholdProfileRequest"> & {
+  /**
+   * @generated from field: string idempotency_key = 1;
+   */
+  idempotencyKey: string;
+
+  /**
+   * @generated from field: ficant.research.v1.DataHealthThresholdProfile threshold_profile = 2;
+   */
+  thresholdProfile?: DataHealthThresholdProfile;
+};
+
+/**
+ * Describes the message ficant.research.v1.PublishDataHealthThresholdProfileRequest.
+ * Use `create(PublishDataHealthThresholdProfileRequestSchema)` to create a new message.
+ */
+export const PublishDataHealthThresholdProfileRequestSchema: GenMessage<PublishDataHealthThresholdProfileRequest> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_health, 3);
+
+/**
+ * @generated from message ficant.research.v1.PublishDataHealthThresholdProfileResponse
+ */
+export type PublishDataHealthThresholdProfileResponse = Message<"ficant.research.v1.PublishDataHealthThresholdProfileResponse"> & {
+  /**
+   * @generated from oneof ficant.research.v1.PublishDataHealthThresholdProfileResponse.result
+   */
+  result: {
+    /**
+     * @generated from field: ficant.research.v1.DataHealthThresholdProfile threshold_profile = 1;
+     */
+    value: DataHealthThresholdProfile;
+    case: "thresholdProfile";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 2;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message ficant.research.v1.PublishDataHealthThresholdProfileResponse.
+ * Use `create(PublishDataHealthThresholdProfileResponseSchema)` to create a new message.
+ */
+export const PublishDataHealthThresholdProfileResponseSchema: GenMessage<PublishDataHealthThresholdProfileResponse> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_health, 4);
 
 /**
  * @generated from message ficant.research.v1.DataHealthReport
@@ -234,7 +310,7 @@ export type DataHealthReport = Message<"ficant.research.v1.DataHealthReport"> & 
  * Use `create(DataHealthReportSchema)` to create a new message.
  */
 export const DataHealthReportSchema: GenMessage<DataHealthReport> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_health, 3);
+  messageDesc(file_ficant_research_v1_health, 5);
 
 /**
  * @generated from message ficant.research.v1.GetDataHealthReportResponse
@@ -263,7 +339,7 @@ export type GetDataHealthReportResponse = Message<"ficant.research.v1.GetDataHea
  * Use `create(GetDataHealthReportResponseSchema)` to create a new message.
  */
 export const GetDataHealthReportResponseSchema: GenMessage<GetDataHealthReportResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_health, 4);
+  messageDesc(file_ficant_research_v1_health, 6);
 
 /**
  * @generated from enum ficant.research.v1.DataHealthState
@@ -367,6 +443,14 @@ export const DataHealthIssueCodeSchema: GenEnum<DataHealthIssueCode> = /*@__PURE
  * @generated from service ficant.research.v1.DataHealthService
  */
 export const DataHealthService: GenService<{
+  /**
+   * @generated from rpc ficant.research.v1.DataHealthService.PublishDataHealthThresholdProfile
+   */
+  publishDataHealthThresholdProfile: {
+    methodKind: "unary";
+    input: typeof PublishDataHealthThresholdProfileRequestSchema;
+    output: typeof PublishDataHealthThresholdProfileResponseSchema;
+  },
   /**
    * @generated from rpc ficant.research.v1.DataHealthService.GetDataHealthReport
    */

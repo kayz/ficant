@@ -2,12 +2,13 @@ use std::sync::Arc;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use ficant_application::ports::{
-    AccessScope, CanonicalSnapshotDecoder, DataSourceRepository, IntegrityEventSink,
-    PositionSnapshotRepository, SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader,
+    AccessScope, BlobStore, CanonicalSnapshotDecoder, DataHealthThresholdProfileRepository,
+    DataSourceRepository, IdempotencyKey, IntegrityEventSink, PositionSnapshotRepository,
+    SnapshotRepository, SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader,
 };
 use ficant_application::{
-    ApplicationError, ApplicationErrorCategory, DataHealthQuery, GetDataHealthReport,
-    map_domain_error,
+    ApplicationError, ApplicationErrorCategory, DataHealthQuery, DataHealthThresholdProfilePayload,
+    GetDataHealthReport, PublishDataHealthThresholdProfile, map_domain_error,
 };
 use ficant_contracts::ficant::core::v1 as core;
 use ficant_contracts::ficant::market::v1 as market;
@@ -32,6 +33,7 @@ use crate::grpc_web::request_credential;
 use crate::registry::PlatformPort;
 
 const READ_SCOPE: &str = "data-health:read";
+const CONFIGURE_SCOPE: &str = "data-health:configure";
 
 #[derive(Clone)]
 pub struct DataHealthGrpcService {
@@ -43,6 +45,9 @@ pub struct DataHealthGrpcService {
     integrity_events: Arc<dyn IntegrityEventSink>,
     decoder: Arc<dyn CanonicalSnapshotDecoder>,
     data_sources: Arc<dyn DataSourceRepository>,
+    threshold_profiles: Arc<dyn DataHealthThresholdProfileRepository>,
+    snapshots: Arc<dyn SnapshotRepository>,
+    blobs: Arc<dyn BlobStore>,
     errors: CoreBusinessErrorMapper,
 }
 
@@ -63,6 +68,9 @@ impl DataHealthGrpcService {
         integrity_events: Arc<dyn IntegrityEventSink>,
         decoder: Arc<dyn CanonicalSnapshotDecoder>,
         data_sources: Arc<dyn DataSourceRepository>,
+        threshold_profiles: Arc<dyn DataHealthThresholdProfileRepository>,
+        snapshots: Arc<dyn SnapshotRepository>,
+        blobs: Arc<dyn BlobStore>,
         trace_key: &[u8],
     ) -> Result<Self, &'static str> {
         Ok(Self {
@@ -74,36 +82,85 @@ impl DataHealthGrpcService {
             integrity_events,
             decoder,
             data_sources,
+            threshold_profiles,
+            snapshots,
+            blobs,
             errors: CoreBusinessErrorMapper::new(trace_key)?,
         })
     }
 
-    fn authorize(&self, request: &Request<impl Sized>) -> Result<(), ApplicationError> {
+    fn authorize(
+        &self,
+        request: &Request<impl Sized>,
+        required_scope: &str,
+    ) -> Result<(), ApplicationError> {
         let credential = request_credential(request.metadata());
         let session = self
             .identity
             .current_session(&credential)
             .map_err(|failure| platform_application_error(&failure))?;
-        if session.has_scope(READ_SCOPE) {
+        if session.has_scope(required_scope) {
             Ok(())
         } else {
             Err(forbidden())
         }
     }
 
-    fn error(&self, error: &ApplicationError) -> core::ErrorDetail {
-        self.errors
-            .map("data-health.get", "data-health-application", error)
+    fn error(&self, operation: &str, error: &ApplicationError) -> core::ErrorDetail {
+        self.errors.map(operation, "data-health-application", error)
     }
 }
 
 #[tonic::async_trait]
 impl DataHealthService for DataHealthGrpcService {
+    async fn publish_data_health_threshold_profile(
+        &self,
+        request: Request<pb::PublishDataHealthThresholdProfileRequest>,
+    ) -> Result<Response<pb::PublishDataHealthThresholdProfileResponse>, Status> {
+        const OPERATION: &str = "data-health.configure";
+        let result = match self.authorize(&request, CONFIGURE_SCOPE) {
+            Err(error) => Err(error),
+            Ok(()) => match parse_threshold_profile(request.get_ref().threshold_profile.as_ref())
+                .and_then(|profile| {
+                    let key = IdempotencyKey::new(request.get_ref().idempotency_key.clone())?;
+                    DataHealthThresholdProfilePayload::new(profile, key)
+                }) {
+                Ok(payload) if self.access_scope.allows(payload.profile().owner()) => {
+                    PublishDataHealthThresholdProfile::new(
+                        self.blobs.as_ref(),
+                        self.snapshots.as_ref(),
+                    )
+                    .execute(&self.access_scope, payload)
+                    .await
+                }
+                Ok(_) => Err(forbidden()),
+                Err(error) => Err(error),
+            },
+        };
+        Ok(Response::new(
+            pb::PublishDataHealthThresholdProfileResponse {
+                result: Some(match result {
+                    Ok(value) => {
+                        pb::publish_data_health_threshold_profile_response::Result::ThresholdProfile(
+                            threshold_profile(&value),
+                        )
+                    }
+                    Err(error) => {
+                        pb::publish_data_health_threshold_profile_response::Result::Error(
+                            self.error(OPERATION, &error),
+                        )
+                    }
+                }),
+            },
+        ))
+    }
+
     async fn get_data_health_report(
         &self,
         request: Request<pb::GetDataHealthReportRequest>,
     ) -> Result<Response<pb::GetDataHealthReportResponse>, Status> {
-        let result = match self.authorize(&request) {
+        const OPERATION: &str = "data-health.get";
+        let result = match self.authorize(&request, READ_SCOPE) {
             Err(error) => Err(error),
             Ok(()) => parse_query(request.get_ref()),
         };
@@ -116,6 +173,7 @@ impl DataHealthService for DataHealthGrpcService {
                     self.integrity_events.as_ref(),
                     self.decoder.as_ref(),
                     self.data_sources.as_ref(),
+                    self.threshold_profiles.as_ref(),
                 )
                 .execute(&self.access_scope, query)
                 .await
@@ -125,9 +183,9 @@ impl DataHealthService for DataHealthGrpcService {
         Ok(Response::new(pb::GetDataHealthReportResponse {
             result: Some(match result {
                 Ok(value) => pb::get_data_health_report_response::Result::Report(report(&value)),
-                Err(error) => {
-                    pb::get_data_health_report_response::Result::Error(self.error(&error))
-                }
+                Err(error) => pb::get_data_health_report_response::Result::Error(
+                    self.error(OPERATION, &error),
+                ),
             }),
         }))
     }
@@ -146,7 +204,6 @@ fn parse_query(
         parse_ulid(value.position_snapshot_id.as_ref())?,
         data_snapshot_id,
         parse_market_time(value.evaluated_at.as_ref())?,
-        parse_threshold_profile(value.threshold_profile.as_ref())?,
     ))
 }
 
@@ -155,14 +212,47 @@ fn parse_threshold_profile(
 ) -> Result<DataHealthThresholdProfile, ApplicationError> {
     let value = value.ok_or_else(invalid)?;
     DataHealthThresholdProfile::new(DataHealthThresholdProfileInput {
+        profile_snapshot_id: parse_ulid(value.profile_snapshot_id.as_ref())?,
+        owner: parse_owner(value.owner.as_ref())?,
         profile_ref: parse_version_ref(value.profile_ref.as_ref())?,
+        visible_at: parse_market_time(value.visible_at.as_ref())?,
+        effective_from: parse_market_time(value.effective_from.as_ref())?,
+        effective_to: parse_market_time(value.effective_to.as_ref())?,
         max_position_snapshot_age_seconds: value.max_position_snapshot_age_seconds,
         unknown_accounting_warning_basis_points: value.unknown_accounting_warning_basis_points,
         max_data_snapshot_age_seconds: value.max_data_snapshot_age_seconds,
         model_valuation_warning_basis_points: value.model_valuation_warning_basis_points,
         content_hash: parse_hash(value.content_hash.as_ref())?,
+        lineage: value
+            .lineage
+            .iter()
+            .map(parse_lineage)
+            .collect::<Result<_, _>>()?,
     })
     .map_err(map_domain_error)
+}
+
+fn parse_owner(value: Option<&core::OwnerRef>) -> Result<OwnerRef, ApplicationError> {
+    let value = value.ok_or_else(invalid)?;
+    Ok(OwnerRef::new(
+        parse_ulid(value.tenant_id.as_ref())?,
+        parse_ulid(value.owner_id.as_ref())?,
+    ))
+}
+
+fn parse_lineage(value: &core::LineageRef) -> Result<LineageRef, ApplicationError> {
+    let object_id = parse_ulid(value.object_id.as_ref())?;
+    match (value.version, value.content_hash.as_ref()) {
+        (0, Some(hash)) => Ok(LineageRef::content_addressed(
+            object_id,
+            parse_hash(Some(hash))?,
+        )),
+        (version, None) if version > 0 => Ok(LineageRef::versioned(
+            object_id,
+            Version::new(version).map_err(map_domain_error)?,
+        )),
+        _ => Err(invalid()),
+    }
 }
 
 fn parse_version_ref(value: Option<&core::VersionRef>) -> Result<VersionRef, ApplicationError> {
@@ -224,12 +314,18 @@ fn report(value: &DataHealthReport) -> pb::DataHealthReport {
 
 fn threshold_profile(value: &DataHealthThresholdProfile) -> pb::DataHealthThresholdProfile {
     pb::DataHealthThresholdProfile {
+        profile_snapshot_id: Some(ulid(value.id())),
+        owner: Some(owner(value.owner())),
         profile_ref: Some(version_ref(value.profile_ref())),
+        visible_at: Some(market_time(value.visible_at())),
+        effective_from: Some(market_time(value.effective_from())),
+        effective_to: Some(market_time(value.effective_to())),
         max_position_snapshot_age_seconds: value.max_position_snapshot_age_seconds(),
         unknown_accounting_warning_basis_points: value.unknown_accounting_warning_basis_points(),
         max_data_snapshot_age_seconds: value.max_data_snapshot_age_seconds(),
         model_valuation_warning_basis_points: value.model_valuation_warning_basis_points(),
         content_hash: Some(hash(value.content_hash())),
+        lineage: value.lineage().iter().map(lineage).collect(),
     }
 }
 

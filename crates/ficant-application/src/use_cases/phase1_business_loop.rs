@@ -520,6 +520,10 @@ async fn promote_snapshot_proof(
             let payload = promote_snapshot_blob(blob_store, payload).await?;
             VerifiedSnapshotProof::position(payload)
         }
+        StagedSnapshotProofParts::DataHealthThresholdProfile { payload } => {
+            let payload = promote_snapshot_blob(blob_store, payload).await?;
+            VerifiedSnapshotProof::data_health_threshold_profile(payload)
+        }
     }
 }
 

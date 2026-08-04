@@ -104,6 +104,18 @@ fn unknown_ratio_uses_exact_integer_threshold_and_age_uses_full_instant() {
             .all(|value| value.code() != DataHealthIssueCode::StalePositionSnapshot)
     );
 
+    let one_nanosecond_over =
+        evaluate_position_snapshot(&snapshot, &profile, &market_time_nanos(3_600, 1)).unwrap();
+    assert_eq!(
+        issue(
+            &one_nanosecond_over,
+            DataHealthIssueCode::StalePositionSnapshot
+        )
+        .observed_age_seconds(),
+        3_601,
+        "full MarketTime precision decides staleness and display seconds round upward"
+    );
+
     let stale = evaluate_position_snapshot(&snapshot, &profile, &market_time(3_601)).unwrap();
     assert_eq!(
         issue(&stale, DataHealthIssueCode::StalePositionSnapshot).observed_age_seconds(),
@@ -338,17 +350,28 @@ fn profile_input(
     model_bps: u32,
 ) -> DataHealthThresholdProfileInput {
     DataHealthThresholdProfileInput {
+        profile_snapshot_id: id('H'),
+        owner: OwnerRef::new(id('T'), id('O')),
         profile_ref: VersionRef::new(id('P'), version()),
+        visible_at: market_time(0),
+        effective_from: market_time(0),
+        effective_to: market_time(10_000),
         max_position_snapshot_age_seconds: max_position_age,
         unknown_accounting_warning_basis_points: unknown_bps,
         max_data_snapshot_age_seconds: max_data_age,
         model_valuation_warning_basis_points: model_bps,
         content_hash: ContentHash::digest(b"placeholder"),
+        lineage: Vec::new(),
     }
 }
 
 fn market_time(seconds: i64) -> MarketTime {
     let instant = Utc.timestamp_opt(1_767_225_600 + seconds, 0).unwrap();
+    MarketTime::new(instant, "UTC", instant.date_naive()).unwrap()
+}
+
+fn market_time_nanos(seconds: i64, nanos: u32) -> MarketTime {
+    let instant = Utc.timestamp_opt(1_767_225_600 + seconds, nanos).unwrap();
     MarketTime::new(instant, "UTC", instant.date_naive()).unwrap()
 }
 

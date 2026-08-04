@@ -13,6 +13,12 @@ message DataHealthThresholdProfile {
   uint64 max_data_snapshot_age_seconds = 4;
   uint32 model_valuation_warning_basis_points = 5;
   ficant.core.v1.Sha256 content_hash = 6;
+  ficant.core.v1.Ulid profile_snapshot_id = 7;
+  ficant.core.v1.OwnerRef owner = 8;
+  ficant.core.v1.MarketTime visible_at = 9;
+  ficant.core.v1.MarketTime effective_from = 10;
+  ficant.core.v1.MarketTime effective_to = 11;
+  repeated ficant.core.v1.LineageRef lineage = 12;
 }
 
 enum DataHealthState {
@@ -51,7 +57,19 @@ message GetDataHealthReportRequest {
   ficant.core.v1.Ulid position_snapshot_id = 2;
   ficant.core.v1.Ulid data_snapshot_id = 3;
   ficant.core.v1.MarketTime evaluated_at = 4;
-  DataHealthThresholdProfile threshold_profile = 5;
+  reserved 5;
+}
+
+message PublishDataHealthThresholdProfileRequest {
+  string idempotency_key = 1;
+  DataHealthThresholdProfile threshold_profile = 2;
+}
+
+message PublishDataHealthThresholdProfileResponse {
+  oneof result {
+    DataHealthThresholdProfile threshold_profile = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
 }
 
 message DataHealthReport {
@@ -82,5 +100,6 @@ message GetDataHealthReportResponse {
 }
 
 service DataHealthService {
+  rpc PublishDataHealthThresholdProfile(PublishDataHealthThresholdProfileRequest) returns (PublishDataHealthThresholdProfileResponse);
   rpc GetDataHealthReport(GetDataHealthReportRequest) returns (GetDataHealthReportResponse);
 }

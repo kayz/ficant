@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 
+use chrono::TimeDelta;
+
 use crate::market::PriceSourceType;
 use crate::primitives::{ContentHash, LineageRef, MarketTime, OwnerRef, Ulid, Version, VersionRef};
 use crate::{ContentAddressed, DomainErrorCode, DomainResult, Lineaged};
@@ -10,28 +12,42 @@ const BASIS_POINTS_DENOMINATOR: u64 = 10_000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DataHealthThresholdProfile {
+    profile_snapshot_id: Ulid,
+    owner: OwnerRef,
     profile_ref: VersionRef,
+    visible_at: MarketTime,
+    effective_from: MarketTime,
+    effective_to: MarketTime,
     max_position_snapshot_age_seconds: u64,
     unknown_accounting_warning_basis_points: u32,
     max_data_snapshot_age_seconds: u64,
     model_valuation_warning_basis_points: u32,
     content_hash: ContentHash,
+    lineage: Vec<LineageRef>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DataHealthThresholdProfileInput {
+    pub profile_snapshot_id: Ulid,
+    pub owner: OwnerRef,
     pub profile_ref: VersionRef,
+    pub visible_at: MarketTime,
+    pub effective_from: MarketTime,
+    pub effective_to: MarketTime,
     pub max_position_snapshot_age_seconds: u64,
     pub unknown_accounting_warning_basis_points: u32,
     pub max_data_snapshot_age_seconds: u64,
     pub model_valuation_warning_basis_points: u32,
     pub content_hash: ContentHash,
+    pub lineage: Vec<LineageRef>,
 }
 
 impl DataHealthThresholdProfile {
     pub fn new(input: DataHealthThresholdProfileInput) -> DomainResult<Self> {
         if !(1..=10_000).contains(&input.unknown_accounting_warning_basis_points)
             || !(1..=10_000).contains(&input.model_valuation_warning_basis_points)
+            || input.effective_from.instant() >= input.effective_to.instant()
+            || input.visible_at.instant() >= input.effective_to.instant()
         {
             return Err(DomainErrorCode::InvalidValue);
         }
@@ -40,12 +56,18 @@ impl DataHealthThresholdProfile {
             return Err(DomainErrorCode::ContentHashMismatch);
         }
         Ok(Self {
+            profile_snapshot_id: input.profile_snapshot_id,
+            owner: input.owner,
             profile_ref: input.profile_ref,
+            visible_at: input.visible_at,
+            effective_from: input.effective_from,
+            effective_to: input.effective_to,
             max_position_snapshot_age_seconds: input.max_position_snapshot_age_seconds,
             unknown_accounting_warning_basis_points: input.unknown_accounting_warning_basis_points,
             max_data_snapshot_age_seconds: input.max_data_snapshot_age_seconds,
             model_valuation_warning_basis_points: input.model_valuation_warning_basis_points,
             content_hash: input.content_hash,
+            lineage: input.lineage,
         })
     }
 
@@ -55,17 +77,43 @@ impl DataHealthThresholdProfile {
 
     pub fn canonical_bytes(&self) -> Vec<u8> {
         profile_canonical_bytes(&DataHealthThresholdProfileInput {
+            profile_snapshot_id: self.profile_snapshot_id.clone(),
+            owner: self.owner.clone(),
             profile_ref: self.profile_ref.clone(),
+            visible_at: self.visible_at.clone(),
+            effective_from: self.effective_from.clone(),
+            effective_to: self.effective_to.clone(),
             max_position_snapshot_age_seconds: self.max_position_snapshot_age_seconds,
             unknown_accounting_warning_basis_points: self.unknown_accounting_warning_basis_points,
             max_data_snapshot_age_seconds: self.max_data_snapshot_age_seconds,
             model_valuation_warning_basis_points: self.model_valuation_warning_basis_points,
             content_hash: self.content_hash.clone(),
+            lineage: self.lineage.clone(),
         })
+    }
+
+    pub fn id(&self) -> &Ulid {
+        &self.profile_snapshot_id
+    }
+
+    pub fn owner(&self) -> &OwnerRef {
+        &self.owner
     }
 
     pub fn profile_ref(&self) -> &VersionRef {
         &self.profile_ref
+    }
+
+    pub fn visible_at(&self) -> &MarketTime {
+        &self.visible_at
+    }
+
+    pub fn effective_from(&self) -> &MarketTime {
+        &self.effective_from
+    }
+
+    pub fn effective_to(&self) -> &MarketTime {
+        &self.effective_to
     }
 
     pub const fn max_position_snapshot_age_seconds(&self) -> u64 {
@@ -88,6 +136,12 @@ impl DataHealthThresholdProfile {
 impl ContentAddressed for DataHealthThresholdProfile {
     fn content_hash(&self) -> &ContentHash {
         &self.content_hash
+    }
+}
+
+impl Lineaged for DataHealthThresholdProfile {
+    fn lineage(&self) -> &[LineageRef] {
+        &self.lineage
     }
 }
 
@@ -351,15 +405,15 @@ pub fn evaluate_position_snapshot(
         )
     };
 
-    let age = elapsed_seconds(snapshot.observed_at(), evaluated_at)?;
-    if age > profile.max_position_snapshot_age_seconds {
+    let age = elapsed_age(snapshot.observed_at(), evaluated_at)?;
+    if age.exceeds(profile.max_position_snapshot_age_seconds) {
         issues.push(DataHealthIssue::new(
             DataHealthIssueCode::StalePositionSnapshot,
             Vec::new(),
             None,
             0,
             0,
-            age,
+            age.display_seconds,
         )?);
     }
     issues.sort_by(compare_issues);
@@ -544,6 +598,11 @@ impl DataHealthReport {
                 evidence.data_snapshot_content_hash().clone(),
             ));
         }
+        lineage.extend_from_slice(input.threshold_profile.lineage());
+        lineage.push(LineageRef::content_addressed(
+            input.threshold_profile.id().clone(),
+            input.threshold_profile.content_hash().clone(),
+        ));
         if !lineage.iter().any(|reference| reference == &profile_ref) {
             lineage.push(profile_ref);
         }
@@ -702,7 +761,12 @@ fn profile_canonical_bytes(input: &DataHealthThresholdProfileInput) -> Vec<u8> {
         &mut bytes,
         b"ficant.research.data-health-threshold-profile.v1",
     );
+    append(&mut bytes, input.profile_snapshot_id.as_str().as_bytes());
+    append_owner(&mut bytes, &input.owner);
     append_version_ref(&mut bytes, &input.profile_ref);
+    append_time(&mut bytes, &input.visible_at);
+    append_time(&mut bytes, &input.effective_from);
+    append_time(&mut bytes, &input.effective_to);
     append(
         &mut bytes,
         &input.max_position_snapshot_age_seconds.to_be_bytes(),
@@ -719,6 +783,9 @@ fn profile_canonical_bytes(input: &DataHealthThresholdProfileInput) -> Vec<u8> {
         &mut bytes,
         &input.model_valuation_warning_basis_points.to_be_bytes(),
     );
+    for reference in &input.lineage {
+        append_lineage(&mut bytes, reference);
+    }
     bytes
 }
 
@@ -765,12 +832,33 @@ fn ratio_basis_points(count: usize, total: usize) -> DomainResult<u32> {
     u32::try_from(value).map_err(|_| DomainErrorCode::InvalidValue)
 }
 
-fn elapsed_seconds(earlier: &MarketTime, later: &MarketTime) -> DomainResult<u64> {
-    let seconds = later
-        .instant()
-        .signed_duration_since(earlier.instant())
-        .num_seconds();
-    u64::try_from(seconds).map_err(|_| DomainErrorCode::InvalidEffectiveTime)
+struct ElapsedAge {
+    duration: TimeDelta,
+    display_seconds: u64,
+}
+
+impl ElapsedAge {
+    fn exceeds(&self, threshold_seconds: u64) -> bool {
+        i64::try_from(threshold_seconds)
+            .is_ok_and(|threshold| self.duration > TimeDelta::seconds(threshold))
+    }
+}
+
+fn elapsed_age(earlier: &MarketTime, later: &MarketTime) -> DomainResult<ElapsedAge> {
+    let duration = later.instant().signed_duration_since(earlier.instant());
+    if duration < TimeDelta::zero() {
+        return Err(DomainErrorCode::InvalidEffectiveTime);
+    }
+    let floor_seconds = duration.num_seconds();
+    let floor_duration = TimeDelta::seconds(floor_seconds);
+    let display_seconds = floor_seconds
+        .checked_add(i64::from(duration > floor_duration))
+        .and_then(|value| u64::try_from(value).ok())
+        .ok_or(DomainErrorCode::InvalidEffectiveTime)?;
+    Ok(ElapsedAge {
+        duration,
+        display_seconds,
+    })
 }
 
 fn append_price_evidence_issues(
@@ -789,7 +877,7 @@ fn append_price_evidence_issues(
     if evaluated_at.instant() < evidence.visible_at().instant() {
         return Err(DomainErrorCode::InvalidEffectiveTime);
     }
-    let age = elapsed_seconds(evidence.as_of(), evaluated_at)?;
+    let age = elapsed_age(evidence.as_of(), evaluated_at)?;
     if evidence.source_type().is_none() {
         issues.push(DataHealthIssue::new(
             DataHealthIssueCode::UntypedPriceSource,
@@ -816,14 +904,14 @@ fn append_price_evidence_issues(
             0,
         )?);
     }
-    if age > profile.max_data_snapshot_age_seconds {
+    if age.exceeds(profile.max_data_snapshot_age_seconds) {
         issues.push(DataHealthIssue::new(
             DataHealthIssueCode::StaleDataSnapshot,
             Vec::new(),
             Some(evidence.data_source_ref().clone()),
             0,
             0,
-            age,
+            age.display_seconds,
         )?);
     }
     Ok((

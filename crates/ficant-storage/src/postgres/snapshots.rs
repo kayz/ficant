@@ -40,6 +40,10 @@ impl SnapshotRepository for PostgresRepository {
              UNION ALL
              SELECT payload FROM research.position_snapshots
              WHERE tenant_id = $1 AND snapshot_id = $2
+               AND owner_id::text = ANY($3::text[])
+             UNION ALL
+             SELECT payload FROM research.data_health_threshold_profiles
+             WHERE tenant_id = $1 AND profile_snapshot_id = $2
                AND owner_id::text = ANY($3::text[])",
         )
         .bind(scope.tenant_id().as_str())
@@ -117,10 +121,9 @@ impl SnapshotVerifiedReadMetadataRepository for PostgresRepository {
                     u64::try_from(size).map_err(|_| invalid())?,
                 )?))
             }
-            SnapshotValue::Position(_) => Err(application_error(
-                ApplicationErrorCategory::ValidationFailed,
-                false,
-            )),
+            SnapshotValue::DataHealthThresholdProfile(_) | SnapshotValue::Position(_) => Err(
+                application_error(ApplicationErrorCategory::ValidationFailed, false),
+            ),
         }
     }
 }
@@ -259,26 +262,88 @@ async fn insert_snapshot_metadata(
             }
         }
         SnapshotValue::Position(value) => {
-            sqlx::query(
-                "INSERT INTO research.position_snapshots
-                 (tenant_id, snapshot_id, owner_id, subject_id, subject_version, observed_at, visible_at,
-                  content_hash, idempotency_key, fingerprint, payload)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+            insert_position_snapshot(
+                transaction,
+                value,
+                command.idempotency_key().as_str(),
+                fingerprint,
+                payload,
             )
-            .bind(tenant_id)
-            .bind(value.id().as_str())
-            .bind(value.owner().owner_id().as_str())
-            .bind(value.subject_ref().id().as_str())
-            .bind(i64::try_from(value.subject_ref().version().get()).map_err(|_| invalid())?)
-            .bind(value.observed_at().instant())
-            .bind(value.visible_at().instant())
-            .bind(crate::s3::content_addressed::hash_hex(value.content_hash()))
-            .bind(command.idempotency_key().as_str())
-            .bind(fingerprint.as_slice())
-            .bind(payload)
-            .execute(&mut **transaction).await.map_err(map_sqlx_error)?;
+            .await?;
+        }
+        SnapshotValue::DataHealthThresholdProfile(value) => {
+            insert_data_health_threshold_profile(
+                transaction,
+                value,
+                command.idempotency_key().as_str(),
+                fingerprint,
+                payload,
+            )
+            .await?;
         }
     }
+    Ok(())
+}
+
+async fn insert_position_snapshot(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    value: &ficant_domain::research::PositionSnapshot,
+    idempotency_key: &str,
+    fingerprint: &[u8],
+    payload: &[u8],
+) -> Result<(), ApplicationError> {
+    sqlx::query(
+        "INSERT INTO research.position_snapshots
+         (tenant_id, snapshot_id, owner_id, subject_id, subject_version, observed_at, visible_at,
+          content_hash, idempotency_key, fingerprint, payload)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+    )
+    .bind(value.owner().tenant_id().as_str())
+    .bind(value.id().as_str())
+    .bind(value.owner().owner_id().as_str())
+    .bind(value.subject_ref().id().as_str())
+    .bind(i64::try_from(value.subject_ref().version().get()).map_err(|_| invalid())?)
+    .bind(value.observed_at().instant())
+    .bind(value.visible_at().instant())
+    .bind(crate::s3::content_addressed::hash_hex(value.content_hash()))
+    .bind(idempotency_key)
+    .bind(fingerprint)
+    .bind(payload)
+    .execute(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    Ok(())
+}
+
+async fn insert_data_health_threshold_profile(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    value: &ficant_domain::research::DataHealthThresholdProfile,
+    idempotency_key: &str,
+    fingerprint: &[u8],
+    payload: &[u8],
+) -> Result<(), ApplicationError> {
+    sqlx::query(
+        "INSERT INTO research.data_health_threshold_profiles
+         (tenant_id, profile_snapshot_id, owner_id, profile_id, profile_version,
+          visible_at, effective_from, effective_to, content_hash,
+          idempotency_key, fingerprint, payload)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+    )
+    .bind(value.owner().tenant_id().as_str())
+    .bind(value.id().as_str())
+    .bind(value.owner().owner_id().as_str())
+    .bind(value.profile_ref().id().as_str())
+    .bind(i64::try_from(value.profile_ref().version().get()).map_err(|_| invalid())?)
+    .bind(value.visible_at().instant())
+    .bind(value.effective_from().instant())
+    .bind(value.effective_to().instant())
+    .bind(crate::s3::content_addressed::hash_hex(value.content_hash()))
+    .bind(idempotency_key)
+    .bind(fingerprint)
+    .bind(payload)
+    .execute(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
     Ok(())
 }
 
@@ -338,6 +403,20 @@ fn validate_proof(
                 value.content_hash(),
             )?;
         }
+        SnapshotValue::DataHealthThresholdProfile(value) => {
+            if command.proof().kind() != SnapshotProofKind::DataHealthThresholdProfile {
+                return Err(invalid());
+            }
+            validate_blob(
+                snapshot,
+                command
+                    .proof()
+                    .get(SnapshotBlobRole::DataHealthThresholdProfilePayload)
+                    .ok_or_else(invalid)?,
+                SnapshotBlobRole::DataHealthThresholdProfilePayload,
+                value.content_hash(),
+            )?;
+        }
     }
     Ok(())
 }
@@ -388,6 +467,16 @@ async fn load_persisted_snapshot(
         SnapshotValue::Position(_) => sqlx::query_scalar(
             "SELECT payload FROM research.position_snapshots
              WHERE tenant_id = $1 AND snapshot_id = $2 AND owner_id = $3",
+        )
+        .bind(snapshot.owner().tenant_id().as_str())
+        .bind(snapshot.id().as_str())
+        .bind(snapshot.owner().owner_id().as_str())
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(map_sqlx_error)?,
+        SnapshotValue::DataHealthThresholdProfile(_) => sqlx::query_scalar(
+            "SELECT payload FROM research.data_health_threshold_profiles
+             WHERE tenant_id = $1 AND profile_snapshot_id = $2 AND owner_id = $3",
         )
         .bind(snapshot.owner().tenant_id().as_str())
         .bind(snapshot.id().as_str())

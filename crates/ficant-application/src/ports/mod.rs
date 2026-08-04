@@ -6,6 +6,7 @@ mod canonical_snapshot;
 mod cursor;
 mod curve_points;
 mod curves;
+mod data_health_profiles;
 mod data_sources;
 mod definitions;
 mod execution;
@@ -43,6 +44,7 @@ pub use curve_points::{
 pub use curves::{
     CarryRollArtifactCodec, CarryRollEngine, EncodedCarryRollArtifact, YieldCurveEngine,
 };
+pub use data_health_profiles::DataHealthThresholdProfileRepository;
 pub use data_sources::{DataSourceRepository, RegisterDataSource};
 pub use definitions::{
     AppendDefinitionVersion, DefinitionIdentity, DefinitionKind, DefinitionRepository,

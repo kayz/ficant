@@ -14,6 +14,11 @@ class DataHealthServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.PublishDataHealthThresholdProfile = channel.unary_unary(
+                '/ficant.research.v1.DataHealthService/PublishDataHealthThresholdProfile',
+                request_serializer=ficant_dot_research_dot_v1_dot_health__pb2.PublishDataHealthThresholdProfileRequest.SerializeToString,
+                response_deserializer=ficant_dot_research_dot_v1_dot_health__pb2.PublishDataHealthThresholdProfileResponse.FromString,
+                _registered_method=True)
         self.GetDataHealthReport = channel.unary_unary(
                 '/ficant.research.v1.DataHealthService/GetDataHealthReport',
                 request_serializer=ficant_dot_research_dot_v1_dot_health__pb2.GetDataHealthReportRequest.SerializeToString,
@@ -24,6 +29,12 @@ class DataHealthServiceStub(object):
 class DataHealthServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
+    def PublishDataHealthThresholdProfile(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetDataHealthReport(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -33,6 +44,11 @@ class DataHealthServiceServicer(object):
 
 def add_DataHealthServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'PublishDataHealthThresholdProfile': grpc.unary_unary_rpc_method_handler(
+                    servicer.PublishDataHealthThresholdProfile,
+                    request_deserializer=ficant_dot_research_dot_v1_dot_health__pb2.PublishDataHealthThresholdProfileRequest.FromString,
+                    response_serializer=ficant_dot_research_dot_v1_dot_health__pb2.PublishDataHealthThresholdProfileResponse.SerializeToString,
+            ),
             'GetDataHealthReport': grpc.unary_unary_rpc_method_handler(
                     servicer.GetDataHealthReport,
                     request_deserializer=ficant_dot_research_dot_v1_dot_health__pb2.GetDataHealthReportRequest.FromString,
@@ -48,6 +64,33 @@ def add_DataHealthServiceServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class DataHealthService(object):
     """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def PublishDataHealthThresholdProfile(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ficant.research.v1.DataHealthService/PublishDataHealthThresholdProfile',
+            ficant_dot_research_dot_v1_dot_health__pb2.PublishDataHealthThresholdProfileRequest.SerializeToString,
+            ficant_dot_research_dot_v1_dot_health__pb2.PublishDataHealthThresholdProfileResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def GetDataHealthReport(request,

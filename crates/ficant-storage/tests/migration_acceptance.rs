@@ -39,7 +39,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
 
-    let expected_migration_versions = (1_i64..=21).collect::<Vec<_>>();
+    let expected_migration_versions = (1_i64..=22).collect::<Vec<_>>();
     let applied_before_repeat: Vec<(i64, bool)> =
         sqlx::query_as("SELECT version, success FROM public._sqlx_migrations ORDER BY version")
             .fetch_all(&pool)
@@ -96,6 +96,14 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         1,
         "0021 must be recorded exactly once after its successful application"
     );
+    assert_eq!(
+        applied_before_repeat
+            .iter()
+            .filter(|(version, success)| *version == 22 && *success)
+            .count(),
+        1,
+        "0022 must be recorded exactly once after its successful application"
+    );
 
     let rows = sqlx::query(
         "SELECT schemaname, tablename
@@ -134,6 +142,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         "market.valuations",
         "research.artifacts",
         "research.data_snapshots",
+        "research.data_health_threshold_profiles",
         "research.experiment_runs",
         "research.execution_tasks",
         "research.execution_identities",
