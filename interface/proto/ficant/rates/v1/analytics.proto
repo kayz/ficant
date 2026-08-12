@@ -4,6 +4,7 @@ package ficant.rates.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
+import "ficant/market/v1/tax_rule.proto";
 
 message ObjectBinding {
   ficant.core.v1.VersionRef object = 1;
@@ -142,6 +143,7 @@ message BondAnalyticsMeasures {
 message TaxAdjustedBondAnalytics {
   repeated DerivedCashflow cashflows = 1;
   ficant.core.v1.DecimalValue yield_to_maturity = 2;
+  ficant.market.v1.CouponTaxClaimScope claim_scope = 3;
 }
 
 message AnalyzeBondRequest {
@@ -249,6 +251,7 @@ message AnalyzeFuturesDeliveryRequest {
   reserved "delivery_month_first", "delivery_date", "product", "futures_clean_price", "candidates";
   SnapshotBinding data_snapshot = 11;
   ObjectBinding funding_rule_pack = 12;
+  ObjectBinding tax_rule_pack = 13;
 }
 
 message FuturesDeliveryMeasures {
@@ -267,17 +270,21 @@ message FuturesDeliveryMeasures {
   ficant.core.v1.DecimalValue implied_repo_rate = 13;
   ficant.core.v1.DecimalValue delivery_profit = 14;
   ficant.core.v1.DecimalValue funding_adjusted_irr = 15;
+  ficant.core.v1.DecimalValue tax_adjusted_interim_coupons = 16;
+  ficant.core.v1.DecimalValue subject_tax_adjusted_irr = 17;
 }
 
 message FuturesDeliveryCandidateResult {
   ObjectBinding bond = 1;
   FuturesDeliveryMeasures measures = 2;
+  ficant.market.v1.CouponTaxClaimScope claim_scope = 3;
 }
 
 message AnalyzeFuturesDeliveryResult {
   repeated FuturesDeliveryCandidateResult candidates = 1;
   uint32 ctd_index = 2;
   ResultMetadata metadata = 3;
+  uint32 subject_ctd_index = 4;
 }
 
 message AnalyzeFuturesDeliveryResponse {

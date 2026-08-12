@@ -15,13 +15,16 @@ use ficant_contracts::ficant::core::v1::{
     DecimalValue, Subject, SubjectStateSnapshot, SubjectVersion,
 };
 use ficant_contracts::ficant::market::v1::{
-    BondCouponTaxRule, BondTaxAttributes, CgbFuturesDeliveryRulePack, CgbFuturesProductRule,
-    FundingRulePack, FundingTierRate, Instrument, InstrumentKind, MarketRulePack,
-    SubjectCouponTaxRate, TaxRulePack,
+    BondCouponTaxRule, BondCouponTaxTreatmentRule, BondTaxAttributes, CgbFuturesDeliveryRulePack,
+    CgbFuturesProductRule, CouponTaxClaimScope, FundingRulePack, FundingTierRate,
+    GrossCouponTaxBasis, Instrument, InstrumentKind, MarketRulePack, SubjectCouponTaxRate,
+    SubjectCouponTaxTreatment, TaxRoundingMode, TaxRulePack, TaxRulePackV2,
 };
 use ficant_contracts::ficant::rates::v1::{
-    AnalysisInputBinding, AnalysisInputRole, AnalyzeBondRequest, ArtifactBinding, CurveNodeBinding,
-    ParameterDigest, SnapshotBinding,
+    AnalysisInputBinding, AnalysisInputRole, AnalyzeBondRequest, AnalyzeFuturesDeliveryRequest,
+    AnalyzeFuturesDeliveryResult, ArtifactBinding, CurveNodeBinding,
+    FuturesDeliveryCandidateResult, FuturesDeliveryMeasures, ParameterDigest, SnapshotBinding,
+    TaxAdjustedBondAnalytics,
 };
 use ficant_contracts::ficant::research::v1::{
     ExecutionInstanceIdentity, ExperimentRun, ReproducibilityIdentity, ResearchGraph, RunState,
@@ -79,6 +82,14 @@ fn generated_rust_consumer_exports_representative_contracts() {
     let coupon_tax_rule = BondCouponTaxRule::default();
     let subject_coupon_tax_rate = SubjectCouponTaxRate::default();
     let bond_tax_attributes = BondTaxAttributes::default();
+    let tax_rule_pack_v2 = TaxRulePackV2::default();
+    let coupon_tax_treatment_rule = BondCouponTaxTreatmentRule::default();
+    let subject_coupon_tax_treatment = SubjectCouponTaxTreatment::default();
+    let delivery_request = AnalyzeFuturesDeliveryRequest::default();
+    let delivery_measures = FuturesDeliveryMeasures::default();
+    let delivery_candidate = FuturesDeliveryCandidateResult::default();
+    let delivery_result = AnalyzeFuturesDeliveryResult::default();
+    let after_tax = TaxAdjustedBondAnalytics::default();
 
     assert!(instrument.instrument_id.is_none());
     assert_eq!(instrument.kind, InstrumentKind::Unspecified as i32);
@@ -107,6 +118,28 @@ fn generated_rust_consumer_exports_representative_contracts() {
     assert!(coupon_tax_rule.tax_attributes.is_none());
     assert!(subject_coupon_tax_rate.coupon_tax_rate.is_none());
     assert_eq!(bond_tax_attributes.value_added_tax_status, 0);
+    assert!(tax_rule_pack_v2.coupon_rules.is_empty());
+    assert!(coupon_tax_treatment_rule.treatments.is_empty());
+    assert_eq!(
+        subject_coupon_tax_treatment.gross_coupon_basis,
+        GrossCouponTaxBasis::Unspecified as i32
+    );
+    assert_eq!(
+        subject_coupon_tax_treatment.rounding,
+        TaxRoundingMode::Unspecified as i32
+    );
+    assert_eq!(
+        subject_coupon_tax_treatment.claim_scope,
+        CouponTaxClaimScope::Unspecified as i32
+    );
+    assert!(delivery_request.tax_rule_pack.is_none());
+    assert!(delivery_measures.tax_adjusted_interim_coupons.is_none());
+    assert!(delivery_candidate.measures.is_none());
+    assert_eq!(delivery_result.subject_ctd_index, 0);
+    assert_eq!(
+        after_tax.claim_scope,
+        CouponTaxClaimScope::Unspecified as i32
+    );
 }
 
 #[derive(Clone, Copy)]
@@ -246,7 +279,7 @@ fn descriptor_inventory_is_unique_and_preserves_phase1_semantics() {
     assert_phase1_objects(&messages);
     assert_cgb_futures_rule_pack_contract(&messages);
     assert_funding_rule_pack_contract(&messages);
-    assert_tax_rule_pack_contract(&messages);
+    assert_tax_rule_pack_contract(&messages, &top_level_enums(descriptor_set));
     assert_position_snapshot_contract(&messages);
     assert_service_inventory(descriptor_set);
 }
@@ -1849,6 +1882,7 @@ fn assert_r5d_rates_contracts(
             ("purchase_date", 4, Type::String, None, false),
             ("data_snapshot", 11, Type::Message, Some(snapshot), false),
             ("funding_rule_pack", 12, Type::Message, Some(object), false),
+            ("tax_rule_pack", 13, Type::Message, Some(object), false),
         ],
     );
     assert_reserved_tags(
@@ -1917,6 +1951,7 @@ fn assert_r5d_rates_contracts(
         &[
             ExpectedField::repeated_message("cashflows", ".ficant.rates.v1.DerivedCashflow"),
             ExpectedField::message("yield_to_maturity", decimal),
+            ExpectedField::enumeration("claim_scope", ".ficant.market.v1.CouponTaxClaimScope"),
         ],
     );
     assert_fields(
@@ -1942,10 +1977,49 @@ fn assert_r5d_rates_contracts(
         false,
         false,
     );
+    assert_exact_field(
+        delivery_measures,
+        "tax_adjusted_interim_coupons",
+        16,
+        Type::Message,
+        Some(decimal),
+        false,
+        false,
+    );
+    assert_exact_field(
+        delivery_measures,
+        "subject_tax_adjusted_irr",
+        17,
+        Type::Message,
+        Some(decimal),
+        false,
+        false,
+    );
     assert_eq!(
         delivery_measures.field.len(),
-        15,
-        "FuturesDeliveryMeasures must retain the subject-adjusted IRR field"
+        17,
+        "FuturesDeliveryMeasures must retain market/funding values and add tax values"
+    );
+    assert_fields(
+        messages,
+        "ficant.rates.v1.FuturesDeliveryCandidateResult",
+        &[
+            ExpectedField::message("bond", object),
+            ExpectedField::message("measures", ".ficant.rates.v1.FuturesDeliveryMeasures"),
+            ExpectedField::enumeration("claim_scope", ".ficant.market.v1.CouponTaxClaimScope"),
+        ],
+    );
+    let delivery_result = messages
+        .get("ficant.rates.v1.AnalyzeFuturesDeliveryResult")
+        .expect("AnalyzeFuturesDeliveryResult must exist");
+    assert_exact_field(
+        delivery_result,
+        "subject_ctd_index",
+        4,
+        Type::Uint32,
+        None,
+        false,
+        false,
     );
 }
 
@@ -2438,7 +2512,10 @@ fn assert_funding_rule_pack_contract(messages: &BTreeMap<String, &DescriptorProt
     assert_eq!(rate.field.len(), 2, "FundingTierRate field drift");
 }
 
-fn assert_tax_rule_pack_contract(messages: &BTreeMap<String, &DescriptorProto>) {
+fn assert_tax_rule_pack_contract(
+    messages: &BTreeMap<String, &DescriptorProto>,
+    enums: &BTreeMap<String, &EnumDescriptorProto>,
+) {
     let pack = messages
         .get("ficant.market.v1.TaxRulePack")
         .expect("TaxRulePack must exist");
@@ -2469,6 +2546,76 @@ fn assert_tax_rule_pack_contract(messages: &BTreeMap<String, &DescriptorProto>) 
             ExpectedField::scalar("value_added_tax_profile", Type::String),
             ExpectedField::scalar("income_tax_profile", Type::String),
             ExpectedField::message("coupon_tax_rate", ".ficant.core.v1.DecimalValue"),
+        ],
+    );
+
+    let pack_v2 = messages
+        .get("ficant.market.v1.TaxRulePackV2")
+        .expect("TaxRulePackV2 must exist");
+    assert_exact_field(
+        pack_v2,
+        "coupon_rules",
+        1,
+        Type::Message,
+        Some(".ficant.market.v1.BondCouponTaxTreatmentRule"),
+        true,
+        false,
+    );
+    assert_eq!(pack_v2.field.len(), 1, "TaxRulePackV2 field drift");
+    assert_fields(
+        messages,
+        "ficant.market.v1.BondCouponTaxTreatmentRule",
+        &[
+            ExpectedField::scalar("first_issue_from", Type::String),
+            ExpectedField::scalar("first_issue_to", Type::String),
+            ExpectedField::message("tax_attributes", ".ficant.market.v1.BondTaxAttributes"),
+            ExpectedField::repeated_message(
+                "treatments",
+                ".ficant.market.v1.SubjectCouponTaxTreatment",
+            ),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.market.v1.SubjectCouponTaxTreatment",
+        &[
+            ExpectedField::scalar("value_added_tax_profile", Type::String),
+            ExpectedField::scalar("income_tax_profile", Type::String),
+            ExpectedField::message("value_added_tax_rate", ".ficant.core.v1.DecimalValue"),
+            ExpectedField::message("income_tax_rate", ".ficant.core.v1.DecimalValue"),
+            ExpectedField::enumeration(
+                "gross_coupon_basis",
+                ".ficant.market.v1.GrossCouponTaxBasis",
+            ),
+            ExpectedField::enumeration("rounding", ".ficant.market.v1.TaxRoundingMode"),
+            ExpectedField::enumeration("claim_scope", ".ficant.market.v1.CouponTaxClaimScope"),
+        ],
+    );
+    assert_enum(
+        enums,
+        "ficant.market.v1.GrossCouponTaxBasis",
+        &[
+            ("GROSS_COUPON_TAX_BASIS_UNSPECIFIED", 0),
+            ("GROSS_COUPON_TAX_BASIS_VAT_INCLUDED", 1),
+        ],
+    );
+    assert_enum(
+        enums,
+        "ficant.market.v1.TaxRoundingMode",
+        &[
+            ("TAX_ROUNDING_MODE_UNSPECIFIED", 0),
+            ("TAX_ROUNDING_MODE_TIES_TO_EVEN", 1),
+        ],
+    );
+    assert_enum(
+        enums,
+        "ficant.market.v1.CouponTaxClaimScope",
+        &[
+            ("COUPON_TAX_CLAIM_SCOPE_UNSPECIFIED", 0),
+            (
+                "COUPON_TAX_CLAIM_SCOPE_COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT",
+                1,
+            ),
         ],
     );
 }

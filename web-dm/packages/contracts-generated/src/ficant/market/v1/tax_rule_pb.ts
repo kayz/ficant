@@ -2,8 +2,8 @@
 // @generated from file ficant/market/v1/tax_rule.proto (package ficant.market.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { DecimalValue } from "../../core/v1/common_pb";
 import { file_ficant_core_v1_common } from "../../core/v1/common_pb";
 import type { BondTaxAttributes } from "./definition_pb";
@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ficant/market/v1/tax_rule.proto.
  */
 export const file_ficant_market_v1_tax_rule: GenFile = /*@__PURE__*/
-  fileDesc("Ch9maWNhbnQvbWFya2V0L3YxL3RheF9ydWxlLnByb3RvEhBmaWNhbnQubWFya2V0LnYxIkgKC1RheFJ1bGVQYWNrEjkKDGNvdXBvbl9ydWxlcxgBIAMoCzIjLmZpY2FudC5tYXJrZXQudjEuQm9uZENvdXBvblRheFJ1bGUiuQEKEUJvbmRDb3Vwb25UYXhSdWxlEhgKEGZpcnN0X2lzc3VlX2Zyb20YASABKAkSFgoOZmlyc3RfaXNzdWVfdG8YAiABKAkSOwoOdGF4X2F0dHJpYnV0ZXMYAyABKAsyIy5maWNhbnQubWFya2V0LnYxLkJvbmRUYXhBdHRyaWJ1dGVzEjUKBXJhdGVzGAQgAygLMiYuZmljYW50Lm1hcmtldC52MS5TdWJqZWN0Q291cG9uVGF4UmF0ZSKKAQoUU3ViamVjdENvdXBvblRheFJhdGUSHwoXdmFsdWVfYWRkZWRfdGF4X3Byb2ZpbGUYASABKAkSGgoSaW5jb21lX3RheF9wcm9maWxlGAIgASgJEjUKD2NvdXBvbl90YXhfcmF0ZRgDIAEoCzIcLmZpY2FudC5jb3JlLnYxLkRlY2ltYWxWYWx1ZWIGcHJvdG8z", [file_ficant_core_v1_common, file_ficant_market_v1_definition]);
+  fileDesc("Ch9maWNhbnQvbWFya2V0L3YxL3RheF9ydWxlLnByb3RvEhBmaWNhbnQubWFya2V0LnYxIkgKC1RheFJ1bGVQYWNrEjkKDGNvdXBvbl9ydWxlcxgBIAMoCzIjLmZpY2FudC5tYXJrZXQudjEuQm9uZENvdXBvblRheFJ1bGUiuQEKEUJvbmRDb3Vwb25UYXhSdWxlEhgKEGZpcnN0X2lzc3VlX2Zyb20YASABKAkSFgoOZmlyc3RfaXNzdWVfdG8YAiABKAkSOwoOdGF4X2F0dHJpYnV0ZXMYAyABKAsyIy5maWNhbnQubWFya2V0LnYxLkJvbmRUYXhBdHRyaWJ1dGVzEjUKBXJhdGVzGAQgAygLMiYuZmljYW50Lm1hcmtldC52MS5TdWJqZWN0Q291cG9uVGF4UmF0ZSKKAQoUU3ViamVjdENvdXBvblRheFJhdGUSHwoXdmFsdWVfYWRkZWRfdGF4X3Byb2ZpbGUYASABKAkSGgoSaW5jb21lX3RheF9wcm9maWxlGAIgASgJEjUKD2NvdXBvbl90YXhfcmF0ZRgDIAEoCzIcLmZpY2FudC5jb3JlLnYxLkRlY2ltYWxWYWx1ZSJTCg1UYXhSdWxlUGFja1YyEkIKDGNvdXBvbl9ydWxlcxgBIAMoCzIsLmZpY2FudC5tYXJrZXQudjEuQm9uZENvdXBvblRheFRyZWF0bWVudFJ1bGUizAEKGkJvbmRDb3Vwb25UYXhUcmVhdG1lbnRSdWxlEhgKEGZpcnN0X2lzc3VlX2Zyb20YASABKAkSFgoOZmlyc3RfaXNzdWVfdG8YAiABKAkSOwoOdGF4X2F0dHJpYnV0ZXMYAyABKAsyIy5maWNhbnQubWFya2V0LnYxLkJvbmRUYXhBdHRyaWJ1dGVzEj8KCnRyZWF0bWVudHMYBCADKAsyKy5maWNhbnQubWFya2V0LnYxLlN1YmplY3RDb3Vwb25UYXhUcmVhdG1lbnQi/wIKGVN1YmplY3RDb3Vwb25UYXhUcmVhdG1lbnQSHwoXdmFsdWVfYWRkZWRfdGF4X3Byb2ZpbGUYASABKAkSGgoSaW5jb21lX3RheF9wcm9maWxlGAIgASgJEjoKFHZhbHVlX2FkZGVkX3RheF9yYXRlGAMgASgLMhwuZmljYW50LmNvcmUudjEuRGVjaW1hbFZhbHVlEjUKD2luY29tZV90YXhfcmF0ZRgEIAEoCzIcLmZpY2FudC5jb3JlLnYxLkRlY2ltYWxWYWx1ZRJBChJncm9zc19jb3Vwb25fYmFzaXMYBSABKA4yJS5maWNhbnQubWFya2V0LnYxLkdyb3NzQ291cG9uVGF4QmFzaXMSMwoIcm91bmRpbmcYBiABKA4yIS5maWNhbnQubWFya2V0LnYxLlRheFJvdW5kaW5nTW9kZRI6CgtjbGFpbV9zY29wZRgHIAEoDjIlLmZpY2FudC5tYXJrZXQudjEuQ291cG9uVGF4Q2xhaW1TY29wZSpmChNHcm9zc0NvdXBvblRheEJhc2lzEiYKIkdST1NTX0NPVVBPTl9UQVhfQkFTSVNfVU5TUEVDSUZJRUQQABInCiNHUk9TU19DT1VQT05fVEFYX0JBU0lTX1ZBVF9JTkNMVURFRBABKlgKD1RheFJvdW5kaW5nTW9kZRIhCh1UQVhfUk9VTkRJTkdfTU9ERV9VTlNQRUNJRklFRBAAEiIKHlRBWF9ST1VORElOR19NT0RFX1RJRVNfVE9fRVZFThABKn8KE0NvdXBvblRheENsYWltU2NvcGUSJgoiQ09VUE9OX1RBWF9DTEFJTV9TQ09QRV9VTlNQRUNJRklFRBAAEkAKPENPVVBPTl9UQVhfQ0xBSU1fU0NPUEVfQ09VUE9OX09VVFBVVF9WQVRfQkVGT1JFX0lOUFVUX0NSRURJVBABYgZwcm90bzM", [file_ficant_core_v1_common, file_ficant_market_v1_definition]);
 
 /**
  * TaxRulePack is L3 content. It selects a coupon tax rate from the Bond's
@@ -100,4 +100,167 @@ export type SubjectCouponTaxRate = Message<"ficant.market.v1.SubjectCouponTaxRat
  */
 export const SubjectCouponTaxRateSchema: GenMessage<SubjectCouponTaxRate> = /*@__PURE__*/
   messageDesc(file_ficant_market_v1_tax_rule, 2);
+
+/**
+ * TaxRulePackV2 binds the statutory rate facts and FICANT coupon analysis
+ * convention separately. V1 remains only for the pre-existing synthetic
+ * retained-rate mechanism tests.
+ *
+ * @generated from message ficant.market.v1.TaxRulePackV2
+ */
+export type TaxRulePackV2 = Message<"ficant.market.v1.TaxRulePackV2"> & {
+  /**
+   * @generated from field: repeated ficant.market.v1.BondCouponTaxTreatmentRule coupon_rules = 1;
+   */
+  couponRules: BondCouponTaxTreatmentRule[];
+};
+
+/**
+ * Describes the message ficant.market.v1.TaxRulePackV2.
+ * Use `create(TaxRulePackV2Schema)` to create a new message.
+ */
+export const TaxRulePackV2Schema: GenMessage<TaxRulePackV2> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_tax_rule, 3);
+
+/**
+ * @generated from message ficant.market.v1.BondCouponTaxTreatmentRule
+ */
+export type BondCouponTaxTreatmentRule = Message<"ficant.market.v1.BondCouponTaxTreatmentRule"> & {
+  /**
+   * @generated from field: string first_issue_from = 1;
+   */
+  firstIssueFrom: string;
+
+  /**
+   * @generated from field: string first_issue_to = 2;
+   */
+  firstIssueTo: string;
+
+  /**
+   * @generated from field: ficant.market.v1.BondTaxAttributes tax_attributes = 3;
+   */
+  taxAttributes?: BondTaxAttributes;
+
+  /**
+   * @generated from field: repeated ficant.market.v1.SubjectCouponTaxTreatment treatments = 4;
+   */
+  treatments: SubjectCouponTaxTreatment[];
+};
+
+/**
+ * Describes the message ficant.market.v1.BondCouponTaxTreatmentRule.
+ * Use `create(BondCouponTaxTreatmentRuleSchema)` to create a new message.
+ */
+export const BondCouponTaxTreatmentRuleSchema: GenMessage<BondCouponTaxTreatmentRule> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_tax_rule, 4);
+
+/**
+ * @generated from message ficant.market.v1.SubjectCouponTaxTreatment
+ */
+export type SubjectCouponTaxTreatment = Message<"ficant.market.v1.SubjectCouponTaxTreatment"> & {
+  /**
+   * @generated from field: string value_added_tax_profile = 1;
+   */
+  valueAddedTaxProfile: string;
+
+  /**
+   * @generated from field: string income_tax_profile = 2;
+   */
+  incomeTaxProfile: string;
+
+  /**
+   * @generated from field: ficant.core.v1.DecimalValue value_added_tax_rate = 3;
+   */
+  valueAddedTaxRate?: DecimalValue;
+
+  /**
+   * @generated from field: ficant.core.v1.DecimalValue income_tax_rate = 4;
+   */
+  incomeTaxRate?: DecimalValue;
+
+  /**
+   * @generated from field: ficant.market.v1.GrossCouponTaxBasis gross_coupon_basis = 5;
+   */
+  grossCouponBasis: GrossCouponTaxBasis;
+
+  /**
+   * @generated from field: ficant.market.v1.TaxRoundingMode rounding = 6;
+   */
+  rounding: TaxRoundingMode;
+
+  /**
+   * @generated from field: ficant.market.v1.CouponTaxClaimScope claim_scope = 7;
+   */
+  claimScope: CouponTaxClaimScope;
+};
+
+/**
+ * Describes the message ficant.market.v1.SubjectCouponTaxTreatment.
+ * Use `create(SubjectCouponTaxTreatmentSchema)` to create a new message.
+ */
+export const SubjectCouponTaxTreatmentSchema: GenMessage<SubjectCouponTaxTreatment> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_tax_rule, 5);
+
+/**
+ * @generated from enum ficant.market.v1.GrossCouponTaxBasis
+ */
+export enum GrossCouponTaxBasis {
+  /**
+   * @generated from enum value: GROSS_COUPON_TAX_BASIS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: GROSS_COUPON_TAX_BASIS_VAT_INCLUDED = 1;
+   */
+  VAT_INCLUDED = 1,
+}
+
+/**
+ * Describes the enum ficant.market.v1.GrossCouponTaxBasis.
+ */
+export const GrossCouponTaxBasisSchema: GenEnum<GrossCouponTaxBasis> = /*@__PURE__*/
+  enumDesc(file_ficant_market_v1_tax_rule, 0);
+
+/**
+ * @generated from enum ficant.market.v1.TaxRoundingMode
+ */
+export enum TaxRoundingMode {
+  /**
+   * @generated from enum value: TAX_ROUNDING_MODE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: TAX_ROUNDING_MODE_TIES_TO_EVEN = 1;
+   */
+  TIES_TO_EVEN = 1,
+}
+
+/**
+ * Describes the enum ficant.market.v1.TaxRoundingMode.
+ */
+export const TaxRoundingModeSchema: GenEnum<TaxRoundingMode> = /*@__PURE__*/
+  enumDesc(file_ficant_market_v1_tax_rule, 1);
+
+/**
+ * @generated from enum ficant.market.v1.CouponTaxClaimScope
+ */
+export enum CouponTaxClaimScope {
+  /**
+   * @generated from enum value: COUPON_TAX_CLAIM_SCOPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: COUPON_TAX_CLAIM_SCOPE_COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT = 1;
+   */
+  COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT = 1,
+}
+
+/**
+ * Describes the enum ficant.market.v1.CouponTaxClaimScope.
+ */
+export const CouponTaxClaimScopeSchema: GenEnum<CouponTaxClaimScope> = /*@__PURE__*/
+  enumDesc(file_ficant_market_v1_tax_rule, 2);
 

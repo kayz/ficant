@@ -176,6 +176,8 @@ pub struct TaxAdjustedBondAnalytics {
     pub cashflows: ::prost::alloc::vec::Vec<DerivedCashflow>,
     #[prost(message, optional, tag="2")]
     pub yield_to_maturity: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(enumeration="super::super::market::v1::CouponTaxClaimScope", tag="3")]
+    pub claim_scope: i32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AnalyzeBondRequest {
@@ -355,6 +357,8 @@ pub struct AnalyzeFuturesDeliveryRequest {
     pub data_snapshot: ::core::option::Option<SnapshotBinding>,
     #[prost(message, optional, tag="12")]
     pub funding_rule_pack: ::core::option::Option<ObjectBinding>,
+    #[prost(message, optional, tag="13")]
+    pub tax_rule_pack: ::core::option::Option<ObjectBinding>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FuturesDeliveryMeasures {
@@ -388,6 +392,10 @@ pub struct FuturesDeliveryMeasures {
     pub delivery_profit: ::core::option::Option<super::super::core::v1::DecimalValue>,
     #[prost(message, optional, tag="15")]
     pub funding_adjusted_irr: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="16")]
+    pub tax_adjusted_interim_coupons: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="17")]
+    pub subject_tax_adjusted_irr: ::core::option::Option<super::super::core::v1::DecimalValue>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FuturesDeliveryCandidateResult {
@@ -395,6 +403,8 @@ pub struct FuturesDeliveryCandidateResult {
     pub bond: ::core::option::Option<ObjectBinding>,
     #[prost(message, optional, tag="2")]
     pub measures: ::core::option::Option<FuturesDeliveryMeasures>,
+    #[prost(enumeration="super::super::market::v1::CouponTaxClaimScope", tag="3")]
+    pub claim_scope: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AnalyzeFuturesDeliveryResult {
@@ -404,6 +414,8 @@ pub struct AnalyzeFuturesDeliveryResult {
     pub ctd_index: u32,
     #[prost(message, optional, tag="3")]
     pub metadata: ::core::option::Option<ResultMetadata>,
+    #[prost(uint32, tag="4")]
+    pub subject_ctd_index: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AnalyzeFuturesDeliveryResponse {

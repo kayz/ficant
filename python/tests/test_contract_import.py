@@ -14,16 +14,22 @@ GENERATED_ROOT = (
 sys.path.insert(0, str(GENERATED_ROOT))
 
 from ficant.app.v1.registry_pb2 import AppRegistry  # noqa: E402
-from ficant.core.v1.common_pb2 import DecimalValue, Sha256, Ulid  # noqa: E402
+from ficant.core.v1.common_pb2 import DecimalValue, Sha256, Ulid, UnitRef  # noqa: E402
 from ficant.market.v1.cgb_futures_rule_pb2 import (  # noqa: E402
     CgbFuturesDeliveryRulePack,
     CgbFuturesProductRule,
 )
 from ficant.market.v1.funding_rule_pb2 import FundingRulePack, FundingTierRate  # noqa: E402
 from ficant.market.v1.tax_rule_pb2 import (  # noqa: E402
+    COUPON_TAX_CLAIM_SCOPE_COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT,
+    GROSS_COUPON_TAX_BASIS_VAT_INCLUDED,
+    TAX_ROUNDING_MODE_TIES_TO_EVEN,
     BondCouponTaxRule,
+    BondCouponTaxTreatmentRule,
     SubjectCouponTaxRate,
+    SubjectCouponTaxTreatment,
     TaxRulePack,
+    TaxRulePackV2,
 )
 from ficant.market.v1.definition_pb2 import BondTaxAttributes  # noqa: E402
 from ficant.market.v1.instrument_pb2 import Instrument  # noqa: E402
@@ -37,14 +43,18 @@ from ficant.rates.v1.analytics_pb2 import (  # noqa: E402
     AnalyzeBondRequest,
     AnalyzeCarryRollRequest,
     AnalyzeFuturesDeliveryRequest,
+    AnalyzeFuturesDeliveryResult,
     AnalyzeFuturesHedgeRequest,
     ArtifactBinding,
     CurveNodeBinding,
+    FuturesDeliveryCandidateResult,
+    FuturesDeliveryMeasures,
     InterpolateYieldCurveRequest,
     ObjectBinding,
     ParameterDigest,
     ResultMetadata,
     SnapshotBinding,
+    TaxAdjustedBondAnalytics,
 )
 from ficant.rates.v1.analytics_pb2_grpc import RatesAnalyticsServiceStub  # noqa: E402
 from ficant.research.v1.experiment_pb2 import ExperimentRun  # noqa: E402
@@ -100,6 +110,7 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     delivery_request = AnalyzeFuturesDeliveryRequest(
         data_snapshot=snapshot_binding,
         funding_rule_pack=ObjectBinding(),
+        tax_rule_pack=ObjectBinding(),
     )
     hedge_request = AnalyzeFuturesHedgeRequest(
         target_risk_artifact=artifact_binding,
@@ -114,6 +125,50 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
         coupon_rules=[
             BondCouponTaxRule(rates=[SubjectCouponTaxRate(value_added_tax_profile="synthetic")])
         ]
+    )
+    rate_unit = UnitRef(
+        unit_id=Ulid(value="01K2CGBVAT0000000000000000"),
+        version=1,
+    )
+    tax_treatment = SubjectCouponTaxTreatment(
+        value_added_tax_profile="general-taxpayer",
+        income_tax_profile="general-enterprise",
+        value_added_tax_rate=DecimalValue(coefficient="6", scale=2, unit=rate_unit),
+        income_tax_rate=DecimalValue(coefficient="0", scale=0, unit=rate_unit),
+        gross_coupon_basis=GROSS_COUPON_TAX_BASIS_VAT_INCLUDED,
+        rounding=TAX_ROUNDING_MODE_TIES_TO_EVEN,
+        claim_scope=COUPON_TAX_CLAIM_SCOPE_COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT,
+    )
+    tax_pack_v2 = TaxRulePackV2(
+        coupon_rules=[
+            BondCouponTaxTreatmentRule(
+                first_issue_from="2025-08-08",
+                tax_attributes=BondTaxAttributes(),
+                treatments=[tax_treatment],
+            )
+        ]
+    )
+    delivery_measures = FuturesDeliveryMeasures(
+        tax_adjusted_interim_coupons=DecimalValue(
+            coefficient="2830188679245", scale=12, unit=rate_unit
+        ),
+        subject_tax_adjusted_irr=DecimalValue(
+            coefficient="123456789", scale=12, unit=rate_unit
+        ),
+    )
+    delivery_result = AnalyzeFuturesDeliveryResult(
+        candidates=[
+            FuturesDeliveryCandidateResult(
+                measures=delivery_measures,
+                claim_scope=(
+                    COUPON_TAX_CLAIM_SCOPE_COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT
+                ),
+            )
+        ],
+        subject_ctd_index=1,
+    )
+    after_tax = TaxAdjustedBondAnalytics(
+        claim_scope=COUPON_TAX_CLAIM_SCOPE_COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT
     )
     tax_attributes = BondTaxAttributes()
     coverage = CoverageDeclaration(
@@ -158,6 +213,7 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert carry_request.curve.DESCRIPTOR.full_name == "ficant.rates.v1.SnapshotBinding"
     assert "calendar" not in AnalyzeCarryRollRequest.DESCRIPTOR.fields_by_name
     assert delivery_request.data_snapshot.DESCRIPTOR.full_name == "ficant.rates.v1.SnapshotBinding"
+    assert delivery_request.tax_rule_pack.DESCRIPTOR.full_name == "ficant.rates.v1.ObjectBinding"
     assert "candidates" not in AnalyzeFuturesDeliveryRequest.DESCRIPTOR.fields_by_name
     assert hedge_request.target_risk_artifact.DESCRIPTOR.full_name == (
         "ficant.rates.v1.ArtifactBinding"
@@ -172,6 +228,17 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert tax_pack.DESCRIPTOR.full_name == "ficant.market.v1.TaxRulePack"
     assert tax_pack.coupon_rules[0].rates[0].DESCRIPTOR.full_name == "ficant.market.v1.SubjectCouponTaxRate"
     assert tax_attributes.DESCRIPTOR.full_name == "ficant.market.v1.BondTaxAttributes"
+    assert tax_pack_v2.DESCRIPTOR.full_name == "ficant.market.v1.TaxRulePackV2"
+    assert tax_pack_v2.coupon_rules[0].treatments[0].value_added_tax_rate.unit == rate_unit
+    assert tax_treatment.gross_coupon_basis == GROSS_COUPON_TAX_BASIS_VAT_INCLUDED
+    assert tax_treatment.rounding == TAX_ROUNDING_MODE_TIES_TO_EVEN
+    assert tax_treatment.claim_scope == (
+        COUPON_TAX_CLAIM_SCOPE_COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT
+    )
+    assert delivery_result.candidates[0].measures.tax_adjusted_interim_coupons.scale == 12
+    assert delivery_result.candidates[0].claim_scope != 0
+    assert delivery_result.subject_ctd_index == 1
+    assert after_tax.claim_scope != 0
     assert coverage.DESCRIPTOR.full_name == "ficant.research.v1.CoverageDeclaration"
     assert coverage_pb2_grpc.__name__ == "ficant.research.v1.coverage_pb2_grpc"
     assert portfolio.coverage.imported_position_count == 2

@@ -961,4 +961,118 @@ pub struct SubjectCouponTaxRate {
     #[prost(message, optional, tag="3")]
     pub coupon_tax_rate: ::core::option::Option<super::super::core::v1::DecimalValue>,
 }
+/// TaxRulePackV2 binds the statutory rate facts and FICANT coupon analysis
+/// convention separately. V1 remains only for the pre-existing synthetic
+/// retained-rate mechanism tests.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TaxRulePackV2 {
+    #[prost(message, repeated, tag="1")]
+    pub coupon_rules: ::prost::alloc::vec::Vec<BondCouponTaxTreatmentRule>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BondCouponTaxTreatmentRule {
+    #[prost(string, tag="1")]
+    pub first_issue_from: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub first_issue_to: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="3")]
+    pub tax_attributes: ::core::option::Option<BondTaxAttributes>,
+    #[prost(message, repeated, tag="4")]
+    pub treatments: ::prost::alloc::vec::Vec<SubjectCouponTaxTreatment>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SubjectCouponTaxTreatment {
+    #[prost(string, tag="1")]
+    pub value_added_tax_profile: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub income_tax_profile: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="3")]
+    pub value_added_tax_rate: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="4")]
+    pub income_tax_rate: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(enumeration="GrossCouponTaxBasis", tag="5")]
+    pub gross_coupon_basis: i32,
+    #[prost(enumeration="TaxRoundingMode", tag="6")]
+    pub rounding: i32,
+    #[prost(enumeration="CouponTaxClaimScope", tag="7")]
+    pub claim_scope: i32,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum GrossCouponTaxBasis {
+    Unspecified = 0,
+    VatIncluded = 1,
+}
+impl GrossCouponTaxBasis {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "GROSS_COUPON_TAX_BASIS_UNSPECIFIED",
+            Self::VatIncluded => "GROSS_COUPON_TAX_BASIS_VAT_INCLUDED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "GROSS_COUPON_TAX_BASIS_UNSPECIFIED" => Some(Self::Unspecified),
+            "GROSS_COUPON_TAX_BASIS_VAT_INCLUDED" => Some(Self::VatIncluded),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum TaxRoundingMode {
+    Unspecified = 0,
+    TiesToEven = 1,
+}
+impl TaxRoundingMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "TAX_ROUNDING_MODE_UNSPECIFIED",
+            Self::TiesToEven => "TAX_ROUNDING_MODE_TIES_TO_EVEN",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "TAX_ROUNDING_MODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "TAX_ROUNDING_MODE_TIES_TO_EVEN" => Some(Self::TiesToEven),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum CouponTaxClaimScope {
+    Unspecified = 0,
+    CouponOutputVatBeforeInputCredit = 1,
+}
+impl CouponTaxClaimScope {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "COUPON_TAX_CLAIM_SCOPE_UNSPECIFIED",
+            Self::CouponOutputVatBeforeInputCredit => "COUPON_TAX_CLAIM_SCOPE_COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "COUPON_TAX_CLAIM_SCOPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "COUPON_TAX_CLAIM_SCOPE_COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT" => Some(Self::CouponOutputVatBeforeInputCredit),
+            _ => None,
+        }
+    }
+}
 // @@protoc_insertion_point(module)

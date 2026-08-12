@@ -27,3 +27,42 @@ message SubjectCouponTaxRate {
   string income_tax_profile = 2;
   ficant.core.v1.DecimalValue coupon_tax_rate = 3;
 }
+
+// TaxRulePackV2 binds the statutory rate facts and FICANT coupon analysis
+// convention separately. V1 remains only for the pre-existing synthetic
+// retained-rate mechanism tests.
+message TaxRulePackV2 {
+  repeated BondCouponTaxTreatmentRule coupon_rules = 1;
+}
+
+message BondCouponTaxTreatmentRule {
+  string first_issue_from = 1;
+  string first_issue_to = 2;
+  BondTaxAttributes tax_attributes = 3;
+  repeated SubjectCouponTaxTreatment treatments = 4;
+}
+
+message SubjectCouponTaxTreatment {
+  string value_added_tax_profile = 1;
+  string income_tax_profile = 2;
+  ficant.core.v1.DecimalValue value_added_tax_rate = 3;
+  ficant.core.v1.DecimalValue income_tax_rate = 4;
+  GrossCouponTaxBasis gross_coupon_basis = 5;
+  TaxRoundingMode rounding = 6;
+  CouponTaxClaimScope claim_scope = 7;
+}
+
+enum GrossCouponTaxBasis {
+  GROSS_COUPON_TAX_BASIS_UNSPECIFIED = 0;
+  GROSS_COUPON_TAX_BASIS_VAT_INCLUDED = 1;
+}
+
+enum TaxRoundingMode {
+  TAX_ROUNDING_MODE_UNSPECIFIED = 0;
+  TAX_ROUNDING_MODE_TIES_TO_EVEN = 1;
+}
+
+enum CouponTaxClaimScope {
+  COUPON_TAX_CLAIM_SCOPE_UNSPECIFIED = 0;
+  COUPON_TAX_CLAIM_SCOPE_COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT = 1;
+}

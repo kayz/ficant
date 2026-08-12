@@ -5,9 +5,11 @@ import {
 } from "../../packages/contracts-generated/src/ficant/app/v1/registry_pb";
 import { SessionSchema } from "../../packages/contracts-generated/src/ficant/app/v1/session_pb";
 import {
+  DecimalValueSchema,
   MarketTimeSchema,
   Sha256Schema,
   UlidSchema,
+  UnitRefSchema,
 } from "../../packages/contracts-generated/src/ficant/core/v1/common_pb";
 import {
   CgbFuturesDeliveryRulePackSchema,
@@ -24,9 +26,15 @@ import {
 } from "../../packages/contracts-generated/src/ficant/market/v1/definition_pb";
 import { MarketRulePackSchema } from "../../packages/contracts-generated/src/ficant/market/v1/rule_pb";
 import {
+  BondCouponTaxTreatmentRuleSchema,
   BondCouponTaxRuleSchema,
+  CouponTaxClaimScope,
+  GrossCouponTaxBasis,
+  SubjectCouponTaxTreatmentSchema,
   SubjectCouponTaxRateSchema,
+  TaxRoundingMode,
   TaxRulePackSchema,
+  TaxRulePackV2Schema,
 } from "../../packages/contracts-generated/src/ficant/market/v1/tax_rule_pb";
 import {
   AlgorithmBindingSchema,
@@ -36,14 +44,18 @@ import {
   AnalyzeBondRequestSchema,
   AnalyzeCarryRollRequestSchema,
   AnalyzeFuturesDeliveryRequestSchema,
+  AnalyzeFuturesDeliveryResultSchema,
   AnalyzeFuturesHedgeRequestSchema,
   ArtifactBindingSchema,
   CurveNodeBindingSchema,
+  FuturesDeliveryCandidateResultSchema,
+  FuturesDeliveryMeasuresSchema,
   InterpolateYieldCurveRequestSchema,
   ObjectBindingSchema,
   ParameterDigestSchema,
   ResultMetadataSchema,
   SnapshotBindingSchema,
+  TaxAdjustedBondAnalyticsSchema,
 } from "../../packages/contracts-generated/src/ficant/rates/v1/analytics_pb";
 import { describe, expect, it } from "vitest";
 
@@ -83,6 +95,38 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
       rates: [taxRate],
     });
     const taxPack = create(TaxRulePackSchema, { couponRules: [taxRule] });
+    const rateUnit = create(UnitRefSchema, {
+      unitId: create(UlidSchema, { value: "01K2CGBVAT0000000000000000" }),
+      version: 1n,
+    });
+    const vatRate = create(DecimalValueSchema, {
+      coefficient: "6",
+      scale: 2,
+      unit: rateUnit,
+    });
+    const incomeTaxRate = create(DecimalValueSchema, {
+      coefficient: "0",
+      scale: 0,
+      unit: rateUnit,
+    });
+    const taxTreatment = create(SubjectCouponTaxTreatmentSchema, {
+      valueAddedTaxProfile: "general-taxpayer",
+      incomeTaxProfile: "general-enterprise",
+      valueAddedTaxRate: vatRate,
+      incomeTaxRate,
+      grossCouponBasis: GrossCouponTaxBasis.VAT_INCLUDED,
+      rounding: TaxRoundingMode.TIES_TO_EVEN,
+      claimScope:
+        CouponTaxClaimScope.COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT,
+    });
+    const treatmentRule = create(BondCouponTaxTreatmentRuleSchema, {
+      firstIssueFrom: "2025-08-08",
+      taxAttributes,
+      treatments: [taxTreatment],
+    });
+    const taxPackV2 = create(TaxRulePackV2Schema, {
+      couponRules: [treatmentRule],
+    });
     const rulePack = create(MarketRulePackSchema, {
       market: "CFFEX",
       ruleType: "cgb-futures",
@@ -155,6 +199,32 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
       context,
       dataSnapshot: snapshotBinding,
       fundingRulePack: objectBinding,
+      taxRulePack: objectBinding,
+    });
+    const deliveryMeasures = create(FuturesDeliveryMeasuresSchema, {
+      taxAdjustedInterimCoupons: create(DecimalValueSchema, {
+        coefficient: "2830188679245",
+        scale: 12,
+        unit: rateUnit,
+      }),
+      subjectTaxAdjustedIrr: create(DecimalValueSchema, {
+        coefficient: "123456789",
+        scale: 12,
+        unit: rateUnit,
+      }),
+    });
+    const deliveryCandidate = create(FuturesDeliveryCandidateResultSchema, {
+      measures: deliveryMeasures,
+      claimScope:
+        CouponTaxClaimScope.COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT,
+    });
+    const deliveryResult = create(AnalyzeFuturesDeliveryResultSchema, {
+      candidates: [deliveryCandidate],
+      subjectCtdIndex: 1,
+    });
+    const afterTax = create(TaxAdjustedBondAnalyticsSchema, {
+      claimScope:
+        CouponTaxClaimScope.COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT,
     });
     const hedgeRequest = create(AnalyzeFuturesHedgeRequestSchema, {
       context,
@@ -171,6 +241,15 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
     expect(fundingPack.$typeName).toBe("ficant.market.v1.FundingRulePack");
     expect(fundingRate.$typeName).toBe("ficant.market.v1.FundingTierRate");
     expect(taxPack.$typeName).toBe("ficant.market.v1.TaxRulePack");
+    expect(taxPackV2.$typeName).toBe("ficant.market.v1.TaxRulePackV2");
+    expect(taxTreatment.valueAddedTaxRate?.unit).toEqual(rateUnit);
+    expect(taxTreatment.grossCouponBasis).toBe(
+      GrossCouponTaxBasis.VAT_INCLUDED,
+    );
+    expect(taxTreatment.rounding).toBe(TaxRoundingMode.TIES_TO_EVEN);
+    expect(taxTreatment.claimScope).toBe(
+      CouponTaxClaimScope.COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT,
+    );
     expect(taxRule.$typeName).toBe("ficant.market.v1.BondCouponTaxRule");
     expect(taxRate.$typeName).toBe("ficant.market.v1.SubjectCouponTaxRate");
     expect(taxAttributes.$typeName).toBe("ficant.market.v1.BondTaxAttributes");
@@ -220,6 +299,15 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
     expect(deliveryRequest.dataSnapshot?.$typeName).toBe(
       "ficant.rates.v1.SnapshotBinding",
     );
+    expect(deliveryRequest.taxRulePack?.$typeName).toBe(
+      "ficant.rates.v1.ObjectBinding",
+    );
+    expect(deliveryResult.candidates[0]?.measures?.taxAdjustedInterimCoupons?.scale).toBe(12);
+    expect(deliveryResult.candidates[0]?.claimScope).not.toBe(
+      CouponTaxClaimScope.UNSPECIFIED,
+    );
+    expect(deliveryResult.subjectCtdIndex).toBe(1);
+    expect(afterTax.claimScope).not.toBe(CouponTaxClaimScope.UNSPECIFIED);
     expect("candidates" in deliveryRequest).toBe(false);
     expect(hedgeRequest.targetRiskArtifact?.$typeName).toBe(
       "ficant.rates.v1.ArtifactBinding",
