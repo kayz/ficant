@@ -26,17 +26,29 @@ from ficant.core.v1 import common_pb2 as ficant_dot_core_dot_v1_dot_common__pb2
 from ficant.market.v1 import definition_pb2 as ficant_dot_market_dot_v1_dot_definition__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1f\x66icant/market/v1/tax_rule.proto\x12\x10\x66icant.market.v1\x1a\x1b\x66icant/core/v1/common.proto\x1a!ficant/market/v1/definition.proto\"U\n\x0bTaxRulePack\x12\x46\n\x0c\x63oupon_rules\x18\x01 \x03(\x0b\x32#.ficant.market.v1.BondCouponTaxRuleR\x0b\x63ouponRules\"\xed\x01\n\x11\x42ondCouponTaxRule\x12(\n\x10\x66irst_issue_from\x18\x01 \x01(\tR\x0e\x66irstIssueFrom\x12$\n\x0e\x66irst_issue_to\x18\x02 \x01(\tR\x0c\x66irstIssueTo\x12J\n\x0etax_attributes\x18\x03 \x01(\x0b\x32#.ficant.market.v1.BondTaxAttributesR\rtaxAttributes\x12<\n\x05rates\x18\x04 \x03(\x0b\x32&.ficant.market.v1.SubjectCouponTaxRateR\x05rates\"\xc1\x01\n\x14SubjectCouponTaxRate\x12\x35\n\x17value_added_tax_profile\x18\x01 \x01(\tR\x14valueAddedTaxProfile\x12,\n\x12income_tax_profile\x18\x02 \x01(\tR\x10incomeTaxProfile\x12\x44\n\x0f\x63oupon_tax_rate\x18\x03 \x01(\x0b\x32\x1c.ficant.core.v1.DecimalValueR\rcouponTaxRateb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1f\x66icant/market/v1/tax_rule.proto\x12\x10\x66icant.market.v1\x1a\x1b\x66icant/core/v1/common.proto\x1a!ficant/market/v1/definition.proto\"U\n\x0bTaxRulePack\x12\x46\n\x0c\x63oupon_rules\x18\x01 \x03(\x0b\x32#.ficant.market.v1.BondCouponTaxRuleR\x0b\x63ouponRules\"\xed\x01\n\x11\x42ondCouponTaxRule\x12(\n\x10\x66irst_issue_from\x18\x01 \x01(\tR\x0e\x66irstIssueFrom\x12$\n\x0e\x66irst_issue_to\x18\x02 \x01(\tR\x0c\x66irstIssueTo\x12J\n\x0etax_attributes\x18\x03 \x01(\x0b\x32#.ficant.market.v1.BondTaxAttributesR\rtaxAttributes\x12<\n\x05rates\x18\x04 \x03(\x0b\x32&.ficant.market.v1.SubjectCouponTaxRateR\x05rates\"\xc1\x01\n\x14SubjectCouponTaxRate\x12\x35\n\x17value_added_tax_profile\x18\x01 \x01(\tR\x14valueAddedTaxProfile\x12,\n\x12income_tax_profile\x18\x02 \x01(\tR\x10incomeTaxProfile\x12\x44\n\x0f\x63oupon_tax_rate\x18\x03 \x01(\x0b\x32\x1c.ficant.core.v1.DecimalValueR\rcouponTaxRate\"`\n\rTaxRulePackV2\x12O\n\x0c\x63oupon_rules\x18\x01 \x03(\x0b\x32,.ficant.market.v1.BondCouponTaxTreatmentRuleR\x0b\x63ouponRules\"\x85\x02\n\x1a\x42ondCouponTaxTreatmentRule\x12(\n\x10\x66irst_issue_from\x18\x01 \x01(\tR\x0e\x66irstIssueFrom\x12$\n\x0e\x66irst_issue_to\x18\x02 \x01(\tR\x0c\x66irstIssueTo\x12J\n\x0etax_attributes\x18\x03 \x01(\x0b\x32#.ficant.market.v1.BondTaxAttributesR\rtaxAttributes\x12K\n\ntreatments\x18\x04 \x03(\x0b\x32+.ficant.market.v1.SubjectCouponTaxTreatmentR\ntreatments\"\xf1\x03\n\x19SubjectCouponTaxTreatment\x12\x35\n\x17value_added_tax_profile\x18\x01 \x01(\tR\x14valueAddedTaxProfile\x12,\n\x12income_tax_profile\x18\x02 \x01(\tR\x10incomeTaxProfile\x12M\n\x14value_added_tax_rate\x18\x03 \x01(\x0b\x32\x1c.ficant.core.v1.DecimalValueR\x11valueAddedTaxRate\x12\x44\n\x0fincome_tax_rate\x18\x04 \x01(\x0b\x32\x1c.ficant.core.v1.DecimalValueR\rincomeTaxRate\x12S\n\x12gross_coupon_basis\x18\x05 \x01(\x0e\x32%.ficant.market.v1.GrossCouponTaxBasisR\x10grossCouponBasis\x12=\n\x08rounding\x18\x06 \x01(\x0e\x32!.ficant.market.v1.TaxRoundingModeR\x08rounding\x12\x46\n\x0b\x63laim_scope\x18\x07 \x01(\x0e\x32%.ficant.market.v1.CouponTaxClaimScopeR\nclaimScope*f\n\x13GrossCouponTaxBasis\x12&\n\"GROSS_COUPON_TAX_BASIS_UNSPECIFIED\x10\x00\x12\'\n#GROSS_COUPON_TAX_BASIS_VAT_INCLUDED\x10\x01*X\n\x0fTaxRoundingMode\x12!\n\x1dTAX_ROUNDING_MODE_UNSPECIFIED\x10\x00\x12\"\n\x1eTAX_ROUNDING_MODE_TIES_TO_EVEN\x10\x01*\x7f\n\x13\x43ouponTaxClaimScope\x12&\n\"COUPON_TAX_CLAIM_SCOPE_UNSPECIFIED\x10\x00\x12@\n<COUPON_TAX_CLAIM_SCOPE_COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT\x10\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'ficant.market.v1.tax_rule_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
+  _globals['_GROSSCOUPONTAXBASIS']._serialized_start=1502
+  _globals['_GROSSCOUPONTAXBASIS']._serialized_end=1604
+  _globals['_TAXROUNDINGMODE']._serialized_start=1606
+  _globals['_TAXROUNDINGMODE']._serialized_end=1694
+  _globals['_COUPONTAXCLAIMSCOPE']._serialized_start=1696
+  _globals['_COUPONTAXCLAIMSCOPE']._serialized_end=1823
   _globals['_TAXRULEPACK']._serialized_start=117
   _globals['_TAXRULEPACK']._serialized_end=202
   _globals['_BONDCOUPONTAXRULE']._serialized_start=205
   _globals['_BONDCOUPONTAXRULE']._serialized_end=442
   _globals['_SUBJECTCOUPONTAXRATE']._serialized_start=445
   _globals['_SUBJECTCOUPONTAXRATE']._serialized_end=638
+  _globals['_TAXRULEPACKV2']._serialized_start=640
+  _globals['_TAXRULEPACKV2']._serialized_end=736
+  _globals['_BONDCOUPONTAXTREATMENTRULE']._serialized_start=739
+  _globals['_BONDCOUPONTAXTREATMENTRULE']._serialized_end=1000
+  _globals['_SUBJECTCOUPONTAXTREATMENT']._serialized_start=1003
+  _globals['_SUBJECTCOUPONTAXTREATMENT']._serialized_end=1500
 # @@protoc_insertion_point(module_scope)
