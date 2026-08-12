@@ -3,6 +3,7 @@ use ficant_api::{
     PlatformApplication, PlatformPort, RatesGrpcService, SessionPolicy, SystemClock,
     TrustedIdentity,
 };
+use ficant_application::ports::CouponTaxTreatment;
 use ficant_application::ports::{
     AccessScope, AppendDefinitionVersion, ApplicationResult, ArtifactRepository,
     BondAnalyticsArtifactCodec, BondAnalyticsArtifactFacts, BondAnalyticsEngine, CanonicalQuote,
@@ -19,8 +20,9 @@ use ficant_application::ports::{
 };
 use ficant_application::{
     ApplicationError, ApplicationErrorCategory, BOND_ANALYTICS_MEDIA_TYPE, BondRatesCommand,
-    BondRatesMaterialization, FUTURES_DELIVERY_MEDIA_TYPE, ImmutableSnapshotBinding,
-    MaterializeBondRatesInput, RatesUnitRequirement, rates_data_source_content_hash,
+    BondRatesMaterialization, DeliveryRatesCommand, DeliveryRatesMaterialization,
+    FUTURES_DELIVERY_MEDIA_TYPE, ImmutableSnapshotBinding, MaterializeBondRatesInput,
+    MaterializeDeliveryRatesInput, RatesUnitRequirement, rates_data_source_content_hash,
 };
 use ficant_cgb_futures_pack::CgbFuturesDeliveryRulePackParser;
 use ficant_contracts::ficant::core::v1::{
@@ -29,10 +31,8 @@ use ficant_contracts::ficant::core::v1::{
     VersionRef as ProtoVersionRef,
 };
 use ficant_contracts::ficant::market::v1::{
-    BondCouponTaxRule, BondTaxAttributes as ProtoBondTaxAttributes, CgbFuturesDeliveryRulePack,
-    CgbFuturesProductRule, FundingRulePack, FundingTierRate,
-    IncomeTaxStatus as ProtoIncomeTaxStatus, SubjectCouponTaxRate, TaxRulePack,
-    ValueAddedTaxStatus as ProtoValueAddedTaxStatus, cgb_futures_product_rule::ResidualUpperBound,
+    CgbFuturesDeliveryRulePack, CgbFuturesProductRule, FundingRulePack, FundingTierRate,
+    cgb_futures_product_rule::ResidualUpperBound,
 };
 use ficant_contracts::ficant::rates::v1::{
     AlgorithmBinding, AnalysisContext, AnalysisInputRole, AnalysisUnits, AnalyzeBondRequest,
@@ -91,7 +91,8 @@ use ficant_funding_pack::{
     TYPE_URL as FUNDING_TYPE_URL,
 };
 use ficant_tax_pack::{
-    MARKET as TAX_MARKET, RULE_TYPE as TAX_RULE_TYPE, TYPE_URL as TAX_TYPE_URL, TaxRulePackV1Parser,
+    MARKET as TAX_MARKET, RULE_TYPE as TAX_RULE_TYPE, SOURCE as TAX_SOURCE,
+    TYPE_URL_V2 as TAX_TYPE_URL, TaxRulePackV2Parser,
 };
 use prost::Message;
 use rust_decimal::Decimal as ExactDecimal;
@@ -107,6 +108,11 @@ const TARGET_BYTES: &[u8] = b"target-risk";
 const DELIVERY_BYTES: &[u8] = b"delivery-basket";
 const CTD_BYTES: &[u8] = b"ctd-risk";
 const CURVE_FAMILY: &str = "cn.gov.yield-curve";
+const R5E_ORACLE_INPUTS: &str =
+    include_str!("../../../tests/golden-cases/china-rates/r5e-tax-adjusted-analytics-inputs.json");
+const R5E_ORACLE_EXPECTED: &str = include_str!(
+    "../../../tests/golden-cases/china-rates/expected/r5e-tax-adjusted-analytics-expected.json"
+);
 
 #[derive(Clone, Default)]
 struct Calls {
@@ -168,6 +174,61 @@ impl FuturesDeliveryEngine for RecordingEngines {
     }
 }
 
+#[derive(Clone)]
+struct R5eOracleDeliveryEngine {
+    calls: Arc<AtomicUsize>,
+}
+
+impl FuturesDeliveryEngine for R5eOracleDeliveryEngine {
+    fn calculate(
+        &self,
+        input: &FuturesDeliverableInput,
+    ) -> Result<FuturesDeliveryResult, AnalyticsError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let bond_id = input.bond().version_ref().id();
+        let oracle_inputs = R5E_ORACLE_INPUTS;
+        let candidate = if bond_id == &id('B') {
+            oracle_candidate(oracle_inputs, "market-subject-ctd-reversal", "CGB-EXEMPT")
+        } else if bond_id == &id('D') {
+            oracle_candidate(oracle_inputs, "market-subject-ctd-reversal", "CGB-TAXABLE")
+        } else {
+            return Err(AnalyticsError::InvalidInput);
+        };
+        let expected = R5E_ORACLE_EXPECTED;
+        let expected = oracle_candidate(
+            expected,
+            "market-subject-ctd-reversal",
+            oracle_string(candidate, "bond_id"),
+        );
+        let gross_coupon = oracle_fixed(candidate, "gross_interim_coupons");
+        let market_irr = oracle_fixed(expected, "market_pre_tax_irr");
+        let net_basis = oracle_fixed(candidate, "market_net_basis");
+        let invoice_price = oracle_fixed(candidate, "invoice_price");
+        let purchase_dirty_price = oracle_fixed(candidate, "purchase_dirty_price");
+        let delivery_profit = FixedDecimal::ZERO
+            .checked_sub(net_basis)
+            .map_err(|_| AnalyticsError::InvalidInput)?;
+        let measures = ficant_domain::futures_delivery::FuturesDeliveryMeasures::new(
+            1,
+            1,
+            FixedDecimal::ONE,
+            FixedDecimal::ZERO,
+            FixedDecimal::ZERO,
+            gross_coupon,
+            invoice_price,
+            purchase_dirty_price,
+            net_basis,
+            FixedDecimal::ZERO,
+            FixedDecimal::ZERO,
+            net_basis,
+            market_irr,
+            delivery_profit,
+        )
+        .map_err(|_| AnalyticsError::InvalidInput)?;
+        Ok(FuturesDeliveryResult::new(input.clone(), measures))
+    }
+}
+
 impl FuturesHedgeEngine for RecordingEngines {
     fn calculate(&self, input: &FuturesHedgeInput) -> Result<FuturesHedgeResult, AnalyticsError> {
         self.calls.hedge.fetch_add(1, Ordering::SeqCst);
@@ -178,10 +239,18 @@ impl FuturesHedgeEngine for RecordingEngines {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Drift {
     None,
+    AllExempt,
     DataOwner,
     CurveVisibleAfterKnowledge,
     TaxEffectiveAfterValuation,
+    TaxSource,
+    TaxVerification,
+    TaxPayload,
+    RateUnitDefinition,
+    SubjectTaxProfile,
+    CandidateTaxAttributes,
     CorruptDataContent,
+    ReverseQuoteOrder,
 }
 
 struct FixturePorts {
@@ -197,7 +266,9 @@ struct FixturePorts {
     delivery_facts: FuturesDeliveryArtifactFacts,
     ctd_facts: BondAnalyticsArtifactFacts,
     corrupt_data: bool,
+    reverse_quotes: bool,
     integrity_events: AtomicUsize,
+    tax_reads: AtomicUsize,
 }
 
 impl FixturePorts {
@@ -245,6 +316,9 @@ impl DefinitionRepository for FixturePorts {
         definition_id: Ulid,
         version: Version,
     ) -> ApplicationResult<Option<DefinitionValue>> {
+        if definition_id == id('T') {
+            self.tax_reads.fetch_add(1, Ordering::SeqCst);
+        }
         Ok(self
             .definitions
             .iter()
@@ -375,10 +449,15 @@ impl CanonicalSnapshotDecoder for FixturePorts {
         assert_eq!(snapshot, &self.data);
         assert_eq!(parquet, DATA_BYTES);
         assert_eq!(manifest, MANIFEST_BYTES);
-        DecodedCanonicalQuotes::new(
-            VersionRef::new(id('Q'), version(1)),
-            vec![quote('D', "10125", 2), quote('C', "995", 1)],
-        )
+        let mut quotes = vec![
+            quote('B', "10127", 2),
+            quote('D', "10125", 2),
+            quote('C', "995", 1),
+        ];
+        if self.reverse_quotes {
+            quotes.reverse();
+        }
+        DecodedCanonicalQuotes::new(VersionRef::new(id('Q'), version(1)), quotes)
     }
 }
 
@@ -556,13 +635,27 @@ struct Fixture {
 impl Fixture {
     #[allow(clippy::too_many_lines)]
     fn new(drift: Drift) -> Self {
-        let units = unit_definitions();
+        Self::build(drift, false)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn with_oracle_delivery(drift: Drift) -> Self {
+        Self::build(drift, true)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn build(drift: Drift, oracle_delivery: bool) -> Self {
+        let units = unit_definitions(drift == Drift::RateUnitDefinition);
         let calendar = calendar();
         let curve_rule = curve_rule_pack();
         let delivery_rule = delivery_rule_pack();
-        let tax_rule = tax_rule_pack(drift == Drift::TaxEffectiveAfterValuation);
+        let tax_rule = tax_rule_pack(drift);
         let funding_rule = funding_rule_pack();
-        let bond = bond_definition();
+        let bond = bond_definition(
+            drift == Drift::AllExempt,
+            drift == Drift::CandidateTaxAttributes,
+        );
+        let exempt_bond = exempt_bond_definition();
         let contract = futures_contract_definition();
         let definitions = units
             .into_iter()
@@ -572,6 +665,7 @@ impl Fixture {
                 DefinitionValue::MarketRulePack(delivery_rule.clone()),
                 DefinitionValue::MarketRulePack(tax_rule.clone()),
                 DefinitionValue::MarketRulePack(funding_rule),
+                exempt_bond,
                 bond.clone(),
                 contract.clone(),
             ])
@@ -711,7 +805,7 @@ impl Fixture {
         );
         let ports = Arc::new(FixturePorts {
             definitions,
-            subjects: vec![fixture_subject()],
+            subjects: vec![fixture_subject(drift == Drift::SubjectTaxProfile)],
             data,
             curve,
             points,
@@ -722,12 +816,21 @@ impl Fixture {
             delivery_facts,
             ctd_facts,
             corrupt_data: drift == Drift::CorruptDataContent,
+            reverse_quotes: drift == Drift::ReverseQuoteOrder,
             integrity_events: AtomicUsize::new(0),
+            tax_reads: AtomicUsize::new(0),
         });
         let calls = Calls::default();
         let engines = Arc::new(RecordingEngines {
             calls: calls.clone(),
         });
+        let futures_delivery: Arc<dyn FuturesDeliveryEngine> = if oracle_delivery {
+            Arc::new(R5eOracleDeliveryEngine {
+                calls: calls.delivery.clone(),
+            })
+        } else {
+            engines.clone()
+        };
         let identity = TrustedIdentity::implicit("rates-r5d-test", ["rates:analyze"])
             .expect("test identity is valid");
         let application: Arc<dyn PlatformPort> = Arc::new(
@@ -746,7 +849,7 @@ impl Fixture {
             engines.clone(),
             engines.clone(),
             engines.clone(),
-            engines.clone(),
+            futures_delivery,
             ports.clone(),
             ports.clone(),
             Arc::new(CgbFuturesDeliveryRulePackParser),
@@ -755,7 +858,7 @@ impl Fixture {
             ports.clone(),
             ports.clone(),
             Arc::new(FundingRulePackV1Parser),
-            Arc::new(TaxRulePackV1Parser),
+            Arc::new(TaxRulePackV2Parser),
             engines,
             ports.clone(),
             ports.clone(),
@@ -809,7 +912,7 @@ async fn authorization_fails_before_contract_parsing_or_any_engine() {
         fixture.ports.clone(),
         fixture.ports.clone(),
         Arc::new(FundingRulePackV1Parser),
-        Arc::new(TaxRulePackV1Parser),
+        Arc::new(TaxRulePackV2Parser),
         engines,
         fixture.ports.clone(),
         fixture.ports.clone(),
@@ -924,7 +1027,51 @@ async fn all_five_rpcs_return_stable_complete_consumed_input_evidence() {
     );
     let first_bond = bond_analysis(first_bond);
     let second_bond = bond_analysis(second_bond);
-    assert!(first_bond.after_tax.is_some());
+    let after_tax = first_bond.after_tax.as_ref().expect("R5E after-tax view");
+    let oracle_expected = R5E_ORACLE_EXPECTED;
+    let oracle_bond = oracle_bond_case(oracle_expected, "cutoff-day-taxable");
+    assert_eq!(after_tax.claim_scope, 1);
+    assert_eq!(after_tax.cashflows.len(), first_bond.cashflows.len());
+    for (market, subject) in first_bond.cashflows.iter().zip(&after_tax.cashflows) {
+        assert_eq!(market.sequence, subject.sequence);
+        assert_eq!(market.nominal_date, subject.nominal_date);
+        assert_eq!(market.payment_date, subject.payment_date);
+        assert_eq!(market.principal, subject.principal);
+        assert_eq!(
+            proto_decimal_value(subject.coupon.as_ref().expect("subject coupon")),
+            ExactDecimal::from_i128_with_scale(1_179_245_283_019, 12),
+            "each gross 1.25 coupon is independently divided by 1.06 with ties-to-even",
+        );
+    }
+    assert_eq!(
+        proto_decimal_value(
+            first_bond
+                .measures
+                .as_ref()
+                .expect("market Bond measures")
+                .yield_to_maturity
+                .as_ref()
+                .expect("market yield to maturity"),
+        ),
+        oracle_decimal(oracle_string(
+            oracle_bond,
+            "market_pre_tax_yield_to_maturity",
+        )),
+        "production pre-tax YTM must match the independent R5E Decimal Oracle",
+    );
+    assert_eq!(
+        proto_decimal_value(
+            after_tax
+                .yield_to_maturity
+                .as_ref()
+                .expect("subject yield to maturity"),
+        ),
+        oracle_decimal(oracle_string(
+            oracle_bond,
+            "subject_tax_adjusted_yield_to_maturity",
+        )),
+        "production subject YTM must match the independent R5E Decimal Oracle",
+    );
     assert_eq!(first_bond.metadata, second_bond.metadata);
     assert_metadata(
         first_bond.metadata.as_ref().expect("Bond metadata"),
@@ -1035,24 +1182,49 @@ async fn all_five_rpcs_return_stable_complete_consumed_input_evidence() {
     );
     let first_delivery = delivery_analysis(first_delivery);
     let second_delivery = delivery_analysis(second_delivery);
-    assert_eq!(first_delivery.candidates.len(), 1);
-    assert_eq!(first_delivery.ctd_index, 0);
+    assert_eq!(first_delivery.candidates.len(), 2);
+    assert_eq!(
+        first_delivery.ctd_index, 1,
+        "market CTD is the taxable Bond"
+    );
+    assert_eq!(
+        first_delivery.subject_ctd_index, 0,
+        "coupon output VAT reverses the subject CTD to the exempt Bond"
+    );
+    for candidate in &first_delivery.candidates {
+        assert_eq!(
+            candidate.claim_scope, 1,
+            "the production v2 fixture returns the authority-approved claim scope"
+        );
+        let measures = candidate.measures.as_ref().expect("delivery measures");
+        assert!(measures.tax_adjusted_interim_coupons.is_some());
+        assert!(measures.subject_tax_adjusted_irr.is_some());
+    }
+    assert_eq!(
+        selected_bond_id(&first_delivery, first_delivery.ctd_index),
+        id('D').as_str(),
+    );
+    assert_eq!(
+        selected_bond_id(&first_delivery, first_delivery.subject_ctd_index),
+        id('B').as_str(),
+    );
     assert_eq!(first_delivery.metadata, second_delivery.metadata);
     assert_metadata(
         first_delivery.metadata.as_ref().expect("delivery metadata"),
         &roles(&[
             (AnalysisInputRole::Subject, 1),
             (AnalysisInputRole::Unit, 9),
-            (AnalysisInputRole::Bond, 1),
+            (AnalysisInputRole::Bond, 2),
             (AnalysisInputRole::DataSnapshot, 1),
             (AnalysisInputRole::DataSource, 1),
+            (AnalysisInputRole::TaxRulePack, 1),
             (AnalysisInputRole::FundingRulePack, 1),
             (AnalysisInputRole::DeliveryRulePack, 1),
             (AnalysisInputRole::FuturesContract, 1),
         ]),
         FUTURES_DELIVERY_ALGORITHM_ID,
     );
-    assert_eq!(fixture.calls.delivery.load(Ordering::SeqCst), 2);
+    assert_eq!(fixture.calls.delivery.load(Ordering::SeqCst), 4);
 
     let hedge_request = hedge_request(&fixture.ports);
     let first_hedge = fixture
@@ -1170,13 +1342,13 @@ async fn private_bond_seam_rejects_stale_or_extra_proof_before_engine() {
         .expect("public materialization supplies metadata");
     let materialized = materialize_bond(&fixture.ports).await;
     assert_eq!(
-        materialized.coupon_tax_rate().coupon_tax_rate(),
-        fixed("1", 1)
+        materialized.coupon_tax_treatment().coupon_tax_rate(),
+        fixed("6", 2)
     );
     let metadata = RatesGrpcService::canonical_materialized_bond_metadata(
         &request,
         materialized.input(),
-        fixed("1", 1),
+        materialized.coupon_tax_treatment(),
         &public_metadata.consumed_inputs,
     )
     .expect("canonical private-port metadata is valid");
@@ -1214,16 +1386,32 @@ async fn private_bond_seam_rejects_stale_or_extra_proof_before_engine() {
         .consumed_inputs
         .sort_by_key(Message::encode_to_vec);
 
-    for (case, supplied_metadata, coupon_tax_rate) in [
-        ("wrong schema", wrong_schema, fixed("1", 1)),
+    for (case, supplied_metadata, coupon_tax_treatment) in [
+        (
+            "wrong schema",
+            wrong_schema,
+            CouponTaxTreatment::legacy_retained_rate(fixed("1", 1), unit_ref('Z')),
+        ),
         (
             "stale parameter digest",
             stale_parameter_digest,
-            fixed("1", 1),
+            CouponTaxTreatment::legacy_retained_rate(fixed("1", 1), unit_ref('Z')),
         ),
-        ("stale fingerprint", stale_fingerprint, fixed("1", 1)),
-        ("extra evidence", extra_evidence, fixed("1", 1)),
-        ("coupon tax scalar drift", metadata, fixed("2", 1)),
+        (
+            "stale fingerprint",
+            stale_fingerprint,
+            CouponTaxTreatment::legacy_retained_rate(fixed("1", 1), unit_ref('Z')),
+        ),
+        (
+            "extra evidence",
+            extra_evidence,
+            CouponTaxTreatment::legacy_retained_rate(fixed("1", 1), unit_ref('Z')),
+        ),
+        (
+            "coupon tax scalar drift",
+            metadata,
+            CouponTaxTreatment::legacy_retained_rate(fixed("2", 1), unit_ref('Z')),
+        ),
     ] {
         let calls = Calls::default();
         let engine = RecordingEngines {
@@ -1234,7 +1422,7 @@ async fn private_bond_seam_rejects_stale_or_extra_proof_before_engine() {
                 &engine,
                 &request,
                 materialized.input(),
-                coupon_tax_rate,
+                &coupon_tax_treatment,
                 supplied_metadata,
             )
             .is_err(),
@@ -1283,7 +1471,7 @@ async fn private_bond_seam_rejects_stale_or_extra_proof_before_engine() {
             &engine,
             &request,
             &changed_input,
-            fixed("1", 1),
+            materialized.coupon_tax_treatment(),
             public_metadata,
         )
         .is_err(),
@@ -1464,7 +1652,7 @@ fn bond_request(ports: &FixturePorts) -> AnalyzeBondRequest {
 }
 
 async fn materialize_bond(ports: &FixturePorts) -> BondRatesMaterialization {
-    let parser = TaxRulePackV1Parser;
+    let parser = TaxRulePackV2Parser;
     MaterializeBondRatesInput::new(ports, ports, ports, ports, ports, &parser)
         .execute(
             &AccessScope::new(id('0'), id('2'), vec![id('1')])
@@ -1494,6 +1682,238 @@ async fn materialize_bond(ports: &FixturePorts) -> BondRatesMaterialization {
         )
         .await
         .expect("fixture Bond materialization is valid")
+}
+
+async fn materialize_delivery(ports: &FixturePorts) -> DeliveryRatesMaterialization {
+    let delivery = CgbFuturesDeliveryRulePackParser;
+    let funding = FundingRulePackV1Parser;
+    let tax = TaxRulePackV2Parser;
+    MaterializeDeliveryRatesInput::new(
+        ports, ports, ports, ports, ports, ports, ports, &delivery, &funding, &tax,
+    )
+    .execute(
+        &AccessScope::new(id('0'), id('2'), vec![id('1')]).expect("fixture access scope is valid"),
+        DeliveryRatesCommand {
+            owner: owner(),
+            subject_ref: VersionRef::new(id('S'), version(1)),
+            units: unit_requirements(),
+            currency_unit: unit_ref('M'),
+            price_unit: unit_ref('P'),
+            rate_unit: unit_ref('Z'),
+            knowledge_at: time(20, 8),
+            futures_contract: analytics_ref(ports.definition('C')),
+            data_snapshot: ImmutableSnapshotBinding::new(id('E'), ContentHash::digest(DATA_BYTES)),
+            funding_rule_pack: analytics_ref(ports.definition('F')),
+            tax_rule_pack: analytics_ref(ports.definition('T')),
+            valuation_at: time(20, 4),
+            purchase_date: date(2026, 7, 20),
+        },
+        SafeTraceContext::new("0123456789abcdef0123456789abcdef").expect("fixture trace is valid"),
+    )
+    .await
+    .expect("fixture Delivery materialization is valid")
+}
+
+#[tokio::test]
+async fn production_v2_delivery_materializes_exact_tax_treatment() {
+    let fixture = Fixture::new(Drift::None);
+    let materialized = materialize_delivery(&fixture.ports).await;
+    assert_eq!(
+        fixture.ports.tax_reads.load(Ordering::SeqCst),
+        1,
+        "one exact TaxRulePack read serves every candidate"
+    );
+    assert_eq!(materialized.inputs().len(), 2);
+    assert_eq!(
+        materialized
+            .coupon_tax_treatments()
+            .iter()
+            .map(CouponTaxTreatment::value_added_tax_rate)
+            .collect::<Vec<_>>(),
+        vec![FixedDecimal::ZERO, fixed("6", 2)]
+    );
+    let market = NativeFuturesDeliveryEngine
+        .calculate(&materialized.inputs()[1])
+        .expect("market Delivery engine succeeds");
+    let measures = market.measures();
+    let adjusted = materialized.coupon_tax_treatments()[1]
+        .adjust_coupon(measures.interim_coupons())
+        .expect("authority coupon adjustment succeeds");
+    assert!(adjusted < measures.interim_coupons());
+    let ratio = measures
+        .invoice_price()
+        .checked_add(adjusted)
+        .and_then(|value| value.checked_div_round_ties_even(measures.purchase_dirty_price()))
+        .expect("subject return ratio is representable");
+    let _annualized = ratio
+        .checked_sub(FixedDecimal::ONE)
+        .and_then(|value| value.checked_mul_integer(365))
+        .and_then(|value| value.checked_div_round_ties_even(fixed("60", 0)))
+        .expect("subject annualized IRR is representable");
+}
+
+#[tokio::test]
+async fn production_v2_delivery_matches_oracle_and_is_order_invariant() {
+    let fixture = Fixture::with_oracle_delivery(Drift::None);
+    let result = delivery_analysis(
+        fixture
+            .service
+            .analyze_futures_delivery(Request::new(delivery_request(&fixture.ports)))
+            .await
+            .expect("Oracle Delivery response is transported")
+            .into_inner(),
+    );
+    assert_oracle_delivery_result(&result);
+    assert_eq!(fixture.calls.delivery.load(Ordering::SeqCst), 2);
+
+    let reversed = Fixture::with_oracle_delivery(Drift::ReverseQuoteOrder);
+    let reversed_result = delivery_analysis(
+        reversed
+            .service
+            .analyze_futures_delivery(Request::new(delivery_request(&reversed.ports)))
+            .await
+            .expect("reordered Oracle Delivery response is transported")
+            .into_inner(),
+    );
+    assert_oracle_delivery_result(&reversed_result);
+    assert_eq!(reversed.calls.delivery.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        result.candidates, reversed_result.candidates,
+        "verified quote order must not alter the stably materialized candidate results",
+    );
+}
+
+fn assert_oracle_delivery_result(
+    result: &ficant_contracts::ficant::rates::v1::AnalyzeFuturesDeliveryResult,
+) {
+    assert_eq!(result.candidates.len(), 2);
+    assert_eq!(selected_bond_id(result, result.ctd_index), id('D').as_str());
+    assert_eq!(
+        selected_bond_id(result, result.subject_ctd_index),
+        id('B').as_str(),
+    );
+    let expected = R5E_ORACLE_EXPECTED;
+    let expected_basket = oracle_basket(expected, "market-subject-ctd-reversal");
+    let market_ctd = oracle_fixture_bond_id(oracle_string(expected_basket, "market_ctd_bond_id"));
+    let subject_ctd = oracle_fixture_bond_id(oracle_string(expected_basket, "subject_ctd_bond_id"));
+    assert_eq!(
+        selected_bond_id(result, result.ctd_index),
+        market_ctd.as_str()
+    );
+    assert_eq!(
+        selected_bond_id(result, result.subject_ctd_index),
+        subject_ctd.as_str(),
+    );
+    for candidate in &result.candidates {
+        let bond = selected_candidate_bond_id(candidate);
+        let oracle_bond = if bond == id('B').as_str() {
+            "CGB-EXEMPT"
+        } else if bond == id('D').as_str() {
+            "CGB-TAXABLE"
+        } else {
+            panic!("unexpected candidate Bond {bond}");
+        };
+        let expected = oracle_candidate(expected, "market-subject-ctd-reversal", oracle_bond);
+        let measures = candidate.measures.as_ref().expect("candidate measures");
+        assert_eq!(
+            proto_decimal_value(
+                measures
+                    .tax_adjusted_interim_coupons
+                    .as_ref()
+                    .expect("tax-adjusted interim coupons"),
+            ),
+            oracle_decimal(oracle_string(expected, "tax_adjusted_interim_coupons")),
+        );
+        assert_eq!(
+            proto_decimal_value(
+                measures
+                    .implied_repo_rate
+                    .as_ref()
+                    .expect("market pre-tax IRR"),
+            ),
+            oracle_decimal(oracle_string(expected, "market_pre_tax_irr")),
+        );
+        assert_eq!(
+            proto_decimal_value(
+                measures
+                    .subject_tax_adjusted_irr
+                    .as_ref()
+                    .expect("subject tax-adjusted IRR"),
+            ),
+            oracle_decimal(oracle_string(expected, "subject_tax_adjusted_irr")),
+        );
+    }
+}
+
+#[tokio::test]
+async fn production_v2_delivery_tax_drift_matrix_never_reaches_the_engine() {
+    for drift in [
+        Drift::TaxEffectiveAfterValuation,
+        Drift::TaxSource,
+        Drift::TaxVerification,
+        Drift::TaxPayload,
+        Drift::RateUnitDefinition,
+        Drift::SubjectTaxProfile,
+        Drift::CandidateTaxAttributes,
+    ] {
+        let fixture = Fixture::new(drift);
+        assert_delivery_error(
+            fixture
+                .service
+                .analyze_futures_delivery(Request::new(delivery_request(&fixture.ports)))
+                .await
+                .expect("business error is transported")
+                .into_inner(),
+        );
+        assert_eq!(
+            fixture.calls.delivery.load(Ordering::SeqCst),
+            0,
+            "{drift:?} reached the Delivery engine"
+        );
+    }
+
+    let fixture = Fixture::new(Drift::None);
+    let mut hash_drift = delivery_request(&fixture.ports);
+    hash_drift
+        .tax_rule_pack
+        .as_mut()
+        .expect("TaxRulePack binding")
+        .content_hash
+        .as_mut()
+        .expect("TaxRulePack hash")
+        .value[0] ^= 1;
+    assert_delivery_error(
+        fixture
+            .service
+            .analyze_futures_delivery(Request::new(hash_drift))
+            .await
+            .expect("business error is transported")
+            .into_inner(),
+    );
+    assert_eq!(fixture.calls.delivery.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn production_v2_no_tax_difference_keeps_market_and_subject_ctd_identical() {
+    let fixture = Fixture::new(Drift::AllExempt);
+    let result = delivery_analysis(
+        fixture
+            .service
+            .analyze_futures_delivery(Request::new(delivery_request(&fixture.ports)))
+            .await
+            .expect("Delivery response is transported")
+            .into_inner(),
+    );
+    assert_eq!(result.candidates.len(), 2);
+    assert_eq!(result.ctd_index, result.subject_ctd_index);
+    for candidate in result.candidates {
+        let measures = candidate.measures.expect("Delivery measures");
+        assert_eq!(
+            measures.interim_coupons, measures.tax_adjusted_interim_coupons,
+            "an exempt Bond has no coupon tax difference",
+        );
+        assert!(measures.subject_tax_adjusted_irr.is_some());
+    }
 }
 
 fn curve_request() -> InterpolateYieldCurveRequest {
@@ -1536,6 +1956,7 @@ fn delivery_request(ports: &FixturePorts) -> AnalyzeFuturesDeliveryRequest {
         purchase_date: "2026-07-20".to_owned(),
         data_snapshot: Some(snapshot_binding('E', &ContentHash::digest(DATA_BYTES))),
         funding_rule_pack: Some(ports.binding('F')),
+        tax_rule_pack: Some(ports.binding('T')),
     }
 }
 
@@ -1774,20 +2195,23 @@ fn assert_hedge_error(response: ficant_contracts::ficant::rates::v1::AnalyzeFutu
     ));
 }
 
-fn unit_definitions() -> Vec<DefinitionValue> {
+fn unit_definitions(drift_rate_definition: bool) -> Vec<DefinitionValue> {
     [
-        ('M', "CNY", "currency_amount", 2),
-        ('P', "CNY100", "price_per_100", 12),
-        ('Z', "RATE", "rate", 12),
-        ('Y', "YEAR", "years", 12),
-        ('X', "YEAR2", "years_squared", 12),
-        ('V', "DV01_100", "dv01_per_100", 12),
-        ('W', "DV01", "dv01", 12),
-        ('I', "ONE", "dimensionless", 12),
-        ('H', "CONTRACT", "contract_count", 0),
+        ('M', "CNY", "currency_amount", 2, 28),
+        ('P', "CNY100", "price_per_100", 12, 28),
+        ('Z', "RATE", "rate", 12, 18),
+        ('Y', "YEAR", "years", 12, 28),
+        ('X', "YEAR2", "years_squared", 12, 28),
+        ('V', "DV01_100", "dv01_per_100", 12, 28),
+        ('W', "DV01", "dv01", 12, 28),
+        ('I', "ONE", "dimensionless", 12, 28),
+        ('H', "CONTRACT", "contract_count", 0, 28),
     ]
     .into_iter()
-    .map(|(suffix, code, dimension, scale)| {
+    .map(|(suffix, code, dimension, scale, mut precision)| {
+        if suffix == 'Z' && drift_rate_definition {
+            precision = 17;
+        }
         DefinitionValue::Unit(
             Unit::new(UnitInput {
                 unit_id: id(suffix),
@@ -1796,7 +2220,7 @@ fn unit_definitions() -> Vec<DefinitionValue> {
                 code: code.to_owned(),
                 dimension: dimension.to_owned(),
                 scale,
-                precision: 28,
+                precision,
             })
             .expect("fixture Unit is valid"),
         )
@@ -1916,28 +2340,18 @@ fn funding_rule_pack() -> MarketRulePack {
     .expect("fixture funding RulePack is valid")
 }
 
-fn tax_rule_pack(after_valuation: bool) -> MarketRulePack {
-    let payload = TaxRulePack {
-        coupon_rules: vec![BondCouponTaxRule {
-            first_issue_from: "2000-01-01".to_owned(),
-            first_issue_to: String::new(),
-            tax_attributes: Some(ProtoBondTaxAttributes {
-                value_added_tax_status: ProtoValueAddedTaxStatus::Taxable as i32,
-                income_tax_status: ProtoIncomeTaxStatus::Taxable as i32,
-            }),
-            rates: vec![SubjectCouponTaxRate {
-                value_added_tax_profile: "vat-a".to_owned(),
-                income_tax_profile: "income-a".to_owned(),
-                coupon_tax_rate: Some(proto_decimal("1", 1, 'Z')),
-            }],
-        }],
+fn tax_rule_pack(drift: Drift) -> MarketRulePack {
+    let payload = if drift == Drift::TaxPayload {
+        b"not-the-authority-payload".to_vec()
+    } else {
+        include_bytes!("../../../domain-packs/cgb-interest-tax/cgb-interest-tax-v1.bin").to_vec()
     };
-    let content = RulePackContent::new(TAX_TYPE_URL, payload.encode_to_vec())
-        .expect("fixture tax payload is valid");
-    let effective_from = if after_valuation {
+    let content =
+        RulePackContent::new(TAX_TYPE_URL, payload).expect("fixture tax payload is valid");
+    let effective_from = if drift == Drift::TaxEffectiveAfterValuation {
         market_time(2026, 7, 21, 4)
     } else {
-        market_time(2020, 1, 1, 4)
+        authority_year_start(2026)
     };
     MarketRulePack::new_with_content(
         MarketRulePackInput {
@@ -1946,10 +2360,18 @@ fn tax_rule_pack(after_valuation: bool) -> MarketRulePack {
             owner: owner(),
             market: TAX_MARKET.to_owned(),
             rule_type: TAX_RULE_TYPE.to_owned(),
-            source: "R5D fixture".to_owned(),
-            effective: EffectivePeriod::new(effective_from, market_time(2040, 1, 1, 4))
+            source: if drift == Drift::TaxSource {
+                "unapproved-source".to_owned()
+            } else {
+                TAX_SOURCE.to_owned()
+            },
+            effective: EffectivePeriod::new(effective_from, authority_year_start(2028))
                 .expect("fixture RulePack period is valid"),
-            verification_status: VerificationStatus::Verified,
+            verification_status: if drift == Drift::TaxVerification {
+                VerificationStatus::Unverified
+            } else {
+                VerificationStatus::Verified
+            },
             content_hash: ContentHash::digest(content.value()),
         },
         content,
@@ -1957,7 +2379,7 @@ fn tax_rule_pack(after_valuation: bool) -> MarketRulePack {
     .expect("fixture tax RulePack is valid")
 }
 
-fn bond_definition() -> DefinitionValue {
+fn bond_definition(exempt: bool, attribute_drift: bool) -> DefinitionValue {
     let instrument = Instrument::new(InstrumentInput {
         instrument_id: id('D'),
         version: version(1),
@@ -1969,13 +2391,28 @@ fn bond_definition() -> DefinitionValue {
         calendar: VersionRef::new(id('K'), version(1)),
     })
     .expect("fixture Bond instrument is valid");
+    let (first_issue_date, mut tax_attributes) = if exempt {
+        (
+            date(2025, 2, 8),
+            BondTaxAttributes::new(ValueAddedTaxStatus::Exempt, IncomeTaxStatus::Exempt),
+        )
+    } else {
+        (
+            date(2025, 8, 8),
+            BondTaxAttributes::new(ValueAddedTaxStatus::Taxable, IncomeTaxStatus::Exempt),
+        )
+    };
+    if attribute_drift {
+        tax_attributes =
+            BondTaxAttributes::new(ValueAddedTaxStatus::Exempt, IncomeTaxStatus::Exempt);
+    }
     let bond = Bond::with_issuance(
         &instrument,
-        date(2024, 8, 15),
-        date(2024, 8, 15),
-        date(2034, 8, 15),
+        first_issue_date,
+        date(2025, 8, 8),
+        date(2034, 8, 8),
         domain_decimal("100000000", 0, 'M'),
-        BondTaxAttributes::new(ValueAddedTaxStatus::Taxable, IncomeTaxStatus::Taxable),
+        tax_attributes,
         domain_decimal("100", 0, 'M'),
     )
     .expect("fixture Bond issuance is valid")
@@ -1992,6 +2429,44 @@ fn bond_definition() -> DefinitionValue {
     DefinitionValue::Instrument(
         InstrumentDefinition::new(instrument, Some(InstrumentSubtype::Bond(bond)))
             .expect("fixture Bond definition is valid"),
+    )
+}
+
+fn exempt_bond_definition() -> DefinitionValue {
+    let instrument = Instrument::new(InstrumentInput {
+        instrument_id: id('B'),
+        version: version(1),
+        owner: owner(),
+        kind: InstrumentKind::Bond,
+        market: "CFFEX".to_owned(),
+        symbol: "250001.IB".to_owned(),
+        currency: unit_ref('M'),
+        calendar: VersionRef::new(id('K'), version(1)),
+    })
+    .expect("fixture exempt Bond instrument is valid");
+    let bond = Bond::with_issuance(
+        &instrument,
+        date(2025, 2, 8),
+        date(2025, 8, 8),
+        date(2034, 8, 8),
+        domain_decimal("100000000", 0, 'M'),
+        BondTaxAttributes::new(ValueAddedTaxStatus::Exempt, IncomeTaxStatus::Exempt),
+        domain_decimal("100", 0, 'M'),
+    )
+    .expect("fixture exempt Bond issuance is valid")
+    .with_pricing_terms(
+        BondPricingTerms::new(
+            domain_decimal("25", 3, 'Z'),
+            BondCouponFrequency::Semiannual,
+            BondDayCountConvention::ActActBondIsma,
+            BondBusinessDayConvention::Following,
+        )
+        .expect("fixture exempt Bond pricing terms are valid"),
+    )
+    .expect("fixture exempt Bond is priced");
+    DefinitionValue::Instrument(
+        InstrumentDefinition::new(instrument, Some(InstrumentSubtype::Bond(bond)))
+            .expect("fixture exempt Bond definition is valid"),
     )
 }
 
@@ -2039,7 +2514,7 @@ fn curve_node(curve_node_id: &str, tenor: &str) -> CurveNodeDefinition {
     CurveNodeDefinition::new(input).expect("fixture CurveNode definition is valid")
 }
 
-fn fixture_subject() -> SubjectRecord {
+fn fixture_subject(drift_tax_profile: bool) -> SubjectRecord {
     let subject =
         Subject::new(id('S'), "R5D exact Rates subject").expect("fixture Subject is valid");
     let reference = VersionRef::new(subject.id().clone(), version(1));
@@ -2057,7 +2532,15 @@ fn fixture_subject() -> SubjectRecord {
         )
         .expect("fixture access set is valid"),
         FundingTier::DrAvailable,
-        TaxTreatment::new("vat-a", "income-a").expect("fixture tax treatment is valid"),
+        TaxTreatment::new(
+            if drift_tax_profile {
+                "small-scale-taxpayer"
+            } else {
+                "cn-vat-general-taxpayer"
+            },
+            "cn-cgb-interest-cit-exempt",
+        )
+        .expect("fixture tax treatment is valid"),
         "direct",
         "principal",
         None,
@@ -2186,13 +2669,16 @@ fn proto_owner() -> ProtoOwnerRef {
 }
 
 fn id(suffix: char) -> Ulid {
+    if suffix == 'Z' {
+        return Ulid::new("01K2CGBVAT0000000000000000").expect("authority Unit ULID is valid");
+    }
     Ulid::new(format!("0000000000000000000000000{}", ulid_char(suffix)))
         .expect("fixture ULID is valid")
 }
 
 fn proto_ulid(suffix: char) -> ProtoUlid {
     ProtoUlid {
-        value: format!("0000000000000000000000000{}", ulid_char(suffix)),
+        value: id(suffix).as_str().to_owned(),
     }
 }
 
@@ -2261,6 +2747,127 @@ fn proto_decimal_value(value: &DecimalValue) -> ExactDecimal {
     )
 }
 
+fn oracle_decimal(value: &str) -> ExactDecimal {
+    value
+        .parse()
+        .expect("independent R5E Oracle Decimal is valid")
+}
+
+fn oracle_bond_case<'a>(document: &'a str, case_id: &str) -> &'a str {
+    oracle_object(document, "case_id", case_id)
+}
+
+fn oracle_basket<'a>(document: &'a str, basket_id: &str) -> &'a str {
+    oracle_object(document, "basket_id", basket_id)
+}
+
+fn oracle_candidate<'a>(document: &'a str, basket_id: &str, bond_id: &str) -> &'a str {
+    oracle_object(oracle_basket(document, basket_id), "bond_id", bond_id)
+}
+
+fn oracle_object<'a>(document: &'a str, identity_field: &str, identity: &str) -> &'a str {
+    let marker = format!("\"{identity_field}\": \"{identity}\"");
+    let identity_index = document
+        .find(&marker)
+        .unwrap_or_else(|| panic!("R5E Oracle object {identity_field}={identity} exists"));
+    let start = document[..identity_index]
+        .rfind('{')
+        .expect("R5E Oracle object has an opening brace");
+    let mut depth = 0_u32;
+    let mut quoted = false;
+    let mut escaped = false;
+    for (offset, byte) in document.as_bytes()[start..].iter().copied().enumerate() {
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                quoted = false;
+            }
+            continue;
+        }
+        match byte {
+            b'"' => quoted = true,
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth
+                    .checked_sub(1)
+                    .expect("R5E Oracle braces are balanced");
+                if depth == 0 {
+                    return &document[start..=start + offset];
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("R5E Oracle object {identity_field}={identity} has a closing brace")
+}
+
+fn oracle_string<'a>(object: &'a str, field: &str) -> &'a str {
+    let marker = format!("\"{field}\": \"");
+    let start = object
+        .find(&marker)
+        .unwrap_or_else(|| panic!("R5E Oracle field {field} exists"))
+        + marker.len();
+    let tail = &object[start..];
+    let end = tail
+        .find('"')
+        .unwrap_or_else(|| panic!("R5E Oracle field {field} is a string"));
+    &tail[..end]
+}
+
+fn oracle_fixed(value: &str, field: &str) -> FixedDecimal {
+    let decimal = oracle_decimal(oracle_string(value, field));
+    assert!(
+        decimal.scale() <= 12,
+        "R5E Oracle FixedDecimal scale must not exceed 12",
+    );
+    let scaled = decimal
+        .mantissa()
+        .checked_mul(
+            10_i128
+                .checked_pow(12 - decimal.scale())
+                .expect("R5E Oracle scale factor is representable"),
+        )
+        .expect("R5E Oracle Decimal is representable");
+    FixedDecimal::from_scaled(scaled)
+}
+
+fn oracle_fixture_bond_id(value: &str) -> String {
+    match value {
+        "CGB-EXEMPT" => id('B').as_str().to_owned(),
+        "CGB-TAXABLE" => id('D').as_str().to_owned(),
+        other => panic!("unexpected R5E Oracle Bond id {other}"),
+    }
+}
+
+fn selected_candidate_bond_id(
+    candidate: &ficant_contracts::ficant::rates::v1::FuturesDeliveryCandidateResult,
+) -> &str {
+    candidate
+        .bond
+        .as_ref()
+        .expect("candidate Bond")
+        .object
+        .as_ref()
+        .expect("candidate Bond version")
+        .id
+        .as_ref()
+        .expect("candidate Bond id")
+        .value
+        .as_str()
+}
+
+fn selected_bond_id(
+    result: &ficant_contracts::ficant::rates::v1::AnalyzeFuturesDeliveryResult,
+    index: u32,
+) -> &str {
+    selected_candidate_bond_id(
+        &result.candidates[usize::try_from(index).expect("CTD index fits usize")],
+    )
+}
+
 fn fixed(coefficient: &str, scale: u32) -> FixedDecimal {
     let coefficient = coefficient
         .parse::<i128>()
@@ -2288,6 +2895,17 @@ fn market_time(year: i32, month: u32, day: u32, hour: u32) -> MarketTime {
         date(year, month, day),
     )
     .expect("fixture MarketTime is valid")
+}
+
+fn authority_year_start(year: i32) -> MarketTime {
+    MarketTime::new(
+        Utc.with_ymd_and_hms(year - 1, 12, 31, 16, 0, 0)
+            .single()
+            .expect("authority effective instant is valid"),
+        "Asia/Shanghai",
+        date(year, 1, 1),
+    )
+    .expect("authority effective MarketTime is valid")
 }
 
 fn proto_time(day: u32, hour: u32) -> ProtoMarketTime {

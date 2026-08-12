@@ -81,7 +81,13 @@ total_return = carry + roll_down
 
 当前实现保留 `ficant.rates.v1.RatesAnalyticsService` 五个一元 RPC 和可安装的 `ficant-sdk`。Python 只消费由 `interface/` 确定性生成的 Protobuf/gRPC 类型，通过认证后的 `ficant-server` 调用 Phase 2A–2D 的真实 Rust application 与 C++ 数值 provider；它不重写算法，不直连 PostgreSQL、Ceph RGW 或 C ABI。
 
-公共请求不再携带 Bond 条款、Calendar 内容、曲线节点、候选券、价格、转换因子、交割日期、CTD 或 DV01 的重复副本。现券、曲线、Carry/Roll-down、交割篮子/CTD 和套保分别提交所需的 exact Object/Snapshot/Artifact 引用；Application 从权威仓储物化实际数值输入，并在进入 provider 前失败关闭 owner、version、hash、knowledge/valuation/as-of/visible/effective time 与内容漂移。响应回显稳定排序的全部实际消费输入、参数摘要和请求指纹。R5D 不包含 AC09 双口径税后分析、AC37 权限分层或尚未组合的 Definition/Fact/Snapshot/Artifact 服务面。
+公共请求不再携带 Bond 条款、Calendar 内容、曲线节点、候选券、价格、转换因子、交割日期、CTD 或 DV01 的重复副本。现券、曲线、Carry/Roll-down、交割篮子/CTD 和套保分别提交所需的 exact Object/Snapshot/Artifact 引用；Application 从权威仓储物化实际数值输入，并在进入 provider 前失败关闭 owner、version、hash、knowledge/valuation/as-of/visible/effective time 与内容漂移。响应回显稳定排序的全部实际消费输入、参数摘要和请求指纹。R5D 不包含 AC37 权限分层或尚未组合的 Definition/Fact/Snapshot/Artifact 服务面。
+
+## 2026-08 / R5E 已落地国债利息双口径与双 CTD
+
+生产 Rates 服务只组合 authority-bound `TaxRulePackV2` parser。对批准的境内证券机构一般纳税人 Subject，Application 在任何 Bond 或 Delivery 数值 handoff 前核验 exact RulePack owner/version/definition 与 payload hash、type URL、source、批准有效期、精确 RATE Unit `01K2CGBVAT0000000000000000@1`、完整 Subject profile pair，以及每只国债的首发日和 VAT/CIT 属性。2025-08-08 前首发券按免税 treatment；当日及以后首发与后续续发按 6% 含税 coupon 销项 VAT treatment，CIT 均为免税。
+
+`AnalyzeBond` 保留原市场税前字段，并以同一 clean price、逐期 `gross/(1+0.06)` 在 12 位 ties-to-even 后重算主体 YTM；`AnalyzeFuturesDelivery` 保留原市场 IRR、funding-adjusted IRR 和市场 CTD，同时为每只候选返回税收调整后 interim coupon、主体 IRR 与独立主体 CTD。该口径严格标注为“coupon 销项 VAT 调整、抵扣进项前”，不代表机构最终应纳 VAT、完整税后利润、金融商品转让/期货平仓/实物交割税务或完整税务会计；境外机构、小规模纳税人、非国债及其他未批准 profile 失败关闭。
 
 ## 2026-07 / Phase 3A 已落地双源 Canonical Quote 接入
 

@@ -190,6 +190,7 @@ async fn all_five_materializers_return_stable_sorted_complete_evidence() {
 
     let delivery = MaterializeDeliveryRatesInput::new(
         &fixture, &fixture, &fixture, &fixture, &fixture, &fixture, &fixture, &fixture, &fixture,
+        &fixture,
     );
     let delivery_first = delivery
         .execute(&fixture.scope, fixture.delivery_command(), trace())
@@ -216,6 +217,7 @@ async fn all_five_materializers_return_stable_sorted_complete_evidence() {
             (RatesInputRole::Bond, 'B'),
             (RatesInputRole::DataSnapshot, 'S'),
             (RatesInputRole::DataSource, '8'),
+            (RatesInputRole::TaxRulePack, 'X'),
             (RatesInputRole::FundingRulePack, 'M'),
             (RatesInputRole::DeliveryRulePack, 'D'),
             (RatesInputRole::FuturesContract, 'F'),
@@ -460,6 +462,7 @@ async fn effective_and_payload_content_drifts_fail_before_numerical_handoff() {
         &funding_drift,
         &funding_drift,
         &funding_drift,
+        &funding_drift,
     );
     Box::pin(assert_fail_closed(use_case.execute(
         &funding_drift.scope,
@@ -607,6 +610,7 @@ async fn curve_carry_delivery_and_hedge_drift_never_reaches_numerical_handoff() 
 
     let delivery = MaterializeDeliveryRatesInput::new(
         &fixture, &fixture, &fixture, &fixture, &fixture, &fixture, &fixture, &fixture, &fixture,
+        &fixture,
     );
     let mut snapshot_hash_drift = fixture.delivery_command();
     snapshot_hash_drift.data_snapshot = ImmutableSnapshotBinding::new(
@@ -628,6 +632,7 @@ async fn curve_carry_delivery_and_hedge_drift_never_reaches_numerical_handoff() 
         ContentHash::digest(b"stale-delivery-source-hash"),
     );
     let delivery = MaterializeDeliveryRatesInput::new(
+        &source_lineage_drift,
         &source_lineage_drift,
         &source_lineage_drift,
         &source_lineage_drift,
@@ -1291,6 +1296,7 @@ impl Fixture {
                 self.data.content_hash().clone(),
             ),
             funding_rule_pack: self.object_binding('M'),
+            tax_rule_pack: self.object_binding('X'),
             valuation_at: time(1),
             purchase_date: date(2026, 8, 3),
         }

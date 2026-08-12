@@ -1,0 +1,77 @@
+{
+  "couponRules": [
+    {
+      "firstIssueFrom": "0001-01-01",
+      "firstIssueTo": "2025-08-08",
+      "taxAttributes": {
+        "valueAddedTaxStatus": "VALUE_ADDED_TAX_STATUS_EXEMPT",
+        "incomeTaxStatus": "INCOME_TAX_STATUS_EXEMPT"
+      },
+      "treatments": [
+        {
+          "valueAddedTaxProfile": "cn-vat-general-taxpayer",
+          "incomeTaxProfile": "cn-cgb-interest-cit-exempt",
+          "valueAddedTaxRate": {
+            "coefficient": "0",
+            "scale": 0,
+            "unit": {
+              "unitId": {
+                "value": "01K2CGBVAT0000000000000000"
+              },
+              "version": "1"
+            }
+          },
+          "incomeTaxRate": {
+            "coefficient": "0",
+            "scale": 0,
+            "unit": {
+              "unitId": {
+                "value": "01K2CGBVAT0000000000000000"
+              },
+              "version": "1"
+            }
+          },
+          "grossCouponBasis": "GROSS_COUPON_TAX_BASIS_VAT_INCLUDED",
+          "rounding": "TAX_ROUNDING_MODE_TIES_TO_EVEN",
+          "claimScope": "COUPON_TAX_CLAIM_SCOPE_COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT"
+        }
+      ]
+    },
+    {
+      "firstIssueFrom": "2025-08-08",
+      "taxAttributes": {
+        "valueAddedTaxStatus": "VALUE_ADDED_TAX_STATUS_TAXABLE",
+        "incomeTaxStatus": "INCOME_TAX_STATUS_EXEMPT"
+      },
+      "treatments": [
+        {
+          "valueAddedTaxProfile": "cn-vat-general-taxpayer",
+          "incomeTaxProfile": "cn-cgb-interest-cit-exempt",
+          "valueAddedTaxRate": {
+            "coefficient": "6",
+            "scale": 2,
+            "unit": {
+              "unitId": {
+                "value": "01K2CGBVAT0000000000000000"
+              },
+              "version": "1"
+            }
+          },
+          "incomeTaxRate": {
+            "coefficient": "0",
+            "scale": 0,
+            "unit": {
+              "unitId": {
+                "value": "01K2CGBVAT0000000000000000"
+              },
+              "version": "1"
+            }
+          },
+          "grossCouponBasis": "GROSS_COUPON_TAX_BASIS_VAT_INCLUDED",
+          "rounding": "TAX_ROUNDING_MODE_TIES_TO_EVEN",
+          "claimScope": "COUPON_TAX_CLAIM_SCOPE_COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT"
+        }
+      ]
+    }
+  ]
+}

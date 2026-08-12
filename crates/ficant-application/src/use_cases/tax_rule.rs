@@ -1,12 +1,12 @@
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate};
 use ficant_domain::analytics::AnalyticsObjectRef;
-use ficant_domain::market::{BondTaxAttributes, MarketRulePack};
+use ficant_domain::market::{BondTaxAttributes, MarketRulePack, VerificationStatus};
 use ficant_domain::primitives::MarketTime;
 use ficant_domain::subject::TaxTreatment;
 use ficant_domain::{ContentAddressed, DomainErrorCode, VersionedDefinition};
 
 use crate::ports::{
-    AccessScope, ApplicationResult, CouponTaxRate, DefinitionRepository, DefinitionValue,
+    AccessScope, ApplicationResult, CouponTaxTreatment, DefinitionRepository, DefinitionValue,
     TaxRulePackParser,
 };
 use crate::{ApplicationError, ApplicationErrorCategory, map_domain_error};
@@ -43,7 +43,7 @@ impl<'a> ResolveTaxRule<'a> {
         first_issue_date: NaiveDate,
         tax_attributes: BondTaxAttributes,
         tax_treatment: &TaxTreatment,
-    ) -> ApplicationResult<CouponTaxRate> {
+    ) -> ApplicationResult<CouponTaxTreatment> {
         let resolved = self
             .definitions
             .get_version(
@@ -56,7 +56,34 @@ impl<'a> ResolveTaxRule<'a> {
         let DefinitionValue::MarketRulePack(rule_pack) = resolved else {
             return Err(lineage_incomplete());
         };
-        validate_tax_rule_pack(scope, binding, &valuation_at, &rule_pack, self.parser)?;
+        self.parse_verified(
+            scope,
+            binding,
+            &valuation_at,
+            &rule_pack,
+            first_issue_date,
+            tax_attributes,
+            tax_treatment,
+        )
+    }
+
+    /// Parses a previously loaded exact rule pack without performing another repository read.
+    ///
+    /// # Errors
+    ///
+    /// Applies the same owner, hash, time, source, type and payload checks as [`Self::execute`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn parse_verified(
+        &self,
+        scope: &AccessScope,
+        binding: &AnalyticsObjectRef,
+        valuation_at: &MarketTime,
+        rule_pack: &MarketRulePack,
+        first_issue_date: NaiveDate,
+        tax_attributes: BondTaxAttributes,
+        tax_treatment: &TaxTreatment,
+    ) -> ApplicationResult<CouponTaxTreatment> {
+        validate_tax_rule_pack(scope, binding, valuation_at, rule_pack, self.parser)?;
         let content = rule_pack.content().ok_or_else(|| {
             ApplicationError::rule_pack_item_missing("context.tax_rule_pack.content")
         })?;
@@ -95,9 +122,24 @@ fn validate_tax_rule_pack(
         .map_err(map_domain_error)?;
     if rule_pack.market() != parser.market()
         || rule_pack.rule_type() != parser.rule_type()
+        || rule_pack.verification_status() != VerificationStatus::Verified
         || content.type_url() != parser.type_url()
+        || parser
+            .expected_source()
+            .is_some_and(|expected| rule_pack.source() != expected)
     {
         return Err(map_domain_error(DomainErrorCode::InvalidValue));
+    }
+    if let Some((expected_from, expected_to)) = parser.expected_effective_window() {
+        let expected_from = DateTime::parse_from_rfc3339(expected_from)
+            .map_err(|_| map_domain_error(DomainErrorCode::InvalidValue))?;
+        let expected_to = DateTime::parse_from_rfc3339(expected_to)
+            .map_err(|_| map_domain_error(DomainErrorCode::InvalidValue))?;
+        if rule_pack.effective().from().instant() != expected_from.to_utc()
+            || rule_pack.effective().to().instant() != expected_to.to_utc()
+        {
+            return Err(map_domain_error(DomainErrorCode::InvalidEffectiveTime));
+        }
     }
     Ok(())
 }

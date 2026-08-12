@@ -102,7 +102,10 @@ pub use snapshots::{
     StagedSnapshotBlob, StagedSnapshotProof, VerifiedSnapshotBlob, VerifiedSnapshotProof,
 };
 pub use subjects::SubjectRepository;
-pub use tax_rule_parser::{CouponTaxRate, TaxRulePackParser};
+pub use tax_rule_parser::{
+    CouponTaxClaimScope, CouponTaxRate, CouponTaxTreatment, GrossCouponTaxBasis, TaxRoundingMode,
+    TaxRulePackParser,
+};
 pub use unit_resolution::{
     MarketFactFieldRole, MarketFactKind, MarketFactUnitResolver, ResolvedMarketFactProof,
     ResolvedUnitBinding, ValidatedMarketFact,

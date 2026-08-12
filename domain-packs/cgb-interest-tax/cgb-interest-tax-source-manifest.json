@@ -1,0 +1,104 @@
+{
+  "schema": "ficant.cgb-interest-tax.source-manifest.v1",
+  "retrieved_at": "2026-08-12",
+  "sources": [
+    {
+      "url": "https://szs.mof.gov.cn/zhengcefabu/202508/t20250801_3969257.htm?type=3",
+      "purpose": "2025-08-08 cutoff、当日归属与续发继承"
+    },
+    {
+      "url": "https://shanghai.chinatax.gov.cn/sjtax/ztzl/yshj/ldjj/202412/t474700.html",
+      "purpose": "增值税价外税、销售额不含税与服务一般税率"
+    },
+    {
+      "url": "https://fgk.chinatax.gov.cn/zcfgk/c100024/c5236196/content.html",
+      "purpose": "一般纳税人金融服务适用 6% 的交叉证明"
+    },
+    {
+      "url": "https://fgk.chinatax.gov.cn/zcfgk/c100010/c5246349/content.html",
+      "purpose": "含税销售额换算、进项凭证及无法划分进项的边界"
+    },
+    {
+      "url": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5247440/content.html",
+      "purpose": "金融商品转让销售额独立口径，明确排除于本包"
+    },
+    {
+      "url": "https://fgk.chinatax.gov.cn/zcfgk/c100009/c5193018/content.html",
+      "purpose": "国债利息企业所得税免税"
+    },
+    {
+      "url": "https://www.chinatax.gov.cn/chinatax/n810341/n810765/n812156/201106/c1186784/content.html",
+      "purpose": "持有期间国债利息企业所得税处理"
+    },
+    {
+      "url": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5247083/content.html",
+      "purpose": "境外机构独立优惠，明确排除于本包"
+    }
+  ],
+  "normalized_facts": {
+    "calculation": {
+      "bond_after_tax_yield": "same_pre_tax_clean_price",
+      "claim_scope": "COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT",
+      "delivery_tax_adjustment": "replace_interim_coupons_only",
+      "excluded_tax_components": [
+        "input_vat_credit",
+        "surtaxes",
+        "financial_instrument_transfer_vat",
+        "physical_delivery_tax",
+        "transaction_fees"
+      ],
+      "funding_adjustment": "SEPARATE",
+      "gross_coupon_basis": "VAT_INCLUDED",
+      "market_ctd": "max_market_pre_tax_irr_then_min_net_basis_then_bond_id",
+      "net_coupon": "round_half_even(gross_coupon/(1+value_added_tax_rate),12)",
+      "output_scale": 12,
+      "rounding": "TIES_TO_EVEN",
+      "subject_ctd": "max_subject_tax_adjusted_irr_then_min_market_net_basis_then_bond_id",
+      "subject_tax_adjusted_irr": "((invoice_price+tax_adjusted_interim_coupons)/purchase_dirty_price-1)*365/actual_days"
+    },
+    "classification": {
+      "anchor": "first_issue_date",
+      "before_cutoff": {
+        "income_tax_status": "EXEMPT",
+        "value_added_tax_status": "EXEMPT"
+      },
+      "cutoff": "2025-08-08",
+      "on_or_after_cutoff": {
+        "income_tax_status": "EXEMPT",
+        "value_added_tax_status": "TAXABLE"
+      },
+      "reissuance_inherits_first_issue_date": true
+    },
+    "operational_effective_from": "2026-01-01T00:00:00+08:00",
+    "operational_effective_to": "2028-01-01T00:00:00+08:00",
+    "rates": {
+      "income_tax": "0",
+      "value_added_tax": "0.06"
+    },
+    "schema": "ficant.cn.cgb-interest-tax.normalized-facts.v1",
+    "scope": {
+      "bond_type": "government_bond",
+      "excluded": [
+        "overseas_institution",
+        "small_scale_taxpayer",
+        "surtaxes",
+        "non_government_bond"
+      ],
+      "subject_income_tax_profile": "cn-cgb-interest-cit-exempt",
+      "subject_vat_profile": "cn-vat-general-taxpayer"
+    },
+    "wire": {
+      "payload_type_url": "type.googleapis.com/ficant.market.v1.TaxRulePackV2",
+      "rate_unit": {
+        "code": "RATE",
+        "dimension": "rate",
+        "owner_binding": "MARKET_RULE_PACK_OWNER",
+        "precision": 18,
+        "scale": 12,
+        "unit_id": "01K2CGBVAT0000000000000000",
+        "version": 1
+      }
+    }
+  },
+  "normalized_facts_sha256": "54fa5adbeb8b164dc779ecc250ab622ab5747cdeb36f2b6da58f4d877ce5106a"
+}

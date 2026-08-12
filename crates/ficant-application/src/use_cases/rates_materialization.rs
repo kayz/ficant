@@ -32,11 +32,11 @@ use ficant_domain::{ContentAddressed, DomainErrorCode, Lineaged, VersionedDefini
 
 use crate::ports::{
     AccessScope, ApplicationResult, ArtifactRepository, BondAnalyticsArtifactCodec,
-    CanonicalSnapshotDecoder, CouponTaxRate, CurvePointSetDecoder, CurveSnapshotMetadataRepository,
-    DataSourceRepository, DefinitionRepository, DefinitionValue, FactorTopologyRepository,
-    FundingRate, FundingRulePackParser, FuturesDeliveryArtifactCodec, FuturesDeliveryRuleParser,
-    InstrumentSubtype, IntegrityEventSink, RequiredVerifiedBlobRead, SafeTraceContext,
-    SnapshotVerifiedReadMetadataRepository, SubjectRepository, TaxRulePackParser,
+    CanonicalSnapshotDecoder, CouponTaxTreatment, CurvePointSetDecoder,
+    CurveSnapshotMetadataRepository, DataSourceRepository, DefinitionRepository, DefinitionValue,
+    FactorTopologyRepository, FundingRate, FundingRulePackParser, FuturesDeliveryArtifactCodec,
+    FuturesDeliveryRuleParser, InstrumentSubtype, IntegrityEventSink, RequiredVerifiedBlobRead,
+    SafeTraceContext, SnapshotVerifiedReadMetadataRepository, SubjectRepository, TaxRulePackParser,
     VerifiedBlobReader, VerifiedBlobRole, VerifiedReadResourceKind, definition_content_hash,
 };
 use crate::use_cases::bond_analytics::{BOND_ANALYTICS_MEDIA_TYPE, map_analytics_error};
@@ -312,7 +312,7 @@ impl RatesRequestEvidence {
         consumed_inputs: Vec<RatesInputEvidence>,
         knowledge_at: &MarketTime,
         input: &BondAnalyticsInput,
-        coupon_tax_rate: FixedDecimal,
+        coupon_tax_treatment: &CouponTaxTreatment,
     ) -> ApplicationResult<Self> {
         let mut parameters = parameter_prefix(
             b"bond",
@@ -323,7 +323,7 @@ impl RatesRequestEvidence {
             CONVENTION_PROFILE,
         );
         append_bond_materialization(&mut parameters, input);
-        append(&mut parameters, &coupon_tax_rate.scaled().to_be_bytes());
+        append(&mut parameters, &coupon_tax_treatment.fingerprint_bytes());
         Self::new(consumed_inputs, &parameters)
     }
 }
@@ -354,7 +354,7 @@ pub struct BondRatesCommand {
 
 pub struct BondRatesMaterialization {
     input: BondAnalyticsInput,
-    coupon_tax_rate: CouponTaxRate,
+    coupon_tax_treatment: CouponTaxTreatment,
     evidence: RatesRequestEvidence,
 }
 
@@ -365,8 +365,8 @@ impl BondRatesMaterialization {
     }
 
     #[must_use]
-    pub fn coupon_tax_rate(&self) -> &CouponTaxRate {
-        &self.coupon_tax_rate
+    pub fn coupon_tax_treatment(&self) -> &CouponTaxTreatment {
+        &self.coupon_tax_treatment
     }
 
     #[must_use]
@@ -430,6 +430,14 @@ impl<'a> MaterializeBondRatesInput<'a> {
         )
         .await?;
         require_units(&command.units, [&command.currency_unit, &command.rate_unit])?;
+        validate_authoritative_rate_unit(
+            self.definitions,
+            scope,
+            &command.owner,
+            &command.rate_unit,
+            self.tax_parser,
+        )
+        .await?;
         let (bond_definition, bond) =
             read_bond(self.definitions, scope, &command.owner, &command.bond).await?;
         validate_bond_units(
@@ -471,16 +479,16 @@ impl<'a> MaterializeBondRatesInput<'a> {
             command.tax_rule_pack.version_ref().clone(),
             tax_pack.content_hash().clone(),
         );
-        let coupon_tax_rate = ResolveTaxRule::new(self.definitions, self.tax_parser)
-            .execute(
+        let coupon_tax_treatment = ResolveTaxRule::new(self.definitions, self.tax_parser)
+            .parse_verified(
                 scope,
                 &tax_payload_binding,
-                command.valuation_at.clone(),
+                &command.valuation_at,
+                &tax_pack,
                 terms.first_issue_date(),
                 tax_attributes,
                 common.subject.tax_treatment(),
-            )
-            .await?;
+            )?;
         let input = BondAnalyticsInput::new(
             command.owner.clone(),
             command.bond.clone(),
@@ -509,11 +517,11 @@ impl<'a> MaterializeBondRatesInput<'a> {
             evidence,
             &command.knowledge_at,
             &input,
-            coupon_tax_rate.coupon_tax_rate(),
+            &coupon_tax_treatment,
         )?;
         Ok(BondRatesMaterialization {
             input,
-            coupon_tax_rate,
+            coupon_tax_treatment,
             evidence,
         })
     }
@@ -843,6 +851,7 @@ pub struct DeliveryRatesCommand {
     pub futures_contract: AnalyticsObjectRef,
     pub data_snapshot: ImmutableSnapshotBinding,
     pub funding_rule_pack: AnalyticsObjectRef,
+    pub tax_rule_pack: AnalyticsObjectRef,
     pub valuation_at: MarketTime,
     pub purchase_date: NaiveDate,
 }
@@ -850,6 +859,7 @@ pub struct DeliveryRatesCommand {
 pub struct DeliveryRatesMaterialization {
     inputs: Vec<FuturesDeliverableInput>,
     funding_rate: FundingRate,
+    coupon_tax_treatments: Vec<CouponTaxTreatment>,
     evidence: RatesRequestEvidence,
 }
 
@@ -862,6 +872,11 @@ impl DeliveryRatesMaterialization {
     #[must_use]
     pub fn funding_rate(&self) -> &FundingRate {
         &self.funding_rate
+    }
+
+    #[must_use]
+    pub fn coupon_tax_treatments(&self) -> &[CouponTaxTreatment] {
+        &self.coupon_tax_treatments
     }
 
     #[must_use]
@@ -880,6 +895,7 @@ pub struct MaterializeDeliveryRatesInput<'a> {
     decoder: &'a dyn CanonicalSnapshotDecoder,
     delivery_parser: &'a dyn FuturesDeliveryRuleParser,
     funding_parser: &'a dyn FundingRulePackParser,
+    tax_parser: &'a dyn TaxRulePackParser,
 }
 
 impl<'a> MaterializeDeliveryRatesInput<'a> {
@@ -895,6 +911,7 @@ impl<'a> MaterializeDeliveryRatesInput<'a> {
         decoder: &'a dyn CanonicalSnapshotDecoder,
         delivery_parser: &'a dyn FuturesDeliveryRuleParser,
         funding_parser: &'a dyn FundingRulePackParser,
+        tax_parser: &'a dyn TaxRulePackParser,
     ) -> Self {
         Self {
             definitions,
@@ -906,6 +923,7 @@ impl<'a> MaterializeDeliveryRatesInput<'a> {
             decoder,
             delivery_parser,
             funding_parser,
+            tax_parser,
         }
     }
 
@@ -933,6 +951,14 @@ impl<'a> MaterializeDeliveryRatesInput<'a> {
         )
         .await?;
         require_units(&command.units, [&command.price_unit, &command.rate_unit])?;
+        validate_authoritative_rate_unit(
+            self.definitions,
+            scope,
+            &command.owner,
+            &command.rate_unit,
+            self.tax_parser,
+        )
+        .await?;
         let contract_value = read_definition(
             self.definitions,
             scope,
@@ -1012,7 +1038,18 @@ impl<'a> MaterializeDeliveryRatesInput<'a> {
         if funding_rate.unit() != &command.rate_unit {
             return Err(map_domain_error(DomainErrorCode::InvalidUnit));
         }
-        let mut inputs = Vec::with_capacity(registered.inputs().len());
+        let tax_pack = read_rule_pack(
+            self.definitions,
+            scope,
+            &command.owner,
+            &command.tax_rule_pack,
+        )
+        .await?;
+        let tax_payload_binding = AnalyticsObjectRef::new(
+            command.tax_rule_pack.version_ref().clone(),
+            tax_pack.content_hash().clone(),
+        );
+        let mut materialized_candidates = Vec::with_capacity(registered.inputs().len());
         for value in registered.inputs() {
             let (definition, bond) =
                 read_bond(self.definitions, scope, &command.owner, value.bond()).await?;
@@ -1022,28 +1059,46 @@ impl<'a> MaterializeDeliveryRatesInput<'a> {
                 &command.currency_unit,
                 &command.rate_unit,
             )?;
-            inputs.push(
-                FuturesDeliverableInput::new(
-                    value.owner().clone(),
-                    value.futures_contract().clone(),
-                    value.bond().clone(),
-                    value.rule_pack().clone(),
-                    value.snapshot().clone(),
-                    value.valuation_at().clone(),
-                    command.purchase_date,
-                    value.delivery_month_first(),
-                    value.delivery_date(),
-                    value.product(),
-                    value.rule().clone(),
-                    value.terms().clone(),
-                    value.spot_clean_price(),
-                    value.futures_clean_price(),
-                    funding_rate.annual_financing_rate(),
-                )
-                .map_err(map_domain_error)?,
-            );
+            let terms = bond_terms(&bond, &command.currency_unit, &command.rate_unit)?;
+            let tax_attributes = terms.tax_attributes().ok_or_else(lineage)?;
+            let coupon_tax_treatment = ResolveTaxRule::new(self.definitions, self.tax_parser)
+                .parse_verified(
+                    scope,
+                    &tax_payload_binding,
+                    &command.valuation_at,
+                    &tax_pack,
+                    terms.first_issue_date(),
+                    tax_attributes,
+                    common.subject.tax_treatment(),
+                )?;
+            let input = FuturesDeliverableInput::new(
+                value.owner().clone(),
+                value.futures_contract().clone(),
+                value.bond().clone(),
+                value.rule_pack().clone(),
+                value.snapshot().clone(),
+                value.valuation_at().clone(),
+                command.purchase_date,
+                value.delivery_month_first(),
+                value.delivery_date(),
+                value.product(),
+                value.rule().clone(),
+                value.terms().clone(),
+                value.spot_clean_price(),
+                value.futures_clean_price(),
+                funding_rate.annual_financing_rate(),
+            )
+            .map_err(map_domain_error)?;
+            materialized_candidates.push((input, coupon_tax_treatment));
         }
-        inputs.sort_by(|left, right| left.bond().version_ref().cmp(right.bond().version_ref()));
+        materialized_candidates.sort_by(|left, right| {
+            left.0
+                .bond()
+                .version_ref()
+                .cmp(right.0.bond().version_ref())
+        });
+        let (inputs, coupon_tax_treatments): (Vec<_>, Vec<_>) =
+            materialized_candidates.into_iter().unzip();
         // The delivery engine deliberately carries the parsed RulePack payload hash. Public exact
         // object bindings and response evidence bind the complete versioned definition instead.
         // Resolve both identities here and require them to describe the same immutable pack.
@@ -1092,6 +1147,7 @@ impl<'a> MaterializeDeliveryRatesInput<'a> {
             RatesInputRole::DeliveryRulePack,
             &delivery_rule,
         ));
+        evidence.push(rule_pack_evidence(RatesInputRole::TaxRulePack, &tax_pack));
         evidence.push(rule_pack_evidence(
             RatesInputRole::FundingRulePack,
             &funding_pack,
@@ -1117,9 +1173,13 @@ impl<'a> MaterializeDeliveryRatesInput<'a> {
             &mut parameters,
             command.purchase_date.to_string().as_bytes(),
         );
+        for treatment in &coupon_tax_treatments {
+            append(&mut parameters, &treatment.fingerprint_bytes());
+        }
         Ok(DeliveryRatesMaterialization {
             inputs,
             funding_rate,
+            coupon_tax_treatments,
             evidence: RatesRequestEvidence::new(evidence, &parameters)?,
         })
     }
@@ -1742,6 +1802,34 @@ async fn read_unit(
         DefinitionValue::Unit(value) => Ok(value),
         _ => Err(lineage()),
     }
+}
+
+async fn validate_authoritative_rate_unit(
+    definitions: &dyn DefinitionRepository,
+    scope: &AccessScope,
+    owner: &OwnerRef,
+    rate_unit: &UnitRef,
+    parser: &dyn TaxRulePackParser,
+) -> ApplicationResult<()> {
+    let Some((unit_id, version, code, dimension, scale, precision)) = parser.expected_rate_unit()
+    else {
+        return Ok(());
+    };
+    if rate_unit.unit_id().as_str() != unit_id || rate_unit.version().get() != version {
+        return Err(map_domain_error(DomainErrorCode::InvalidUnit));
+    }
+    let unit = read_unit(definitions, scope, owner, rate_unit).await?;
+    if unit.identity() != unit_id
+        || unit.version() != version
+        || unit.owner() != owner
+        || unit.code() != code
+        || unit.dimension() != dimension
+        || unit.scale() != scale
+        || unit.precision() != precision
+    {
+        return Err(map_domain_error(DomainErrorCode::InvalidUnit));
+    }
+    Ok(())
 }
 
 async fn definition_hash_for_reference(

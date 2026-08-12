@@ -3,8 +3,8 @@ use std::sync::Arc;
 use chrono::{NaiveDate, Utc};
 use ficant_application::ports::{
     ArtifactRepository, BondAnalyticsArtifactCodec, BondAnalyticsEngine, CanonicalSnapshotDecoder,
-    CarryRollEngine, CurvePointSetDecoder, CurveSnapshotMetadataRepository, DataSourceRepository,
-    DefinitionRepository, FactorTopologyRepository, FundingRulePackParser,
+    CarryRollEngine, CouponTaxClaimScope, CurvePointSetDecoder, CurveSnapshotMetadataRepository,
+    DataSourceRepository, DefinitionRepository, FactorTopologyRepository, FundingRulePackParser,
     FuturesDeliveryArtifactCodec, FuturesDeliveryEngine, FuturesDeliveryRuleParser,
     FuturesHedgeEngine, IntegrityEventSink, SnapshotVerifiedReadMetadataRepository,
     SubjectRepository, TaxRulePackParser, VerifiedBlobReader, YieldCurveEngine,
@@ -22,13 +22,14 @@ use ficant_application::{
 use ficant_contracts::ficant::core::v1::{
     DecimalValue, OwnerRef as ProtoOwnerRef, UnitRef as ProtoUnitRef,
 };
+use ficant_contracts::ficant::market::v1::CouponTaxClaimScope as ProtoCouponTaxClaimScope;
 use ficant_contracts::ficant::rates::v1 as pb;
 use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsService;
 use ficant_domain::DomainErrorCode;
 use ficant_domain::analytics::{
     ABI_VERSION, ALGORITHM_ID, ALGORITHM_VERSION, AnalyticsMode, AnalyticsObjectRef,
-    BondAnalyticsResult, CONVENTION_PROFILE, CalendarRequirement, DECIMAL_SCALE, ENGINE_ID,
-    ENGINE_VERSION, FixedDecimal, RESULT_SCHEMA_ID,
+    BondAnalyticsResult, CONVENTION_PROFILE, CalendarRequirement, CouponFrequency, DECIMAL_SCALE,
+    ENGINE_ID, ENGINE_VERSION, FixedDecimal, RESULT_SCHEMA_ID,
 };
 use ficant_domain::curves::{
     CARRY_ROLL_ALGORITHM_ID, CARRY_ROLL_ALGORITHM_VERSION, CARRY_ROLL_CONVENTION_PROFILE,
@@ -43,11 +44,14 @@ use ficant_domain::futures_hedge::{
     FUTURES_HEDGE_ALGORITHM_ID, FUTURES_HEDGE_ALGORITHM_VERSION, FUTURES_HEDGE_CONVENTION_PROFILE,
     FuturesHedgeResult,
 };
+use ficant_domain::market::{IncomeTaxStatus, ValueAddedTaxStatus};
 use ficant_domain::primitives::{
     ContentHash, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
 };
 use prost::Message;
 use tonic::{Request, Response, Status};
+
+pub use ficant_application::ports::CouponTaxTreatment;
 
 use crate::core_error::CoreBusinessErrorMapper;
 use crate::error::{PlatformFailure, PlatformFailureCode};
@@ -98,11 +102,116 @@ impl RatesGrpcService {
     pub fn canonical_materialized_bond_metadata(
         request: &pb::AnalyzeBondRequest,
         input: &ficant_domain::analytics::BondAnalyticsInput,
-        coupon_tax_rate: FixedDecimal,
+        coupon_tax_treatment: &CouponTaxTreatment,
         consumed_inputs: &[pb::AnalysisInputBinding],
     ) -> Result<pb::ResultMetadata, ApplicationError> {
-        materialized_bond_proof(request, input, coupon_tax_rate, consumed_inputs)
+        materialized_bond_proof(request, input, coupon_tax_treatment, consumed_inputs)
             .map(|(_, metadata)| metadata)
+    }
+
+    /// Canonicalizes one private v2 treatment wire into the provider-neutral proof used by the
+    /// native two-port seam.
+    ///
+    /// # Errors
+    ///
+    /// Rejects unknown enums, non-canonical decimals, unit drift, profile drift, or a missing /
+    /// incorrect authority semantic hash.
+    pub fn canonical_v2_coupon_tax_treatment(
+        input: &ficant_domain::analytics::BondAnalyticsInput,
+        treatment: &ficant_contracts::ficant::market::v1::SubjectCouponTaxTreatment,
+        authority_semantic_hash: &[u8],
+    ) -> Result<CouponTaxTreatment, ApplicationError> {
+        use ficant_contracts::ficant::market::v1::{
+            CouponTaxClaimScope, GrossCouponTaxBasis, TaxRoundingMode,
+        };
+        if treatment.value_added_tax_profile != "cn-vat-general-taxpayer"
+            || treatment.income_tax_profile != "cn-cgb-interest-cit-exempt"
+            || GrossCouponTaxBasis::try_from(treatment.gross_coupon_basis).map_err(|_| invalid())?
+                != GrossCouponTaxBasis::VatIncluded
+            || TaxRoundingMode::try_from(treatment.rounding).map_err(|_| invalid())?
+                != TaxRoundingMode::TiesToEven
+            || CouponTaxClaimScope::try_from(treatment.claim_scope).map_err(|_| invalid())?
+                != CouponTaxClaimScope::CouponOutputVatBeforeInputCredit
+        {
+            return Err(invalid());
+        }
+        let vat = treatment
+            .value_added_tax_rate
+            .as_ref()
+            .ok_or_else(invalid)?;
+        let income = treatment.income_tax_rate.as_ref().ok_or_else(invalid)?;
+        let vat_unit = vat.unit.as_ref().ok_or_else(invalid)?;
+        if income.unit.as_ref() != Some(vat_unit)
+            || vat_unit
+                .unit_id
+                .as_ref()
+                .is_none_or(|value| value.value != "01K2CGBVAT0000000000000000")
+            || vat_unit.version != 1
+        {
+            return Err(invalid());
+        }
+        let unit = parse_unit(vat_unit)?;
+        let vat = parse_fixed_decimal(vat, vat_unit)?;
+        let income = parse_fixed_decimal(income, vat_unit)?;
+        let attributes = input.terms().tax_attributes().ok_or_else(invalid)?;
+        let cutoff = NaiveDate::from_ymd_opt(2025, 8, 8).ok_or_else(invalid)?;
+        let (expected_attributes, expected_vat) = if input.terms().first_issue_date() < cutoff {
+            (
+                ficant_domain::market::BondTaxAttributes::new(
+                    ValueAddedTaxStatus::Exempt,
+                    IncomeTaxStatus::Exempt,
+                ),
+                FixedDecimal::ZERO,
+            )
+        } else {
+            (
+                ficant_domain::market::BondTaxAttributes::new(
+                    ValueAddedTaxStatus::Taxable,
+                    IncomeTaxStatus::Exempt,
+                ),
+                FixedDecimal::from_scaled(60_000_000_000),
+            )
+        };
+        if attributes != expected_attributes || vat != expected_vat || income != FixedDecimal::ZERO
+        {
+            return Err(invalid());
+        }
+        let semantic =
+            ContentHash::from_bytes(authority_semantic_hash).map_err(map_domain_error)?;
+        if semantic.as_bytes()
+            != &[
+                0x54, 0xfa, 0x5a, 0xdb, 0xeb, 0x8b, 0x16, 0x4d, 0xc7, 0x79, 0xec, 0xc2, 0x50, 0xab,
+                0x62, 0x2a, 0xb5, 0x74, 0xcd, 0xeb, 0x36, 0xf2, 0xb6, 0xda, 0x58, 0xf4, 0xd8, 0x77,
+                0xce, 0x51, 0x06, 0x0a,
+            ]
+        {
+            return Err(invalid());
+        }
+        CouponTaxTreatment::vat_included(vat, income, unit, semantic)
+    }
+
+    /// Executes the native private port from its generated v2 treatment wire.
+    ///
+    /// # Errors
+    ///
+    /// Validates the wire proof before any numerical engine invocation.
+    pub fn execute_materialized_v2_bond_request(
+        engine: &dyn BondAnalyticsEngine,
+        request: &pb::AnalyzeBondRequest,
+        input: &ficant_domain::analytics::BondAnalyticsInput,
+        treatment: &ficant_contracts::ficant::market::v1::SubjectCouponTaxTreatment,
+        authority_semantic_hash: &[u8],
+        supplied_metadata: pb::ResultMetadata,
+    ) -> Result<pb::AnalyzeBondResult, ApplicationError> {
+        let treatment =
+            Self::canonical_v2_coupon_tax_treatment(input, treatment, authority_semantic_hash)?;
+        Self::execute_materialized_bond_request(
+            engine,
+            request,
+            input,
+            &treatment,
+            supplied_metadata,
+        )
     }
 
     /// Constructs the complete R5D production dependency slice.
@@ -232,25 +341,19 @@ impl RatesGrpcService {
             trace_context(request),
         )
         .await?;
-        if materialized.coupon_tax_rate().unit() != &parse_unit(&context.units.rate)? {
+        if materialized.coupon_tax_treatment().unit() != &parse_unit(&context.units.rate)? {
             return Err(map_domain_error(DomainErrorCode::InvalidUnit));
         }
         let pre_tax =
             CalculateBondAnalytics::new(self.bond.as_ref()).execute(materialized.input())?;
-        let retained = FixedDecimal::ONE
-            .checked_sub(materialized.coupon_tax_rate().coupon_tax_rate())
-            .map_err(map_domain_error)?;
         let terms = materialized
             .input()
             .terms()
-            .with_coupon_rate(
-                materialized
-                    .input()
-                    .terms()
-                    .coupon_rate()
-                    .checked_mul(retained)
-                    .map_err(map_domain_error)?,
-            )
+            .with_coupon_rate(tax_adjusted_coupon_rate(
+                materialized.input(),
+                &pre_tax,
+                materialized.coupon_tax_treatment(),
+            )?)
             .map_err(map_domain_error)?;
         let after_tax_input = materialized
             .input()
@@ -258,12 +361,12 @@ impl RatesGrpcService {
             .map_err(map_domain_error)?;
         let after_tax =
             CalculateBondAnalytics::new(self.bond.as_ref()).execute(&after_tax_input)?;
-        Ok(bond_result(
+        bond_result(
             &pre_tax,
-            Some(&after_tax),
+            Some((&after_tax, materialized.coupon_tax_treatment())),
             &context,
             materialized.evidence(),
-        ))
+        )
     }
 
     async fn interpolate_curve_value(
@@ -369,6 +472,7 @@ impl RatesGrpcService {
             self.snapshot_decoder.as_ref(),
             self.delivery_parser.as_ref(),
             self.funding_parser.as_ref(),
+            self.tax_parser.as_ref(),
         )
         .execute(
             &context.scope()?,
@@ -383,6 +487,7 @@ impl RatesGrpcService {
                 futures_contract: parse_object(request.futures_contract.as_ref())?,
                 data_snapshot: parse_snapshot(request.data_snapshot.as_ref())?,
                 funding_rule_pack: parse_object(request.funding_rule_pack.as_ref())?,
+                tax_rule_pack: parse_object(request.tax_rule_pack.as_ref())?,
                 valuation_at: parse_market_time(request.valuation_at.as_ref())?,
                 purchase_date: parse_date(&request.purchase_date)?,
             },
@@ -397,6 +502,7 @@ impl RatesGrpcService {
         futures_delivery_result(
             &result,
             materialized.funding_rate().annual_financing_rate(),
+            materialized.coupon_tax_treatments(),
             &context,
             materialized.evidence(),
         )
@@ -460,13 +566,13 @@ impl RatesGrpcService {
         engine: &dyn BondAnalyticsEngine,
         request: &pb::AnalyzeBondRequest,
         input: &ficant_domain::analytics::BondAnalyticsInput,
-        coupon_tax_rate: FixedDecimal,
+        coupon_tax_treatment: &CouponTaxTreatment,
         supplied_metadata: pb::ResultMetadata,
     ) -> Result<pb::AnalyzeBondResult, ApplicationError> {
         let (context, expected_metadata) = materialized_bond_proof(
             request,
             input,
-            coupon_tax_rate,
+            coupon_tax_treatment,
             &supplied_metadata.consumed_inputs,
         )?;
         if supplied_metadata != expected_metadata {
@@ -477,29 +583,24 @@ impl RatesGrpcService {
         if pre_tax.schema_id() != RESULT_SCHEMA_ID {
             return Err(invalid());
         }
-        let retained = FixedDecimal::ONE
-            .checked_sub(coupon_tax_rate)
-            .map_err(map_domain_error)?;
         let terms = input
             .terms()
-            .with_coupon_rate(
-                input
-                    .terms()
-                    .coupon_rate()
-                    .checked_mul(retained)
-                    .map_err(map_domain_error)?,
-            )
+            .with_coupon_rate(tax_adjusted_coupon_rate(
+                input,
+                &pre_tax,
+                coupon_tax_treatment,
+            )?)
             .map_err(map_domain_error)?;
         let after_tax_input = input
             .with_terms_and_price_in(terms, pre_tax.measures().clean_price())
             .map_err(map_domain_error)?;
         let after_tax = CalculateBondAnalytics::new(engine).execute(&after_tax_input)?;
-        Ok(bond_result_with_metadata(
+        bond_result_with_metadata(
             &pre_tax,
-            Some(&after_tax),
+            Some((&after_tax, coupon_tax_treatment)),
             &context.units,
             supplied_metadata,
-        ))
+        )
     }
 }
 
@@ -509,7 +610,7 @@ impl RatesGrpcService {
 pub struct ParsedBondAnalyticsRequest {
     request: pb::AnalyzeBondRequest,
     input: ficant_domain::analytics::BondAnalyticsInput,
-    coupon_tax_rate: FixedDecimal,
+    coupon_tax_treatment: CouponTaxTreatment,
     metadata: pb::ResultMetadata,
 }
 
@@ -522,19 +623,19 @@ pub struct ParsedBondAnalyticsRequest {
 pub fn parse_analyze_bond_request(
     request: pb::AnalyzeBondRequest,
     input: ficant_domain::analytics::BondAnalyticsInput,
-    coupon_tax_rate: FixedDecimal,
+    coupon_tax_treatment: CouponTaxTreatment,
     consumed_inputs: &[pb::AnalysisInputBinding],
 ) -> Result<ParsedBondAnalyticsRequest, ApplicationError> {
     let metadata = RatesGrpcService::canonical_materialized_bond_metadata(
         &request,
         &input,
-        coupon_tax_rate,
+        &coupon_tax_treatment,
         consumed_inputs,
     )?;
     Ok(ParsedBondAnalyticsRequest {
         request,
         input,
-        coupon_tax_rate,
+        coupon_tax_treatment,
         metadata,
     })
 }
@@ -552,7 +653,7 @@ pub fn execute_parsed_bond_request(
         engine,
         &parsed.request,
         &parsed.input,
-        parsed.coupon_tax_rate,
+        &parsed.coupon_tax_treatment,
         parsed.metadata.clone(),
     )
 }
@@ -566,10 +667,10 @@ pub fn analyze_bond_request(
     engine: &dyn BondAnalyticsEngine,
     request: pb::AnalyzeBondRequest,
     input: ficant_domain::analytics::BondAnalyticsInput,
-    coupon_tax_rate: FixedDecimal,
+    coupon_tax_treatment: CouponTaxTreatment,
     consumed_inputs: &[pb::AnalysisInputBinding],
 ) -> Result<pb::AnalyzeBondResult, ApplicationError> {
-    let parsed = parse_analyze_bond_request(request, input, coupon_tax_rate, consumed_inputs)?;
+    let parsed = parse_analyze_bond_request(request, input, coupon_tax_treatment, consumed_inputs)?;
     execute_parsed_bond_request(engine, &parsed)
 }
 
@@ -577,7 +678,7 @@ pub fn analyze_bond_request(
 fn materialized_bond_proof(
     request: &pb::AnalyzeBondRequest,
     input: &ficant_domain::analytics::BondAnalyticsInput,
-    coupon_tax_rate: FixedDecimal,
+    coupon_tax_treatment: &CouponTaxTreatment,
     consumed_inputs: &[pb::AnalysisInputBinding],
 ) -> Result<(ParsedContext, pb::ResultMetadata), ApplicationError> {
     let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::bond())?;
@@ -612,8 +713,7 @@ fn materialized_bond_proof(
         || calendar_requirement != input.calendar_requirement()
         || mode != input.mode()
         || input_value != input.input_value()
-        || !coupon_tax_rate.is_non_negative()
-        || coupon_tax_rate > FixedDecimal::ONE
+        || coupon_tax_treatment.unit() != &parse_unit(&context.units.rate)?
     {
         return Err(invalid());
     }
@@ -623,8 +723,12 @@ fn materialized_bond_proof(
         .map(parse_metadata_evidence)
         .collect::<Result<Vec<_>, _>>()?;
     validate_bond_evidence_times(&parsed_inputs, &valuation_at, &context.knowledge_at, input)?;
-    let evidence =
-        RatesRequestEvidence::bond(parsed_inputs, &context.knowledge_at, input, coupon_tax_rate)?;
+    let evidence = RatesRequestEvidence::bond(
+        parsed_inputs,
+        &context.knowledge_at,
+        input,
+        coupon_tax_treatment,
+    )?;
     let expected = metadata(RESULT_SCHEMA_ID, &context, &evidence);
     if expected.consumed_inputs.as_slice() != consumed_inputs {
         return Err(invalid());
@@ -1195,10 +1299,10 @@ fn trace_context(message: &impl Message) -> ficant_application::ports::SafeTrace
 
 fn bond_result(
     result: &BondAnalyticsResult,
-    after_tax: Option<&BondAnalyticsResult>,
+    after_tax: Option<(&BondAnalyticsResult, &CouponTaxTreatment)>,
     context: &ParsedContext,
     evidence: &RatesRequestEvidence,
-) -> pb::AnalyzeBondResult {
+) -> Result<pb::AnalyzeBondResult, ApplicationError> {
     bond_result_with_metadata(
         result,
         after_tax,
@@ -1209,12 +1313,21 @@ fn bond_result(
 
 fn bond_result_with_metadata(
     result: &BondAnalyticsResult,
-    after_tax: Option<&BondAnalyticsResult>,
+    after_tax: Option<(&BondAnalyticsResult, &CouponTaxTreatment)>,
     units: &UnitBindings,
     metadata: pb::ResultMetadata,
-) -> pb::AnalyzeBondResult {
+) -> Result<pb::AnalyzeBondResult, ApplicationError> {
     let measures = result.measures();
-    pb::AnalyzeBondResult {
+    let after_tax = after_tax
+        .map(|(value, treatment)| {
+            Ok(pb::TaxAdjustedBondAnalytics {
+                cashflows: tax_adjusted_cashflows(result, units, treatment)?,
+                yield_to_maturity: Some(decimal(value.measures().yield_to_maturity(), &units.rate)),
+                claim_scope: proto_claim_scope(treatment.claim_scope()),
+            })
+        })
+        .transpose()?;
+    Ok(pb::AnalyzeBondResult {
         cashflows: derived_cashflows(result, units),
         measures: Some(pb::BondAnalyticsMeasures {
             accrued_interest: Some(decimal(measures.accrued_interest(), &units.price_per_100)),
@@ -1227,11 +1340,61 @@ fn bond_result_with_metadata(
             dv01: Some(decimal(measures.dv01(), &units.dv01_per_100)),
         }),
         metadata: Some(metadata),
-        after_tax: after_tax.map(|value| pb::TaxAdjustedBondAnalytics {
-            cashflows: derived_cashflows(value, units),
-            yield_to_maturity: Some(decimal(value.measures().yield_to_maturity(), &units.rate)),
-        }),
+        after_tax,
+    })
+}
+
+fn tax_adjusted_cashflows(
+    pre_tax: &BondAnalyticsResult,
+    units: &UnitBindings,
+    treatment: &CouponTaxTreatment,
+) -> Result<Vec<pb::DerivedCashflow>, ApplicationError> {
+    pre_tax
+        .cashflows()
+        .iter()
+        .map(|value| {
+            let coupon = treatment.adjust_coupon(value.coupon())?;
+            let total = coupon
+                .checked_add(value.principal())
+                .map_err(map_domain_error)?;
+            Ok(pb::DerivedCashflow {
+                sequence: value.sequence(),
+                nominal_date: value.nominal_date().to_string(),
+                payment_date: value.payment_date().to_string(),
+                coupon: Some(decimal(coupon, &units.currency_amount)),
+                principal: Some(decimal(value.principal(), &units.currency_amount)),
+                total: Some(decimal(total, &units.currency_amount)),
+            })
+        })
+        .collect()
+}
+
+fn tax_adjusted_coupon_rate(
+    input: &ficant_domain::analytics::BondAnalyticsInput,
+    pre_tax: &BondAnalyticsResult,
+    treatment: &CouponTaxTreatment,
+) -> Result<FixedDecimal, ApplicationError> {
+    let gross_coupon = pre_tax
+        .cashflows()
+        .first()
+        .map(ficant_domain::analytics::DerivedCashflow::coupon)
+        .ok_or_else(invalid)?;
+    if pre_tax
+        .cashflows()
+        .iter()
+        .any(|cashflow| cashflow.coupon() != gross_coupon)
+    {
+        return Err(invalid());
     }
+    let periods_per_year = match input.terms().frequency() {
+        CouponFrequency::Annual => 1,
+        CouponFrequency::Semiannual => 2,
+    };
+    treatment
+        .adjust_coupon(gross_coupon)?
+        .checked_mul_integer(periods_per_year)
+        .and_then(|value| value.checked_div_round_ties_even(input.terms().face_amount()))
+        .map_err(map_domain_error)
 }
 
 fn derived_cashflows(
@@ -1301,61 +1464,155 @@ fn carry_roll_result(
 fn futures_delivery_result(
     result: &FuturesDeliveryBasketResult,
     annual_financing_rate: FixedDecimal,
+    treatments: &[CouponTaxTreatment],
     context: &ParsedContext,
     evidence: &RatesRequestEvidence,
 ) -> Result<pb::AnalyzeFuturesDeliveryResult, ApplicationError> {
-    Ok(pb::AnalyzeFuturesDeliveryResult {
-        candidates: result
-            .candidates()
-            .iter()
-            .map(|candidate| {
-                Ok(pb::FuturesDeliveryCandidateResult {
-                    bond: Some(object_binding(candidate.input().bond())),
-                    measures: Some(delivery_measures(
-                        candidate.measures(),
-                        &context.units,
-                        annual_financing_rate,
-                    )?),
-                })
+    if result.candidates().len() != treatments.len() || treatments.is_empty() {
+        return Err(invalid());
+    }
+    let mut subject_rates = Vec::with_capacity(treatments.len());
+    let candidates = result
+        .candidates()
+        .iter()
+        .zip(treatments)
+        .map(|(candidate, treatment)| {
+            let (measures, subject_rate) = delivery_measures(
+                candidate.measures(),
+                candidate.input().purchase_date(),
+                candidate.input().delivery_date(),
+                &context.units,
+                annual_financing_rate,
+                treatment,
+            )?;
+            subject_rates.push(subject_rate);
+            Ok(pb::FuturesDeliveryCandidateResult {
+                bond: Some(object_binding(candidate.input().bond())),
+                measures: Some(measures),
+                claim_scope: proto_claim_scope(treatment.claim_scope()),
             })
-            .collect::<Result<Vec<_>, ApplicationError>>()?,
+        })
+        .collect::<Result<Vec<_>, ApplicationError>>()?;
+    let subject_ctd_index = select_subject_ctd(result, &subject_rates)?;
+    Ok(pb::AnalyzeFuturesDeliveryResult {
+        candidates,
         ctd_index: u32::try_from(result.ctd_index()).map_err(|_| invalid())?,
         metadata: Some(metadata(result.ctd().schema_id(), context, evidence)),
+        subject_ctd_index: u32::try_from(subject_ctd_index).map_err(|_| invalid())?,
     })
 }
 
 fn delivery_measures(
     value: FuturesDeliveryMeasures,
+    purchase_date: NaiveDate,
+    delivery_date: NaiveDate,
     units: &UnitBindings,
     annual_financing_rate: FixedDecimal,
-) -> Result<pb::FuturesDeliveryMeasures, ApplicationError> {
+    treatment: &CouponTaxTreatment,
+) -> Result<(pb::FuturesDeliveryMeasures, FixedDecimal), ApplicationError> {
     let funding_adjusted_irr = value
         .implied_repo_rate()
         .checked_sub(annual_financing_rate)
         .map_err(map_domain_error)?;
-    Ok(pb::FuturesDeliveryMeasures {
-        months_to_next_coupon: value.months_to_next_coupon(),
-        remaining_coupon_count: value.remaining_coupon_count(),
-        conversion_factor: Some(decimal(value.conversion_factor(), &units.dimensionless)),
-        purchase_accrued_interest: Some(decimal(
-            value.purchase_accrued_interest(),
-            &units.price_per_100,
-        )),
-        delivery_accrued_interest: Some(decimal(
-            value.delivery_accrued_interest(),
-            &units.price_per_100,
-        )),
-        interim_coupons: Some(decimal(value.interim_coupons(), &units.price_per_100)),
-        invoice_price: Some(decimal(value.invoice_price(), &units.price_per_100)),
-        purchase_dirty_price: Some(decimal(value.purchase_dirty_price(), &units.price_per_100)),
-        gross_basis: Some(decimal(value.gross_basis(), &units.price_per_100)),
-        financing_cost: Some(decimal(value.financing_cost(), &units.price_per_100)),
-        holding_carry: Some(decimal(value.holding_carry(), &units.price_per_100)),
-        net_basis: Some(decimal(value.net_basis(), &units.price_per_100)),
-        implied_repo_rate: Some(decimal(value.implied_repo_rate(), &units.rate)),
-        delivery_profit: Some(decimal(value.delivery_profit(), &units.price_per_100)),
-        funding_adjusted_irr: Some(decimal(funding_adjusted_irr, &units.rate)),
-    })
+    let tax_adjusted_interim_coupons = treatment.adjust_coupon(value.interim_coupons())?;
+    let subject_tax_adjusted_irr = subject_delivery_irr(
+        value.invoice_price(),
+        tax_adjusted_interim_coupons,
+        value.purchase_dirty_price(),
+        purchase_date,
+        delivery_date,
+    )?;
+    Ok((
+        pb::FuturesDeliveryMeasures {
+            months_to_next_coupon: value.months_to_next_coupon(),
+            remaining_coupon_count: value.remaining_coupon_count(),
+            conversion_factor: Some(decimal(value.conversion_factor(), &units.dimensionless)),
+            purchase_accrued_interest: Some(decimal(
+                value.purchase_accrued_interest(),
+                &units.price_per_100,
+            )),
+            delivery_accrued_interest: Some(decimal(
+                value.delivery_accrued_interest(),
+                &units.price_per_100,
+            )),
+            interim_coupons: Some(decimal(value.interim_coupons(), &units.price_per_100)),
+            invoice_price: Some(decimal(value.invoice_price(), &units.price_per_100)),
+            purchase_dirty_price: Some(decimal(value.purchase_dirty_price(), &units.price_per_100)),
+            gross_basis: Some(decimal(value.gross_basis(), &units.price_per_100)),
+            financing_cost: Some(decimal(value.financing_cost(), &units.price_per_100)),
+            holding_carry: Some(decimal(value.holding_carry(), &units.price_per_100)),
+            net_basis: Some(decimal(value.net_basis(), &units.price_per_100)),
+            implied_repo_rate: Some(decimal(value.implied_repo_rate(), &units.rate)),
+            delivery_profit: Some(decimal(value.delivery_profit(), &units.price_per_100)),
+            funding_adjusted_irr: Some(decimal(funding_adjusted_irr, &units.rate)),
+            tax_adjusted_interim_coupons: Some(decimal(
+                tax_adjusted_interim_coupons,
+                &units.price_per_100,
+            )),
+            subject_tax_adjusted_irr: Some(decimal(subject_tax_adjusted_irr, &units.rate)),
+        },
+        subject_tax_adjusted_irr,
+    ))
+}
+
+fn subject_delivery_irr(
+    invoice_price: FixedDecimal,
+    tax_adjusted_interim_coupons: FixedDecimal,
+    purchase_dirty_price: FixedDecimal,
+    purchase_date: NaiveDate,
+    delivery_date: NaiveDate,
+) -> Result<FixedDecimal, ApplicationError> {
+    let days = (delivery_date - purchase_date).num_days();
+    if days <= 0 {
+        return Err(invalid());
+    }
+    invoice_price
+        .checked_add(tax_adjusted_interim_coupons)
+        .and_then(|value| value.checked_div_round_ties_even(purchase_dirty_price))
+        .and_then(|value| value.checked_sub(FixedDecimal::ONE))
+        .and_then(|value| value.checked_mul_integer(365))
+        .and_then(|value| {
+            value.checked_div_round_ties_even(FixedDecimal::from_scaled(
+                i128::from(days) * 1_000_000_000_000,
+            ))
+        })
+        .map_err(map_domain_error)
+}
+
+fn select_subject_ctd(
+    result: &FuturesDeliveryBasketResult,
+    subject_rates: &[FixedDecimal],
+) -> Result<usize, ApplicationError> {
+    if result.candidates().len() != subject_rates.len() || subject_rates.is_empty() {
+        return Err(invalid());
+    }
+    let mut best = 0;
+    for index in 1..subject_rates.len() {
+        let candidate = result.candidates()[index].measures();
+        let incumbent = result.candidates()[best].measures();
+        let candidate_id = result.candidates()[index].input().bond().version_ref().id();
+        let incumbent_id = result.candidates()[best].input().bond().version_ref().id();
+        if subject_rates[index] > subject_rates[best]
+            || (subject_rates[index] == subject_rates[best]
+                && (candidate.net_basis() < incumbent.net_basis()
+                    || (candidate.net_basis() == incumbent.net_basis()
+                        && candidate_id < incumbent_id)))
+        {
+            best = index;
+        }
+    }
+    Ok(best)
+}
+
+const fn proto_claim_scope(value: CouponTaxClaimScope) -> i32 {
+    match value {
+        CouponTaxClaimScope::LegacySyntheticRetainedRate => {
+            ProtoCouponTaxClaimScope::Unspecified as i32
+        }
+        CouponTaxClaimScope::CouponOutputVatBeforeInputCredit => {
+            ProtoCouponTaxClaimScope::CouponOutputVatBeforeInputCredit as i32
+        }
+    }
 }
 
 fn futures_hedge_result(

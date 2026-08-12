@@ -1,0 +1,85 @@
+{
+  "schema": "ficant.r5e-tax-adjusted-analytics.expected.v1",
+  "authority_semantic_sha256": "54fa5adbeb8b164dc779ecc250ab622ab5747cdeb36f2b6da58f4d877ce5106a",
+  "bond_cases": [
+    {
+      "case_id": "before-cutoff-exempt",
+      "value_added_tax_rate": "0.000000000000",
+      "gross_coupon_per_period": "1.250000000000",
+      "tax_adjusted_coupon_per_period": "1.250000000000",
+      "market_pre_tax_yield_to_maturity": "0.024999039455",
+      "subject_tax_adjusted_yield_to_maturity": "0.024999039455",
+      "claim_scope": "COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT"
+    },
+    {
+      "case_id": "cutoff-day-taxable",
+      "value_added_tax_rate": "0.060000000000",
+      "gross_coupon_per_period": "1.250000000000",
+      "tax_adjusted_coupon_per_period": "1.179245283019",
+      "market_pre_tax_yield_to_maturity": "0.024999039455",
+      "subject_tax_adjusted_yield_to_maturity": "0.023584055497",
+      "claim_scope": "COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT"
+    },
+    {
+      "case_id": "reissuance-inherits-taxable-first-issue",
+      "value_added_tax_rate": "0.060000000000",
+      "gross_coupon_per_period": "1.250000000000",
+      "tax_adjusted_coupon_per_period": "1.179245283019",
+      "market_pre_tax_yield_to_maturity": "0.024999039455",
+      "subject_tax_adjusted_yield_to_maturity": "0.023584055497",
+      "claim_scope": "COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT"
+    }
+  ],
+  "delivery_baskets": [
+    {
+      "basket_id": "market-subject-ctd-reversal",
+      "candidates": [
+        {
+          "bond_id": "CGB-EXEMPT",
+          "gross_interim_coupons": "1.200000000000",
+          "tax_adjusted_interim_coupons": "1.200000000000",
+          "market_pre_tax_irr": "0.042797319931",
+          "subject_tax_adjusted_irr": "0.042797319931",
+          "market_net_basis": "0.150000000000",
+          "claim_scope": "COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT"
+        },
+        {
+          "bond_id": "CGB-TAXABLE",
+          "gross_interim_coupons": "1.250000000000",
+          "tax_adjusted_interim_coupons": "1.179245283019",
+          "market_pre_tax_irr": "0.045854271356",
+          "subject_tax_adjusted_irr": "0.041528396701",
+          "market_net_basis": "0.140000000000",
+          "claim_scope": "COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT"
+        }
+      ],
+      "market_ctd_bond_id": "CGB-TAXABLE",
+      "subject_ctd_bond_id": "CGB-EXEMPT"
+    },
+    {
+      "basket_id": "no-tax-difference-control",
+      "candidates": [
+        {
+          "bond_id": "CGB-EXEMPT-A",
+          "gross_interim_coupons": "1.200000000000",
+          "tax_adjusted_interim_coupons": "1.200000000000",
+          "market_pre_tax_irr": "0.042797319931",
+          "subject_tax_adjusted_irr": "0.042797319931",
+          "market_net_basis": "0.150000000000",
+          "claim_scope": "COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT"
+        },
+        {
+          "bond_id": "CGB-EXEMPT-B",
+          "gross_interim_coupons": "1.250000000000",
+          "tax_adjusted_interim_coupons": "1.250000000000",
+          "market_pre_tax_irr": "0.045854271356",
+          "subject_tax_adjusted_irr": "0.045854271356",
+          "market_net_basis": "0.140000000000",
+          "claim_scope": "COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT"
+        }
+      ],
+      "market_ctd_bond_id": "CGB-EXEMPT-B",
+      "subject_ctd_bond_id": "CGB-EXEMPT-B"
+    }
+  ]
+}
