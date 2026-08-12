@@ -50,7 +50,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 .\scripts\check-fast.ps1
 ```
 
-它运行 `cargo fmt`、离线 workspace check、非环境 Rust 测试和 Storage library 测试；不会连接 PostgreSQL、Ceph RGW、GitHub 或目标服务器。
+它运行 `cargo fmt`、离线 workspace check、R5D 精确 crate 邻接表与 L1→L2 语法依赖门禁、非环境 Rust 测试和 Storage library 测试；不会连接 PostgreSQL、Ceph RGW、GitHub 或目标服务器。未知 workspace package/依赖边，以及 `research/**` 对 analytics/curves/futures 模块的直接或 façade 引用，都会默认失败。
 
 完整本地回归：
 
@@ -59,7 +59,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 .\scripts\check.ps1
 ```
 
-它在不依赖目标服务器的前提下运行：严格 Rust format/Clippy/build/test、生成契约测试、冻结 `cgb-futures` RulePack 的确定性 payload 漂移检查、C++ Release build 与当前 CMake/CTest catalog 中登记的全部测试、Phase 2A/2B/2C acceptance matrix 完整性、Phase 2C 独立 Oracle 与确定性 Artifact 测试、Python 生成契约测试，以及 Web typecheck/build/Vitest。默认不运行需要持久化服务的测试。CTest 数量由当前 catalog 决定，文档不另行硬编码一个会漂移的计数。
+它在不依赖目标服务器的前提下运行：严格 Rust format/Clippy/build/test、生成契约与 R5D 结构门禁、冻结 `cgb-futures` RulePack 的确定性 payload 漂移检查、C++ Release build 与当前 CMake/CTest catalog 中登记的全部测试、既有 acceptance matrix/独立 Oracle/确定性 Artifact 回归、R5D 独立 Decimal KRD Oracle、20 个一方包的许可证绑定、Python 契约测试，以及 Web typecheck/build/Vitest。默认不运行需要持久化服务的测试。CTest 数量由当前 catalog 决定，文档不另行硬编码一个会漂移的计数。
 
 可选本地集成回归：
 

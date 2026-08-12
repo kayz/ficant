@@ -19,12 +19,15 @@ use ficant_contracts::ficant::market::v1::{
     FundingRulePack, FundingTierRate, Instrument, InstrumentKind, MarketRulePack,
     SubjectCouponTaxRate, TaxRulePack,
 };
-use ficant_contracts::ficant::rates::v1::AnalyzeBondRequest;
+use ficant_contracts::ficant::rates::v1::{
+    AnalysisInputBinding, AnalysisInputRole, AnalyzeBondRequest, ArtifactBinding, CurveNodeBinding,
+    ParameterDigest, SnapshotBinding,
+};
 use ficant_contracts::ficant::research::v1::{
     ExecutionInstanceIdentity, ExperimentRun, ReproducibilityIdentity, ResearchGraph, RunState,
 };
 
-const DEFAULT_BUF: &str = "/usr/local/bin/buf";
+const DEFAULT_BUF: &str = "buf";
 const BUF_VERSION: &str = "1.56.0";
 
 static DESCRIPTOR_SET: OnceLock<FileDescriptorSet> = OnceLock::new();
@@ -56,6 +59,11 @@ fn generated_rust_consumer_exports_representative_contracts() {
     let run = ExperimentRun::default();
     let registry = AppRegistry::default();
     let rates = AnalyzeBondRequest::default();
+    let snapshot_binding = SnapshotBinding::default();
+    let artifact_binding = ArtifactBinding::default();
+    let curve_node_binding = CurveNodeBinding::default();
+    let input_binding = AnalysisInputBinding::default();
+    let parameter_digest = ParameterDigest::default();
     let graph = ResearchGraph::default();
     let reproducibility = ReproducibilityIdentity::default();
     let execution = ExecutionInstanceIdentity::default();
@@ -78,6 +86,12 @@ fn generated_rust_consumer_exports_representative_contracts() {
     assert_eq!(run.state, RunState::Unspecified as i32);
     assert!(registry.apps.is_empty());
     assert!(rates.context.is_none());
+    assert!(snapshot_binding.snapshot_id.is_none());
+    assert!(artifact_binding.artifact_id.is_none());
+    assert!(curve_node_binding.curve_node_id.is_empty());
+    assert_eq!(input_binding.role, AnalysisInputRole::Unspecified as i32);
+    assert!(input_binding.binding.is_none());
+    assert!(parameter_digest.canonical_parameters_sha256.is_none());
     assert!(graph.nodes.is_empty());
     assert!(reproducibility.node_implementations.is_empty());
     assert!(execution.reproducibility.is_none());
@@ -228,6 +242,7 @@ fn descriptor_inventory_is_unique_and_preserves_phase1_semantics() {
     assert_no_parallel_contract_representations(descriptor_set);
     assert_shared_types(&messages);
     assert_subject_contracts(&messages);
+    assert_r5d_rates_contracts(&messages, &top_level_enums(descriptor_set));
     assert_phase1_objects(&messages);
     assert_cgb_futures_rule_pack_contract(&messages);
     assert_funding_rule_pack_contract(&messages);
@@ -765,7 +780,7 @@ fn platform_service_has_exact_seven_rpc_security_contract() {
 }
 
 #[test]
-fn rates_analytics_service_has_exact_phase2e_signatures() {
+fn rates_analytics_service_has_exact_r5d_signatures() {
     let descriptor_set = descriptor_set();
     assert_exact_service(
         descriptor_set,
@@ -1385,8 +1400,6 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     let decimal = ".ficant.core.v1.DecimalValue";
     let timestamp = ".google.protobuf.Timestamp";
     let error = ".ficant.core.v1.ErrorDetail";
-    let owner = ".ficant.core.v1.OwnerRef";
-    let binding = ".ficant.rates.v1.ObjectBinding";
 
     assert_fields(
         messages,
@@ -1528,134 +1541,376 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
             ExpectedField::oneof_message("error", error, "result"),
         ],
     );
+}
+
+fn assert_r5d_rates_contracts(
+    messages: &BTreeMap<String, &DescriptorProto>,
+    enums: &BTreeMap<String, &EnumDescriptorProto>,
+) {
+    let owner = ".ficant.core.v1.OwnerRef";
+    let version = ".ficant.core.v1.VersionRef";
+    let id = ".ficant.core.v1.Ulid";
+    let hash = ".ficant.core.v1.Sha256";
+    let decimal = ".ficant.core.v1.DecimalValue";
+    let time = ".ficant.core.v1.MarketTime";
+    let object = ".ficant.rates.v1.ObjectBinding";
+    let snapshot = ".ficant.rates.v1.SnapshotBinding";
+    let artifact = ".ficant.rates.v1.ArtifactBinding";
+    let curve_node = ".ficant.rates.v1.CurveNodeBinding";
+    let context_type = ".ficant.rates.v1.AnalysisContext";
+
+    assert_enum(
+        enums,
+        "ficant.rates.v1.AnalysisInputRole",
+        &[
+            ("ANALYSIS_INPUT_ROLE_UNSPECIFIED", 0),
+            ("ANALYSIS_INPUT_ROLE_SUBJECT", 1),
+            ("ANALYSIS_INPUT_ROLE_UNIT", 2),
+            ("ANALYSIS_INPUT_ROLE_BOND", 3),
+            ("ANALYSIS_INPUT_ROLE_CALENDAR", 4),
+            ("ANALYSIS_INPUT_ROLE_CURVE_SNAPSHOT", 5),
+            ("ANALYSIS_INPUT_ROLE_DATA_SNAPSHOT", 6),
+            ("ANALYSIS_INPUT_ROLE_DATA_SOURCE", 7),
+            ("ANALYSIS_INPUT_ROLE_TAX_RULE_PACK", 8),
+            ("ANALYSIS_INPUT_ROLE_FUNDING_RULE_PACK", 9),
+            ("ANALYSIS_INPUT_ROLE_DELIVERY_RULE_PACK", 10),
+            ("ANALYSIS_INPUT_ROLE_FUTURES_CONTRACT", 11),
+            ("ANALYSIS_INPUT_ROLE_TARGET_RISK_ARTIFACT", 12),
+            ("ANALYSIS_INPUT_ROLE_DELIVERY_ARTIFACT", 13),
+            ("ANALYSIS_INPUT_ROLE_CTD_ANALYTICS_ARTIFACT", 14),
+            ("ANALYSIS_INPUT_ROLE_CURVE_RULE_PACK", 15),
+            ("ANALYSIS_INPUT_ROLE_CURVE_NODE_DEFINITION", 16),
+        ],
+    );
+
+    for removed in [
+        "ficant.rates.v1.BondTerms",
+        "ficant.rates.v1.CalendarBinding",
+        "ficant.rates.v1.YieldCurveNode",
+        "ficant.rates.v1.YieldCurveBinding",
+        "ficant.rates.v1.FuturesDeliverableCandidate",
+    ] {
+        assert!(
+            !messages.contains_key(removed),
+            "R5D must remove duplicate inline contract {removed}"
+        );
+    }
+    for removed in [
+        "ficant.rates.v1.CouponFrequency",
+        "ficant.rates.v1.YieldCurveInterpolation",
+        "ficant.rates.v1.CgbFuturesProduct",
+    ] {
+        assert!(
+            !enums.contains_key(removed),
+            "R5D must remove unused inline enum {removed}"
+        );
+    }
+
     assert_fields(
         messages,
-        "ficant.rates.v1.ResultMetadata",
+        "ficant.rates.v1.SnapshotBinding",
         &[
-            ExpectedField::scalar("schema_id", Type::String),
-            ExpectedField::scalar("engine_id", Type::String),
-            ExpectedField::scalar("engine_version", Type::String),
-            ExpectedField::message("algorithm", ".ficant.rates.v1.AlgorithmBinding"),
-            ExpectedField::message("subject_ref", version),
-            ExpectedField::message("funding_rule_pack", binding),
-            ExpectedField::message("tax_rule_pack", binding),
+            ExpectedField::message("snapshot_id", id),
+            ExpectedField::message("content_hash", hash),
         ],
     );
     assert_fields(
+        messages,
+        "ficant.rates.v1.ArtifactBinding",
+        &[
+            ExpectedField::message("artifact_id", id),
+            ExpectedField::message("content_hash", hash),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.rates.v1.CurveNodeBinding",
+        &[
+            ExpectedField::scalar("curve_node_id", Type::String),
+            ExpectedField::message("content_hash", hash),
+        ],
+    );
+    let curve_node_binding = messages
+        .get("ficant.rates.v1.CurveNodeBinding")
+        .expect("CurveNodeBinding must exist");
+    assert_exact_tagged_fields(
+        curve_node_binding,
+        &[
+            ("curve_node_id", 1, Type::String, None, false),
+            ("content_hash", 2, Type::Message, Some(hash), false),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.rates.v1.AnalysisInputBinding",
+        &[
+            ExpectedField::enumeration("role", ".ficant.rates.v1.AnalysisInputRole"),
+            ExpectedField::message("owner", owner),
+            ExpectedField::oneof_message("object", object, "binding"),
+            ExpectedField::oneof_message("snapshot", snapshot, "binding"),
+            ExpectedField::oneof_message("artifact", artifact, "binding"),
+            ExpectedField::message("observed_at", time),
+            ExpectedField::message("visible_at", time),
+            ExpectedField::message("effective_from", time),
+            ExpectedField::message("effective_to", time),
+            ExpectedField::oneof_message("curve_node", curve_node, "binding"),
+        ],
+    );
+    let input_binding = messages
+        .get("ficant.rates.v1.AnalysisInputBinding")
+        .expect("AnalysisInputBinding must exist");
+    assert_exact_tagged_fields(
+        input_binding,
+        &[
+            (
+                "role",
+                1,
+                Type::Enum,
+                Some(".ficant.rates.v1.AnalysisInputRole"),
+                false,
+            ),
+            ("owner", 2, Type::Message, Some(owner), false),
+            ("object", 3, Type::Message, Some(object), false),
+            ("snapshot", 4, Type::Message, Some(snapshot), false),
+            ("artifact", 5, Type::Message, Some(artifact), false),
+            ("observed_at", 6, Type::Message, Some(time), false),
+            ("visible_at", 7, Type::Message, Some(time), false),
+            ("effective_from", 8, Type::Message, Some(time), false),
+            ("effective_to", 9, Type::Message, Some(time), false),
+            ("curve_node", 10, Type::Message, Some(curve_node), false),
+        ],
+    );
+    for field in ["object", "snapshot", "artifact", "curve_node"] {
+        assert_field_oneof(input_binding, field, "binding");
+    }
+    assert_fields(
+        messages,
+        "ficant.rates.v1.ParameterDigest",
+        &[
+            ExpectedField::message("algorithm", ".ficant.rates.v1.AlgorithmBinding"),
+            ExpectedField::message("canonical_parameters_sha256", hash),
+        ],
+    );
+
+    let context = messages
+        .get("ficant.rates.v1.AnalysisContext")
+        .expect("AnalysisContext must exist");
+    assert_exact_tagged_fields(
+        context,
+        &[
+            ("owner", 1, Type::Message, Some(owner), false),
+            (
+                "algorithm",
+                4,
+                Type::Message,
+                Some(".ficant.rates.v1.AlgorithmBinding"),
+                false,
+            ),
+            (
+                "units",
+                5,
+                Type::Message,
+                Some(".ficant.rates.v1.AnalysisUnits"),
+                false,
+            ),
+            ("subject_ref", 6, Type::Message, Some(version), false),
+            ("knowledge_at", 9, Type::Message, Some(time), false),
+        ],
+    );
+    assert_reserved_tags(messages, "ficant.rates.v1.AnalysisContext", &[2, 3, 7, 8]);
+    assert_reserved_names(
         messages,
         "ficant.rates.v1.AnalysisContext",
         &[
-            ExpectedField::message("owner", owner),
-            ExpectedField::message("rule_pack", binding),
-            ExpectedField::message("data_snapshot", binding),
-            ExpectedField::message("algorithm", ".ficant.rates.v1.AlgorithmBinding"),
-            ExpectedField::message("units", ".ficant.rates.v1.AnalysisUnits"),
-            ExpectedField::message("subject_ref", version),
-            ExpectedField::message("funding_rule_pack", binding),
-            ExpectedField::message("tax_rule_pack", binding),
+            "rule_pack",
+            "data_snapshot",
+            "funding_rule_pack",
+            "tax_rule_pack",
         ],
     );
+
+    let metadata = messages
+        .get("ficant.rates.v1.ResultMetadata")
+        .expect("ResultMetadata must exist");
+    assert_exact_tagged_fields(
+        metadata,
+        &[
+            ("schema_id", 1, Type::String, None, false),
+            ("engine_id", 2, Type::String, None, false),
+            ("engine_version", 3, Type::String, None, false),
+            (
+                "algorithm",
+                4,
+                Type::Message,
+                Some(".ficant.rates.v1.AlgorithmBinding"),
+                false,
+            ),
+            ("subject_ref", 5, Type::Message, Some(version), false),
+            (
+                "consumed_inputs",
+                8,
+                Type::Message,
+                Some(".ficant.rates.v1.AnalysisInputBinding"),
+                true,
+            ),
+            (
+                "parameter_digest",
+                9,
+                Type::Message,
+                Some(".ficant.rates.v1.ParameterDigest"),
+                false,
+            ),
+            ("request_fingerprint", 10, Type::Message, Some(hash), false),
+        ],
+    );
+    assert_reserved_tags(messages, "ficant.rates.v1.ResultMetadata", &[6, 7]);
+    assert_reserved_names(
+        messages,
+        "ficant.rates.v1.ResultMetadata",
+        &["funding_rule_pack", "tax_rule_pack"],
+    );
+
+    let bond = messages
+        .get("ficant.rates.v1.AnalyzeBondRequest")
+        .expect("AnalyzeBondRequest must exist");
+    assert_exact_tagged_fields(
+        bond,
+        &[
+            ("context", 1, Type::Message, Some(context_type), false),
+            ("bond", 2, Type::Message, Some(object), false),
+            ("valuation_at", 3, Type::Message, Some(time), false),
+            ("settlement_date", 4, Type::String, None, false),
+            (
+                "calendar_requirement",
+                5,
+                Type::Enum,
+                Some(".ficant.rates.v1.CalendarRequirement"),
+                false,
+            ),
+            ("calendar", 6, Type::Message, Some(object), false),
+            ("yield_to_maturity", 8, Type::Message, Some(decimal), false),
+            ("clean_price", 9, Type::Message, Some(decimal), false),
+            ("data_snapshot", 11, Type::Message, Some(snapshot), false),
+            ("tax_rule_pack", 12, Type::Message, Some(object), false),
+        ],
+    );
+    assert_field_oneof(bond, "yield_to_maturity", "input");
+    assert_field_oneof(bond, "clean_price", "input");
+    assert_reserved_tags(messages, "ficant.rates.v1.AnalyzeBondRequest", &[7, 10]);
+    assert_reserved_names(messages, "ficant.rates.v1.AnalyzeBondRequest", &["terms"]);
+
     assert_fields(
         messages,
-        "ficant.rates.v1.AnalyzeBondRequest",
+        "ficant.rates.v1.InterpolateYieldCurveRequest",
         &[
-            ExpectedField::message("context", ".ficant.rates.v1.AnalysisContext"),
-            ExpectedField::message("bond", ".ficant.rates.v1.ObjectBinding"),
-            ExpectedField::message("valuation_at", ".ficant.core.v1.MarketTime"),
-            ExpectedField::scalar("settlement_date", Type::String),
-            ExpectedField::enumeration(
-                "calendar_requirement",
-                ".ficant.rates.v1.CalendarRequirement",
-            ),
-            ExpectedField::message("calendar", ".ficant.rates.v1.CalendarBinding"),
-            ExpectedField::message("terms", ".ficant.rates.v1.BondTerms"),
-            ExpectedField::oneof_message(
-                "yield_to_maturity",
-                ".ficant.core.v1.DecimalValue",
-                "input",
-            ),
-            ExpectedField::oneof_message("clean_price", ".ficant.core.v1.DecimalValue", "input"),
+            ExpectedField::message("context", context_type),
+            ExpectedField::message("curve", snapshot),
+            ExpectedField::scalar("query_date", Type::String),
         ],
     );
-    assert_reserved_tag(messages, "ficant.rates.v1.AnalyzeBondRequest", 10);
 
-    let bond_terms = messages
-        .get("ficant.rates.v1.BondTerms")
-        .expect("BondTerms must exist");
-    assert_exact_field(
-        bond_terms,
-        "maturity_date",
-        2,
-        Type::String,
-        None,
-        false,
-        false,
+    let carry = messages
+        .get("ficant.rates.v1.AnalyzeCarryRollRequest")
+        .expect("AnalyzeCarryRollRequest must exist");
+    assert_exact_tagged_fields(
+        carry,
+        &[
+            ("context", 1, Type::Message, Some(context_type), false),
+            ("bond", 2, Type::Message, Some(object), false),
+            ("valuation_at", 3, Type::Message, Some(time), false),
+            ("initial_settlement", 4, Type::String, None, false),
+            ("horizon_settlement", 5, Type::String, None, false),
+            (
+                "calendar_requirement",
+                6,
+                Type::Enum,
+                Some(".ficant.rates.v1.CalendarRequirement"),
+                false,
+            ),
+            ("curve", 9, Type::Message, Some(snapshot), false),
+        ],
     );
-    assert_exact_field(
-        bond_terms,
-        "frequency",
-        3,
-        Type::Enum,
-        Some(".ficant.rates.v1.CouponFrequency"),
-        false,
-        false,
+    assert_reserved_tags(messages, "ficant.rates.v1.AnalyzeCarryRollRequest", &[7, 8]);
+    assert_reserved_names(
+        messages,
+        "ficant.rates.v1.AnalyzeCarryRollRequest",
+        &["calendar", "terms"],
     );
-    assert_exact_field(
-        bond_terms,
-        "coupon_rate",
-        4,
-        Type::Message,
-        Some(decimal),
-        false,
-        false,
+
+    let delivery = messages
+        .get("ficant.rates.v1.AnalyzeFuturesDeliveryRequest")
+        .expect("AnalyzeFuturesDeliveryRequest must exist");
+    assert_exact_tagged_fields(
+        delivery,
+        &[
+            ("context", 1, Type::Message, Some(context_type), false),
+            ("futures_contract", 2, Type::Message, Some(object), false),
+            ("valuation_at", 3, Type::Message, Some(time), false),
+            ("purchase_date", 4, Type::String, None, false),
+            ("data_snapshot", 11, Type::Message, Some(snapshot), false),
+            ("funding_rule_pack", 12, Type::Message, Some(object), false),
+        ],
     );
-    assert_exact_field(
-        bond_terms,
-        "face_amount",
-        5,
-        Type::Message,
-        Some(decimal),
-        false,
-        false,
+    assert_reserved_tags(
+        messages,
+        "ficant.rates.v1.AnalyzeFuturesDeliveryRequest",
+        &[5, 6, 7, 8, 9, 10],
     );
-    assert_exact_field(
-        bond_terms,
-        "first_issue_date",
-        6,
-        Type::String,
-        None,
-        false,
-        false,
+    assert_reserved_names(
+        messages,
+        "ficant.rates.v1.AnalyzeFuturesDeliveryRequest",
+        &[
+            "delivery_month_first",
+            "delivery_date",
+            "product",
+            "futures_clean_price",
+            "candidates",
+        ],
     );
-    assert_exact_field(
-        bond_terms,
-        "current_issue_date",
-        7,
-        Type::String,
-        None,
-        false,
-        false,
+
+    let hedge = messages
+        .get("ficant.rates.v1.AnalyzeFuturesHedgeRequest")
+        .expect("AnalyzeFuturesHedgeRequest must exist");
+    assert_exact_tagged_fields(
+        hedge,
+        &[
+            ("context", 1, Type::Message, Some(context_type), false),
+            (
+                "target_risk_artifact",
+                2,
+                Type::Message,
+                Some(artifact),
+                false,
+            ),
+            ("delivery_artifact", 3, Type::Message, Some(artifact), false),
+            (
+                "ctd_analytics_artifact",
+                4,
+                Type::Message,
+                Some(artifact),
+                false,
+            ),
+            ("futures_contract", 5, Type::Message, Some(object), false),
+            ("valuation_at", 7, Type::Message, Some(time), false),
+        ],
     );
-    assert_exact_field(
-        bond_terms,
-        "cumulative_issued_amount",
-        8,
-        Type::Message,
-        Some(decimal),
-        false,
-        false,
+    assert_reserved_tags(
+        messages,
+        "ficant.rates.v1.AnalyzeFuturesHedgeRequest",
+        &[6, 8, 9, 10, 11],
     );
-    assert_exact_field(
-        bond_terms,
-        "tax_attributes",
-        9,
-        Type::Message,
-        Some(".ficant.market.v1.BondTaxAttributes"),
-        false,
-        false,
+    assert_reserved_names(
+        messages,
+        "ficant.rates.v1.AnalyzeFuturesHedgeRequest",
+        &[
+            "ctd_bond",
+            "product",
+            "target_dv01",
+            "ctd_dv01_per_100",
+            "conversion_factor",
+        ],
     );
-    assert_eq!(bond_terms.field.len(), 8, "BondTerms field drift");
-    assert_reserved_tag(messages, "ficant.rates.v1.BondTerms", 1);
+
     assert_fields(
         messages,
         "ficant.rates.v1.TaxAdjustedBondAnalytics",
@@ -1675,43 +1930,6 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
         ],
     );
 
-    let delivery_request = messages
-        .get("ficant.rates.v1.AnalyzeFuturesDeliveryRequest")
-        .expect("AnalyzeFuturesDeliveryRequest must exist");
-    assert_exact_field(
-        delivery_request,
-        "context",
-        1,
-        Type::Message,
-        Some(".ficant.rates.v1.AnalysisContext"),
-        false,
-        false,
-    );
-    assert_exact_field(
-        delivery_request,
-        "futures_clean_price",
-        8,
-        Type::Message,
-        Some(decimal),
-        false,
-        false,
-    );
-    assert_exact_field(
-        delivery_request,
-        "candidates",
-        10,
-        Type::Message,
-        Some(".ficant.rates.v1.FuturesDeliverableCandidate"),
-        true,
-        false,
-    );
-    assert_eq!(
-        delivery_request.field.len(),
-        9,
-        "AnalyzeFuturesDeliveryRequest must not retain the caller financing-rate field"
-    );
-    assert_reserved_tag(messages, "ficant.rates.v1.AnalyzeFuturesDeliveryRequest", 9);
-
     let delivery_measures = messages
         .get("ficant.rates.v1.FuturesDeliveryMeasures")
         .expect("FuturesDeliveryMeasures must exist");
@@ -1727,7 +1945,7 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     assert_eq!(
         delivery_measures.field.len(),
         15,
-        "FuturesDeliveryMeasures must add only the subject-adjusted IRR field"
+        "FuturesDeliveryMeasures must retain the subject-adjusted IRR field"
     );
 }
 
@@ -2267,8 +2485,89 @@ fn assert_reserved_tag(
         message
             .reserved_range
             .iter()
-            .any(|range| range.start() == tag && range.end() == tag + 1),
+            .any(|range| range.start() <= tag && tag < range.end()),
         "{message_name} must reserve removed tag {tag}"
+    );
+}
+
+fn assert_reserved_tags(
+    messages: &BTreeMap<String, &DescriptorProto>,
+    message_name: &str,
+    tags: &[i32],
+) {
+    let message = messages
+        .get(message_name)
+        .unwrap_or_else(|| panic!("missing message {message_name}"));
+    let actual = message
+        .reserved_range
+        .iter()
+        .flat_map(|range| range.start()..range.end())
+        .collect::<BTreeSet<_>>();
+    let expected = tags.iter().copied().collect::<BTreeSet<_>>();
+    assert_eq!(
+        actual, expected,
+        "{message_name} must reserve the exact removed field tags"
+    );
+}
+
+fn assert_reserved_names(
+    messages: &BTreeMap<String, &DescriptorProto>,
+    message_name: &str,
+    names: &[&str],
+) {
+    let message = messages
+        .get(message_name)
+        .unwrap_or_else(|| panic!("missing message {message_name}"));
+    let actual = message
+        .reserved_name
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let expected = names.iter().copied().collect::<BTreeSet<_>>();
+    assert_eq!(
+        actual, expected,
+        "{message_name} must reserve the exact removed field names"
+    );
+}
+
+fn assert_exact_tagged_fields(
+    message: &DescriptorProto,
+    expected: &[(&str, i32, Type, Option<&str>, bool)],
+) {
+    assert_eq!(
+        message.field.len(),
+        expected.len(),
+        "{} must have the exact frozen field count",
+        message.name()
+    );
+    for (name, number, field_type, type_name, repeated) in expected {
+        assert_exact_field(
+            message,
+            name,
+            *number,
+            *field_type,
+            *type_name,
+            *repeated,
+            false,
+        );
+    }
+}
+
+fn assert_field_oneof(message: &DescriptorProto, field_name: &str, oneof_name: &str) {
+    let field = message
+        .field
+        .iter()
+        .find(|field| field.name() == field_name)
+        .unwrap_or_else(|| panic!("{}.{} must exist", message.name(), field_name));
+    let oneof_index = field
+        .oneof_index
+        .unwrap_or_else(|| panic!("{}.{} must belong to a oneof", message.name(), field_name));
+    assert_eq!(
+        message.oneof_decl[oneof_index as usize].name(),
+        oneof_name,
+        "{}.{} oneof drift",
+        message.name(),
+        field_name
     );
 }
 

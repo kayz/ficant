@@ -12,8 +12,9 @@ use ficant_domain::research::{
     ResearchGraphInput, ResearchNode,
 };
 use ficant_native_nodes::{
-    CgbBondAnalyticsNativeNode, analyze_bond_request_type, cgb_bond_analytics_contract,
-    native_node_source_digest, native_node_source_digest_attestation,
+    CgbBondAnalyticsNativeNode, MATERIALIZED_INPUT_PORT, REQUEST_PORT, analyze_bond_request_type,
+    cgb_bond_analytics_contract, materialized_bond_input_type, native_node_source_digest,
+    native_node_source_digest_attestation,
 };
 use ficant_runtime::{ExecutionInstanceIdentity, NativeNode, NativePortValue};
 use tokio::sync::watch;
@@ -115,29 +116,46 @@ impl WorkerBackend for FakeBackend {
         loaded: &LoadedTask,
     ) -> Result<PreparedInputs, WorkerError> {
         self.record(WorkerStep::ReadInput)?;
-        let frozen = &loaded
+        let frozen = loaded
             .stored_identity
             .identity
             .reproducibility()
-            .external_inputs()[0];
+            .external_inputs();
         Ok(PreparedInputs {
             values: vec![
                 NativePortValue::new(
-                    "request",
-                    frozen.value_type().clone(),
-                    frozen.payload().to_vec(),
+                    REQUEST_PORT,
+                    frozen[0].value_type().clone(),
+                    frozen[0].payload().to_vec(),
+                )
+                .unwrap(),
+                NativePortValue::new(
+                    MATERIALIZED_INPUT_PORT,
+                    frozen[1].value_type().clone(),
+                    frozen[1].payload().to_vec(),
                 )
                 .unwrap(),
             ],
-            evidence: vec![InputEvidence {
-                target_port: "request".to_owned(),
-                value_type: frozen.value_type().clone(),
-                artifact_id: id('I'),
-                content_hash: frozen.content_hash().clone(),
-                source: InputSource::External {
-                    input_id: "market-data".to_owned(),
+            evidence: vec![
+                InputEvidence {
+                    target_port: REQUEST_PORT.to_owned(),
+                    value_type: frozen[0].value_type().clone(),
+                    artifact_id: id('I'),
+                    content_hash: frozen[0].content_hash().clone(),
+                    source: InputSource::External {
+                        input_id: "bond-request".to_owned(),
+                    },
                 },
-            }],
+                InputEvidence {
+                    target_port: MATERIALIZED_INPUT_PORT.to_owned(),
+                    value_type: frozen[1].value_type().clone(),
+                    artifact_id: id('J'),
+                    content_hash: frozen[1].content_hash().clone(),
+                    source: InputSource::External {
+                        input_id: "materialized-bond-input".to_owned(),
+                    },
+                },
+            ],
         })
     }
 
@@ -177,10 +195,16 @@ impl WorkerBackend for FakeBackend {
             "application/test",
             hash,
             u64::try_from(execution.output_envelope.len()).unwrap(),
-            vec![LineageRef::content_addressed(
-                id('I'),
-                ContentHash::digest(b"request"),
-            )],
+            execution
+                .input_evidence
+                .iter()
+                .map(|value| {
+                    LineageRef::content_addressed(
+                        value.artifact_id.clone(),
+                        value.content_hash.clone(),
+                    )
+                })
+                .collect(),
         )
         .unwrap();
         Ok(NodeCompletion {
@@ -435,6 +459,7 @@ fn claim() -> ClaimedTask {
 fn loaded() -> LoadedTask {
     let owner = OwnerRef::new(id('N'), id('O'));
     let request = analyze_bond_request_type();
+    let materialized = materialized_bond_input_type();
     let contract = cgb_bond_analytics_contract().unwrap();
     let node = ResearchNode::new(id('D'), contract, ContentHash::digest(b"parameters"));
     let executor = CgbBondAnalyticsNativeNode::new(node.node_id().clone()).unwrap();
@@ -446,18 +471,33 @@ fn loaded() -> LoadedTask {
             nodes: vec![node.clone()],
             edges: vec![],
         },
-        vec![GraphExternalInput::new("market-data", request.clone()).unwrap()],
         vec![
-            GraphExternalInputBinding::new("market-data", node.node_id().clone(), "request")
+            GraphExternalInput::new("bond-request", request.clone()).unwrap(),
+            GraphExternalInput::new("materialized-bond-input", materialized.clone()).unwrap(),
+        ],
+        vec![
+            GraphExternalInputBinding::new("bond-request", node.node_id().clone(), REQUEST_PORT)
                 .unwrap(),
+            GraphExternalInputBinding::new(
+                "materialized-bond-input",
+                node.node_id().clone(),
+                MATERIALIZED_INPUT_PORT,
+            )
+            .unwrap(),
         ],
     )
     .unwrap();
-    let input = ExecutionExternalInput::new("market-data", request, b"request".to_vec()).unwrap();
+    let input = ExecutionExternalInput::new("bond-request", request, b"request".to_vec()).unwrap();
+    let materialized_input = ExecutionExternalInput::new(
+        "materialized-bond-input",
+        materialized,
+        b"materialized".to_vec(),
+    )
+    .unwrap();
     let reproducibility = ReproducibilityIdentity::new(
         &graph,
         ReproducibilityIdentityInput {
-            external_inputs: vec![input.clone()],
+            external_inputs: vec![input.clone(), materialized_input.clone()],
             data_snapshot_hash: ContentHash::digest(b"data"),
             universe_snapshot_hash: ContentHash::digest(b"universe"),
             parameters_hash: ContentHash::digest(b"parameters"),
@@ -478,11 +518,18 @@ fn loaded() -> LoadedTask {
         graph_id: graph.graph_id().clone(),
         graph_version: graph.version(),
         identity,
-        external_input_artifacts: vec![ExternalInputArtifactBinding {
-            input_id: "market-data".to_owned(),
-            artifact_id: id('I'),
-            content_hash: input.content_hash().clone(),
-        }],
+        external_input_artifacts: vec![
+            ExternalInputArtifactBinding {
+                input_id: "bond-request".to_owned(),
+                artifact_id: id('I'),
+                content_hash: input.content_hash().clone(),
+            },
+            ExternalInputArtifactBinding {
+                input_id: "materialized-bond-input".to_owned(),
+                artifact_id: id('J'),
+                content_hash: materialized_input.content_hash().clone(),
+            },
+        ],
     };
     LoadedTask {
         owner,

@@ -57,7 +57,7 @@ if data.get("cargo_reachability") != {
     "command": ["tree", "--locked", "--all-features", "--target", "all", "--prefix", "none", "--format", "{p}"],
 }:
     print("supply-chain: frozen Cargo reachability contract mismatch", file=sys.stderr); raise SystemExit(2)
-if len(data.get("first_party_packages", [])) != 17 or len({item.get("purl") for item in data["first_party_packages"]}) != 17:
+if len(data.get("first_party_packages", [])) != 20 or len({item.get("purl") for item in data["first_party_packages"]}) != 20:
     print("supply-chain: exact first-party policy mismatch", file=sys.stderr); raise SystemExit(2)
 expected_vendored = [{
     "purl": "pkg:cargo/parquet@59.1.0",

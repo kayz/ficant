@@ -1,29 +1,34 @@
-use chrono::DateTime;
-use ficant_api::analyze_bond_request;
+use chrono::{DateTime, NaiveDate, Utc};
+use ficant_api::RatesGrpcService;
 use ficant_contracts::ficant::core::v1::{
-    DecimalValue, MarketTime, OwnerRef as ProtoOwnerRef, Sha256, Ulid as ProtoUlid, UnitRef,
-    VersionRef,
-};
-use ficant_contracts::ficant::market::v1::{
-    BondTaxAttributes, IncomeTaxStatus, ValueAddedTaxStatus,
+    DecimalValue, MarketTime as ProtoMarketTime, OwnerRef as ProtoOwnerRef, Sha256,
+    Ulid as ProtoUlid, UnitRef, VersionRef,
 };
 use ficant_contracts::ficant::rates::v1::{
-    AlgorithmBinding, AnalysisContext, AnalysisUnits, AnalyzeBondRequest, AnalyzeBondResult,
-    BondTerms, CalendarBinding, CalendarRequirement, CouponFrequency, ObjectBinding, RiskSummary,
-    analyze_bond_request,
+    AlgorithmBinding, AnalysisContext, AnalysisInputBinding, AnalysisInputRole, AnalysisUnits,
+    AnalyzeBondRequest, AnalyzeBondResult, CalendarRequirement, ObjectBinding, ResultMetadata,
+    RiskSummary, SnapshotBinding, analysis_input_binding, analyze_bond_request,
 };
 use ficant_domain::DomainErrorCode;
-use ficant_domain::analytics::{ALGORITHM_ID, CONVENTION_PROFILE};
-use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid, Version};
+use ficant_domain::analytics::{
+    ABI_VERSION, ALGORITHM_ID, ALGORITHM_VERSION, AnalyticsMode, AnalyticsObjectRef, BondTerms,
+    BusinessDayConvention, CONVENTION_PROFILE, CalendarBinding,
+    CalendarRequirement as DomainCalendarRequirement, CouponFrequency, DayCountConvention,
+    FixedDecimal,
+};
+use ficant_domain::market::{BondTaxAttributes, IncomeTaxStatus, ValueAddedTaxStatus};
+use ficant_domain::primitives::{
+    ContentHash, MarketTime, OwnerRef, Ulid, Version, VersionRef as DomainVersionRef,
+};
 use ficant_domain::research::{
     GraphExternalInput, GraphExternalInputBinding, ResearchEdge, ResearchGraph, ResearchGraphInput,
     ResearchNode, TypedValue,
 };
-use ficant_fixed_income_native::NativeBondAnalyticsEngine;
 use ficant_native_nodes::{
-    CgbBondAnalyticsNativeNode, CgbBondRiskSummaryNativeNode, REQUEST_PORT, RESULT_PORT,
-    RISK_INPUT_PORT, RISK_OUTPUT_PORT, analyze_bond_request_type, cgb_bond_analytics_contract,
-    cgb_bond_risk_summary_contract, trusted_native_node,
+    CgbBondAnalyticsNativeNode, CgbBondRiskSummaryNativeNode, MATERIALIZED_INPUT_PORT,
+    REQUEST_PORT, RESULT_PORT, RISK_INPUT_PORT, RISK_OUTPUT_PORT, analyze_bond_request_type,
+    cgb_bond_analytics_contract, cgb_bond_risk_summary_contract, encode_materialized_bond_input,
+    materialized_bond_input_type, trusted_native_node,
 };
 use ficant_runtime::{
     ExecutionExternalInput, ExecutionInstanceIdentity, NativeNode, NativePortValue,
@@ -65,6 +70,13 @@ fn object(suffix: char) -> ObjectBinding {
     }
 }
 
+fn snapshot(suffix: char) -> SnapshotBinding {
+    SnapshotBinding {
+        snapshot_id: Some(proto_id(suffix)),
+        content_hash: Some(proto_hash(&hash(format!("object-{suffix}").as_bytes()))),
+    }
+}
+
 fn unit(suffix: char) -> UnitRef {
     UnitRef {
         unit_id: Some(proto_id(suffix)),
@@ -80,12 +92,24 @@ fn decimal(coefficient: &str, scale: u32, unit: UnitRef) -> DecimalValue {
     }
 }
 
-fn golden_request() -> AnalyzeBondRequest {
-    let fixture: Value = serde_json::from_str(include_str!(
-        "../../../tests/golden-cases/china-rates/fixtures/bond-260008.IB.json"
-    ))
-    .unwrap();
-    let units = AnalysisUnits {
+fn proto_time(instant: &str, local_trading_date: &str) -> ProtoMarketTime {
+    let instant = DateTime::parse_from_rfc3339(instant).unwrap();
+    ProtoMarketTime {
+        instant: Some(prost_types::Timestamp {
+            seconds: instant.timestamp(),
+            nanos: instant.timestamp_subsec_nanos().cast_signed(),
+        }),
+        market_timezone: "Asia/Shanghai".to_owned(),
+        local_trading_date: local_trading_date.to_owned(),
+    }
+}
+
+fn valuation_at() -> ProtoMarketTime {
+    proto_time("2026-07-13T15:00:00+08:00", "2026-07-13")
+}
+
+fn analysis_units() -> AnalysisUnits {
+    AnalysisUnits {
         currency_amount: Some(unit('A')),
         price_per_100: Some(unit('B')),
         rate: Some(unit('C')),
@@ -95,145 +119,296 @@ fn golden_request() -> AnalyzeBondRequest {
         dv01: Some(unit('G')),
         dimensionless: Some(unit('H')),
         contract_count: Some(unit('J')),
-    };
-    let instant = DateTime::parse_from_rfc3339(fixture["valuation_at"].as_str().unwrap()).unwrap();
+    }
+}
+
+fn algorithm() -> AlgorithmBinding {
+    AlgorithmBinding {
+        algorithm_id: ALGORITHM_ID.to_owned(),
+        algorithm_version: ALGORITHM_VERSION,
+        convention_profile: CONVENTION_PROFILE.to_owned(),
+        abi_version: ABI_VERSION,
+    }
+}
+
+fn golden_request() -> AnalyzeBondRequest {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../tests/golden-cases/china-rates/fixtures/bond-260008.IB.json"
+    ))
+    .unwrap();
     AnalyzeBondRequest {
         context: Some(AnalysisContext {
             owner: Some(ProtoOwnerRef {
                 tenant_id: Some(proto_id('0')),
                 owner_id: Some(proto_id('1')),
             }),
-            rule_pack: Some(object('K')),
-            data_snapshot: Some(object('M')),
-            algorithm: Some(AlgorithmBinding {
-                algorithm_id: ALGORITHM_ID.to_owned(),
-                algorithm_version: 1,
-                convention_profile: CONVENTION_PROFILE.to_owned(),
-                abi_version: 1,
-            }),
-            units: Some(units.clone()),
+            algorithm: Some(algorithm()),
+            units: Some(analysis_units()),
             subject_ref: Some(VersionRef {
                 id: Some(proto_id('S')),
                 version: 1,
             }),
-            funding_rule_pack: None,
-            tax_rule_pack: None,
+            knowledge_at: Some(valuation_at()),
         }),
         bond: Some(object('N')),
-        valuation_at: Some(MarketTime {
-            instant: Some(prost_types::Timestamp {
-                seconds: instant.timestamp(),
-                nanos: instant.timestamp_subsec_nanos().cast_signed(),
-            }),
-            market_timezone: "Asia/Shanghai".to_owned(),
-            local_trading_date: "2026-07-13".to_owned(),
-        }),
+        valuation_at: Some(valuation_at()),
         settlement_date: fixture["settlement_date"].as_str().unwrap().to_owned(),
         calendar_requirement: CalendarRequirement::ReferenceReplay as i32,
-        calendar: Some(CalendarBinding {
-            calendar_id: fixture["calendar"].as_str().unwrap().to_owned(),
-            version: 1,
-            content_hash: Some(proto_hash(&hash(b"calendar-cgb-reference-v1"))),
-            coverage_start: "2005-01-01".to_owned(),
-            coverage_end: "2026-12-31".to_owned(),
-            non_business_days: vec![],
-            work_weekends: vec![],
-        }),
-        terms: Some(BondTerms {
-            first_issue_date: fixture["issue_date"].as_str().unwrap().to_owned(),
-            current_issue_date: fixture["issue_date"].as_str().unwrap().to_owned(),
-            maturity_date: fixture["maturity_date"].as_str().unwrap().to_owned(),
-            frequency: CouponFrequency::Annual as i32,
-            coupon_rate: Some(decimal("15", 3, units.rate.unwrap())),
-            face_amount: Some(decimal("100", 0, units.currency_amount.unwrap())),
-            cumulative_issued_amount: Some(decimal("100", 0, unit('A'))),
-            tax_attributes: Some(BondTaxAttributes {
-                value_added_tax_status: ValueAddedTaxStatus::Taxable as i32,
-                income_tax_status: IncomeTaxStatus::Taxable as i32,
-            }),
-        }),
+        calendar: Some(object('C')),
         input: Some(analyze_bond_request::Input::YieldToMaturity(decimal(
             "155",
             4,
             unit('C'),
         ))),
+        data_snapshot: Some(snapshot('M')),
+        tax_rule_pack: Some(object('K')),
     }
+}
+
+fn domain_object(suffix: char) -> AnalyticsObjectRef {
+    AnalyticsObjectRef::new(
+        DomainVersionRef::new(id(suffix), Version::new(1).unwrap()),
+        hash(format!("object-{suffix}").as_bytes()),
+    )
+}
+
+fn materialized_input(input_value: FixedDecimal) -> ficant_domain::analytics::BondAnalyticsInput {
+    let instant = DateTime::parse_from_rfc3339("2026-07-13T15:00:00+08:00")
+        .unwrap()
+        .with_timezone(&Utc);
+    ficant_domain::analytics::BondAnalyticsInput::new(
+        OwnerRef::new(id('0'), id('1')),
+        domain_object('N'),
+        domain_object('K'),
+        domain_object('M'),
+        MarketTime::new(
+            instant,
+            "Asia/Shanghai",
+            NaiveDate::from_ymd_opt(2026, 7, 13).unwrap(),
+        )
+        .unwrap(),
+        NaiveDate::from_ymd_opt(2026, 7, 14).unwrap(),
+        DomainCalendarRequirement::ReferenceReplay,
+        CalendarBinding::new(
+            id('C').to_string(),
+            Version::new(1).unwrap(),
+            hash(b"object-C"),
+            NaiveDate::from_ymd_opt(2005, 1, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2035, 12, 31).unwrap(),
+            vec![],
+            vec![],
+        )
+        .unwrap(),
+        BondTerms::with_issuance(
+            NaiveDate::from_ymd_opt(2026, 4, 15).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 4, 15).unwrap(),
+            NaiveDate::from_ymd_opt(2031, 4, 15).unwrap(),
+            CouponFrequency::Annual,
+            DayCountConvention::ActActBondIsma,
+            BusinessDayConvention::Following,
+            FixedDecimal::from_scaled(15_000_000_000),
+            FixedDecimal::from_scaled(100_000_000_000_000),
+            FixedDecimal::from_scaled(100_000_000_000_000),
+            BondTaxAttributes::new(ValueAddedTaxStatus::Taxable, IncomeTaxStatus::Taxable),
+        )
+        .unwrap(),
+        AnalyticsMode::YieldIn,
+        input_value,
+    )
+    .unwrap()
+}
+
+fn evidence_object(role: AnalysisInputRole, binding: ObjectBinding) -> AnalysisInputBinding {
+    AnalysisInputBinding {
+        role: role as i32,
+        owner: Some(ProtoOwnerRef {
+            tenant_id: Some(proto_id('0')),
+            owner_id: Some(proto_id('1')),
+        }),
+        binding: Some(analysis_input_binding::Binding::Object(binding)),
+        observed_at: None,
+        visible_at: None,
+        effective_from: None,
+        effective_to: None,
+    }
+}
+
+fn effective_evidence_object(
+    role: AnalysisInputRole,
+    binding: ObjectBinding,
+) -> AnalysisInputBinding {
+    let mut evidence = evidence_object(role, binding);
+    evidence.effective_from = Some(proto_time("2005-01-01T00:00:00+08:00", "2005-01-01"));
+    evidence.effective_to = Some(proto_time("2035-12-31T23:59:59+08:00", "2035-12-31"));
+    evidence
+}
+
+fn supplied_metadata(
+    request: &AnalyzeBondRequest,
+    input: &ficant_domain::analytics::BondAnalyticsInput,
+) -> ResultMetadata {
+    let mut consumed_inputs = vec![
+        evidence_object(AnalysisInputRole::Subject, object('S')),
+        evidence_object(AnalysisInputRole::Bond, object('N')),
+        effective_evidence_object(AnalysisInputRole::Calendar, object('C')),
+        effective_evidence_object(AnalysisInputRole::TaxRulePack, object('K')),
+        AnalysisInputBinding {
+            role: AnalysisInputRole::DataSnapshot as i32,
+            owner: Some(ProtoOwnerRef {
+                tenant_id: Some(proto_id('0')),
+                owner_id: Some(proto_id('1')),
+            }),
+            binding: Some(analysis_input_binding::Binding::Snapshot(snapshot('M'))),
+            observed_at: Some(valuation_at()),
+            visible_at: Some(valuation_at()),
+            effective_from: None,
+            effective_to: None,
+        },
+    ];
+    for suffix in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J'] {
+        consumed_inputs.push(evidence_object(AnalysisInputRole::Unit, object(suffix)));
+    }
+    consumed_inputs.sort_by_key(prost::Message::encode_to_vec);
+    RatesGrpcService::canonical_materialized_bond_metadata(
+        request,
+        input,
+        FixedDecimal::ZERO,
+        &consumed_inputs,
+    )
+    .unwrap()
 }
 
 struct Fixture {
     graph: ResearchGraph,
     node: ResearchNode,
     executor: CgbBondAnalyticsNativeNode,
-    external: ExecutionExternalInput,
+    request_external: ExecutionExternalInput,
+    materialized_external: ExecutionExternalInput,
     identity: ReproducibilityIdentity,
 }
 
-fn fixture(request: &AnalyzeBondRequest) -> Fixture {
+fn fixture(
+    request: &AnalyzeBondRequest,
+    materialized: &ficant_domain::analytics::BondAnalyticsInput,
+) -> Fixture {
     let node_id = id('A');
-    let contract = cgb_bond_analytics_contract().unwrap();
-    let node = ResearchNode::new(node_id.clone(), contract, hash(b"no-parameters"));
+    let node = ResearchNode::new(
+        node_id.clone(),
+        cgb_bond_analytics_contract().unwrap(),
+        hash(b"no-parameters"),
+    );
     let graph = ResearchGraph::new_with_external_inputs(
         ResearchGraphInput {
-            graph_id: id('G'),
+            graph_id: id('P'),
             version: Version::new(1).unwrap(),
-            owner: OwnerRef::new(id('T'), id('W')),
+            owner: OwnerRef::new(id('0'), id('1')),
             nodes: vec![node.clone()],
             edges: vec![],
         },
-        vec![GraphExternalInput::new("bond-request", analyze_bond_request_type()).unwrap()],
+        vec![
+            GraphExternalInput::new("bond-request", analyze_bond_request_type()).unwrap(),
+            GraphExternalInput::new("materialized-bond-input", materialized_bond_input_type())
+                .unwrap(),
+        ],
         vec![
             GraphExternalInputBinding::new("bond-request", node_id.clone(), REQUEST_PORT).unwrap(),
+            GraphExternalInputBinding::new(
+                "materialized-bond-input",
+                node_id.clone(),
+                MATERIALIZED_INPUT_PORT,
+            )
+            .unwrap(),
         ],
     )
     .unwrap();
     let executor = CgbBondAnalyticsNativeNode::new(node_id.clone()).unwrap();
-    let payload = request.encode_to_vec();
-    let external =
-        ExecutionExternalInput::new("bond-request", analyze_bond_request_type(), payload).unwrap();
-    let context = request.context.as_ref().unwrap();
-    let snapshot_hash = ContentHash::from_bytes(
-        &context
-            .data_snapshot
-            .as_ref()
-            .unwrap()
-            .content_hash
-            .as_ref()
-            .unwrap()
-            .value,
+    let request_external = ExecutionExternalInput::new(
+        "bond-request",
+        analyze_bond_request_type(),
+        request.encode_to_vec(),
     )
     .unwrap();
-    let rule = context.rule_pack.as_ref().unwrap();
-    let rule_ref = rule.object.as_ref().unwrap();
+    let materialized_external = ExecutionExternalInput::new(
+        "materialized-bond-input",
+        materialized_bond_input_type(),
+        encode_materialized_bond_input(
+            materialized,
+            FixedDecimal::ZERO,
+            &supplied_metadata(request, materialized),
+        ),
+    )
+    .unwrap();
+    let rule = request.tax_rule_pack.as_ref().unwrap();
     let identity = ReproducibilityIdentity::new(
         &graph,
-        ReproducibilityIdentityInput {
-            external_inputs: vec![external.clone()],
-            data_snapshot_hash: snapshot_hash,
-            universe_snapshot_hash: hash(b"universe"),
-            parameters_hash: hash(b"parameters"),
-            runtime_image_digest: hash(b"runtime"),
-            environment_digest: hash(b"environment"),
-            seed: 7,
-            rule_pack_bindings: vec![RulePackBinding {
-                rule_pack_id: rule_ref.id.as_ref().unwrap().value.clone(),
-                version: Version::new(rule_ref.version).unwrap(),
-                content_hash: ContentHash::from_bytes(&rule.content_hash.as_ref().unwrap().value)
-                    .unwrap(),
-            }],
-            node_implementations: vec![NodeImplementation {
-                node_id,
-                implementation_digest: executor.implementation_digest().clone(),
-            }],
-        },
+        identity_input(
+            &executor,
+            node_id,
+            vec![request_external.clone(), materialized_external.clone()],
+            rule,
+        ),
     )
     .unwrap();
     Fixture {
         graph,
         node,
         executor,
-        external,
+        request_external,
+        materialized_external,
         identity,
     }
+}
+
+fn identity_input(
+    executor: &CgbBondAnalyticsNativeNode,
+    node_id: Ulid,
+    external_inputs: Vec<ExecutionExternalInput>,
+    rule: &ObjectBinding,
+) -> ReproducibilityIdentityInput {
+    ReproducibilityIdentityInput {
+        external_inputs,
+        data_snapshot_hash: hash(b"object-M"),
+        universe_snapshot_hash: hash(b"universe"),
+        parameters_hash: hash(b"parameters"),
+        runtime_image_digest: hash(b"runtime"),
+        environment_digest: hash(b"environment"),
+        seed: 7,
+        rule_pack_bindings: vec![RulePackBinding {
+            rule_pack_id: rule
+                .object
+                .as_ref()
+                .unwrap()
+                .id
+                .as_ref()
+                .unwrap()
+                .value
+                .clone(),
+            version: Version::new(rule.object.as_ref().unwrap().version).unwrap(),
+            content_hash: ContentHash::from_bytes(&rule.content_hash.as_ref().unwrap().value)
+                .unwrap(),
+        }],
+        node_implementations: vec![NodeImplementation {
+            node_id,
+            implementation_digest: executor.implementation_digest().clone(),
+        }],
+    }
+}
+
+fn port_inputs(fixture: &Fixture) -> Vec<NativePortValue> {
+    vec![
+        NativePortValue::new(
+            REQUEST_PORT,
+            analyze_bond_request_type(),
+            fixture.request_external.payload().to_vec(),
+        )
+        .unwrap(),
+        NativePortValue::new(
+            MATERIALIZED_INPUT_PORT,
+            materialized_bond_input_type(),
+            fixture.materialized_external.payload().to_vec(),
+        )
+        .unwrap(),
+    ]
 }
 
 fn execute(fixture: &Fixture) -> Result<ficant_runtime::NativeNodeExecution, RuntimeError> {
@@ -241,27 +416,27 @@ fn execute(fixture: &Fixture) -> Result<ficant_runtime::NativeNodeExecution, Run
         &fixture.node,
         &fixture.identity,
         &fixture.executor,
-        vec![NativePortValue::new(
-            REQUEST_PORT,
-            analyze_bond_request_type(),
-            fixture.external.payload().to_vec(),
-        )?],
-        vec![fixture.external.content_hash().clone()],
+        port_inputs(fixture),
+        vec![
+            fixture.request_external.content_hash().clone(),
+            fixture.materialized_external.content_hash().clone(),
+        ],
     )
 }
 
 #[test]
-fn golden_cgb_node_matches_the_direct_native_api_path() {
+fn golden_cgb_node_calculates_from_exact_materialized_input() {
     let request = golden_request();
-    let direct = analyze_bond_request(&NativeBondAnalyticsEngine, &request).unwrap();
-    let fixture = fixture(&request);
+    let input = materialized_input(FixedDecimal::from_scaled(15_500_000_000));
+    let fixture = fixture(&request, &input);
     let execution = execute(&fixture).unwrap();
     let decoded = AnalyzeBondResult::decode(execution.outputs()[0].payload()).unwrap();
 
-    assert_eq!(decoded, direct);
     assert_eq!(decoded.cashflows.len(), 5);
     let measures = decoded.measures.unwrap();
     assert_eq!(measures.clean_price.unwrap().coefficient, "99770427052063");
+    assert!(decoded.after_tax.is_some());
+    assert_eq!(decoded.metadata, Some(supplied_metadata(&request, &input)));
     assert_eq!(
         execution.outputs()[0].content_hash(),
         &ContentHash::digest(execution.outputs()[0].payload())
@@ -270,7 +445,10 @@ fn golden_cgb_node_matches_the_direct_native_api_path() {
 
 #[test]
 fn run_identity_does_not_change_node_output_content() {
-    let fixture = fixture(&golden_request());
+    let fixture = fixture(
+        &golden_request(),
+        &materialized_input(FixedDecimal::from_scaled(15_500_000_000)),
+    );
     let first_instance =
         ExecutionInstanceIdentity::from_reproducibility(id('R'), fixture.identity.clone());
     let second_instance =
@@ -279,30 +457,22 @@ fn run_identity_does_not_change_node_output_content() {
         &fixture.node,
         first_instance.reproducibility(),
         &fixture.executor,
+        port_inputs(&fixture),
         vec![
-            NativePortValue::new(
-                REQUEST_PORT,
-                analyze_bond_request_type(),
-                fixture.external.payload().to_vec(),
-            )
-            .unwrap(),
+            fixture.request_external.content_hash().clone(),
+            fixture.materialized_external.content_hash().clone(),
         ],
-        vec![fixture.external.content_hash().clone()],
     )
     .unwrap();
     let second = execute_native_node(
         &fixture.node,
         second_instance.reproducibility(),
         &fixture.executor,
+        port_inputs(&fixture),
         vec![
-            NativePortValue::new(
-                REQUEST_PORT,
-                analyze_bond_request_type(),
-                fixture.external.payload().to_vec(),
-            )
-            .unwrap(),
+            fixture.request_external.content_hash().clone(),
+            fixture.materialized_external.content_hash().clone(),
         ],
-        vec![fixture.external.content_hash().clone()],
     )
     .unwrap();
     assert_ne!(first_instance.digest(), second_instance.digest());
@@ -314,81 +484,113 @@ fn run_identity_does_not_change_node_output_content() {
 }
 
 #[test]
-fn missing_external_and_type_or_payload_drift_fail_closed() {
+fn missing_or_drifted_materialized_port_fails_closed() {
     let request = golden_request();
-    let fixture = fixture(&request);
-    let mut missing = ReproducibilityIdentityInput {
-        external_inputs: vec![],
-        data_snapshot_hash: fixture.identity.data_snapshot_hash().clone(),
-        universe_snapshot_hash: hash(b"universe"),
-        parameters_hash: hash(b"parameters"),
-        runtime_image_digest: hash(b"runtime"),
-        environment_digest: hash(b"environment"),
-        seed: 7,
-        rule_pack_bindings: fixture.identity.rule_pack_bindings().to_vec(),
-        node_implementations: fixture.identity.node_implementations().to_vec(),
-    };
+    let input = materialized_input(FixedDecimal::from_scaled(15_500_000_000));
+    let fixture = fixture(&request, &input);
+    let rule = request.tax_rule_pack.as_ref().unwrap();
     assert_eq!(
-        ReproducibilityIdentity::new(&fixture.graph, missing.clone()),
+        ReproducibilityIdentity::new(
+            &fixture.graph,
+            identity_input(
+                &fixture.executor,
+                fixture.node.node_id().clone(),
+                vec![fixture.request_external.clone()],
+                rule,
+            ),
+        ),
         Err(RuntimeError::Domain(DomainErrorCode::InvalidValue))
     );
-    missing.external_inputs = vec![fixture.external.clone()];
+    assert_eq!(
+        execute_native_node(
+            &fixture.node,
+            &fixture.identity,
+            &fixture.executor,
+            vec![port_inputs(&fixture).remove(0)],
+            vec![],
+        ),
+        Err(RuntimeError::Domain(DomainErrorCode::InvalidValue))
+    );
+    let mut drifted = fixture.materialized_external.payload().to_vec();
+    drifted.push(0);
+    assert_eq!(
+        execute_native_node(
+            &fixture.node,
+            &fixture.identity,
+            &fixture.executor,
+            vec![
+                port_inputs(&fixture).remove(0),
+                NativePortValue::new(
+                    MATERIALIZED_INPUT_PORT,
+                    materialized_bond_input_type(),
+                    drifted,
+                )
+                .unwrap(),
+            ],
+            vec![],
+        ),
+        Err(RuntimeError::Domain(DomainErrorCode::ContentHashMismatch))
+    );
 
-    let wrong_type = TypedValue::new(
-        "ficant.test.wrong",
-        Version::new(1).unwrap(),
-        hash(b"wrong-schema"),
+    let changed_input = materialized_input(FixedDecimal::from_scaled(16_000_000_000));
+    let original_input = materialized_input(FixedDecimal::from_scaled(15_500_000_000));
+    let original_request = golden_request();
+    let changed_external = ExecutionExternalInput::new(
+        "materialized-bond-input",
+        materialized_bond_input_type(),
+        encode_materialized_bond_input(
+            &changed_input,
+            FixedDecimal::ZERO,
+            &supplied_metadata(&original_request, &original_input),
+        ),
+    )
+    .unwrap();
+    let changed_identity = ReproducibilityIdentity::new(
+        &fixture.graph,
+        identity_input(
+            &fixture.executor,
+            fixture.node.node_id().clone(),
+            vec![fixture.request_external.clone(), changed_external.clone()],
+            rule,
+        ),
     )
     .unwrap();
     assert_eq!(
         execute_native_node(
             &fixture.node,
-            &fixture.identity,
+            &changed_identity,
             &fixture.executor,
-            vec![NativePortValue::new(REQUEST_PORT, wrong_type, request.encode_to_vec()).unwrap()],
-            vec![]
-        ),
-        Err(RuntimeError::Domain(DomainErrorCode::InvalidValue))
-    );
-    let mut changed = request.encode_to_vec();
-    changed.push(0);
-    assert_eq!(
-        execute_native_node(
-            &fixture.node,
-            &fixture.identity,
-            &fixture.executor,
-            vec![NativePortValue::new(REQUEST_PORT, analyze_bond_request_type(), changed).unwrap()],
-            vec![]
+            vec![
+                port_inputs(&fixture).remove(0),
+                NativePortValue::new(
+                    MATERIALIZED_INPUT_PORT,
+                    materialized_bond_input_type(),
+                    changed_external.payload().to_vec(),
+                )
+                .unwrap(),
+            ],
+            vec![
+                fixture.request_external.content_hash().clone(),
+                changed_external.content_hash().clone(),
+            ],
         ),
         Err(RuntimeError::Domain(DomainErrorCode::ContentHashMismatch))
     );
 }
 
 #[test]
-fn snapshot_rule_and_algorithm_drift_fail_closed() {
+fn public_snapshot_rule_and_algorithm_drift_fail_closed() {
     let original = golden_request();
     for mutation in 0..3 {
         let mut changed = original.clone();
         match mutation {
             0 => {
-                changed
-                    .context
-                    .as_mut()
-                    .unwrap()
-                    .data_snapshot
-                    .as_mut()
-                    .unwrap()
-                    .content_hash = Some(proto_hash(&hash(b"changed-snapshot")));
+                changed.data_snapshot.as_mut().unwrap().content_hash =
+                    Some(proto_hash(&hash(b"changed-snapshot")));
             }
             1 => {
-                changed
-                    .context
-                    .as_mut()
-                    .unwrap()
-                    .rule_pack
-                    .as_mut()
-                    .unwrap()
-                    .content_hash = Some(proto_hash(&hash(b"changed-rule")));
+                changed.tax_rule_pack.as_mut().unwrap().content_hash =
+                    Some(proto_hash(&hash(b"changed-rule")));
             }
             _ => {
                 changed
@@ -401,39 +603,43 @@ fn snapshot_rule_and_algorithm_drift_fail_closed() {
                     .algorithm_id = "ficant.wrong.algorithm".to_owned();
             }
         }
-        let original_fixture = fixture(&original);
-        let changed_external = ExecutionExternalInput::new(
+        let base = fixture(
+            &original,
+            &materialized_input(FixedDecimal::from_scaled(15_500_000_000)),
+        );
+        let changed_request = ExecutionExternalInput::new(
             "bond-request",
             analyze_bond_request_type(),
             changed.encode_to_vec(),
         )
         .unwrap();
-        let identity_input = ReproducibilityIdentityInput {
-            external_inputs: vec![changed_external.clone()],
-            data_snapshot_hash: original_fixture.identity.data_snapshot_hash().clone(),
-            universe_snapshot_hash: hash(b"universe"),
-            parameters_hash: hash(b"parameters"),
-            runtime_image_digest: hash(b"runtime"),
-            environment_digest: hash(b"environment"),
-            seed: 7,
-            rule_pack_bindings: original_fixture.identity.rule_pack_bindings().to_vec(),
-            node_implementations: original_fixture.identity.node_implementations().to_vec(),
-        };
-        let identity =
-            ReproducibilityIdentity::new(&original_fixture.graph, identity_input.clone()).unwrap();
+        let identity = ReproducibilityIdentity::new(
+            &base.graph,
+            identity_input(
+                &base.executor,
+                base.node.node_id().clone(),
+                vec![changed_request.clone(), base.materialized_external.clone()],
+                original.tax_rule_pack.as_ref().unwrap(),
+            ),
+        )
+        .unwrap();
         let outcome = execute_native_node(
-            &original_fixture.node,
+            &base.node,
             &identity,
-            &original_fixture.executor,
+            &base.executor,
             vec![
                 NativePortValue::new(
                     REQUEST_PORT,
                     analyze_bond_request_type(),
-                    changed_external.payload().to_vec(),
+                    changed_request.payload().to_vec(),
                 )
                 .unwrap(),
+                port_inputs(&base).remove(1),
             ],
-            vec![changed_external.content_hash().clone()],
+            vec![
+                changed_request.content_hash().clone(),
+                base.materialized_external.content_hash().clone(),
+            ],
         );
         assert!(outcome.is_err(), "mutation {mutation} must fail closed");
     }
@@ -443,6 +649,7 @@ fn snapshot_rule_and_algorithm_drift_fail_closed() {
 #[allow(clippy::too_many_lines)]
 fn real_bond_analysis_flows_through_typed_risk_summary_dependency() {
     let request = golden_request();
+    let input = materialized_input(FixedDecimal::from_scaled(15_500_000_000));
     let analysis_id = id('A');
     let risk_id = id('B');
     let analysis = ResearchNode::new(
@@ -457,9 +664,9 @@ fn real_bond_analysis_flows_through_typed_risk_summary_dependency() {
     );
     let graph = ResearchGraph::new_with_external_inputs(
         ResearchGraphInput {
-            graph_id: id('G'),
+            graph_id: id('P'),
             version: Version::new(1).unwrap(),
-            owner: OwnerRef::new(id('T'), id('W')),
+            owner: OwnerRef::new(id('0'), id('1')),
             nodes: vec![risk.clone(), analysis.clone()],
             edges: vec![
                 ResearchEdge::new(
@@ -471,67 +678,52 @@ fn real_bond_analysis_flows_through_typed_risk_summary_dependency() {
                 .unwrap(),
             ],
         },
-        vec![GraphExternalInput::new("bond-request", analyze_bond_request_type()).unwrap()],
+        vec![
+            GraphExternalInput::new("bond-request", analyze_bond_request_type()).unwrap(),
+            GraphExternalInput::new("materialized-bond-input", materialized_bond_input_type())
+                .unwrap(),
+        ],
         vec![
             GraphExternalInputBinding::new("bond-request", analysis_id.clone(), REQUEST_PORT)
                 .unwrap(),
+            GraphExternalInputBinding::new(
+                "materialized-bond-input",
+                analysis_id.clone(),
+                MATERIALIZED_INPUT_PORT,
+            )
+            .unwrap(),
         ],
     )
     .unwrap();
     let analytics = CgbBondAnalyticsNativeNode::new(analysis_id.clone()).unwrap();
     let risk_summary = CgbBondRiskSummaryNativeNode::new(risk_id.clone()).unwrap();
-    let payload = request.encode_to_vec();
-    let external =
-        ExecutionExternalInput::new("bond-request", analyze_bond_request_type(), payload).unwrap();
-    let context = request.context.as_ref().unwrap();
-    let rule = context.rule_pack.as_ref().unwrap();
-    let identity = ReproducibilityIdentity::new(
-        &graph,
-        ReproducibilityIdentityInput {
-            external_inputs: vec![external.clone()],
-            data_snapshot_hash: ContentHash::from_bytes(
-                &context
-                    .data_snapshot
-                    .as_ref()
-                    .unwrap()
-                    .content_hash
-                    .as_ref()
-                    .unwrap()
-                    .value,
-            )
-            .unwrap(),
-            universe_snapshot_hash: hash(b"universe"),
-            parameters_hash: hash(b"parameters"),
-            runtime_image_digest: hash(b"runtime"),
-            environment_digest: hash(b"environment"),
-            seed: 7,
-            rule_pack_bindings: vec![RulePackBinding {
-                rule_pack_id: rule
-                    .object
-                    .as_ref()
-                    .unwrap()
-                    .id
-                    .as_ref()
-                    .unwrap()
-                    .value
-                    .clone(),
-                version: Version::new(rule.object.as_ref().unwrap().version).unwrap(),
-                content_hash: ContentHash::from_bytes(&rule.content_hash.as_ref().unwrap().value)
-                    .unwrap(),
-            }],
-            node_implementations: vec![
-                NodeImplementation {
-                    node_id: analysis_id,
-                    implementation_digest: analytics.implementation_digest().clone(),
-                },
-                NodeImplementation {
-                    node_id: risk_id,
-                    implementation_digest: risk_summary.implementation_digest().clone(),
-                },
-            ],
-        },
+    let request_external = ExecutionExternalInput::new(
+        "bond-request",
+        analyze_bond_request_type(),
+        request.encode_to_vec(),
     )
     .unwrap();
+    let materialized_external = ExecutionExternalInput::new(
+        "materialized-bond-input",
+        materialized_bond_input_type(),
+        encode_materialized_bond_input(
+            &input,
+            FixedDecimal::ZERO,
+            &supplied_metadata(&request, &input),
+        ),
+    )
+    .unwrap();
+    let mut identity_data = identity_input(
+        &analytics,
+        analysis_id,
+        vec![request_external.clone(), materialized_external.clone()],
+        request.tax_rule_pack.as_ref().unwrap(),
+    );
+    identity_data.node_implementations.push(NodeImplementation {
+        node_id: risk_id,
+        implementation_digest: risk_summary.implementation_digest().clone(),
+    });
+    let identity = ReproducibilityIdentity::new(&graph, identity_data).unwrap();
 
     let first = execute_native_node(
         &analysis,
@@ -541,11 +733,20 @@ fn real_bond_analysis_flows_through_typed_risk_summary_dependency() {
             NativePortValue::new(
                 REQUEST_PORT,
                 analyze_bond_request_type(),
-                external.payload().to_vec(),
+                request_external.payload().to_vec(),
+            )
+            .unwrap(),
+            NativePortValue::new(
+                MATERIALIZED_INPUT_PORT,
+                materialized_bond_input_type(),
+                materialized_external.payload().to_vec(),
             )
             .unwrap(),
         ],
-        vec![external.content_hash().clone()],
+        vec![
+            request_external.content_hash().clone(),
+            materialized_external.content_hash().clone(),
+        ],
     )
     .unwrap();
     let second = execute_native_node(
@@ -566,11 +767,6 @@ fn real_bond_analysis_flows_through_typed_risk_summary_dependency() {
     let summary = RiskSummary::decode(second.outputs()[0].payload()).unwrap();
     let source = AnalyzeBondResult::decode(first.outputs()[0].payload()).unwrap();
     let measures = source.measures.unwrap();
-    assert_ne!(
-        first.outputs()[0].content_hash(),
-        first.artifact().output_envelope_hash(),
-        "the per-port payload hash is distinct from the canonical output-envelope Artifact hash"
-    );
     assert_eq!(second.outputs()[0].port_name(), RISK_OUTPUT_PORT);
     assert_eq!(summary.modified_duration, measures.modified_duration);
     assert_eq!(summary.convexity, measures.convexity);
@@ -578,4 +774,30 @@ fn real_bond_analysis_flows_through_typed_risk_summary_dependency() {
     assert_eq!(summary.source_metadata, source.metadata);
     assert!(trusted_native_node(&analysis).is_ok());
     assert!(trusted_native_node(&risk).is_ok());
+}
+
+#[test]
+fn wrong_materialized_type_is_rejected_by_contract() {
+    let fixture = fixture(
+        &golden_request(),
+        &materialized_input(FixedDecimal::from_scaled(15_500_000_000)),
+    );
+    let wrong_type = TypedValue::new(
+        "ficant.test.wrong",
+        Version::new(1).unwrap(),
+        hash(b"wrong-schema"),
+    )
+    .unwrap();
+    let mut inputs = port_inputs(&fixture);
+    inputs[1] = NativePortValue::new(MATERIALIZED_INPUT_PORT, wrong_type, vec![1]).unwrap();
+    assert_eq!(
+        execute_native_node(
+            &fixture.node,
+            &fixture.identity,
+            &fixture.executor,
+            inputs,
+            vec![],
+        ),
+        Err(RuntimeError::Domain(DomainErrorCode::InvalidValue))
+    );
 }

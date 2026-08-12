@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import http.client
 import json
 import os
@@ -14,8 +13,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from ficant.core.v1 import common_pb2, subject_pb2
-from ficant.market.v1 import definition_pb2, funding_rule_pb2, tax_rule_pb2
+from ficant.core.v1 import common_pb2
 from ficant.rates.v1 import analytics_pb2 as rates
 from ficant_sdk import RatesClient
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -23,7 +21,6 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GOLDEN_ROOT = REPO_ROOT / "tests" / "golden-cases" / "china-rates"
-CGB_FUTURES_RULE_PACK = REPO_ROOT / "domain-packs" / "cgb-futures" / "cgb-futures-v1.bin"
 ULID_PREFIX = "01ARZ3NDEKTSV4RRFFQ69G5FA"
 TOKEN = "phase2e-python-sdk-test-token"
 KEY = "3031323334353637383961626364656630313233343536373839616263646566"
@@ -33,76 +30,40 @@ def _ulid(suffix: str) -> common_pb2.Ulid:
     return common_pb2.Ulid(value=f"{ULID_PREFIX}{suffix}")
 
 
-def _hash(label: str) -> common_pb2.Sha256:
-    return common_pb2.Sha256(value=hashlib.sha256(label.encode()).digest())
+def _fixture_hash(kind: str, suffix: str) -> common_pb2.Sha256:
+    key = f"FICANT_PHASE2E_{kind}_{suffix}_SHA256"
+    try:
+        value = bytes.fromhex(os.environ[key])
+    except (KeyError, ValueError) as error:
+        raise RuntimeError(f"missing or invalid exact Phase 2E binding: {key}") from error
+    if len(value) != 32:
+        raise RuntimeError(f"exact Phase 2E binding is not SHA-256: {key}")
+    return common_pb2.Sha256(value=value)
 
 
 def _object(suffix: str) -> rates.ObjectBinding:
     return rates.ObjectBinding(
         object=common_pb2.VersionRef(id=_ulid(suffix), version=1),
-        content_hash=_hash(f"object-{suffix}"),
+        content_hash=_fixture_hash("OBJECT", suffix),
     )
 
 
-def _cgb_futures_rule_pack() -> rates.ObjectBinding:
-    return rates.ObjectBinding(
-        object=common_pb2.VersionRef(id=_ulid("X"), version=1),
-        content_hash=common_pb2.Sha256(
-            value=hashlib.sha256(CGB_FUTURES_RULE_PACK.read_bytes()).digest()
-        ),
+def _snapshot(suffix: str) -> rates.SnapshotBinding:
+    return rates.SnapshotBinding(
+        snapshot_id=_ulid(suffix),
+        content_hash=_fixture_hash("SNAPSHOT", suffix),
+    )
+
+
+def _artifact(suffix: str) -> rates.ArtifactBinding:
+    return rates.ArtifactBinding(
+        artifact_id=_ulid(suffix),
+        content_hash=_fixture_hash("ARTIFACT", suffix),
     )
 
 
 def _subject_ref() -> common_pb2.VersionRef:
     return common_pb2.VersionRef(id=_ulid("S"), version=1)
-
-
-def _funding_rule_pack() -> rates.ObjectBinding:
-    payload = funding_rule_pb2.FundingRulePack(
-        rates=[
-            funding_rule_pb2.FundingTierRate(
-                funding_tier=subject_pb2.FUNDING_TIER_DR_AVAILABLE,
-                annual_financing_rate=_decimal("0.018", UNITS.rate),
-            ),
-            funding_rule_pb2.FundingTierRate(
-                funding_tier=subject_pb2.FUNDING_TIER_R_ONLY,
-                annual_financing_rate=_decimal("0.025", UNITS.rate),
-            ),
-        ]
-    )
-    return rates.ObjectBinding(
-        object=common_pb2.VersionRef(id=_ulid("F"), version=1),
-        content_hash=common_pb2.Sha256(
-            value=hashlib.sha256(payload.SerializeToString(deterministic=True)).digest()
-        ),
-    )
-
-
-def _tax_rule_pack() -> rates.ObjectBinding:
-    payload = tax_rule_pb2.TaxRulePack(
-        coupon_rules=[
-            tax_rule_pb2.BondCouponTaxRule(
-                first_issue_from="2000-01-01",
-                tax_attributes=definition_pb2.BondTaxAttributes(
-                    value_added_tax_status=definition_pb2.VALUE_ADDED_TAX_STATUS_TAXABLE,
-                    income_tax_status=definition_pb2.INCOME_TAX_STATUS_TAXABLE,
-                ),
-                rates=[
-                    tax_rule_pb2.SubjectCouponTaxRate(
-                        value_added_tax_profile="synthetic-vat",
-                        income_tax_profile="synthetic-income",
-                        coupon_tax_rate=_decimal("0", UNITS.rate),
-                    )
-                ],
-            )
-        ]
-    )
-    return rates.ObjectBinding(
-        object=common_pb2.VersionRef(id=_ulid("T"), version=1),
-        content_hash=common_pb2.Sha256(
-            value=hashlib.sha256(payload.SerializeToString(deterministic=True)).digest()
-        ),
-    )
 
 
 def _unit(suffix: str) -> common_pb2.UnitRef:
@@ -150,17 +111,10 @@ def _decimal_value(value: common_pb2.DecimalValue) -> Decimal:
 def _context(
     algorithm_id: str,
     convention: str,
-    *,
-    rule_suffix: str,
-    snapshot_suffix: str,
-    rule_pack: rates.ObjectBinding | None = None,
-    funding_rule_pack: rates.ObjectBinding | None = None,
-    tax_rule_pack: rates.ObjectBinding | None = None,
+    knowledge_at: common_pb2.MarketTime,
 ) -> rates.AnalysisContext:
     return rates.AnalysisContext(
         owner=common_pb2.OwnerRef(tenant_id=_ulid("0"), owner_id=_ulid("1")),
-        rule_pack=rule_pack or _object(rule_suffix),
-        data_snapshot=_object(snapshot_suffix),
         algorithm=rates.AlgorithmBinding(
             algorithm_id=algorithm_id,
             algorithm_version=1,
@@ -169,8 +123,7 @@ def _context(
         ),
         units=UNITS,
         subject_ref=_subject_ref(),
-        funding_rule_pack=funding_rule_pack,
-        tax_rule_pack=tax_rule_pack,
+        knowledge_at=knowledge_at,
     )
 
 
@@ -181,64 +134,6 @@ def _market_time(iso_value: str, local_date: str) -> common_pb2.MarketTime:
         instant=timestamp,
         market_timezone="Asia/Shanghai",
         local_trading_date=local_date,
-    )
-
-
-def _terms(value: dict[str, object]) -> rates.BondTerms:
-    frequency = (
-        rates.COUPON_FREQUENCY_ANNUAL
-        if int(value["frequency"]) == 1
-        else rates.COUPON_FREQUENCY_SEMIANNUAL
-    )
-    return rates.BondTerms(
-        first_issue_date=str(value["issue_date"]),
-        current_issue_date=str(value["issue_date"]),
-        maturity_date=str(value["maturity_date"]),
-        frequency=frequency,
-        coupon_rate=_decimal(
-            str(value.get("coupon_rate", value.get("coupon_rate_decimal"))), UNITS.rate
-        ),
-        face_amount=_decimal(
-            str(value.get("face_value", "100.000000000000")),
-            UNITS.currency_amount,
-        ),
-        cumulative_issued_amount=_decimal(
-            str(value.get("face_value", "100.000000000000")),
-            UNITS.currency_amount,
-        ),
-        tax_attributes=definition_pb2.BondTaxAttributes(
-            value_added_tax_status=definition_pb2.VALUE_ADDED_TAX_STATUS_TAXABLE,
-            income_tax_status=definition_pb2.INCOME_TAX_STATUS_TAXABLE,
-        ),
-    )
-
-
-def _calendar(value: dict[str, object]) -> rates.CalendarBinding:
-    return rates.CalendarBinding(
-        calendar_id=str(value["id"]),
-        version=1,
-        content_hash=_hash(f"calendar-{value['id']}"),
-        coverage_start=str(value["coverage_start"]),
-        coverage_end=str(value["coverage_end"]),
-        non_business_days=[str(item) for item in value["non_business_days"]],
-        work_weekends=[str(item) for item in value["work_weekends"]],
-    )
-
-
-def _curve(value: dict[str, object]) -> rates.YieldCurveBinding:
-    return rates.YieldCurveBinding(
-        curve_snapshot=_object("Q"),
-        valuation_date=str(value["valuation_date"]),
-        interpolation=rates.YIELD_CURVE_INTERPOLATION_LINEAR_YIELD,
-        nodes=[
-            rates.YieldCurveNode(
-                maturity_date=str(node["maturity_date"]),
-                yield_to_maturity=_decimal(
-                    str(node["yield_to_maturity"]), UNITS.rate
-                ),
-            )
-            for node in value["curve"]["nodes"]
-        ],
     )
 
 
@@ -259,30 +154,23 @@ def _assert_decimal_fields(
 
 def _bond_request() -> rates.AnalyzeBondRequest:
     fixture = _load("fixtures/bond-260008.IB.json")
-    calendar = {
-        "id": fixture["calendar"],
-        "coverage_start": "2005-01-01",
-        "coverage_end": "2026-12-31",
-        "non_business_days": [],
-        "work_weekends": [],
-    }
+    valuation_at = _market_time(str(fixture["valuation_at"]), "2026-07-13")
     return rates.AnalyzeBondRequest(
         context=_context(
             "ficant.cgb.fixed-rate.reference",
             "cgb-reference-v1",
-            rule_suffix="K",
-            snapshot_suffix="M",
-            tax_rule_pack=_tax_rule_pack(),
+            valuation_at,
         ),
         bond=_object("N"),
-        valuation_at=_market_time(str(fixture["valuation_at"]), "2026-07-13"),
+        valuation_at=valuation_at,
         settlement_date=str(fixture["settlement_date"]),
         calendar_requirement=rates.CALENDAR_REQUIREMENT_REFERENCE_REPLAY,
-        calendar=_calendar(calendar),
-        terms=_terms(fixture),
+        calendar=_object("K"),
         yield_to_maturity=_decimal(
             str(fixture["synthetic_yield_decimal"]), UNITS.rate
         ),
+        data_snapshot=_snapshot("M"),
+        tax_rule_pack=_object("T"),
     )
 
 
@@ -315,20 +203,24 @@ def _assert_bond(client: RatesClient) -> None:
         },
     )
     assert result.metadata.schema_id == "ficant.bond-analytics.result.v1"
-    assert result.metadata.tax_rule_pack.object.id.value == _ulid("T").value
+    tax_input = next(
+        value
+        for value in result.metadata.consumed_inputs
+        if value.role == rates.ANALYSIS_INPUT_ROLE_TAX_RULE_PACK
+    )
+    assert tax_input.object.object.id.value == _ulid("T").value
 
 
 def _assert_curve_and_carry(client: RatesClient) -> None:
     source = _load("phase2b-curve-carry-inputs.json")
     expected = _load("expected/phase2b-curve-carry-v1-expected.json")
-    curve = _curve(source)
+    curve = _snapshot("Q")
     point = client.interpolate_yield_curve(
         rates.InterpolateYieldCurveRequest(
             context=_context(
                 "ficant.cgb.ytm-curve.linear",
                 "cfets-ytm-linear-v1",
-                rule_suffix="R",
-                snapshot_suffix="S",
+                _market_time("2026-07-19T15:00:00+08:00", "2026-07-19"),
             ),
             curve=curve,
             query_date="2027-04-11",
@@ -345,16 +237,13 @@ def _assert_curve_and_carry(client: RatesClient) -> None:
             context=_context(
                 "ficant.cgb.carry-roll.unfunded",
                 "cfets-ytm-carry-roll-v1",
-                rule_suffix="T",
-                snapshot_suffix="V",
+                _market_time("2026-07-19T15:00:00+08:00", "2026-07-19"),
             ),
             bond=_object("W"),
             valuation_at=_market_time("2026-07-19T15:00:00+08:00", "2026-07-19"),
             initial_settlement=carry_case["initial_settlement"],
             horizon_settlement=carry_case["horizon_settlement"],
             calendar_requirement=rates.CALENDAR_REQUIREMENT_REFERENCE_REPLAY,
-            calendar=_calendar(source["calendar"]),
-            terms=_terms(carry_case["bond"]),
             curve=curve,
         )
     )
@@ -394,28 +283,13 @@ def _assert_futures_delivery(client: RatesClient) -> None:
             context=_context(
                 "ficant.cffex.cgb-futures-delivery",
                 "cffex-cgb-futures-delivery-v1",
-                rule_suffix="X",
-                snapshot_suffix="Y",
-                rule_pack=_cgb_futures_rule_pack(),
-                funding_rule_pack=_funding_rule_pack(),
+                _market_time("2026-07-20T15:00:00+08:00", "2026-07-20"),
             ),
             futures_contract=_object("Z"),
             valuation_at=_market_time("2026-07-20T15:00:00+08:00", "2026-07-20"),
             purchase_date=source["purchase_date"],
-            delivery_month_first=source["delivery_month_first"],
-            delivery_date=source["delivery_date"],
-            product=rates.CGB_FUTURES_PRODUCT_T,
-            futures_clean_price=_decimal(source["futures_clean_price"], UNITS.price_per_100),
-            candidates=[
-                rates.FuturesDeliverableCandidate(
-                    bond=_object(suffix),
-                    terms=_terms(candidate),
-                    spot_clean_price=_decimal(
-                        candidate["spot_clean_price"], UNITS.price_per_100
-                    ),
-                )
-                for candidate, suffix in zip(candidates, ("2", "3", "4"), strict=True)
-            ],
+            data_snapshot=_snapshot("Y"),
+            funding_rule_pack=_object("V"),
         )
     )
     assert result.ctd_index == 1
@@ -426,27 +300,19 @@ def _assert_futures_delivery(client: RatesClient) -> None:
 
 
 def _assert_futures_hedge(client: RatesClient) -> None:
-    source = _load("phase2d-futures-hedge-inputs.json")
     expected = _load("expected/phase2d-futures-hedge-v1-expected.json")
-    case = source["cases"][0]
     result = client.analyze_futures_hedge(
         rates.AnalyzeFuturesHedgeRequest(
             context=_context(
                 "ficant.cffex.cgb-futures-dv01-hedge",
                 "cffex-cgb-futures-dv01-hedge-v1",
-                rule_suffix="5",
-                snapshot_suffix="6",
+                _market_time("2026-07-20T15:00:00+08:00", "2026-07-20"),
             ),
-            target_risk_artifact=_object("7"),
-            delivery_artifact=_object("8"),
-            ctd_analytics_artifact=_object("9"),
+            target_risk_artifact=_artifact("7"),
+            delivery_artifact=_artifact("8"),
+            ctd_analytics_artifact=_artifact("9"),
             futures_contract=_object("P"),
-            ctd_bond=_object("R"),
             valuation_at=_market_time("2026-07-20T15:00:00+08:00", "2026-07-20"),
-            product=rates.CGB_FUTURES_PRODUCT_TS,
-            target_dv01=_decimal(case["target_dv01"], UNITS.dv01),
-            ctd_dv01_per_100=_decimal(case["ctd_dv01_per_100"], UNITS.dv01_per_100),
-            conversion_factor=_decimal(case["conversion_factor"], UNITS.dimensionless),
         )
     )
     _assert_decimal_fields(

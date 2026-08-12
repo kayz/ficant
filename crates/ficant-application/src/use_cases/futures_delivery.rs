@@ -707,7 +707,6 @@ impl<'a> MaterializeRegisteredFuturesDelivery<'a> {
         {
             return Err(lineage_incomplete());
         }
-
         let product = self.parser.parse_product_code(product_code)?;
         validate_delivery_rule_pack(scope, &rule_binding, valuation_at, &rule_pack, self.parser)?;
         let rule = self.parser.parse_for_portfolio_risk(content, product)?;
@@ -1247,7 +1246,10 @@ impl<'a> PublishFuturesDelivery<'a> {
         let first = first_input(inputs)?;
         scope.authorize(first.owner())?;
         let result = CalculateFuturesDeliveryBasket::new(self.engine).execute(inputs)?;
-        let encoded = self.codec.encode(&result).map_err(map_analytics_error)?;
+        let encoded = self
+            .codec
+            .encode_self_describing(&result)
+            .map_err(map_analytics_error)?;
         let expected_hash = encoded.content_hash().clone();
         let expected_size = encoded.size();
         let stage = self
@@ -1389,7 +1391,7 @@ impl<'a> ReplayFuturesDelivery<'a> {
         }
         let replay = self
             .codec
-            .encode(&recalculated)
+            .encode_self_describing(&recalculated)
             .map_err(map_analytics_error)?;
         if replay.content_hash() != artifact.content_hash()
             || replay.size() != artifact.blob_size()

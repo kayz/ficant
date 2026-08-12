@@ -77,11 +77,11 @@ total_return = carry + roll_down
 
 结果绑定目标 Risk Artifact、Delivery Artifact、CTD Analytics Artifact、FuturesContract、CTD Bond、RulePack 和 DataSnapshot 七段血缘，并贯通独立 Decimal Oracle、C++20/C ABI/Rust、确定性 Arrow 以及真实 PostgreSQL 16 + Ceph RGW 发布、重启重放和篡改失败关闭。该方法只处理单一 CTD 的平行 1bp 一阶风险，不是关键期限或多合约曲线风险优化，也不包含基差、CTD 切换、凸性、流动性和动态再平衡风险。
 
-## 2026-07 / Phase 2E 已落地 Python SDK 一致性闭环
+## 2026-08 / R5D 已落地 Rates 精确输入物化
 
-当前实现新增 `ficant.rates.v1.RatesAnalyticsService` 五个一元 RPC 和可安装的 `ficant-sdk`。Python 只消费由 `interface/` 确定性生成的 Protobuf/gRPC 类型，通过认证后的 `ficant-server` 调用 Phase 2A–2D 的真实 Rust application 与 C++ 数值 provider；它不重写算法，不直连 PostgreSQL、Ceph RGW 或 C ABI。
+当前实现保留 `ficant.rates.v1.RatesAnalyticsService` 五个一元 RPC 和可安装的 `ficant-sdk`。Python 只消费由 `interface/` 确定性生成的 Protobuf/gRPC 类型，通过认证后的 `ficant-server` 调用 Phase 2A–2D 的真实 Rust application 与 C++ 数值 provider；它不重写算法，不直连 PostgreSQL、Ceph RGW 或 C ABI。
 
-每个请求显式绑定 owner、DataSnapshot、MarketRulePack、算法/约定/ABI 版本和对应市场对象，服务端要求 `rates:analyze` scope 并在进入 provider 前失败关闭非法身份与输入。真实服务进程上的跨语言 Golden Case 已覆盖现券、曲线、Carry/Roll-down、交割篮子/CTD 和套保五类调用，并证明 Python 结果与冻结参考一致。
+公共请求不再携带 Bond 条款、Calendar 内容、曲线节点、候选券、价格、转换因子、交割日期、CTD 或 DV01 的重复副本。现券、曲线、Carry/Roll-down、交割篮子/CTD 和套保分别提交所需的 exact Object/Snapshot/Artifact 引用；Application 从权威仓储物化实际数值输入，并在进入 provider 前失败关闭 owner、version、hash、knowledge/valuation/as-of/visible/effective time 与内容漂移。响应回显稳定排序的全部实际消费输入、参数摘要和请求指纹。R5D 不包含 AC09 双口径税后分析、AC37 权限分层或尚未组合的 Definition/Fact/Snapshot/Artifact 服务面。
 
 ## 2026-07 / Phase 3A 已落地双源 Canonical Quote 接入
 

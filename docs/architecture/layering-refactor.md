@@ -3,7 +3,7 @@
 > 性质：编译产物。规范条款在 `SPEC.md`，判定条款在 `ACCEPTANCE.md`，本文只是通往它们的施工说明。
 > 本文过时不影响系统正确性；SPEC 过时才影响。
 
-**日期** 2026-07-26 · **依据** SPEC v1.0 §1 分层法则 · **Human 决定** 允许破坏性重构；一期补齐全部五个 L1 对象
+**日期** 2026-07-26 · **依据** SPEC v1.0 §1 分层法则 · **Human 决定** 允许破坏性重构；一期补齐全部五个 L1 对象 · **路线重排** 2026-08-12
 
 ---
 
@@ -135,7 +135,7 @@ R5b 在 R5a 之后建立 `CoverageDeclaration`，R5c 在 R5a 之后建立 `DataH
 
 **方案。** 立 ADR 承认 `AnalyticsService` 为与 `ResearchGraph` 并列的一等执行形态：同样绑定快照 / 规则 / 主体，同样进血缘，但语义是幂等查询而非有状态运行。ficant 由此具备批处理与在线服务两种运行模式。
 
-**归属：** R1（ADR）+ R5（承载约束查询）。
+**归属：** R1（ADR）；既有 Rates / DataHealth 已由 R5 系列承载，Constraint 查询实现顺延至 **v0.2**。
 
 ---
 
@@ -147,7 +147,7 @@ R5b 在 R5a 之后建立 `CoverageDeclaration`，R5c 在 R5a 之后建立 `DataH
 
 **方案。** 新增 `PolicyArtifact` 输出类型，且**必须与求值器实现一同交付**，回测与实盘共用同一份实现。已写入 SPEC §2 B2。
 
-**归属：** R1（契约）+ R6（落地）。
+**归属：** R1（契约）+ **v0.2（落地）**。
 
 ---
 
@@ -168,8 +168,21 @@ R5b 在 R5a 之后建立 `CoverageDeclaration`，R5c 在 R5a 之后建立 `DataH
 | **R5a** | **价格来源类型与可信度标记** | 精确 DataSource 版本绑定封闭来源类型；Fact / verified snapshot 可解析该类型；内部曲线插值价格显式标记；混合来源的风险结果携带类型摘要。canonical quote v1/schema/hash 不变 | AC15 |
 | **R5b** | **组合覆盖度声明** | 依赖 R5a；所有多仓位聚合输出携带含分母、参与数与总额、缺失关键字段数及字段可信度分布的 `CoverageDeclaration`；机械门禁与真实负向 fixture 禁止裸组合数值 | AC35 |
 | **R5c** | **数据健康度预警** | 依赖 R5a；`DataHealthReport` 以 AnalyticsService 形态落地；阈值来自显式配置并进入结果证据；同一 UNKNOWN snapshot 健康度预警但不阻断，资本占用仍按 AC17 失败关闭 | AC36 |
-| **R6** | 角色与白名单 | 平台管理员与研究用户分离；数据源导入白名单；基础数据变更留痕 | AC37 |
-| **R7** | 一期收口 | **虚构市场零核心改动验证**（健康度指标）；全量重取证；MANUAL 走查 | AC04 AC11–AC13 AC30–AC33 |
+| **R5D** | **系统完整性重整** | 五个 Rates RPC 精确输入物化与实际消费血缘；`FixedDecimal` 下沉并消除 L1→L2 反向依赖；结构门禁；独立 Decimal KRD Oracle；20 个一方包许可证闭合与必要事实文档修复 | —（S3 / I3 前置） |
+| **R5E** | **税后 CTD 双口径** | Human 批准且带来源/hash 的 TaxRulePack；独立税后 YTM Oracle；候选双 IRR、市场/主体双 CTD、反转篮子和无税差对照 | AC09 |
+| **R6A** | **角色、白名单与输入服务组合** | 平台管理员/研究用户分离；实现并生产组合 Definition、Fact、Snapshot 输入面；数据源白名单和基础数据变更留痕 | AC37 |
+| **R6B** | **Artifact 服务与拓扑闭合** | 实现 Artifact 查询/发布面并接通现有 publish use case；建立“声明即生产可达”门禁；清理 dead gRPC-Web 代码和 `ficant-web` 逻辑孤儿 | —（服务拓扑闭合） |
+| **R7A** | **分层与双时间重取证** | 虚构市场零核心改动；重取证双时间与不可变性；跨 clang 原始数值比对；按 AC04 实证决定是否拆分 domain crates | AC04 AC11–AC13 |
+| **R7B** | **一期证据与恢复收口** | 完整代码/镜像/输入血缘、确定性与恢复；MANUAL、运行手册、当前能力文档及全量重取证 | AC30–AC33 |
+| **独立治理轮** | **远端仓库与发布治理** | 由 Human/CICD 决定轻量 PR 检查、CODEOWNERS/审批/status checks、Dependabot、secret scanning、push protection、Release 对齐和签名策略；不进入 OPAID 产品迭代 | — |
+
+### 2026-08 系统完整性重排
+
+2026-08 完整审计证明，Rates 公共请求仍允许调用方重复提交 Bond、Calendar、曲线、价格和 Artifact 已含数值，部分通用绑定只进血缘、不进计算；`research/exposure.rs` 还通过 `FixedDecimal` 反向依赖 L2 analytics，三个一方 RulePack adapter crate 未进入许可证 policy。Human 因此批准在原 R6 前插入 R5D：先收敛精确输入、补独立 KRD 见证和结构/供应链门禁，再继续功能验收。R5D 不新增点亮 AC，也不以完整性修复代替 R5E 的 AC09 业务裁决。
+
+原 R6 拆为 R6A / R6B，分别承担身份与输入面、Artifact 与服务拓扑；原 R7 拆为 R7A / R7B，分别承担架构/双时间重取证和完整血缘/恢复收口，避免把公共服务实现、跨编译器裁决、MANUAL 与恢复证据耦合在一个候选中。GitHub 远端权限、安全、PR 和 Release 策略单列治理轮，只能由 Human/CICD 授权，不进入 OPAID 产品迭代或任一 AC 的产品证据。
+
+Python node runtime、DMQuant、Policy / Constraint、完整 DataHealth 扩展和 AI / GeneratedNode 沙箱继续明确顺延至 v0.2；它们不得作为 v0.1 已实现能力宣传。后续不预建 R5E / R6 / R7 brief，占位文件只会制造第二状态源；每轮开始时再冻结其唯一 Human brief。
 
 ### R1 为什么这么小
 
@@ -183,8 +196,8 @@ R1 是唯一一轮**以建立判据为主**的迭代——这是它的性质，�
 ### 与原 Phase 计划的关系
 
 - Phase 0–4 的既有成果**保留**，但 Phase 2C 与 Phase 3A 的取证在 R2 / R4 后**必须重跑**（破坏性变更已获批准）。
-- 原 Phase 5（Rates Research Lab）**后移至 R7 之后**——在 L1 建成之前做业务界面，界面会绑死错误的对象模型。
-- 原 Phase 7 / 8（AI 基础设施与 GeneratedNode）**整体后移**。理由：两份研究文档一致判定瓶颈是领域知识与人工投入，不是算力；且 GeneratedNode 要替换的撮合假设，其输入数据（盘口历史、中介报价流、询价日志）在数据层尚不存在。**沙箱建好了没有料。**
+- 原 Phase 5（Rates Research Lab）**后移至 R7B 之后**——在 L1、精确 Rates 输入和完整血缘/恢复证据闭合前做业务界面，界面会绑死错误的对象模型。
+- 原 Phase 7 / 8（AI 基础设施与 GeneratedNode）**整体后移至 v0.2**。理由：两份研究文档一致判定瓶颈是领域知识与人工投入，不是算力；且 GeneratedNode 要替换的撮合假设，其输入数据（盘口历史、中介报价流、询价日志）在数据层尚不存在。**沙箱建好了没有料。**
 - AI 在本阶段的正确用武之地在 L5 与数据管道：条款解析、报价文本实体识别、非市场化成交打分。这些不需要 gVisor。
 
 ---

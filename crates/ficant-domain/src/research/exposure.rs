@@ -1,12 +1,11 @@
-use crate::analytics::FixedDecimal;
 use crate::market::PriceSourceType;
-use crate::primitives::{ContentHash, LineageRef, Ulid, UnitRef, Version, VersionRef};
+use crate::primitives::{
+    ContentHash, FIXED_DECIMAL_FACTOR, FixedDecimal, LineageRef, Ulid, UnitRef, Version, VersionRef,
+};
 use crate::research::SensitivityDirection;
 use crate::{ContentAddressed, DomainErrorCode, DomainResult, Lineaged};
 
 use super::CoverageDeclaration;
-
-const FIXED_SCALE: i128 = 1_000_000_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PriceSourceCount {
@@ -85,7 +84,7 @@ pub fn key_rate_dv01(
     };
     let scaled_numerator = numerator
         .scaled()
-        .checked_mul(FIXED_SCALE)
+        .checked_mul(FIXED_DECIMAL_FACTOR)
         .ok_or(DomainErrorCode::InvalidValue)?;
     if divisor == 0 || scaled_numerator % divisor != 0 {
         return Err(DomainErrorCode::InvalidValue);
@@ -118,13 +117,13 @@ pub fn scale_futures_key_rate_dv01(
     )?;
     let contract_size = FixedDecimal::from_scaled(
         i128::from(contract_size_in_quote_units)
-            .checked_mul(FIXED_SCALE)
+            .checked_mul(FIXED_DECIMAL_FACTOR)
             .ok_or(DomainErrorCode::InvalidValue)?,
     );
     let one_contract = exact_div(quote_krd.checked_mul(contract_size)?, conversion_factor)?;
     one_contract.checked_mul(FixedDecimal::from_scaled(
         i128::from(signed_contract_count)
-            .checked_mul(FIXED_SCALE)
+            .checked_mul(FIXED_DECIMAL_FACTOR)
             .ok_or(DomainErrorCode::InvalidValue)?,
     ))
 }
@@ -135,7 +134,7 @@ fn exact_div(numerator: FixedDecimal, denominator: FixedDecimal) -> DomainResult
     }
     let scaled = numerator
         .scaled()
-        .checked_mul(FIXED_SCALE)
+        .checked_mul(FIXED_DECIMAL_FACTOR)
         .ok_or(DomainErrorCode::InvalidValue)?;
     if scaled % denominator.scaled() != 0 {
         return Err(DomainErrorCode::InvalidValue);

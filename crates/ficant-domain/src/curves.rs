@@ -1,10 +1,9 @@
 use chrono::{NaiveDate, TimeDelta};
 
 use crate::analytics::{
-    AnalyticsObjectRef, BondTerms, CalendarBinding, CalendarRequirement, FixedDecimal,
-    MARKET_TIMEZONE,
+    AnalyticsObjectRef, BondTerms, CalendarBinding, CalendarRequirement, MARKET_TIMEZONE,
 };
-use crate::primitives::{ContentHash, MarketTime, OwnerRef};
+use crate::primitives::{ContentHash, FixedDecimal, MarketTime, OwnerRef};
 use crate::{DomainErrorCode, DomainResult};
 
 pub const CURVE_RESULT_SCHEMA_ID: &str = "ficant.yield-curve-point.result.v1";

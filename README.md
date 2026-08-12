@@ -1166,7 +1166,7 @@ PostgreSQL 16 schema
 
 **目标：** 建立平台权威基准，供 AI 节点和研究实现比较。
 
-**当前状态（2026-07-19）：** Phase 2A 已交付固定利率/贴现国债的现金流、价格、YTM、久期、凸性与 DV01；Phase 2B 已交付区间内实际日数线性 YTM 曲线和未融资 Carry/Roll-down 分解；Phase 2C 已交付中金所 `TS`/`TF`/`T`/`TL` 合约与可交割券资格、CF、交割发票价、基差、含融资成本净基差、IRR 和 CTD；Phase 2D 已交付基于 CTD、转换因子和带符号目标 DV01 的单合约期现套保比例；Phase 2E 已通过加法式 `ficant.rates.v1.RatesAnalyticsService` 和 Python SDK 暴露五类真实生产调用。所有切片均贯通冻结合同、独立 Oracle 或 Golden Case、C++/Rust 生产路径和确定性结果验证；Python SDK 的结果与参考结果一致，因此 Phase 2 已正式退出。公共边界、最终证据与残余风险见 [Phase 2E iteration brief](docs/history/iterations/2026-07-phase2e-python-sdk.md)。
+**当前状态（2026-08-12）：** Phase 2A 已交付固定利率/贴现国债的现金流、价格、YTM、久期、凸性与 DV01；Phase 2B 已交付区间内实际日数线性 YTM 曲线和未融资 Carry/Roll-down 分解；Phase 2C 已交付中金所 `TS`/`TF`/`T`/`TL` 合约与可交割券资格、CF、交割发票价、基差、含融资成本净基差、IRR 和 CTD；Phase 2D 已交付基于 CTD、转换因子和带符号目标 DV01 的单合约期现套保比例；Phase 2E 已通过 `ficant.rates.v1.RatesAnalyticsService` 和 Python SDK 暴露五类生产调用。R5D 已把这五个 RPC 收敛为 exact Bond、Calendar、Snapshot、RulePack、FuturesContract 与 Artifact 引用：Application 在任何数值引擎调用前完成 owner/version/hash/时间/内容一致性校验，并在结果中返回稳定排序的实际消费输入、参数摘要与请求指纹。R5D 只加固输入完整性、结构、数值见证和供应链门禁，不宣称完成 R5E 的 AC09 双口径税后分析。当前迭代边界与最终证据见 [R5D iteration brief](docs/iterations/2026-08-r5d-system-integrity.md)。
 
 优先实现：
 
