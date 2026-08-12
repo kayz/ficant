@@ -1,12 +1,16 @@
 //! L3 parser for the typed coupon-tax `RulePack` payload.
 
 use chrono::NaiveDate;
-use ficant_application::ports::{ApplicationResult, CouponTaxRate, TaxRulePackParser};
+use ficant_application::ports::{
+    ApplicationResult, CouponTaxRate, CouponTaxTreatment, TaxRulePackParser,
+};
 use ficant_application::{ApplicationError, ApplicationErrorCategory, map_domain_error};
 use ficant_contracts::ficant::core::v1::DecimalValue;
 use ficant_contracts::ficant::market::v1::{
-    BondCouponTaxRule, BondTaxAttributes as ProtoBondTaxAttributes,
-    IncomeTaxStatus as ProtoIncomeTaxStatus, SubjectCouponTaxRate, TaxRulePack,
+    BondCouponTaxRule, BondCouponTaxTreatmentRule, BondTaxAttributes as ProtoBondTaxAttributes,
+    CouponTaxClaimScope as ProtoClaimScope, GrossCouponTaxBasis as ProtoGrossBasis,
+    IncomeTaxStatus as ProtoIncomeTaxStatus, SubjectCouponTaxRate, SubjectCouponTaxTreatment,
+    TaxRoundingMode as ProtoRounding, TaxRulePack, TaxRulePackV2,
     ValueAddedTaxStatus as ProtoValueAddedTaxStatus,
 };
 use ficant_domain::analytics::{DECIMAL_SCALE, FixedDecimal};
@@ -20,6 +24,180 @@ use prost::Message;
 pub const MARKET: &str = "CN";
 pub const RULE_TYPE: &str = "tax";
 pub const TYPE_URL: &str = "type.googleapis.com/ficant.market.v1.TaxRulePack";
+pub const TYPE_URL_V2: &str = "type.googleapis.com/ficant.market.v1.TaxRulePackV2";
+pub const SOURCE: &str = "ficant-authority/cgb-interest-tax/v1";
+pub const RATE_UNIT_ID: &str = "01K2CGBVAT0000000000000000";
+pub const AUTHORITATIVE_SEMANTIC_SHA256_HEX: &str =
+    "54fa5adbeb8b164dc779ecc250ab622ab5747cdeb36f2b6da58f4d877ce5106a";
+pub const AUTHORITATIVE_PAYLOAD_SHA256_HEX: &str =
+    "14748fb4d27d01b35ebe466f72669937c850fd48f9bbd875542848d3800168db";
+
+const AUTHORITATIVE_PAYLOAD: &[u8] =
+    include_bytes!("../../../domain-packs/cgb-interest-tax/cgb-interest-tax-v1.bin");
+
+/// Parses only the authority-approved v2 coupon treatment payload.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TaxRulePackV2Parser;
+
+impl TaxRulePackParser for TaxRulePackV2Parser {
+    fn market(&self) -> &'static str {
+        MARKET
+    }
+
+    fn rule_type(&self) -> &'static str {
+        RULE_TYPE
+    }
+
+    fn type_url(&self) -> &'static str {
+        TYPE_URL_V2
+    }
+
+    fn expected_source(&self) -> Option<&'static str> {
+        Some(SOURCE)
+    }
+
+    fn expected_effective_window(&self) -> Option<(&'static str, &'static str)> {
+        Some(("2026-01-01T00:00:00+08:00", "2028-01-01T00:00:00+08:00"))
+    }
+
+    fn expected_rate_unit(
+        &self,
+    ) -> Option<(&'static str, u64, &'static str, &'static str, u32, u32)> {
+        Some((RATE_UNIT_ID, 1, "RATE", "rate", 12, 18))
+    }
+
+    fn parse(
+        &self,
+        content: &RulePackContent,
+        first_issue_date: NaiveDate,
+        tax_attributes: BondTaxAttributes,
+        tax_treatment: &TaxTreatment,
+    ) -> ApplicationResult<CouponTaxTreatment> {
+        if content.type_url() != TYPE_URL_V2 || content.value() != AUTHORITATIVE_PAYLOAD {
+            return Err(invalid());
+        }
+        let payload = TaxRulePackV2::decode(content.value()).map_err(|_| invalid())?;
+        parse_v2_payload(&payload, first_issue_date, tax_attributes, tax_treatment)
+    }
+}
+
+fn parse_v2_payload(
+    payload: &TaxRulePackV2,
+    first_issue_date: NaiveDate,
+    tax_attributes: BondTaxAttributes,
+    tax_treatment: &TaxTreatment,
+) -> ApplicationResult<CouponTaxTreatment> {
+    validate_authoritative_v2_shape(&payload.coupon_rules)?;
+    let date_path = format!("coupon_rules[first_issue_date={first_issue_date}]");
+    let selected = payload
+        .coupon_rules
+        .iter()
+        .find(|rule| v2_contains(rule, first_issue_date))
+        .ok_or_else(|| missing(&date_path))?;
+    let selected_attributes = attributes(
+        selected.tax_attributes.as_ref(),
+        &format!("{date_path}.tax_attributes"),
+    )?;
+    if selected_attributes != tax_attributes {
+        return Err(missing(&format!("{date_path}.tax_attributes")));
+    }
+    let profile_path = format!(
+        "{date_path}.treatments[vat_profile={}][income_profile={}]",
+        tax_treatment.value_added_tax_profile(),
+        tax_treatment.income_tax_profile()
+    );
+    let treatment = selected
+        .treatments
+        .iter()
+        .find(|value| {
+            value.value_added_tax_profile == tax_treatment.value_added_tax_profile()
+                && value.income_tax_profile == tax_treatment.income_tax_profile()
+        })
+        .ok_or_else(|| missing(&profile_path))?;
+    parse_v2_treatment(treatment, &profile_path)
+}
+
+fn validate_authoritative_v2_shape(rules: &[BondCouponTaxTreatmentRule]) -> ApplicationResult<()> {
+    if rules.len() != 2
+        || rules[0].first_issue_from != "0001-01-01"
+        || rules[0].first_issue_to != "2025-08-08"
+        || rules[1].first_issue_from != "2025-08-08"
+        || !rules[1].first_issue_to.is_empty()
+        || rules.iter().any(|rule| rule.treatments.len() != 1)
+    {
+        return Err(invalid());
+    }
+    let pre = attributes(
+        rules[0].tax_attributes.as_ref(),
+        "coupon_rules[0].tax_attributes",
+    )?;
+    let post = attributes(
+        rules[1].tax_attributes.as_ref(),
+        "coupon_rules[1].tax_attributes",
+    )?;
+    if pre != BondTaxAttributes::new(ValueAddedTaxStatus::Exempt, IncomeTaxStatus::Exempt)
+        || post != BondTaxAttributes::new(ValueAddedTaxStatus::Taxable, IncomeTaxStatus::Exempt)
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn v2_contains(rule: &BondCouponTaxTreatmentRule, value: NaiveDate) -> bool {
+    let Ok(from) = NaiveDate::parse_from_str(&rule.first_issue_from, "%Y-%m-%d") else {
+        return false;
+    };
+    let to = if rule.first_issue_to.is_empty() {
+        None
+    } else {
+        NaiveDate::parse_from_str(&rule.first_issue_to, "%Y-%m-%d").ok()
+    };
+    from <= value && to.is_none_or(|to| value < to)
+}
+
+fn parse_v2_treatment(
+    value: &SubjectCouponTaxTreatment,
+    path: &str,
+) -> ApplicationResult<CouponTaxTreatment> {
+    if value.value_added_tax_profile != "cn-vat-general-taxpayer"
+        || value.income_tax_profile != "cn-cgb-interest-cit-exempt"
+        || ProtoGrossBasis::try_from(value.gross_coupon_basis).map_err(|_| invalid())?
+            != ProtoGrossBasis::VatIncluded
+        || ProtoRounding::try_from(value.rounding).map_err(|_| invalid())?
+            != ProtoRounding::TiesToEven
+        || ProtoClaimScope::try_from(value.claim_scope).map_err(|_| invalid())?
+            != ProtoClaimScope::CouponOutputVatBeforeInputCredit
+    {
+        return Err(invalid());
+    }
+    let (vat_rate, vat_unit) = decimal_parts(
+        value.value_added_tax_rate.as_ref(),
+        &format!("{path}.value_added_tax_rate"),
+    )?;
+    let (income_rate, income_unit) = decimal_parts(
+        value.income_tax_rate.as_ref(),
+        &format!("{path}.income_tax_rate"),
+    )?;
+    if vat_unit != income_unit
+        || vat_unit.unit_id().as_str() != RATE_UNIT_ID
+        || vat_unit.version().get() != 1
+        || income_rate != FixedDecimal::ZERO
+        || !matches!(vat_rate.scaled(), 0 | 60_000_000_000)
+    {
+        return Err(invalid());
+    }
+    CouponTaxTreatment::vat_included(
+        vat_rate,
+        income_rate,
+        vat_unit,
+        ficant_domain::primitives::ContentHash::from_bytes(&[
+            0x54, 0xfa, 0x5a, 0xdb, 0xeb, 0x8b, 0x16, 0x4d, 0xc7, 0x79, 0xec, 0xc2, 0x50, 0xab,
+            0x62, 0x2a, 0xb5, 0x74, 0xcd, 0xeb, 0x36, 0xf2, 0xb6, 0xda, 0x58, 0xf4, 0xd8, 0x77,
+            0xce, 0x51, 0x06, 0x0a,
+        ])
+        .expect("authority hash has exactly 32 bytes"),
+    )
+}
 
 /// Parses only the exact v1 coupon-tax rule content schema.
 #[derive(Clone, Copy, Debug, Default)]
@@ -224,7 +402,10 @@ fn date(value: &str, path: &str) -> ApplicationResult<NaiveDate> {
     Ok(parsed)
 }
 
-fn decimal(value: Option<&DecimalValue>, path: &str) -> ApplicationResult<CouponTaxRate> {
+fn decimal_parts(
+    value: Option<&DecimalValue>,
+    path: &str,
+) -> ApplicationResult<(FixedDecimal, UnitRef)> {
     let value = value.ok_or_else(|| missing(path))?;
     let unit = value
         .unit
@@ -255,7 +436,12 @@ fn decimal(value: Option<&DecimalValue>, path: &str) -> ApplicationResult<Coupon
         }
         coefficient / divisor
     };
-    Ok(CouponTaxRate::new(FixedDecimal::from_scaled(scaled), unit))
+    Ok((FixedDecimal::from_scaled(scaled), unit))
+}
+
+fn decimal(value: Option<&DecimalValue>, path: &str) -> ApplicationResult<CouponTaxRate> {
+    let (value, unit) = decimal_parts(value, path)?;
+    Ok(CouponTaxRate::new(value, unit))
 }
 
 fn power_of_ten(exponent: u32) -> ApplicationResult<i128> {

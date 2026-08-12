@@ -4,6 +4,7 @@ use ficant_api::RatesGrpcService;
 use ficant_contracts::ficant::core::v1::{
     DecimalValue as ProtoDecimalValue, MarketTime as ProtoMarketTime, UnitRef,
 };
+use ficant_contracts::ficant::market::v1::SubjectCouponTaxTreatment;
 use ficant_contracts::ficant::rates::v1::{
     AnalysisContext, AnalyzeBondRequest, AnalyzeBondResult, ObjectBinding, ResultMetadata,
     RiskSummary, SnapshotBinding, analyze_bond_request,
@@ -46,8 +47,8 @@ const ANALYTICS_PROTO: &[u8] =
 const REQUEST_PROTOBUF_NAME: &str = "ficant.rates.v1.AnalyzeBondRequest";
 const RESULT_PROTOBUF_NAME: &str = "ficant.rates.v1.AnalyzeBondResult";
 const RISK_SUMMARY_PROTOBUF_NAME: &str = "ficant.rates.v1.RiskSummary";
-const MATERIALIZED_BOND_INPUT_SCHEMA: &[u8] = b"ficant/materialized-bond-analytics-input-schema/v1";
-const MATERIALIZED_BOND_INPUT_MAGIC: &[u8] = b"FMBI\0\x01";
+const MATERIALIZED_BOND_INPUT_SCHEMA: &[u8] = b"ficant/materialized-bond-analytics-input-schema/v2";
+const MATERIALIZED_BOND_INPUT_MAGIC: &[u8] = b"FMBI\0\x02";
 const ANALYTICS_IMPLEMENTATION_DOMAIN: &[u8] =
     b"ficant/cgb-bond-analytics-native-node-implementation/v3";
 const RISK_SUMMARY_IMPLEMENTATION_DOMAIN: &[u8] =
@@ -90,7 +91,8 @@ pub fn risk_summary_type() -> TypedValue {
 #[must_use]
 pub fn encode_materialized_bond_input(
     input: &BondAnalyticsInput,
-    coupon_tax_rate: FixedDecimal,
+    coupon_tax_treatment: &SubjectCouponTaxTreatment,
+    authority_semantic_hash: &ContentHash,
     metadata: &ResultMetadata,
 ) -> Vec<u8> {
     let mut bytes = MATERIALIZED_BOND_INPUT_MAGIC.to_vec();
@@ -110,7 +112,10 @@ pub fn encode_materialized_bond_input(
     encode_terms(&mut bytes, input.terms());
     bytes.push(input.mode() as u8);
     bytes.extend_from_slice(&input.input_value().scaled().to_be_bytes());
-    bytes.extend_from_slice(&coupon_tax_rate.scaled().to_be_bytes());
+    let treatment = deterministic_encode(coupon_tax_treatment);
+    bytes.extend_from_slice(&(treatment.len() as u64).to_be_bytes());
+    bytes.extend_from_slice(&treatment);
+    bytes.extend_from_slice(authority_semantic_hash.as_bytes());
     let metadata = deterministic_encode(metadata);
     bytes.extend_from_slice(&(metadata.len() as u64).to_be_bytes());
     bytes.extend_from_slice(&metadata);
@@ -119,7 +124,15 @@ pub fn encode_materialized_bond_input(
 
 fn decode_materialized_bond_input(
     bytes: &[u8],
-) -> Result<(BondAnalyticsInput, FixedDecimal, ResultMetadata), RuntimeError> {
+) -> Result<
+    (
+        BondAnalyticsInput,
+        SubjectCouponTaxTreatment,
+        ContentHash,
+        ResultMetadata,
+    ),
+    RuntimeError,
+> {
     let mut reader = MaterializedReader::new(bytes);
     if reader.take(MATERIALIZED_BOND_INPUT_MAGIC.len())? != MATERIALIZED_BOND_INPUT_MAGIC {
         return Err(invalid());
@@ -148,7 +161,11 @@ fn decode_materialized_bond_input(
         _ => return Err(invalid()),
     };
     let input_value = FixedDecimal::from_scaled(reader.i128()?);
-    let coupon_tax_rate = FixedDecimal::from_scaled(reader.i128()?);
+    let treatment_length = usize::try_from(reader.u64()?).map_err(|_| invalid())?;
+    let coupon_tax_treatment =
+        SubjectCouponTaxTreatment::decode(reader.take(treatment_length)?).map_err(|_| invalid())?;
+    let authority_semantic_hash =
+        ContentHash::from_bytes(reader.take(32)?).map_err(RuntimeError::Domain)?;
     let metadata_length = usize::try_from(reader.u64()?).map_err(|_| invalid())?;
     let metadata = ResultMetadata::decode(reader.take(metadata_length)?).map_err(|_| invalid())?;
     if !reader.is_empty() {
@@ -168,7 +185,12 @@ fn decode_materialized_bond_input(
         input_value,
     )
     .map_err(RuntimeError::Domain)?;
-    Ok((input, coupon_tax_rate, metadata))
+    Ok((
+        input,
+        coupon_tax_treatment,
+        authority_semantic_hash,
+        metadata,
+    ))
 }
 
 fn encode_owner(bytes: &mut Vec<u8>, owner: &OwnerRef) {
@@ -671,14 +693,15 @@ impl NativeNode for CgbBondAnalyticsNativeNode {
         validate_external_lineage(request.identity(), public_input)?;
         validate_external_lineage(request.identity(), materialized_input)?;
         let protobuf = AnalyzeBondRequest::decode(public_input.payload()).map_err(|_| invalid())?;
-        let (materialized, coupon_tax_rate, metadata) =
+        let (materialized, coupon_tax_treatment, authority_semantic_hash, metadata) =
             decode_materialized_bond_input(materialized_input.payload())?;
         validate_request_against_materialized(request.identity(), &protobuf, &materialized)?;
-        let result = RatesGrpcService::execute_materialized_bond_request(
+        let result = RatesGrpcService::execute_materialized_v2_bond_request(
             &NativeBondAnalyticsEngine,
             &protobuf,
             &materialized,
-            coupon_tax_rate,
+            &coupon_tax_treatment,
+            authority_semantic_hash.as_bytes(),
             metadata,
         )
         .map_err(|_| invalid())?;

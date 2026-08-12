@@ -290,13 +290,17 @@ def _assert_futures_delivery(client: RatesClient) -> None:
             purchase_date=source["purchase_date"],
             data_snapshot=_snapshot("Y"),
             funding_rule_pack=_object("V"),
+            tax_rule_pack=_object("T"),
         )
     )
     assert result.ctd_index == 1
+    assert result.subject_ctd_index < len(result.candidates)
     for actual, candidate in zip(result.candidates, candidates, strict=True):
         _assert_decimal_fields(
             actual.measures, expected["basket_results"][candidate["bond_id"]]
         )
+        assert actual.measures.HasField("tax_adjusted_interim_coupons")
+        assert actual.measures.HasField("subject_tax_adjusted_irr")
 
 
 def _assert_futures_hedge(client: RatesClient) -> None:

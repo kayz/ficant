@@ -1,0 +1,115 @@
+{
+  "schema": "ficant.r5e-tax-adjusted-analytics.inputs.v1",
+  "authority": {
+    "semantic_sha256": "54fa5adbeb8b164dc779ecc250ab622ab5747cdeb36f2b6da58f4d877ce5106a",
+    "type_url": "type.googleapis.com/ficant.market.v1.TaxRulePackV2",
+    "source": "ficant-authority/cgb-interest-tax/v1",
+    "rate_unit": "01K2CGBVAT0000000000000000@1",
+    "cutoff": "2025-08-08",
+    "value_added_tax_rate": "0.06",
+    "income_tax_rate": "0",
+    "gross_coupon_basis": "VAT_INCLUDED",
+    "rounding": "TIES_TO_EVEN",
+    "claim_scope": "COUPON_OUTPUT_VAT_BEFORE_INPUT_CREDIT"
+  },
+  "bond_cases": [
+    {
+      "case_id": "before-cutoff-exempt",
+      "first_issue_date": "2025-08-07",
+      "current_issue_date": "2025-08-07",
+      "value_added_tax_status": "EXEMPT",
+      "income_tax_status": "EXEMPT",
+      "face_value": "100",
+      "gross_coupon_per_period": "1.25",
+      "periods_per_year": "2",
+      "remaining_periods": "17",
+      "settlement_fraction_to_next_coupon": "0.0994475138121546961325966850828729281767955801104972375690608",
+      "accrued_period_fraction": "0.9005524861878453038674033149171270718232044198895027624309392",
+      "clean_price": "100.00"
+    },
+    {
+      "case_id": "cutoff-day-taxable",
+      "first_issue_date": "2025-08-08",
+      "current_issue_date": "2025-08-08",
+      "value_added_tax_status": "TAXABLE",
+      "income_tax_status": "EXEMPT",
+      "face_value": "100",
+      "gross_coupon_per_period": "1.25",
+      "periods_per_year": "2",
+      "remaining_periods": "17",
+      "settlement_fraction_to_next_coupon": "0.0994475138121546961325966850828729281767955801104972375690608",
+      "accrued_period_fraction": "0.9005524861878453038674033149171270718232044198895027624309392",
+      "clean_price": "100.00"
+    },
+    {
+      "case_id": "reissuance-inherits-taxable-first-issue",
+      "first_issue_date": "2025-08-08",
+      "current_issue_date": "2026-02-08",
+      "value_added_tax_status": "TAXABLE",
+      "income_tax_status": "EXEMPT",
+      "face_value": "100",
+      "gross_coupon_per_period": "1.25",
+      "periods_per_year": "2",
+      "remaining_periods": "17",
+      "settlement_fraction_to_next_coupon": "0.0994475138121546961325966850828729281767955801104972375690608",
+      "accrued_period_fraction": "0.9005524861878453038674033149171270718232044198895027624309392",
+      "clean_price": "100.00"
+    }
+  ],
+  "delivery_baskets": [
+    {
+      "basket_id": "market-subject-ctd-reversal",
+      "candidates": [
+        {
+          "bond_id": "CGB-EXEMPT",
+          "first_issue_date": "2025-08-07",
+          "value_added_tax_status": "EXEMPT",
+          "income_tax_status": "EXEMPT",
+          "invoice_price": "99.00",
+          "gross_interim_coupons": "1.20",
+          "purchase_dirty_price": "99.50",
+          "actual_days": "60",
+          "market_net_basis": "0.15"
+        },
+        {
+          "bond_id": "CGB-TAXABLE",
+          "first_issue_date": "2025-08-08",
+          "value_added_tax_status": "TAXABLE",
+          "income_tax_status": "EXEMPT",
+          "invoice_price": "99.00",
+          "gross_interim_coupons": "1.25",
+          "purchase_dirty_price": "99.50",
+          "actual_days": "60",
+          "market_net_basis": "0.14"
+        }
+      ]
+    },
+    {
+      "basket_id": "no-tax-difference-control",
+      "candidates": [
+        {
+          "bond_id": "CGB-EXEMPT-A",
+          "first_issue_date": "2025-08-06",
+          "value_added_tax_status": "EXEMPT",
+          "income_tax_status": "EXEMPT",
+          "invoice_price": "99.00",
+          "gross_interim_coupons": "1.20",
+          "purchase_dirty_price": "99.50",
+          "actual_days": "60",
+          "market_net_basis": "0.15"
+        },
+        {
+          "bond_id": "CGB-EXEMPT-B",
+          "first_issue_date": "2025-08-07",
+          "value_added_tax_status": "EXEMPT",
+          "income_tax_status": "EXEMPT",
+          "invoice_price": "99.00",
+          "gross_interim_coupons": "1.25",
+          "purchase_dirty_price": "99.50",
+          "actual_days": "60",
+          "market_net_basis": "0.14"
+        }
+      ]
+    }
+  ]
+}

@@ -30,7 +30,7 @@ use ficant_storage::s3::S3BlobStore;
 use ficant_storage::{
     analytics_arrow::ArrowBondAnalyticsCodec, futures_arrow::ArrowFuturesDeliveryCodec,
 };
-use ficant_tax_pack::TaxRulePackV1Parser;
+use ficant_tax_pack::TaxRulePackV2Parser;
 use sqlx::postgres::PgPoolOptions;
 use std::collections::BTreeMap;
 use std::env;
@@ -704,7 +704,7 @@ fn build_rates_service(
         integrity_events,
         Arc::new(CanonicalSnapshotCodecAdapter),
         Arc::new(FundingRulePackV1Parser),
-        Arc::new(TaxRulePackV1Parser),
+        Arc::new(TaxRulePackV2Parser),
         Arc::new(NativeFuturesHedgeEngine),
         data_sources,
         curve_snapshots,

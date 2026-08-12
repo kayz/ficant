@@ -4,6 +4,9 @@ use ficant_contracts::ficant::core::v1::{
     DecimalValue, MarketTime as ProtoMarketTime, OwnerRef as ProtoOwnerRef, Sha256,
     Ulid as ProtoUlid, UnitRef, VersionRef,
 };
+use ficant_contracts::ficant::market::v1::{
+    CouponTaxClaimScope, GrossCouponTaxBasis, SubjectCouponTaxTreatment, TaxRoundingMode,
+};
 use ficant_contracts::ficant::rates::v1::{
     AlgorithmBinding, AnalysisContext, AnalysisInputBinding, AnalysisInputRole, AnalysisUnits,
     AnalyzeBondRequest, AnalyzeBondResult, CalendarRequirement, ObjectBinding, ResultMetadata,
@@ -39,6 +42,7 @@ use prost::Message;
 use serde_json::Value;
 
 const PREFIX: &str = "01ARZ3NDEKTSV4RRFFQ69G5FA";
+const RATE_UNIT_ID: &str = "01K2CGBVAT0000000000000000";
 
 fn id(suffix: char) -> Ulid {
     Ulid::new(format!("{PREFIX}{suffix}")).unwrap()
@@ -84,6 +88,46 @@ fn unit(suffix: char) -> UnitRef {
     }
 }
 
+fn rate_unit() -> UnitRef {
+    UnitRef {
+        unit_id: Some(ProtoUlid {
+            value: RATE_UNIT_ID.to_owned(),
+        }),
+        version: 1,
+    }
+}
+
+fn rate_unit_object() -> ObjectBinding {
+    ObjectBinding {
+        object: Some(VersionRef {
+            id: rate_unit().unit_id,
+            version: 1,
+        }),
+        content_hash: Some(proto_hash(&hash(b"authoritative-rate-unit"))),
+    }
+}
+
+fn private_tax_treatment() -> SubjectCouponTaxTreatment {
+    SubjectCouponTaxTreatment {
+        value_added_tax_profile: "cn-vat-general-taxpayer".to_owned(),
+        income_tax_profile: "cn-cgb-interest-cit-exempt".to_owned(),
+        value_added_tax_rate: Some(decimal("6", 2, rate_unit())),
+        income_tax_rate: Some(decimal("0", 0, rate_unit())),
+        gross_coupon_basis: GrossCouponTaxBasis::VatIncluded as i32,
+        rounding: TaxRoundingMode::TiesToEven as i32,
+        claim_scope: CouponTaxClaimScope::CouponOutputVatBeforeInputCredit as i32,
+    }
+}
+
+fn semantic_hash() -> ContentHash {
+    ContentHash::from_bytes(&[
+        0x54, 0xfa, 0x5a, 0xdb, 0xeb, 0x8b, 0x16, 0x4d, 0xc7, 0x79, 0xec, 0xc2, 0x50, 0xab, 0x62,
+        0x2a, 0xb5, 0x74, 0xcd, 0xeb, 0x36, 0xf2, 0xb6, 0xda, 0x58, 0xf4, 0xd8, 0x77, 0xce, 0x51,
+        0x06, 0x0a,
+    ])
+    .unwrap()
+}
+
 fn decimal(coefficient: &str, scale: u32, unit: UnitRef) -> DecimalValue {
     DecimalValue {
         coefficient: coefficient.to_owned(),
@@ -112,7 +156,7 @@ fn analysis_units() -> AnalysisUnits {
     AnalysisUnits {
         currency_amount: Some(unit('A')),
         price_per_100: Some(unit('B')),
-        rate: Some(unit('C')),
+        rate: Some(rate_unit()),
         years: Some(unit('D')),
         years_squared: Some(unit('E')),
         dv01_per_100: Some(unit('F')),
@@ -158,7 +202,7 @@ fn golden_request() -> AnalyzeBondRequest {
         input: Some(analyze_bond_request::Input::YieldToMaturity(decimal(
             "155",
             4,
-            unit('C'),
+            rate_unit(),
         ))),
         data_snapshot: Some(snapshot('M')),
         tax_rule_pack: Some(object('K')),
@@ -209,7 +253,7 @@ fn materialized_input(input_value: FixedDecimal) -> ficant_domain::analytics::Bo
             FixedDecimal::from_scaled(15_000_000_000),
             FixedDecimal::from_scaled(100_000_000_000_000),
             FixedDecimal::from_scaled(100_000_000_000_000),
-            BondTaxAttributes::new(ValueAddedTaxStatus::Taxable, IncomeTaxStatus::Taxable),
+            BondTaxAttributes::new(ValueAddedTaxStatus::Taxable, IncomeTaxStatus::Exempt),
         )
         .unwrap(),
         AnalyticsMode::YieldIn,
@@ -265,14 +309,20 @@ fn supplied_metadata(
             effective_to: None,
         },
     ];
-    for suffix in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J'] {
+    for suffix in ['A', 'B', 'D', 'E', 'F', 'G', 'H', 'J'] {
         consumed_inputs.push(evidence_object(AnalysisInputRole::Unit, object(suffix)));
     }
+    consumed_inputs.push(evidence_object(AnalysisInputRole::Unit, rate_unit_object()));
     consumed_inputs.sort_by_key(prost::Message::encode_to_vec);
     RatesGrpcService::canonical_materialized_bond_metadata(
         request,
         input,
-        FixedDecimal::ZERO,
+        &RatesGrpcService::canonical_v2_coupon_tax_treatment(
+            input,
+            &private_tax_treatment(),
+            semantic_hash().as_bytes(),
+        )
+        .unwrap(),
         &consumed_inputs,
     )
     .unwrap()
@@ -333,7 +383,8 @@ fn fixture(
         materialized_bond_input_type(),
         encode_materialized_bond_input(
             materialized,
-            FixedDecimal::ZERO,
+            &private_tax_treatment(),
+            &semantic_hash(),
             &supplied_metadata(request, materialized),
         ),
     )
@@ -540,7 +591,8 @@ fn missing_or_drifted_materialized_port_fails_closed() {
         materialized_bond_input_type(),
         encode_materialized_bond_input(
             &changed_input,
-            FixedDecimal::ZERO,
+            &private_tax_treatment(),
+            &semantic_hash(),
             &supplied_metadata(&original_request, &original_input),
         ),
     )
@@ -708,7 +760,8 @@ fn real_bond_analysis_flows_through_typed_risk_summary_dependency() {
         materialized_bond_input_type(),
         encode_materialized_bond_input(
             &input,
-            FixedDecimal::ZERO,
+            &private_tax_treatment(),
+            &semantic_hash(),
             &supplied_metadata(&request, &input),
         ),
     )

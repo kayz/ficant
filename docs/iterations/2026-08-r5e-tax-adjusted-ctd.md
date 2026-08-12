@@ -69,6 +69,8 @@ Delivery 税收组合位于 Application/API 边界：native `FuturesDeliveryBask
 
 本轮没有未决 Human 选择。以下事项已由 authority base `0b09a7b0b4a297cefdb564552ea3125d8ad153d6` 冻结：D1 适用主体/排除、D2 cutoff/续发分类、D3 税率、D4 gross含税与12位 ties-to-even约定、D5 Bond双口径、D6 Delivery双 IRR且与 funding隔离、D7双CTD稳定择优、D8 semantic hash/type URL/Unit/source/effective window。R5E 不得在实施中改写这些语义、扩大税务 claim 或把 AC09提前标为点亮。
 
+- **执行期单文件扩权——一方 Python SDK 派生绑定：** 2026-08-12 Human 明确授权把 `.github/scripts/license-inventory.lock.json` 加入 R5E 允许写路径。触发事实是 R5E 按 §4 同步生成 Python SDK 后，既有 `verify-bindings` 对 `pkg:pypi/ficant-sdk@0.1.0` 的 source-integrity 真实失败；本扩权只允许使用仓库既有 `refresh-bindings` 机械刷新该 inventory 的派生 source-integrity、header 与 inventory digest。不得改变 `supply-chain.lock.json`、first-party/third-party 包集合、许可证表达式、例外、source locator、供应链 policy 或验证代码；刷新后必须要求 19 个 Cargo package 加 Python SDK 共 20 个一方包完整通过绑定验证及既有正负套件。
+
 若需改变任一枚举、字段号、算术顺序、TaxRulePack内容/profile/rate/source/effective window、允许路径、受保护 expected/Oracle/容差/断言方向、C/C++/Artifact schema、authority、CI/CD或部署，必须在首次写入前停止并取得 Human明确扩权；不得先改后补。
 
 ## 6. 最终真实测试证据
@@ -146,6 +148,41 @@ Delivery 税收组合位于 Application/API 边界：native `FuturesDeliveryBask
 - 静默导入既有 User级 `FICANT_TEST_*` 后 `pwsh -NoProfile -NonInteractive -File scripts/check.ps1 -IncludeIntegration`
 - `git diff --check`；实际 changed paths完全包含于允许路径；逐项核验全部受保护事实
 
+**最终真实结果（2026-08-12）：** R5E 的技术 acceptance sentence 已在同一最终代码候选成立。本地候选只证明 AC09 的实现与判据已经满足；正式点亮仍严格等待本候选公共 rebase merge 后，由 private authority 绑定精确公共 SHA、payload SHA-256 与本节证据。
+
+**RED-first 过程证据边界：** contract、tax/decimal、Bond Oracle、Delivery 与 consumer 五个子循环均采用判据先行并形成 forward-only 实现；但最初非零命令的完整原始输出没有全部留存，不能事后以最终绿灯补造首错或 test count。本轮可核实的中间失败包括：严格 API Clippy 对新增 Oracle 绑定测试报告 6 处 `needless_borrow`，只做机械去借用后转绿；一方绑定在 Python SDK 生成物变化后以 `first-party package binding mismatch: pkg:pypi/ficant-sdk@0.1.0` 失败，取得 §5 事前单文件扩权后只运行既有 `refresh-bindings`；完整 Buf 临时树相较仓库暴露一个无 service 的 `tax_rule_pb2_grpc.py` 空桩路径差异，未越权登记或用修改生成模板消除。以上均不是用来替代缺失原始 RED 的 checkpoint。
+
+**权威 pack 与独立 Oracle：**
+
+- `scripts/generate-cgb-interest-tax-pack.ps1 -Check` exit `0`。canonical semantic SHA-256 为 `54fa5adbeb8b164dc779ecc250ab622ab5747cdeb36f2b6da58f4d877ce5106a`；确定性 protobuf payload 为 `336` bytes，SHA-256 / `MarketRulePack.content_hash` 为 `14748fb4d27d01b35ebe466f72669937c850fd48f9bbd875542848d3800168db`；source manifest SHA-256 为 `211ec12aadd0f5072cd9c7b40fb439f1beb0ab0a9f3f1004ae3ee68738fe7d8c`。
+- `uv run --offline --locked --project python python -m pytest tests/oracle/china-rates/test_r5e_tax_adjusted_decimal_oracle.py -q` exit `0`，`13 passed`。Oracle 只使用 Python `decimal` 与冻结输入，独立覆盖 cutoff 前、当日、cutoff 后续发继承、反转篮子、无税差篮子、ties-to-even、数量/顺序确定性和受控扰动；不 import 生产税后公式、native helper 或 expected 生成器。
+- 生产 Rates API 对同一 Oracle expected 逐值核对 Bond 市场 YTM `0.024999039455`、主体 YTM `0.023584055497`，并通过真实 Application/API mapping 核对每只候选的税收调整 coupon、双 IRR、市场/主体 CTD；反转 verified quote 顺序后候选身份与两个 CTD 均不变。
+
+**生成、契约与针对性 checkpoint（均 exit `0`）：**
+
+- 固定 Buf `1.56.0` 的 format/lint 均通过。两个全新临时根各生成 `74` 个文件，路径集相同、原始字节 mismatch `0`；仓库登记的 `73` 个实际 Rust/Python/TypeScript 输出与临时树规范化换行后 mismatch `0`。第 `74` 个是本轮新增 import 令 types-filter plugin 产生的无 service `tax_rule_pb2_grpc.py` 空桩；仓库仍跟踪 R3B 留下、当前模板不再产生的无 service `definition_pb2_grpc.py`，两者均无 consumer。本轮没有扩权写入或删除这两个空桩。
+- descriptor inventory `20 passed`；Python contract import `1 passed`；固定 Node `22.17.0`、pnpm `10.12.4` 下 TypeScript contract consumer `1 passed`，同次 Web suite 为 `35 passed`。
+- `fixed_decimal_rounding`：`3 passed`；`ficant-tax-pack` lib：`3 passed`，权威 pack：`2 passed`；`tax_rule_resolution`：`3 passed`；`r5d_rates_materialization`：`10 passed`；`r5e_tax_materialization`：`2 passed`。
+- Rates API：`9 passed`；生产 server SIT：`1 passed`；native node：lib `1 passed`、integration `6 passed`；Worker Phase4 SIT：`1 passed`。Python contract/R5E Oracle/live construction 合并执行为 `14 passed / 1 skipped`，skip 仅为既有 live-server 环境门禁；统一入口随后实际运行 Phase 2E live SDK parity。
+- R4d-a：`4 passed`；R4d-b：`6 passed`；Rust R5D KRD 对照：`7 passed`；Python R5D Decimal Oracle：`3 passed`。AC10、AC26、Phase 2C/2D matrix、既有 Golden/Arrow 与 native 数值路径在统一入口中全部回归通过。
+- 针对新增 Rust 路径的 `cargo clippy --offline --locked ... --no-deps -- -D warnings` 全部通过；没有新增 lint allow、放宽容差、改 expected 或改变断言方向。
+
+**供应链 checkpoint：** 使用仓库既有 `refresh-bindings` 只刷新 `.github/scripts/license-inventory.lock.json` 的派生 source-integrity/header/digest；包身份、classification、license expression、source locator、first-party policy 与 `supply-chain.lock.json` 均未变。`verify-bindings --require-first-party` exit `0`，inventory digest 为 `90cf2da12bd521fc58105bcc59c822f5aa333005ca539613d0e8a8210ce1c589`，精确覆盖 `19` 个 Cargo package 加 Python SDK共 `20` 个一方包；绑定正负套件 `11 passed`。
+
+**统一入口（同一最终代码候选）：**
+
+- `pwsh -NoProfile -NonInteractive -File scripts/check-fast.ps1`：exit `0`，`98.1 s`。
+- prepend 固定 Node `22.17.0` 后，`pwsh -NoProfile -NonInteractive -File scripts/check.ps1`：exit `0`，`414.3 s`。包含 layering `51` assertions、coverage 七个真实负向 fixture、strict Clippy、workspace build/test、descriptor `20/20`、C++ `8/8`、主 matrix `36/36`、Phase 2B `16/16`、Phase 2C `18/18` 与 Oracle `3/3`、Phase 2D `18/18` 与 Oracle `3/3`、R5D/R5E Oracle、Phase 2E live SDK、许可证及 Web `35/35`。
+- 静默导入既有六个 Windows User 级 `FICANT_TEST_*` 后，`pwsh -NoProfile -NonInteractive -File scripts/check.ps1 -IncludeIntegration`：exit `0`，`445.5 s`；变量值未输出。除完整非环境检查外，migration `4/4`、lease queue `1/1`、execution closure `3/3`、Worker `1/1`、Phase 1 `1/1`、negative invariants `13/13`、Phase 2B/2C/2D 各 `1/1`、Phase 3A registry/dual-source 与 Phase 3B codec/publication 全部通过。
+
+**范围与受保护事实：** execution base 到候选共 `43` 个 tracked/untracked候选路径；全部落在冻结 §6 清单与 §5 事前单文件扩权的并集内，unauthorized `0`。现有未跟踪 `docs/review/full-audit-2026-08-07.md` 保持未改、未暂存、候选外。对除权威 protobuf 二进制 `domain-packs/cgb-interest-tax/cgb-interest-tax-v1.bin` 外的全部候选文本路径执行 `git diff --check`，exit `0`；该 `.bin` 因仓库没有 binary attribute 会被 Git 的文本空白检查误判 wire byte `0x20`，故改由 `-Check` 再生成、`336` bytes 与 SHA-256 `14748fb4d27d01b35ebe466f72669937c850fd48f9bbd875542848d3800168db` 精确判定。`cpp/**`、`crates/ficant-kernel-sys/**`、`crates/ficant-fixed-income-native/**`、`crates/ficant-storage/**`、migrations、`domain-packs/cgb-futures/**`、Phase 2C/2D matrix、`Cargo.lock`、`interface/buf.gen.yaml` 与 `scripts/layering-allowlist.json` 差异均为 `0`；既有 Golden/Oracle/expected未变，只新增 §6 点名的四个 R5E 文件。
+
+**Acceptance sentence：成立。** v2 pack 的 owner/version/definition hash/payload hash/type URL/source/effective window、RATE Unit、Subject完整 profile pair以及每只 Bond 首发日/税收属性都在数值 handoff 前验证；所有漂移负向均以 engine count `0` 失败关闭。Bond保留税前结果并返回显式 coupon-output-VAT-before-input-credit 主体 YTM；Delivery保留全部市场/native字段和 funding-adjusted IRR，逐候选返回税收调整 coupon/IRR与 claim scope，独立计算 subject CTD。反转篮子的市场/主体 CTD不同，无税差篮子相同，输入排序不改变身份。AC10、AC26及R5D行为没有回退。
+
 ## 7. 残余风险
 
-截至规划冻结尚未实施，暂无最终候选残余风险结论。即使 R5E 完成，claim仍只覆盖D1主体的单券coupon销项VAT调整、抵扣进项前；机构最终税负、金融商品转让/交割税务、其他主体/券种、Factor/Exposure/KRD双口径、完整税务会计与UI呈现继续不在产品承诺内。
+- 产品 claim 仍只覆盖 D1 主体的国债 coupon 销项 VAT 调整、抵扣进项前；机构最终税负、进项抵扣/分摊、附加税、金融商品转让/平仓/实物交割税务、交易费用、其他主体与券种、Factor/Exposure/KRD 双口径、完整税务会计与 UI 主动呈现均不在本轮承诺内。
+- pack 的运行窗口在 `2028-01-01T00:00:00+08:00` 强制结束；这是 Human批准的复核边界，不是法规失效推断。到期前必须由 Human依据届时法规发布 forward-only pack version，不能延长现有版本或默认继续使用。
+- 最初五个 RED 子循环的完整原始非零输出没有全部留存；最终门禁、独立 Oracle和负向矩阵证明当前判据方向，但不能补偿过程取证缺口。后续迭代应在首次 RED 时立即固化命令、exit code与首错。
+- Python types-filter 生成仍存在一个历史无 service `definition_pb2_grpc.py` 孤儿和一个未登记、同样无 service的 `tax_rule_pb2_grpc.py` 空桩。二者当前无 import/consumer且不影响 payload或 SDK；若要让 tracked generated路径集与完整 Buf临时树严格相等，必须在后续独立授权中成对删除/登记并重跑完整生成与供应链绑定，不能由本轮越权清理。
+- 本地自测候选尚不是 AC09 的正式事实源；只有公共 rebase merge 与 private authority 对精确公共 SHA、payload hash和本节证据完成 post-merge绑定后，AC09 才能从 `☑ 已批准待实现` 变为 `● 已点亮`。
