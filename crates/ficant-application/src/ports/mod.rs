@@ -31,7 +31,8 @@ mod unit_resolution;
 
 pub use access::AccessScope;
 pub use analytics::{
-    BondAnalyticsArtifactCodec, BondAnalyticsEngine, EncodedBondAnalyticsArtifact,
+    BondAnalyticsArtifactCodec, BondAnalyticsArtifactFacts, BondAnalyticsEngine,
+    EncodedBondAnalyticsArtifact,
 };
 pub use artifacts::{ArtifactRepository, PublishArtifact};
 pub use blob_store::{BeginBlobStage, BlobStore, StagedBlobRef, VerifiedBlobRef, VerifyBlobStage};
@@ -62,7 +63,8 @@ pub use fingerprint::OperationFingerprint;
 pub(crate) use fingerprint::definition_content_hash;
 pub use funding_rule_parser::{FundingRate, FundingRulePackParser};
 pub use futures_delivery::{
-    EncodedFuturesDeliveryArtifact, FuturesDeliveryArtifactCodec, FuturesDeliveryEngine,
+    EncodedFuturesDeliveryArtifact, FuturesDeliveryArtifactCandidateFacts,
+    FuturesDeliveryArtifactCodec, FuturesDeliveryArtifactFacts, FuturesDeliveryEngine,
 };
 pub use futures_hedge::{
     EncodedFuturesHedgeArtifact, FuturesHedgeArtifactCodec, FuturesHedgeEngine,

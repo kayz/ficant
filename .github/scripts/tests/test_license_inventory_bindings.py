@@ -263,5 +263,106 @@ class LicenseInventoryBindingsTests(unittest.TestCase):
         self.assertEqual(self.inventory.read_bytes(), before)
 
 
+class R5DFirstPartyPolicyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.repository = TOOL.parents[2]
+        cls.inventory = cls.repository / ".github/scripts/license-inventory.lock.json"
+        cls.supply_lock = cls.repository / ".github/scripts/supply-chain.lock.json"
+        cls.cargo_lock = cls.repository / "Cargo.lock"
+        cls.uv_lock = cls.repository / "python/uv.lock"
+        cls.pnpm_lock = cls.repository / "web-dm/pnpm-lock.yaml"
+
+    def command(self, inventory):
+        return subprocess.run(
+            [
+                sys.executable,
+                str(TOOL),
+                "verify-bindings",
+                "--inventory",
+                str(inventory),
+                "--cargo-lock",
+                str(self.cargo_lock),
+                "--uv-lock",
+                str(self.uv_lock),
+                "--pnpm-lock",
+                str(self.pnpm_lock),
+                "--supply-lock",
+                str(self.supply_lock),
+                "--release-root",
+                str(self.repository),
+                "--require-first-party",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def candidate(self, packages, path):
+        document = json.loads(self.inventory.read_text(encoding="utf-8"))
+        document["packages"] = packages
+        keys = [
+            {name: package[name] for name in ("purl", "ecosystem", "name", "version")}
+            for package in packages
+        ]
+        document.update(
+            MODULE.header(
+                keys,
+                packages,
+                self.cargo_lock,
+                self.uv_lock,
+                self.pnpm_lock,
+                self.supply_lock,
+            )
+        )
+        path.write_text(
+            json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+
+    def test_policy_is_exactly_nineteen_cargo_packages_plus_python_sdk(self):
+        supply = json.loads(self.supply_lock.read_text(encoding="utf-8"))
+        policy = supply["first_party_packages"]
+        purls = [item["purl"] for item in policy]
+        self.assertEqual(len(policy), 20)
+        self.assertEqual(len(set(purls)), 20)
+        self.assertEqual(sum(item["ecosystem"] == "crates.io" for item in policy), 19)
+        self.assertEqual(
+            [item["purl"] for item in policy if item["ecosystem"] == "PyPI"],
+            ["pkg:pypi/ficant-sdk@0.1.0"],
+        )
+
+    def test_each_r5d_pack_is_required_by_the_exact_policy(self):
+        original = json.loads(self.inventory.read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as temporary:
+            for name in ("ficant-cgb-futures-pack", "ficant-funding-pack", "ficant-tax-pack"):
+                purl = f"pkg:cargo/{name}@0.1.0"
+                with self.subTest(purl=purl):
+                    path = pathlib.Path(temporary) / f"missing-{name}.json"
+                    packages = [
+                        dict(item) for item in original["packages"] if item["purl"] != purl
+                    ]
+                    self.candidate(packages, path)
+                    result = self.command(path)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn(
+                        "first-party package set does not match frozen policy", result.stderr
+                    )
+
+    def test_duplicate_first_party_purl_is_rejected(self):
+        original = json.loads(self.inventory.read_text(encoding="utf-8"))
+        packages = [dict(item) for item in original["packages"]]
+        duplicate = next(
+            item for item in packages if item["purl"] == "pkg:cargo/ficant-tax-pack@0.1.0"
+        )
+        packages.append(dict(duplicate))
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "duplicate-purl.json"
+            self.candidate(packages, path)
+            result = self.command(path)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("duplicate or invalid inventory key", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

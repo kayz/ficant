@@ -1,22 +1,23 @@
-use crate::core_error::CoreBusinessErrorMapper;
-use crate::error::{PlatformFailure, PlatformFailureCode};
-use crate::grpc_web::request_credential;
-use crate::registry::PlatformPort;
-use chrono::{DateTime, NaiveDate, Utc};
+use std::sync::Arc;
+
+use chrono::{NaiveDate, Utc};
 use ficant_application::ports::{
-    BondAnalyticsEngine, CanonicalSnapshotDecoder, CarryRollEngine, DefinitionRepository,
-    FundingRulePackParser, FuturesDeliveryEngine, FuturesDeliveryRuleParser, FuturesHedgeEngine,
-    IntegrityEventSink, SnapshotVerifiedReadMetadataRepository, SubjectRepository,
-    TaxRulePackParser, VerifiedBlobReader, YieldCurveEngine,
-};
-use ficant_application::use_cases::{
-    funding_rule::ResolveFundingRule, subject_resolution::ResolveSubject, tax_rule::ResolveTaxRule,
+    ArtifactRepository, BondAnalyticsArtifactCodec, BondAnalyticsEngine, CanonicalSnapshotDecoder,
+    CarryRollEngine, CurvePointSetDecoder, CurveSnapshotMetadataRepository, DataSourceRepository,
+    DefinitionRepository, FactorTopologyRepository, FundingRulePackParser,
+    FuturesDeliveryArtifactCodec, FuturesDeliveryEngine, FuturesDeliveryRuleParser,
+    FuturesHedgeEngine, IntegrityEventSink, SnapshotVerifiedReadMetadataRepository,
+    SubjectRepository, TaxRulePackParser, VerifiedBlobReader, YieldCurveEngine,
 };
 use ficant_application::{
-    AccessScope, ApplicationError, ApplicationErrorCategory, CalculateBondAnalytics,
-    CalculateCarryRoll, CalculateFuturesDeliveryBasket, CalculateFuturesHedge,
-    FuturesDeliveryCandidateBinding, FuturesDeliveryInputBindings,
-    MaterializeFuturesDeliveryInputs, map_analytics_error, map_domain_error,
+    AccessScope, ApplicationError, ApplicationErrorCategory, BondRatesCommand,
+    CalculateBondAnalytics, CalculateCarryRoll, CalculateFuturesDeliveryBasket,
+    CalculateFuturesHedge, CarryRatesCommand, CurveRatesCommand, DeliveryRatesCommand,
+    HedgeRatesCommand, ImmutableArtifactBinding, ImmutableCurveNodeBinding,
+    ImmutableSnapshotBinding, MaterializeBondRatesInput, MaterializeCarryRatesInput,
+    MaterializeCurveRatesInput, MaterializeDeliveryRatesInput, MaterializeHedgeRatesInput,
+    RatesEvidenceBinding, RatesInputEvidence, RatesInputRole, RatesRequestEvidence,
+    RatesUnitRequirement, map_analytics_error, map_domain_error,
 };
 use ficant_contracts::ficant::core::v1::{
     DecimalValue, OwnerRef as ProtoOwnerRef, UnitRef as ProtoUnitRef,
@@ -26,40 +27,34 @@ use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAn
 use ficant_domain::DomainErrorCode;
 use ficant_domain::analytics::{
     ABI_VERSION, ALGORITHM_ID, ALGORITHM_VERSION, AnalyticsMode, AnalyticsObjectRef,
-    BondAnalyticsInput, BondAnalyticsResult, BondTerms, BusinessDayConvention, CONVENTION_PROFILE,
-    CalendarBinding, CalendarRequirement, CouponFrequency, DECIMAL_SCALE, DayCountConvention,
-    ENGINE_ID, ENGINE_VERSION, FixedDecimal,
+    BondAnalyticsResult, CONVENTION_PROFILE, CalendarRequirement, DECIMAL_SCALE, ENGINE_ID,
+    ENGINE_VERSION, FixedDecimal, RESULT_SCHEMA_ID,
 };
 use ficant_domain::curves::{
     CARRY_ROLL_ALGORITHM_ID, CARRY_ROLL_ALGORITHM_VERSION, CARRY_ROLL_CONVENTION_PROFILE,
-    CURVE_ALGORITHM_ID, CURVE_ALGORITHM_VERSION, CURVE_CONVENTION_PROFILE, CarryRollInput,
-    CarryRollResult, YieldCurveBinding, YieldCurveInterpolation, YieldCurveNode, YieldCurvePoint,
-    YieldCurveQuery,
+    CURVE_ALGORITHM_ID, CURVE_ALGORITHM_VERSION, CURVE_CONVENTION_PROFILE, CarryRollResult,
+    YieldCurvePoint,
 };
 use ficant_domain::futures_delivery::{
-    CgbFuturesProduct, FUTURES_DELIVERY_ALGORITHM_ID, FUTURES_DELIVERY_ALGORITHM_VERSION,
+    FUTURES_DELIVERY_ALGORITHM_ID, FUTURES_DELIVERY_ALGORITHM_VERSION,
     FUTURES_DELIVERY_CONVENTION_PROFILE, FuturesDeliveryBasketResult, FuturesDeliveryMeasures,
 };
 use ficant_domain::futures_hedge::{
     FUTURES_HEDGE_ALGORITHM_ID, FUTURES_HEDGE_ALGORITHM_VERSION, FUTURES_HEDGE_CONVENTION_PROFILE,
-    FuturesHedgeInput, FuturesHedgeResult,
+    FuturesHedgeResult,
 };
-use ficant_domain::market::{BondTaxAttributes, IncomeTaxStatus, ValueAddedTaxStatus};
 use ficant_domain::primitives::{
-    ContentHash, DecimalValue as DomainDecimalValue, MarketTime, OwnerRef, Ulid, UnitRef, Version,
-    VersionRef,
+    ContentHash, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
 };
 use prost::Message;
-use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
+use crate::core_error::CoreBusinessErrorMapper;
+use crate::error::{PlatformFailure, PlatformFailureCode};
+use crate::grpc_web::request_credential;
+use crate::registry::PlatformPort;
+
 const REQUIRED_SCOPE: &str = "rates:analyze";
-const CN_MARKET: &str = "CN";
-const BOND_TOOL: &str = "bond-analytics";
-const CURVE_TOOL: &str = "yield-curve";
-const CARRY_ROLL_TOOL: &str = "carry-roll";
-const FUTURES_DELIVERY_TOOL: &str = "futures-delivery";
-const FUTURES_HEDGE_TOOL: &str = "futures-hedge";
 
 #[derive(Clone)]
 pub struct RatesGrpcService {
@@ -68,27 +63,55 @@ pub struct RatesGrpcService {
     curve: Arc<dyn YieldCurveEngine>,
     carry_roll: Arc<dyn CarryRollEngine>,
     futures_delivery: Arc<dyn FuturesDeliveryEngine>,
+    futures_hedge: Arc<dyn FuturesHedgeEngine>,
     definitions: Arc<dyn DefinitionRepository>,
     subjects: Arc<dyn SubjectRepository>,
-    futures_delivery_rule_parser: Arc<dyn FuturesDeliveryRuleParser>,
-    snapshot_metadata: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
-    blob_reader: Arc<dyn VerifiedBlobReader>,
+    data_sources: Arc<dyn DataSourceRepository>,
+    snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
+    curve_snapshots: Arc<dyn CurveSnapshotMetadataRepository>,
+    factors: Arc<dyn FactorTopologyRepository>,
+    artifacts: Arc<dyn ArtifactRepository>,
+    blobs: Arc<dyn VerifiedBlobReader>,
     integrity_events: Arc<dyn IntegrityEventSink>,
-    canonical_snapshot_decoder: Arc<dyn CanonicalSnapshotDecoder>,
-    funding_rule_pack_parser: Arc<dyn FundingRulePackParser>,
-    tax_rule_pack_parser: Arc<dyn TaxRulePackParser>,
-    futures_hedge: Arc<dyn FuturesHedgeEngine>,
+    snapshot_decoder: Arc<dyn CanonicalSnapshotDecoder>,
+    curve_decoder: Arc<dyn CurvePointSetDecoder>,
+    delivery_parser: Arc<dyn FuturesDeliveryRuleParser>,
+    funding_parser: Arc<dyn FundingRulePackParser>,
+    tax_parser: Arc<dyn TaxRulePackParser>,
+    bond_codec: Arc<dyn BondAnalyticsArtifactCodec>,
+    delivery_codec: Arc<dyn FuturesDeliveryArtifactCodec>,
     errors: CoreBusinessErrorMapper,
 }
 
 impl RatesGrpcService {
-    /// Creates the authenticated transport adapter for all Phase 2 reference calculations.
+    /// Canonicalizes the metadata carried by the private materialized Bond port.
+    ///
+    /// The caller supplies only Application-built consumed-input evidence. This function binds
+    /// that evidence to the public request, the fully materialized numerical input and the
+    /// resolved coupon-tax scalar, then derives the fixed schema, parameter digest and request
+    /// fingerprint used by execution.
     ///
     /// # Errors
     ///
-    /// Returns an error when the trace-signing key contains fewer than 32 bytes.
+    /// Returns a validation failure when the request, materialized facts, role closure, ordering,
+    /// identities or time evidence are inconsistent.
+    pub fn canonical_materialized_bond_metadata(
+        request: &pb::AnalyzeBondRequest,
+        input: &ficant_domain::analytics::BondAnalyticsInput,
+        coupon_tax_rate: FixedDecimal,
+        consumed_inputs: &[pb::AnalysisInputBinding],
+    ) -> Result<pb::ResultMetadata, ApplicationError> {
+        materialized_bond_proof(request, input, coupon_tax_rate, consumed_inputs)
+            .map(|(_, metadata)| metadata)
+    }
+
+    /// Constructs the complete R5D production dependency slice.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the trace-key configuration is invalid.
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub fn new_with_materialization(
         identity: Arc<dyn PlatformPort>,
         bond: Arc<dyn BondAnalyticsEngine>,
         curve: Arc<dyn YieldCurveEngine>,
@@ -96,14 +119,21 @@ impl RatesGrpcService {
         futures_delivery: Arc<dyn FuturesDeliveryEngine>,
         definitions: Arc<dyn DefinitionRepository>,
         subjects: Arc<dyn SubjectRepository>,
-        futures_delivery_rule_parser: Arc<dyn FuturesDeliveryRuleParser>,
-        snapshot_metadata: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
-        blob_reader: Arc<dyn VerifiedBlobReader>,
+        delivery_parser: Arc<dyn FuturesDeliveryRuleParser>,
+        snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
+        blobs: Arc<dyn VerifiedBlobReader>,
         integrity_events: Arc<dyn IntegrityEventSink>,
-        canonical_snapshot_decoder: Arc<dyn CanonicalSnapshotDecoder>,
-        funding_rule_pack_parser: Arc<dyn FundingRulePackParser>,
-        tax_rule_pack_parser: Arc<dyn TaxRulePackParser>,
+        snapshot_decoder: Arc<dyn CanonicalSnapshotDecoder>,
+        funding_parser: Arc<dyn FundingRulePackParser>,
+        tax_parser: Arc<dyn TaxRulePackParser>,
         futures_hedge: Arc<dyn FuturesHedgeEngine>,
+        data_sources: Arc<dyn DataSourceRepository>,
+        curve_snapshots: Arc<dyn CurveSnapshotMetadataRepository>,
+        factors: Arc<dyn FactorTopologyRepository>,
+        artifacts: Arc<dyn ArtifactRepository>,
+        curve_decoder: Arc<dyn CurvePointSetDecoder>,
+        bond_codec: Arc<dyn BondAnalyticsArtifactCodec>,
+        delivery_codec: Arc<dyn FuturesDeliveryArtifactCodec>,
         trace_key: &[u8],
     ) -> Result<Self, &'static str> {
         Ok(Self {
@@ -112,16 +142,23 @@ impl RatesGrpcService {
             curve,
             carry_roll,
             futures_delivery,
+            futures_hedge,
             definitions,
             subjects,
-            futures_delivery_rule_parser,
-            snapshot_metadata,
-            blob_reader,
+            data_sources,
+            snapshots,
+            curve_snapshots,
+            factors,
+            artifacts,
+            blobs,
             integrity_events,
-            canonical_snapshot_decoder,
-            funding_rule_pack_parser,
-            tax_rule_pack_parser,
-            futures_hedge,
+            snapshot_decoder,
+            curve_decoder,
+            delivery_parser,
+            funding_parser,
+            tax_parser,
+            bond_codec,
+            delivery_codec,
             errors: CoreBusinessErrorMapper::new(trace_key)?,
         })
     }
@@ -154,65 +191,78 @@ impl RatesGrpcService {
         request: &pb::AnalyzeBondRequest,
     ) -> Result<pb::AnalyzeBondResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::bond())?;
-        reject_funding_rule_pack(&context)?;
-        let subject = ResolveSubject::new(self.subjects.as_ref())
-            .execute(&context.subject_ref, CN_MARKET, BOND_TOOL)
-            .await?;
-        let tax_rule_pack = context.tax_rule_pack.as_ref().ok_or_else(invalid)?;
-        let parsed = parse_bond_request(request, &context)?;
-        let tax_attributes = parsed
-            .input()
-            .terms()
-            .tax_attributes()
-            .ok_or_else(invalid)?;
-        let access_scope = AccessScope::new(
-            context.owner.tenant_id().clone(),
-            context.owner.owner_id().clone(),
-            vec![context.owner.owner_id().clone()],
-        )?;
-        let coupon_tax_rate = ResolveTaxRule::new(
+        let (mode, input_value) = match request.input.as_ref() {
+            Some(pb::analyze_bond_request::Input::YieldToMaturity(value)) => (
+                AnalyticsMode::YieldIn,
+                parse_fixed_decimal(value, &context.units.rate)?,
+            ),
+            Some(pb::analyze_bond_request::Input::CleanPrice(value)) => (
+                AnalyticsMode::PriceIn,
+                parse_fixed_decimal(value, &context.units.price_per_100)?,
+            ),
+            None => return Err(invalid()),
+        };
+        let materialized = MaterializeBondRatesInput::new(
             self.definitions.as_ref(),
-            self.tax_rule_pack_parser.as_ref(),
+            self.subjects.as_ref(),
+            self.snapshots.as_ref(),
+            self.blobs.as_ref(),
+            self.integrity_events.as_ref(),
+            self.tax_parser.as_ref(),
         )
         .execute(
-            &access_scope,
-            tax_rule_pack,
-            parsed.input().valuation_at().clone(),
-            parsed.input().terms().first_issue_date(),
-            tax_attributes,
-            subject.tax_treatment(),
+            &context.scope()?,
+            BondRatesCommand {
+                owner: context.owner.clone(),
+                subject_ref: context.subject_ref.clone(),
+                units: context.units.requirements()?,
+                currency_unit: parse_unit(&context.units.currency_amount)?,
+                rate_unit: parse_unit(&context.units.rate)?,
+                knowledge_at: context.knowledge_at.clone(),
+                bond: parse_object(request.bond.as_ref())?,
+                calendar: parse_object(request.calendar.as_ref())?,
+                data_snapshot: parse_snapshot(request.data_snapshot.as_ref())?,
+                tax_rule_pack: parse_object(request.tax_rule_pack.as_ref())?,
+                valuation_at: parse_market_time(request.valuation_at.as_ref())?,
+                settlement_date: parse_date(&request.settlement_date)?,
+                calendar_requirement: parse_calendar_requirement(request.calendar_requirement)?,
+                mode,
+                input_value,
+            },
+            trace_context(request),
         )
         .await?;
-        if coupon_tax_rate.unit() != &parse_unit(&context.units.rate)? {
+        if materialized.coupon_tax_rate().unit() != &parse_unit(&context.units.rate)? {
             return Err(map_domain_error(DomainErrorCode::InvalidUnit));
         }
-        let pre_tax = CalculateBondAnalytics::new(self.bond.as_ref()).execute(parsed.input())?;
-        let retained_coupon_fraction = FixedDecimal::ONE
-            .checked_sub(coupon_tax_rate.coupon_tax_rate())
+        let pre_tax =
+            CalculateBondAnalytics::new(self.bond.as_ref()).execute(materialized.input())?;
+        let retained = FixedDecimal::ONE
+            .checked_sub(materialized.coupon_tax_rate().coupon_tax_rate())
             .map_err(map_domain_error)?;
-        let adjusted_coupon_rate = parsed
+        let terms = materialized
             .input()
             .terms()
-            .coupon_rate()
-            .checked_mul(retained_coupon_fraction)
+            .with_coupon_rate(
+                materialized
+                    .input()
+                    .terms()
+                    .coupon_rate()
+                    .checked_mul(retained)
+                    .map_err(map_domain_error)?,
+            )
             .map_err(map_domain_error)?;
-        let adjusted_terms = parsed
+        let after_tax_input = materialized
             .input()
-            .terms()
-            .with_coupon_rate(adjusted_coupon_rate)
-            .map_err(map_domain_error)?;
-        let after_tax_input = parsed
-            .input()
-            .with_terms_and_price_in(adjusted_terms, pre_tax.measures().clean_price())
+            .with_terms_and_price_in(terms, pre_tax.measures().clean_price())
             .map_err(map_domain_error)?;
         let after_tax =
             CalculateBondAnalytics::new(self.bond.as_ref()).execute(&after_tax_input)?;
         Ok(bond_result(
             &pre_tax,
-            &context.units,
-            &context.subject_ref,
-            Some(tax_rule_pack),
             Some(&after_tax),
+            &context,
+            materialized.evidence(),
         ))
     }
 
@@ -221,22 +271,40 @@ impl RatesGrpcService {
         request: &pb::InterpolateYieldCurveRequest,
     ) -> Result<pb::InterpolateYieldCurveResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::curve())?;
-        reject_funding_rule_pack(&context)?;
-        reject_tax_rule_pack(&context)?;
-        ResolveSubject::new(self.subjects.as_ref())
-            .execute(&context.subject_ref, CN_MARKET, CURVE_TOOL)
-            .await?;
-        let query = YieldCurveQuery::new(
-            parse_curve(request.curve.as_ref(), &context.units)?,
-            parse_date(&request.query_date)?,
+        let materialized = MaterializeCurveRatesInput::new(
+            self.definitions.as_ref(),
+            self.subjects.as_ref(),
+            self.data_sources.as_ref(),
+            self.snapshots.as_ref(),
+            self.curve_snapshots.as_ref(),
+            self.blobs.as_ref(),
+            self.integrity_events.as_ref(),
+            self.curve_decoder.as_ref(),
+            self.factors.as_ref(),
         )
-        .map_err(map_domain_error)?;
+        .execute(
+            &context.scope()?,
+            CurveRatesCommand {
+                owner: context.owner.clone(),
+                subject_ref: context.subject_ref.clone(),
+                units: context.units.requirements()?,
+                currency_unit: parse_unit(&context.units.currency_amount)?,
+                rate_unit: parse_unit(&context.units.rate)?,
+                knowledge_at: context.knowledge_at.clone(),
+                curve: parse_snapshot(request.curve.as_ref())?,
+                query_date: parse_date(&request.query_date)?,
+            },
+            trace_context(request),
+        )
+        .await?;
         let point = self
             .curve
-            .interpolate(&query)
+            .interpolate(materialized.query())
             .map_err(map_analytics_error)?;
-        point.validate_against(&query).map_err(map_domain_error)?;
-        Ok(curve_result(&point, &context.units, &context.subject_ref))
+        point
+            .validate_against(materialized.query())
+            .map_err(map_domain_error)?;
+        Ok(curve_result(&point, &context, materialized.evidence()))
     }
 
     async fn analyze_carry_roll_value(
@@ -244,30 +312,42 @@ impl RatesGrpcService {
         request: &pb::AnalyzeCarryRollRequest,
     ) -> Result<pb::AnalyzeCarryRollResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::carry_roll())?;
-        reject_funding_rule_pack(&context)?;
-        reject_tax_rule_pack(&context)?;
-        ResolveSubject::new(self.subjects.as_ref())
-            .execute(&context.subject_ref, CN_MARKET, CARRY_ROLL_TOOL)
-            .await?;
-        let input = CarryRollInput::new(
-            context.owner,
-            parse_object(request.bond.as_ref())?,
-            context.rule_pack,
-            context.data_snapshot,
-            parse_market_time(request.valuation_at.as_ref())?,
-            parse_date(&request.initial_settlement)?,
-            parse_date(&request.horizon_settlement)?,
-            parse_calendar_requirement(request.calendar_requirement)?,
-            parse_calendar(request.calendar.as_ref())?,
-            parse_bond_terms(request.terms.as_ref(), &context.units)?,
-            parse_curve(request.curve.as_ref(), &context.units)?,
+        let materialized = MaterializeCarryRatesInput::new(
+            self.definitions.as_ref(),
+            self.subjects.as_ref(),
+            self.data_sources.as_ref(),
+            self.snapshots.as_ref(),
+            self.curve_snapshots.as_ref(),
+            self.blobs.as_ref(),
+            self.integrity_events.as_ref(),
+            self.curve_decoder.as_ref(),
+            self.factors.as_ref(),
         )
-        .map_err(map_domain_error)?;
-        let result = CalculateCarryRoll::new(self.carry_roll.as_ref()).execute(&input)?;
+        .execute(
+            &context.scope()?,
+            CarryRatesCommand {
+                owner: context.owner.clone(),
+                subject_ref: context.subject_ref.clone(),
+                units: context.units.requirements()?,
+                currency_unit: parse_unit(&context.units.currency_amount)?,
+                rate_unit: parse_unit(&context.units.rate)?,
+                knowledge_at: context.knowledge_at.clone(),
+                bond: parse_object(request.bond.as_ref())?,
+                curve: parse_snapshot(request.curve.as_ref())?,
+                valuation_at: parse_market_time(request.valuation_at.as_ref())?,
+                initial_settlement: parse_date(&request.initial_settlement)?,
+                horizon_settlement: parse_date(&request.horizon_settlement)?,
+                calendar_requirement: parse_calendar_requirement(request.calendar_requirement)?,
+            },
+            trace_context(request),
+        )
+        .await?;
+        let result =
+            CalculateCarryRoll::new(self.carry_roll.as_ref()).execute(materialized.input())?;
         Ok(carry_roll_result(
             &result,
-            &context.units,
-            &context.subject_ref,
+            &context,
+            materialized.evidence(),
         ))
     }
 
@@ -279,92 +359,46 @@ impl RatesGrpcService {
             request.context.as_ref(),
             ExpectedAlgorithm::futures_delivery(),
         )?;
-        reject_tax_rule_pack(&context)?;
-        let subject = ResolveSubject::new(self.subjects.as_ref())
-            .execute(
-                &context.subject_ref,
-                self.futures_delivery_rule_parser.market(),
-                FUTURES_DELIVERY_TOOL,
-            )
-            .await?;
-        let funding_rule_pack = context.funding_rule_pack.as_ref().ok_or_else(invalid)?;
-        let futures_contract = parse_object(request.futures_contract.as_ref())?;
-        let valuation_at = parse_market_time(request.valuation_at.as_ref())?;
-        let purchase_date = parse_date(&request.purchase_date)?;
-        let delivery_month_first = parse_date(&request.delivery_month_first)?;
-        let delivery_date = parse_date(&request.delivery_date)?;
-        let product = parse_product(request.product)?;
-        let access_scope = AccessScope::new(
-            context.owner.tenant_id().clone(),
-            context.owner.owner_id().clone(),
-            vec![context.owner.owner_id().clone()],
-        )?;
-        let funding_rate = ResolveFundingRule::new(
+        let materialized = MaterializeDeliveryRatesInput::new(
             self.definitions.as_ref(),
-            self.funding_rule_pack_parser.as_ref(),
+            self.subjects.as_ref(),
+            self.data_sources.as_ref(),
+            self.snapshots.as_ref(),
+            self.blobs.as_ref(),
+            self.integrity_events.as_ref(),
+            self.snapshot_decoder.as_ref(),
+            self.delivery_parser.as_ref(),
+            self.funding_parser.as_ref(),
         )
         .execute(
-            &access_scope,
-            funding_rule_pack,
-            valuation_at.clone(),
-            subject.funding_tier(),
+            &context.scope()?,
+            DeliveryRatesCommand {
+                owner: context.owner.clone(),
+                subject_ref: context.subject_ref.clone(),
+                units: context.units.requirements()?,
+                currency_unit: parse_unit(&context.units.currency_amount)?,
+                price_unit: parse_unit(&context.units.price_per_100)?,
+                rate_unit: parse_unit(&context.units.rate)?,
+                knowledge_at: context.knowledge_at.clone(),
+                futures_contract: parse_object(request.futures_contract.as_ref())?,
+                data_snapshot: parse_snapshot(request.data_snapshot.as_ref())?,
+                funding_rule_pack: parse_object(request.funding_rule_pack.as_ref())?,
+                valuation_at: parse_market_time(request.valuation_at.as_ref())?,
+                purchase_date: parse_date(&request.purchase_date)?,
+            },
+            trace_context(request),
         )
         .await?;
-        if funding_rate.unit() != &parse_unit(&context.units.rate)? {
+        if materialized.funding_rate().unit() != &parse_unit(&context.units.rate)? {
             return Err(map_domain_error(DomainErrorCode::InvalidUnit));
         }
-        let futures_clean_price = parse_fixed_decimal(
-            request.futures_clean_price.as_ref().ok_or_else(invalid)?,
-            &context.units.price_per_100,
-        )?;
-        let financing_rate = funding_rate.annual_financing_rate();
-        let candidates = request
-            .candidates
-            .iter()
-            .map(|candidate| {
-                Ok(FuturesDeliveryCandidateBinding::new(
-                    parse_object(candidate.bond.as_ref())?,
-                    parse_bond_terms(candidate.terms.as_ref(), &context.units)?,
-                    parse_fixed_decimal(
-                        candidate.spot_clean_price.as_ref().ok_or_else(invalid)?,
-                        &context.units.price_per_100,
-                    )?,
-                ))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let bindings = FuturesDeliveryInputBindings::new(
-            context.owner.clone(),
-            futures_contract,
-            context.rule_pack.clone(),
-            context.data_snapshot.clone(),
-            valuation_at,
-            purchase_date,
-            delivery_month_first,
-            delivery_date,
-            product,
-            candidates,
-            futures_clean_price,
-            financing_rate,
-            parse_unit(&context.units.price_per_100)?,
-        );
-        let inputs = MaterializeFuturesDeliveryInputs::new(
-            self.definitions.as_ref(),
-            self.snapshot_metadata.as_ref(),
-            self.blob_reader.as_ref(),
-            self.integrity_events.as_ref(),
-            self.canonical_snapshot_decoder.as_ref(),
-            self.futures_delivery_rule_parser.as_ref(),
-        )
-        .execute(&access_scope, &bindings, trace_context(request))
-        .await?;
-        let result =
-            CalculateFuturesDeliveryBasket::new(self.futures_delivery.as_ref()).execute(&inputs)?;
+        let result = CalculateFuturesDeliveryBasket::new(self.futures_delivery.as_ref())
+            .execute(materialized.inputs())?;
         futures_delivery_result(
             &result,
-            &context.units,
-            &context.subject_ref,
-            funding_rule_pack,
-            financing_rate,
+            materialized.funding_rate().annual_financing_rate(),
+            &context,
+            materialized.evidence(),
         )
     }
 
@@ -373,87 +407,187 @@ impl RatesGrpcService {
         request: &pb::AnalyzeFuturesHedgeRequest,
     ) -> Result<pb::AnalyzeFuturesHedgeResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::futures_hedge())?;
-        reject_funding_rule_pack(&context)?;
-        reject_tax_rule_pack(&context)?;
-        ResolveSubject::new(self.subjects.as_ref())
-            .execute(
-                &context.subject_ref,
-                self.futures_delivery_rule_parser.market(),
-                FUTURES_HEDGE_TOOL,
-            )
-            .await?;
-        let input = FuturesHedgeInput::new(
-            context.owner,
-            parse_object(request.target_risk_artifact.as_ref())?,
-            parse_object(request.delivery_artifact.as_ref())?,
-            parse_object(request.ctd_analytics_artifact.as_ref())?,
-            parse_object(request.futures_contract.as_ref())?,
-            parse_object(request.ctd_bond.as_ref())?,
-            context.rule_pack,
-            context.data_snapshot,
-            parse_market_time(request.valuation_at.as_ref())?,
-            parse_product(request.product)?,
-            parse_fixed_decimal(
-                request.target_dv01.as_ref().ok_or_else(invalid)?,
-                &context.units.dv01,
-            )?,
-            parse_fixed_decimal(
-                request.ctd_dv01_per_100.as_ref().ok_or_else(invalid)?,
-                &context.units.dv01_per_100,
-            )?,
-            parse_fixed_decimal(
-                request.conversion_factor.as_ref().ok_or_else(invalid)?,
-                &context.units.dimensionless,
-            )?,
+        let materialized = MaterializeHedgeRatesInput::new(
+            self.definitions.as_ref(),
+            self.subjects.as_ref(),
+            self.artifacts.as_ref(),
+            self.blobs.as_ref(),
+            self.integrity_events.as_ref(),
+            self.bond_codec.as_ref(),
+            self.delivery_codec.as_ref(),
+            self.delivery_parser.as_ref(),
         )
-        .map_err(map_domain_error)?;
-        let result = CalculateFuturesHedge::new(self.futures_hedge.as_ref()).execute(&input)?;
+        .execute(
+            &context.scope()?,
+            HedgeRatesCommand {
+                owner: context.owner.clone(),
+                subject_ref: context.subject_ref.clone(),
+                units: context.units.requirements()?,
+                knowledge_at: context.knowledge_at.clone(),
+                target_risk_artifact: parse_artifact(request.target_risk_artifact.as_ref())?,
+                delivery_artifact: parse_artifact(request.delivery_artifact.as_ref())?,
+                ctd_analytics_artifact: parse_artifact(request.ctd_analytics_artifact.as_ref())?,
+                futures_contract: parse_object(request.futures_contract.as_ref())?,
+                valuation_at: parse_market_time(request.valuation_at.as_ref())?,
+            },
+            trace_context(request),
+        )
+        .await?;
+        let result = CalculateFuturesHedge::new(self.futures_hedge.as_ref())
+            .execute(materialized.input())?;
         Ok(futures_hedge_result(
             &result,
-            &context.units,
-            &context.subject_ref,
+            &context,
+            materialized.evidence(),
         ))
     }
 }
 
-/// Fully parsed bond-analysis request shared by gRPC and native research nodes.
+impl RatesGrpcService {
+    /// Executes a Bond calculation from an input that was already materialized and verified by
+    /// the Application layer.
+    ///
+    /// This is the private native-node seam. The public request still carries only exact
+    /// identities; the numerical facts, resolved tax scalar, and response evidence must arrive
+    /// through the private materialized port. Every public value that can affect the calculation
+    /// is compared with the materialized input before the engine is called.
+    ///
+    /// # Errors
+    ///
+    /// Returns a non-retryable validation failure when either representation drifts, the supplied
+    /// evidence is incomplete, or the numerical engine rejects the materialized input.
+    pub fn execute_materialized_bond_request(
+        engine: &dyn BondAnalyticsEngine,
+        request: &pb::AnalyzeBondRequest,
+        input: &ficant_domain::analytics::BondAnalyticsInput,
+        coupon_tax_rate: FixedDecimal,
+        supplied_metadata: pb::ResultMetadata,
+    ) -> Result<pb::AnalyzeBondResult, ApplicationError> {
+        let (context, expected_metadata) = materialized_bond_proof(
+            request,
+            input,
+            coupon_tax_rate,
+            &supplied_metadata.consumed_inputs,
+        )?;
+        if supplied_metadata != expected_metadata {
+            return Err(invalid());
+        }
+
+        let pre_tax = CalculateBondAnalytics::new(engine).execute(input)?;
+        if pre_tax.schema_id() != RESULT_SCHEMA_ID {
+            return Err(invalid());
+        }
+        let retained = FixedDecimal::ONE
+            .checked_sub(coupon_tax_rate)
+            .map_err(map_domain_error)?;
+        let terms = input
+            .terms()
+            .with_coupon_rate(
+                input
+                    .terms()
+                    .coupon_rate()
+                    .checked_mul(retained)
+                    .map_err(map_domain_error)?,
+            )
+            .map_err(map_domain_error)?;
+        let after_tax_input = input
+            .with_terms_and_price_in(terms, pre_tax.measures().clean_price())
+            .map_err(map_domain_error)?;
+        let after_tax = CalculateBondAnalytics::new(engine).execute(&after_tax_input)?;
+        Ok(bond_result_with_metadata(
+            &pre_tax,
+            Some(&after_tax),
+            &context.units,
+            supplied_metadata,
+        ))
+    }
+}
+
+/// A fully materialized Bond request whose public identities and private proof have already been
+/// jointly validated.
+#[derive(Clone, Debug)]
 pub struct ParsedBondAnalyticsRequest {
-    input: BondAnalyticsInput,
-    units: UnitBindings,
-    subject_ref: VersionRef,
+    request: pb::AnalyzeBondRequest,
+    input: ficant_domain::analytics::BondAnalyticsInput,
+    coupon_tax_rate: FixedDecimal,
+    metadata: pb::ResultMetadata,
 }
 
-impl ParsedBondAnalyticsRequest {
-    #[must_use]
-    pub fn input(&self) -> &BondAnalyticsInput {
-        &self.input
-    }
-
-    #[must_use]
-    pub fn subject_ref(&self) -> &VersionRef {
-        &self.subject_ref
-    }
-}
-
-/// Parses and validates every field of the public bond-analysis contract without I/O.
+/// Parses and seals the exact two-port Bond representation without invoking a numerical engine.
 ///
 /// # Errors
 ///
-/// Returns a stable application validation error for any incomplete or inconsistent binding.
+/// Returns a validation failure when any public identity, private fact, tax scalar or evidence
+/// binding drifts.
 pub fn parse_analyze_bond_request(
-    request: &pb::AnalyzeBondRequest,
+    request: pb::AnalyzeBondRequest,
+    input: ficant_domain::analytics::BondAnalyticsInput,
+    coupon_tax_rate: FixedDecimal,
+    consumed_inputs: &[pb::AnalysisInputBinding],
 ) -> Result<ParsedBondAnalyticsRequest, ApplicationError> {
-    let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::bond())?;
-    reject_funding_rule_pack(&context)?;
-    reject_tax_rule_pack(&context)?;
-    parse_bond_request(request, &context)
+    let metadata = RatesGrpcService::canonical_materialized_bond_metadata(
+        &request,
+        &input,
+        coupon_tax_rate,
+        consumed_inputs,
+    )?;
+    Ok(ParsedBondAnalyticsRequest {
+        request,
+        input,
+        coupon_tax_rate,
+        metadata,
+    })
 }
 
-fn parse_bond_request(
+/// Executes an already parsed exact Bond request.
+///
+/// # Errors
+///
+/// Returns validation or numerical failures from the sealed R5D private execution seam.
+pub fn execute_parsed_bond_request(
+    engine: &dyn BondAnalyticsEngine,
+    parsed: &ParsedBondAnalyticsRequest,
+) -> Result<pb::AnalyzeBondResult, ApplicationError> {
+    RatesGrpcService::execute_materialized_bond_request(
+        engine,
+        &parsed.request,
+        &parsed.input,
+        parsed.coupon_tax_rate,
+        parsed.metadata.clone(),
+    )
+}
+
+/// Parses, seals and executes one exact two-port Bond request.
+///
+/// # Errors
+///
+/// Returns validation or numerical failures from parsing or execution.
+pub fn analyze_bond_request(
+    engine: &dyn BondAnalyticsEngine,
+    request: pb::AnalyzeBondRequest,
+    input: ficant_domain::analytics::BondAnalyticsInput,
+    coupon_tax_rate: FixedDecimal,
+    consumed_inputs: &[pb::AnalysisInputBinding],
+) -> Result<pb::AnalyzeBondResult, ApplicationError> {
+    let parsed = parse_analyze_bond_request(request, input, coupon_tax_rate, consumed_inputs)?;
+    execute_parsed_bond_request(engine, &parsed)
+}
+
+#[allow(clippy::too_many_lines)]
+fn materialized_bond_proof(
     request: &pb::AnalyzeBondRequest,
-    context: &ParsedContext,
-) -> Result<ParsedBondAnalyticsRequest, ApplicationError> {
-    let terms = parse_bond_terms(request.terms.as_ref(), &context.units)?;
+    input: &ficant_domain::analytics::BondAnalyticsInput,
+    coupon_tax_rate: FixedDecimal,
+    consumed_inputs: &[pb::AnalysisInputBinding],
+) -> Result<(ParsedContext, pb::ResultMetadata), ApplicationError> {
+    let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::bond())?;
+    let bond = parse_object(request.bond.as_ref())?;
+    let calendar = parse_object(request.calendar.as_ref())?;
+    let snapshot = parse_snapshot(request.data_snapshot.as_ref())?;
+    let tax_rule_pack = parse_object(request.tax_rule_pack.as_ref())?;
+    let valuation_at = parse_market_time(request.valuation_at.as_ref())?;
+    let settlement_date = parse_date(&request.settlement_date)?;
+    let calendar_requirement = parse_calendar_requirement(request.calendar_requirement)?;
     let (mode, input_value) = match request.input.as_ref() {
         Some(pb::analyze_bond_request::Input::YieldToMaturity(value)) => (
             AnalyticsMode::YieldIn,
@@ -465,57 +599,133 @@ fn parse_bond_request(
         ),
         None => return Err(invalid()),
     };
-    let input = BondAnalyticsInput::new(
-        context.owner.clone(),
-        parse_object(request.bond.as_ref())?,
-        context.rule_pack.clone(),
-        context.data_snapshot.clone(),
-        parse_market_time(request.valuation_at.as_ref())?,
-        parse_date(&request.settlement_date)?,
-        parse_calendar_requirement(request.calendar_requirement)?,
-        parse_calendar(request.calendar.as_ref())?,
-        terms,
-        mode,
-        input_value,
-    )
-    .map_err(map_domain_error)?;
-    Ok(ParsedBondAnalyticsRequest {
-        input,
-        units: context.units.clone(),
-        subject_ref: context.subject_ref.clone(),
-    })
+    if &context.owner != input.owner()
+        || &bond != input.bond()
+        || &tax_rule_pack != input.rule_pack()
+        || snapshot.id() != input.snapshot().version_ref().id()
+        || snapshot.content_hash() != input.snapshot().content_hash()
+        || calendar.version_ref().id().as_str() != input.calendar().id()
+        || calendar.version_ref().version() != input.calendar().version()
+        || calendar.content_hash() != input.calendar().content_hash()
+        || valuation_at != *input.valuation_at()
+        || settlement_date != input.settlement_date()
+        || calendar_requirement != input.calendar_requirement()
+        || mode != input.mode()
+        || input_value != input.input_value()
+        || !coupon_tax_rate.is_non_negative()
+        || coupon_tax_rate > FixedDecimal::ONE
+    {
+        return Err(invalid());
+    }
+    require_exact_bond_roles(consumed_inputs)?;
+    let parsed_inputs = consumed_inputs
+        .iter()
+        .map(parse_metadata_evidence)
+        .collect::<Result<Vec<_>, _>>()?;
+    validate_bond_evidence_times(&parsed_inputs, &valuation_at, &context.knowledge_at, input)?;
+    let evidence =
+        RatesRequestEvidence::bond(parsed_inputs, &context.knowledge_at, input, coupon_tax_rate)?;
+    let expected = metadata(RESULT_SCHEMA_ID, &context, &evidence);
+    if expected.consumed_inputs.as_slice() != consumed_inputs {
+        return Err(invalid());
+    }
+    validate_materialized_metadata(&context, &expected, &context.units.all_proto_refs())?;
+    require_metadata_version(
+        &expected,
+        pb::AnalysisInputRole::Subject,
+        &context.subject_ref,
+    )?;
+    require_metadata_object(&expected, pb::AnalysisInputRole::Bond, input.bond())?;
+    require_metadata_object(&expected, pb::AnalysisInputRole::Calendar, &calendar)?;
+    require_metadata_snapshot(&expected, pb::AnalysisInputRole::DataSnapshot, &snapshot)?;
+    require_metadata_object(
+        &expected,
+        pb::AnalysisInputRole::TaxRulePack,
+        input.rule_pack(),
+    )?;
+    Ok((context, expected))
 }
 
-/// Executes an already parsed bond request and maps the domain result to its protobuf contract.
-///
-/// # Errors
-///
-/// Returns the application error produced by the real analytics engine.
-pub fn execute_parsed_bond_request(
-    engine: &dyn BondAnalyticsEngine,
-    request: &ParsedBondAnalyticsRequest,
-) -> Result<pb::AnalyzeBondResult, ApplicationError> {
-    let result = CalculateBondAnalytics::new(engine).execute(&request.input)?;
-    Ok(bond_result(
-        &result,
-        &request.units,
-        request.subject_ref(),
-        None,
-        None,
-    ))
+fn require_exact_bond_roles(inputs: &[pb::AnalysisInputBinding]) -> Result<(), ApplicationError> {
+    let expected = [
+        (pb::AnalysisInputRole::Subject, 1_usize),
+        (pb::AnalysisInputRole::Unit, 9),
+        (pb::AnalysisInputRole::Bond, 1),
+        (pb::AnalysisInputRole::Calendar, 1),
+        (pb::AnalysisInputRole::DataSnapshot, 1),
+        (pb::AnalysisInputRole::TaxRulePack, 1),
+    ];
+    if inputs.len() != expected.iter().map(|(_, count)| count).sum::<usize>()
+        || expected.iter().any(|(role, count)| {
+            inputs
+                .iter()
+                .filter(|input| input.role == *role as i32)
+                .count()
+                != *count
+        })
+    {
+        return Err(invalid());
+    }
+    Ok(())
 }
 
-/// Runs the shared pure parse, native calculation, and protobuf result mapping path.
-///
-/// # Errors
-///
-/// Returns a stable application error for validation or analytics failure.
-pub fn analyze_bond_request(
-    engine: &dyn BondAnalyticsEngine,
-    request: &pb::AnalyzeBondRequest,
-) -> Result<pb::AnalyzeBondResult, ApplicationError> {
-    let parsed = parse_analyze_bond_request(request)?;
-    execute_parsed_bond_request(engine, &parsed)
+fn validate_bond_evidence_times(
+    inputs: &[RatesInputEvidence],
+    valuation_at: &MarketTime,
+    knowledge_at: &MarketTime,
+    materialized: &ficant_domain::analytics::BondAnalyticsInput,
+) -> Result<(), ApplicationError> {
+    for input in inputs {
+        match input.role() {
+            RatesInputRole::Subject | RatesInputRole::Unit | RatesInputRole::Bond => {
+                if input.observed_at().is_some()
+                    || input.visible_at().is_some()
+                    || input.effective_from().is_some()
+                    || input.effective_to().is_some()
+                {
+                    return Err(invalid());
+                }
+            }
+            RatesInputRole::Calendar => {
+                let from = input.effective_from().ok_or_else(invalid)?;
+                let to = input.effective_to().ok_or_else(invalid)?;
+                if input.observed_at().is_some()
+                    || input.visible_at().is_some()
+                    || from.local_trading_date() != materialized.calendar().coverage_start()
+                    || to.local_trading_date() != materialized.calendar().coverage_end()
+                    || from.instant() > valuation_at.instant()
+                    || valuation_at.instant() >= to.instant()
+                {
+                    return Err(invalid());
+                }
+            }
+            RatesInputRole::DataSnapshot => {
+                let observed = input.observed_at().ok_or_else(invalid)?;
+                let visible = input.visible_at().ok_or_else(invalid)?;
+                if observed != valuation_at
+                    || visible.instant() < observed.instant()
+                    || visible.instant() > knowledge_at.instant()
+                    || input.effective_from().is_some()
+                    || input.effective_to().is_some()
+                {
+                    return Err(invalid());
+                }
+            }
+            RatesInputRole::TaxRulePack => {
+                let from = input.effective_from().ok_or_else(invalid)?;
+                let to = input.effective_to().ok_or_else(invalid)?;
+                if input.observed_at().is_some()
+                    || input.visible_at().is_some()
+                    || from.instant() > valuation_at.instant()
+                    || valuation_at.instant() >= to.instant()
+                {
+                    return Err(invalid());
+                }
+            }
+            _ => return Err(invalid()),
+        }
+    }
+    Ok(())
 }
 
 #[tonic::async_trait]
@@ -525,9 +735,10 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::AnalyzeBondRequest>,
     ) -> Result<Response<pb::AnalyzeBondResponse>, Status> {
         const OPERATION: &str = "rates.analyze-bond";
-        let result = match self.authorize(&request) {
-            Ok(()) => self.analyze_bond_value(request.get_ref()).await,
-            Err(error) => Err(error),
+        let result = if let Err(error) = self.authorize(&request) {
+            Err(error)
+        } else {
+            self.analyze_bond_value(request.get_ref()).await
         };
         Ok(Response::new(pb::AnalyzeBondResponse {
             result: Some(match result {
@@ -544,9 +755,10 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::InterpolateYieldCurveRequest>,
     ) -> Result<Response<pb::InterpolateYieldCurveResponse>, Status> {
         const OPERATION: &str = "rates.interpolate-yield-curve";
-        let result = match self.authorize(&request) {
-            Ok(()) => self.interpolate_curve_value(request.get_ref()).await,
-            Err(error) => Err(error),
+        let result = if let Err(error) = self.authorize(&request) {
+            Err(error)
+        } else {
+            self.interpolate_curve_value(request.get_ref()).await
         };
         Ok(Response::new(pb::InterpolateYieldCurveResponse {
             result: Some(match result {
@@ -563,9 +775,10 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::AnalyzeCarryRollRequest>,
     ) -> Result<Response<pb::AnalyzeCarryRollResponse>, Status> {
         const OPERATION: &str = "rates.analyze-carry-roll";
-        let result = match self.authorize(&request) {
-            Ok(()) => self.analyze_carry_roll_value(request.get_ref()).await,
-            Err(error) => Err(error),
+        let result = if let Err(error) = self.authorize(&request) {
+            Err(error)
+        } else {
+            self.analyze_carry_roll_value(request.get_ref()).await
         };
         Ok(Response::new(pb::AnalyzeCarryRollResponse {
             result: Some(match result {
@@ -582,9 +795,10 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::AnalyzeFuturesDeliveryRequest>,
     ) -> Result<Response<pb::AnalyzeFuturesDeliveryResponse>, Status> {
         const OPERATION: &str = "rates.analyze-futures-delivery";
-        let result = match self.authorize(&request) {
-            Ok(()) => self.analyze_futures_delivery_value(request.get_ref()).await,
-            Err(error) => Err(error),
+        let result = if let Err(error) = self.authorize(&request) {
+            Err(error)
+        } else {
+            self.analyze_futures_delivery_value(request.get_ref()).await
         };
         Ok(Response::new(pb::AnalyzeFuturesDeliveryResponse {
             result: Some(match result {
@@ -601,9 +815,10 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::AnalyzeFuturesHedgeRequest>,
     ) -> Result<Response<pb::AnalyzeFuturesHedgeResponse>, Status> {
         const OPERATION: &str = "rates.analyze-futures-hedge";
-        let result = match self.authorize(&request) {
-            Ok(()) => self.analyze_futures_hedge_value(request.get_ref()).await,
-            Err(error) => Err(error),
+        let result = if let Err(error) = self.authorize(&request) {
+            Err(error)
+        } else {
+            self.analyze_futures_hedge_value(request.get_ref()).await
         };
         Ok(Response::new(pb::AnalyzeFuturesHedgeResponse {
             result: Some(match result {
@@ -619,12 +834,20 @@ impl RatesAnalyticsService for RatesGrpcService {
 #[derive(Clone)]
 struct ParsedContext {
     owner: OwnerRef,
-    rule_pack: AnalyticsObjectRef,
-    data_snapshot: AnalyticsObjectRef,
+    algorithm: ExpectedAlgorithm,
     units: UnitBindings,
     subject_ref: VersionRef,
-    funding_rule_pack: Option<AnalyticsObjectRef>,
-    tax_rule_pack: Option<AnalyticsObjectRef>,
+    knowledge_at: MarketTime,
+}
+
+impl ParsedContext {
+    fn scope(&self) -> Result<AccessScope, ApplicationError> {
+        AccessScope::new(
+            self.owner.tenant_id().clone(),
+            self.owner.owner_id().clone(),
+            vec![self.owner.owner_id().clone()],
+        )
+    }
 }
 
 #[derive(Clone)]
@@ -641,19 +864,52 @@ struct UnitBindings {
 }
 
 impl UnitBindings {
-    fn parse(units: Option<&pb::AnalysisUnits>) -> Result<Self, ApplicationError> {
-        let units = units.ok_or_else(invalid)?;
+    fn parse(value: Option<&pb::AnalysisUnits>) -> Result<Self, ApplicationError> {
+        let value = value.ok_or_else(invalid)?;
         Ok(Self {
-            currency_amount: parse_proto_unit(units.currency_amount.as_ref())?,
-            price_per_100: parse_proto_unit(units.price_per_100.as_ref())?,
-            rate: parse_proto_unit(units.rate.as_ref())?,
-            years: parse_proto_unit(units.years.as_ref())?,
-            years_squared: parse_proto_unit(units.years_squared.as_ref())?,
-            dv01_per_100: parse_proto_unit(units.dv01_per_100.as_ref())?,
-            dv01: parse_proto_unit(units.dv01.as_ref())?,
-            dimensionless: parse_proto_unit(units.dimensionless.as_ref())?,
-            contract_count: parse_proto_unit(units.contract_count.as_ref())?,
+            currency_amount: parse_proto_unit(value.currency_amount.as_ref())?,
+            price_per_100: parse_proto_unit(value.price_per_100.as_ref())?,
+            rate: parse_proto_unit(value.rate.as_ref())?,
+            years: parse_proto_unit(value.years.as_ref())?,
+            years_squared: parse_proto_unit(value.years_squared.as_ref())?,
+            dv01_per_100: parse_proto_unit(value.dv01_per_100.as_ref())?,
+            dv01: parse_proto_unit(value.dv01.as_ref())?,
+            dimensionless: parse_proto_unit(value.dimensionless.as_ref())?,
+            contract_count: parse_proto_unit(value.contract_count.as_ref())?,
         })
+    }
+
+    fn all_proto_refs(&self) -> [&ProtoUnitRef; 9] {
+        [
+            &self.currency_amount,
+            &self.price_per_100,
+            &self.rate,
+            &self.years,
+            &self.years_squared,
+            &self.dv01_per_100,
+            &self.dv01,
+            &self.dimensionless,
+            &self.contract_count,
+        ]
+    }
+
+    fn requirements(&self) -> Result<Vec<RatesUnitRequirement>, ApplicationError> {
+        [
+            (&self.currency_amount, "currency_amount"),
+            (&self.price_per_100, "price_per_100"),
+            (&self.rate, "rate"),
+            (&self.years, "years"),
+            (&self.years_squared, "years_squared"),
+            (&self.dv01_per_100, "dv01_per_100"),
+            (&self.dv01, "dv01"),
+            (&self.dimensionless, "dimensionless"),
+            (&self.contract_count, "contract_count"),
+        ]
+        .into_iter()
+        .map(|(reference, dimension)| {
+            parse_unit(reference).map(|reference| RatesUnitRequirement::new(reference, dimension))
+        })
+        .collect()
     }
 }
 
@@ -672,6 +928,7 @@ impl ExpectedAlgorithm {
             convention: CONVENTION_PROFILE,
         }
     }
+
     const fn curve() -> Self {
         Self {
             id: CURVE_ALGORITHM_ID,
@@ -679,6 +936,7 @@ impl ExpectedAlgorithm {
             convention: CURVE_CONVENTION_PROFILE,
         }
     }
+
     const fn carry_roll() -> Self {
         Self {
             id: CARRY_ROLL_ALGORITHM_ID,
@@ -686,6 +944,7 @@ impl ExpectedAlgorithm {
             convention: CARRY_ROLL_CONVENTION_PROFILE,
         }
     }
+
     const fn futures_delivery() -> Self {
         Self {
             id: FUTURES_DELIVERY_ALGORITHM_ID,
@@ -693,6 +952,7 @@ impl ExpectedAlgorithm {
             convention: FUTURES_DELIVERY_CONVENTION_PROFILE,
         }
     }
+
     const fn futures_hedge() -> Self {
         Self {
             id: FUTURES_HEDGE_ALGORITHM_ID,
@@ -710,35 +970,11 @@ fn parse_context(
     validate_algorithm(value.algorithm.as_ref(), expected)?;
     Ok(ParsedContext {
         owner: parse_owner(value.owner.as_ref())?,
-        rule_pack: parse_object(value.rule_pack.as_ref())?,
-        data_snapshot: parse_object(value.data_snapshot.as_ref())?,
+        algorithm: expected,
         units: UnitBindings::parse(value.units.as_ref())?,
         subject_ref: parse_subject_ref(value.subject_ref.as_ref())?,
-        funding_rule_pack: value
-            .funding_rule_pack
-            .as_ref()
-            .map(|binding| parse_object(Some(binding)))
-            .transpose()?,
-        tax_rule_pack: value
-            .tax_rule_pack
-            .as_ref()
-            .map(|binding| parse_object(Some(binding)))
-            .transpose()?,
+        knowledge_at: parse_market_time(value.knowledge_at.as_ref())?,
     })
-}
-
-fn reject_funding_rule_pack(context: &ParsedContext) -> Result<(), ApplicationError> {
-    if context.funding_rule_pack.is_some() {
-        return Err(invalid());
-    }
-    Ok(())
-}
-
-fn reject_tax_rule_pack(context: &ParsedContext) -> Result<(), ApplicationError> {
-    if context.tax_rule_pack.is_some() {
-        return Err(invalid());
-    }
-    Ok(())
 }
 
 fn validate_algorithm(
@@ -776,17 +1012,87 @@ fn parse_object(value: Option<&pb::ObjectBinding>) -> Result<AnalyticsObjectRef,
     ))
 }
 
-fn trace_context(message: &impl Message) -> ficant_application::ports::SafeTraceContext {
-    let hash = ContentHash::digest(&message.encode_to_vec());
-    let value = hash.as_bytes()[..16]
-        .iter()
-        .fold(String::with_capacity(32), |mut output, byte| {
-            use std::fmt::Write as _;
-            write!(output, "{byte:02x}").expect("writing to String cannot fail");
-            output
-        });
-    ficant_application::ports::SafeTraceContext::new(value)
-        .expect("derived trace token is canonical")
+fn parse_snapshot(
+    value: Option<&pb::SnapshotBinding>,
+) -> Result<ImmutableSnapshotBinding, ApplicationError> {
+    let value = value.ok_or_else(invalid)?;
+    Ok(ImmutableSnapshotBinding::new(
+        parse_ulid(value.snapshot_id.as_ref())?,
+        parse_hash(value.content_hash.as_ref())?,
+    ))
+}
+
+fn parse_artifact(
+    value: Option<&pb::ArtifactBinding>,
+) -> Result<ImmutableArtifactBinding, ApplicationError> {
+    let value = value.ok_or_else(invalid)?;
+    Ok(ImmutableArtifactBinding::new(
+        parse_ulid(value.artifact_id.as_ref())?,
+        parse_hash(value.content_hash.as_ref())?,
+    ))
+}
+
+fn parse_metadata_evidence(
+    value: &pb::AnalysisInputBinding,
+) -> Result<RatesInputEvidence, ApplicationError> {
+    let role = match pb::AnalysisInputRole::try_from(value.role).map_err(|_| invalid())? {
+        pb::AnalysisInputRole::Subject => RatesInputRole::Subject,
+        pb::AnalysisInputRole::Unit => RatesInputRole::Unit,
+        pb::AnalysisInputRole::Bond => RatesInputRole::Bond,
+        pb::AnalysisInputRole::Calendar => RatesInputRole::Calendar,
+        pb::AnalysisInputRole::CurveSnapshot => RatesInputRole::CurveSnapshot,
+        pb::AnalysisInputRole::DataSnapshot => RatesInputRole::DataSnapshot,
+        pb::AnalysisInputRole::DataSource => RatesInputRole::DataSource,
+        pb::AnalysisInputRole::TaxRulePack => RatesInputRole::TaxRulePack,
+        pb::AnalysisInputRole::FundingRulePack => RatesInputRole::FundingRulePack,
+        pb::AnalysisInputRole::DeliveryRulePack => RatesInputRole::DeliveryRulePack,
+        pb::AnalysisInputRole::FuturesContract => RatesInputRole::FuturesContract,
+        pb::AnalysisInputRole::TargetRiskArtifact => RatesInputRole::TargetRiskArtifact,
+        pb::AnalysisInputRole::DeliveryArtifact => RatesInputRole::DeliveryArtifact,
+        pb::AnalysisInputRole::CtdAnalyticsArtifact => RatesInputRole::CtdAnalyticsArtifact,
+        pb::AnalysisInputRole::CurveRulePack => RatesInputRole::CurveRulePack,
+        pb::AnalysisInputRole::CurveNodeDefinition => RatesInputRole::CurveNodeDefinition,
+        pb::AnalysisInputRole::Unspecified => return Err(invalid()),
+    };
+    let binding = match value.binding.as_ref().ok_or_else(invalid)? {
+        pb::analysis_input_binding::Binding::Object(value) => {
+            RatesEvidenceBinding::Object(parse_object(Some(value))?)
+        }
+        pb::analysis_input_binding::Binding::Snapshot(value) => {
+            RatesEvidenceBinding::Snapshot(parse_snapshot(Some(value))?)
+        }
+        pb::analysis_input_binding::Binding::Artifact(value) => {
+            RatesEvidenceBinding::Artifact(parse_artifact(Some(value))?)
+        }
+        pb::analysis_input_binding::Binding::CurveNode(value) => {
+            if value.curve_node_id.trim().is_empty()
+                || value.curve_node_id != value.curve_node_id.trim()
+            {
+                return Err(invalid());
+            }
+            RatesEvidenceBinding::CurveNode(ImmutableCurveNodeBinding::new(
+                value.curve_node_id.clone(),
+                parse_hash(value.content_hash.as_ref())?,
+            ))
+        }
+    };
+    Ok(RatesInputEvidence::new(
+        role,
+        parse_owner(value.owner.as_ref())?,
+        binding,
+        parse_optional_market_time(value.observed_at.as_ref())?,
+        parse_optional_market_time(value.visible_at.as_ref())?,
+        parse_optional_market_time(value.effective_from.as_ref())?,
+        parse_optional_market_time(value.effective_to.as_ref())?,
+    ))
+}
+
+fn parse_optional_market_time(
+    value: Option<&ficant_contracts::ficant::core::v1::MarketTime>,
+) -> Result<Option<MarketTime>, ApplicationError> {
+    value
+        .map(|value| parse_market_time(Some(value)))
+        .transpose()
 }
 
 fn parse_subject_ref(
@@ -805,22 +1111,10 @@ fn parse_subject_ref(
     Ok(VersionRef::new(id, version))
 }
 
-fn parse_ulid(
-    value: Option<&ficant_contracts::ficant::core::v1::Ulid>,
-) -> Result<Ulid, ApplicationError> {
-    Ulid::new(value.ok_or_else(invalid)?.value.clone()).map_err(map_domain_error)
-}
-
-fn parse_hash(
-    value: Option<&ficant_contracts::ficant::core::v1::Sha256>,
-) -> Result<ContentHash, ApplicationError> {
-    ContentHash::from_bytes(&value.ok_or_else(invalid)?.value).map_err(map_domain_error)
-}
-
 fn parse_proto_unit(value: Option<&ProtoUnitRef>) -> Result<ProtoUnitRef, ApplicationError> {
-    let value = value.ok_or_else(invalid)?;
-    parse_unit(value)?;
-    Ok(value.clone())
+    let value = value.ok_or_else(invalid)?.clone();
+    parse_unit(&value)?;
+    Ok(value)
 }
 
 fn parse_unit(value: &ProtoUnitRef) -> Result<UnitRef, ApplicationError> {
@@ -834,58 +1128,16 @@ fn parse_fixed_decimal(
     value: &DecimalValue,
     expected_unit: &ProtoUnitRef,
 ) -> Result<FixedDecimal, ApplicationError> {
-    if value.unit.as_ref() != Some(expected_unit) {
+    if value.unit.as_ref() != Some(expected_unit) || value.scale > DECIMAL_SCALE {
         return Err(map_domain_error(DomainErrorCode::InvalidUnit));
     }
-    let canonical = DomainDecimalValue::new(
-        value.coefficient.clone(),
-        value.scale,
-        parse_unit(expected_unit)?,
-    )
-    .map_err(map_domain_error)?;
-    if canonical.coefficient() != value.coefficient || canonical.scale() != value.scale {
-        return Err(invalid());
-    }
     let coefficient = value.coefficient.parse::<i128>().map_err(|_| invalid())?;
-    let scaled = if value.scale <= DECIMAL_SCALE {
-        coefficient
-            .checked_mul(power_of_ten(DECIMAL_SCALE - value.scale)?)
-            .ok_or_else(invalid)?
-    } else {
-        let divisor = power_of_ten(value.scale - DECIMAL_SCALE)?;
-        if coefficient % divisor != 0 {
-            return Err(invalid());
-        }
-        coefficient / divisor
-    };
-    Ok(FixedDecimal::from_scaled(scaled))
-}
-
-fn power_of_ten(exponent: u32) -> Result<i128, ApplicationError> {
-    10_i128.checked_pow(exponent).ok_or_else(invalid)
-}
-
-fn parse_date(value: &str) -> Result<NaiveDate, ApplicationError> {
-    let date = NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|_| invalid())?;
-    if date.to_string() != value {
-        return Err(invalid());
-    }
-    Ok(date)
-}
-
-fn parse_market_time(
-    value: Option<&ficant_contracts::ficant::core::v1::MarketTime>,
-) -> Result<MarketTime, ApplicationError> {
-    let value = value.ok_or_else(invalid)?;
-    let instant = value.instant.as_ref().ok_or_else(invalid)?;
-    let nanos = u32::try_from(instant.nanos).map_err(|_| invalid())?;
-    let instant = DateTime::<Utc>::from_timestamp(instant.seconds, nanos).ok_or_else(invalid)?;
-    MarketTime::new(
-        instant,
-        value.market_timezone.clone(),
-        parse_date(&value.local_trading_date)?,
-    )
-    .map_err(map_domain_error)
+    let factor = 10_i128
+        .checked_pow(DECIMAL_SCALE - value.scale)
+        .ok_or_else(invalid)?;
+    Ok(FixedDecimal::from_scaled(
+        coefficient.checked_mul(factor).ok_or_else(invalid)?,
+    ))
 }
 
 fn parse_calendar_requirement(value: i32) -> Result<CalendarRequirement, ApplicationError> {
@@ -896,149 +1148,70 @@ fn parse_calendar_requirement(value: i32) -> Result<CalendarRequirement, Applica
     }
 }
 
-fn parse_calendar(
-    value: Option<&pb::CalendarBinding>,
-) -> Result<CalendarBinding, ApplicationError> {
+fn parse_date(value: &str) -> Result<NaiveDate, ApplicationError> {
+    value.parse().map_err(|_| invalid())
+}
+
+fn parse_market_time(
+    value: Option<&ficant_contracts::ficant::core::v1::MarketTime>,
+) -> Result<MarketTime, ApplicationError> {
     let value = value.ok_or_else(invalid)?;
-    CalendarBinding::new(
-        value.calendar_id.clone(),
-        Version::new(value.version).map_err(map_domain_error)?,
-        parse_hash(value.content_hash.as_ref())?,
-        parse_date(&value.coverage_start)?,
-        parse_date(&value.coverage_end)?,
-        value
-            .non_business_days
-            .iter()
-            .map(|date| parse_date(date))
-            .collect::<Result<Vec<_>, _>>()?,
-        value
-            .work_weekends
-            .iter()
-            .map(|date| parse_date(date))
-            .collect::<Result<Vec<_>, _>>()?,
+    let timestamp = value.instant.as_ref().ok_or_else(invalid)?;
+    let nanos = u32::try_from(timestamp.nanos).map_err(|_| invalid())?;
+    let instant =
+        chrono::DateTime::<Utc>::from_timestamp(timestamp.seconds, nanos).ok_or_else(invalid)?;
+    MarketTime::new(
+        instant,
+        value.market_timezone.clone(),
+        parse_date(&value.local_trading_date)?,
     )
     .map_err(map_domain_error)
 }
 
-fn parse_bond_terms(
-    value: Option<&pb::BondTerms>,
-    units: &UnitBindings,
-) -> Result<BondTerms, ApplicationError> {
-    let value = value.ok_or_else(invalid)?;
-    let frequency = match pb::CouponFrequency::try_from(value.frequency).map_err(|_| invalid())? {
-        pb::CouponFrequency::Annual => CouponFrequency::Annual,
-        pb::CouponFrequency::Semiannual => CouponFrequency::Semiannual,
-        pb::CouponFrequency::Unspecified => return Err(invalid()),
-    };
-    BondTerms::with_issuance(
-        parse_date(&value.first_issue_date)?,
-        parse_date(&value.current_issue_date)?,
-        parse_date(&value.maturity_date)?,
-        frequency,
-        DayCountConvention::ActActBondIsma,
-        BusinessDayConvention::Following,
-        parse_fixed_decimal(value.coupon_rate.as_ref().ok_or_else(invalid)?, &units.rate)?,
-        parse_fixed_decimal(
-            value.face_amount.as_ref().ok_or_else(invalid)?,
-            &units.currency_amount,
-        )?,
-        parse_fixed_decimal(
-            value
-                .cumulative_issued_amount
-                .as_ref()
-                .ok_or_else(invalid)?,
-            &units.currency_amount,
-        )?,
-        parse_bond_tax_attributes(value.tax_attributes.as_ref())?,
-    )
-    .map_err(map_domain_error)
+fn parse_ulid(
+    value: Option<&ficant_contracts::ficant::core::v1::Ulid>,
+) -> Result<Ulid, ApplicationError> {
+    Ulid::new(value.ok_or_else(invalid)?.value.clone()).map_err(map_domain_error)
 }
 
-fn parse_bond_tax_attributes(
-    value: Option<&ficant_contracts::ficant::market::v1::BondTaxAttributes>,
-) -> Result<BondTaxAttributes, ApplicationError> {
-    let value = value.ok_or_else(invalid)?;
-    let value_added_tax_status =
-        match ficant_contracts::ficant::market::v1::ValueAddedTaxStatus::try_from(
-            value.value_added_tax_status,
-        )
-        .map_err(|_| invalid())?
-        {
-            ficant_contracts::ficant::market::v1::ValueAddedTaxStatus::Exempt => {
-                ValueAddedTaxStatus::Exempt
-            }
-            ficant_contracts::ficant::market::v1::ValueAddedTaxStatus::Taxable => {
-                ValueAddedTaxStatus::Taxable
-            }
-            ficant_contracts::ficant::market::v1::ValueAddedTaxStatus::Unspecified => {
-                return Err(invalid());
-            }
-        };
-    let income_tax_status = match ficant_contracts::ficant::market::v1::IncomeTaxStatus::try_from(
-        value.income_tax_status,
-    )
-    .map_err(|_| invalid())?
-    {
-        ficant_contracts::ficant::market::v1::IncomeTaxStatus::Exempt => IncomeTaxStatus::Exempt,
-        ficant_contracts::ficant::market::v1::IncomeTaxStatus::Taxable => IncomeTaxStatus::Taxable,
-        ficant_contracts::ficant::market::v1::IncomeTaxStatus::Unspecified => {
-            return Err(invalid());
-        }
-    };
-    Ok(BondTaxAttributes::new(
-        value_added_tax_status,
-        income_tax_status,
-    ))
+fn parse_hash(
+    value: Option<&ficant_contracts::ficant::core::v1::Sha256>,
+) -> Result<ContentHash, ApplicationError> {
+    ContentHash::from_bytes(&value.ok_or_else(invalid)?.value).map_err(map_domain_error)
 }
 
-fn parse_curve(
-    value: Option<&pb::YieldCurveBinding>,
-    units: &UnitBindings,
-) -> Result<YieldCurveBinding, ApplicationError> {
-    let value = value.ok_or_else(invalid)?;
-    let interpolation =
-        match pb::YieldCurveInterpolation::try_from(value.interpolation).map_err(|_| invalid())? {
-            pb::YieldCurveInterpolation::LinearYield => YieldCurveInterpolation::LinearYield,
-            pb::YieldCurveInterpolation::Unspecified => return Err(invalid()),
-        };
-    YieldCurveBinding::new(
-        parse_object(value.curve_snapshot.as_ref())?,
-        parse_date(&value.valuation_date)?,
-        interpolation,
-        value
-            .nodes
-            .iter()
-            .map(|node| {
-                YieldCurveNode::new(
-                    parse_date(&node.maturity_date)?,
-                    parse_fixed_decimal(
-                        node.yield_to_maturity.as_ref().ok_or_else(invalid)?,
-                        &units.rate,
-                    )?,
-                )
-                .map_err(map_domain_error)
-            })
-            .collect::<Result<Vec<_>, _>>()?,
-    )
-    .map_err(map_domain_error)
-}
-
-fn parse_product(value: i32) -> Result<CgbFuturesProduct, ApplicationError> {
-    match pb::CgbFuturesProduct::try_from(value).map_err(|_| invalid())? {
-        pb::CgbFuturesProduct::Ts => Ok(CgbFuturesProduct::TwoYear),
-        pb::CgbFuturesProduct::Tf => Ok(CgbFuturesProduct::FiveYear),
-        pb::CgbFuturesProduct::T => Ok(CgbFuturesProduct::TenYear),
-        pb::CgbFuturesProduct::Tl => Ok(CgbFuturesProduct::ThirtyYear),
-        pb::CgbFuturesProduct::Unspecified => Err(invalid()),
-    }
+fn trace_context(message: &impl Message) -> ficant_application::ports::SafeTraceContext {
+    let hash = ContentHash::digest(&message.encode_to_vec());
+    let value = hash.as_bytes()[..16]
+        .iter()
+        .fold(String::with_capacity(32), |mut output, byte| {
+            use std::fmt::Write as _;
+            write!(output, "{byte:02x}").expect("writing to String cannot fail");
+            output
+        });
+    ficant_application::ports::SafeTraceContext::new(value)
+        .expect("derived trace token is canonical")
 }
 
 fn bond_result(
     result: &BondAnalyticsResult,
-    units: &UnitBindings,
-    subject_ref: &VersionRef,
-    tax_rule_pack: Option<&AnalyticsObjectRef>,
     after_tax: Option<&BondAnalyticsResult>,
+    context: &ParsedContext,
+    evidence: &RatesRequestEvidence,
+) -> pb::AnalyzeBondResult {
+    bond_result_with_metadata(
+        result,
+        after_tax,
+        &context.units,
+        metadata(result.schema_id(), context, evidence),
+    )
+}
+
+fn bond_result_with_metadata(
+    result: &BondAnalyticsResult,
+    after_tax: Option<&BondAnalyticsResult>,
+    units: &UnitBindings,
+    metadata: pb::ResultMetadata,
 ) -> pb::AnalyzeBondResult {
     let measures = result.measures();
     pb::AnalyzeBondResult {
@@ -1053,13 +1226,7 @@ fn bond_result(
             convexity: Some(decimal(measures.convexity(), &units.years_squared)),
             dv01: Some(decimal(measures.dv01(), &units.dv01_per_100)),
         }),
-        metadata: Some(metadata(
-            result.schema_id(),
-            ExpectedAlgorithm::bond(),
-            subject_ref,
-            None,
-            tax_rule_pack,
-        )),
+        metadata: Some(metadata),
         after_tax: after_tax.map(|value| pb::TaxAdjustedBondAnalytics {
             cashflows: derived_cashflows(value, units),
             yield_to_maturity: Some(decimal(value.measures().yield_to_maturity(), &units.rate)),
@@ -1074,75 +1241,68 @@ fn derived_cashflows(
     result
         .cashflows()
         .iter()
-        .map(|cashflow| pb::DerivedCashflow {
-            sequence: cashflow.sequence(),
-            nominal_date: cashflow.nominal_date().to_string(),
-            payment_date: cashflow.payment_date().to_string(),
-            coupon: Some(decimal(cashflow.coupon(), &units.currency_amount)),
-            principal: Some(decimal(cashflow.principal(), &units.currency_amount)),
-            total: Some(decimal(cashflow.total(), &units.currency_amount)),
+        .map(|value| pb::DerivedCashflow {
+            sequence: value.sequence(),
+            nominal_date: value.nominal_date().to_string(),
+            payment_date: value.payment_date().to_string(),
+            coupon: Some(decimal(value.coupon(), &units.currency_amount)),
+            principal: Some(decimal(value.principal(), &units.currency_amount)),
+            total: Some(decimal(value.total(), &units.currency_amount)),
         })
         .collect()
 }
 
 fn curve_result(
     point: &YieldCurvePoint,
-    units: &UnitBindings,
-    subject_ref: &VersionRef,
+    context: &ParsedContext,
+    evidence: &RatesRequestEvidence,
 ) -> pb::InterpolateYieldCurveResult {
     pb::InterpolateYieldCurveResult {
         query_date: point.query().query_date().to_string(),
-        yield_to_maturity: Some(decimal(point.yield_to_maturity(), &units.rate)),
-        metadata: Some(metadata(
-            point.schema_id(),
-            ExpectedAlgorithm::curve(),
-            subject_ref,
-            None,
-            None,
-        )),
+        yield_to_maturity: Some(decimal(point.yield_to_maturity(), &context.units.rate)),
+        metadata: Some(metadata(point.schema_id(), context, evidence)),
     }
 }
 
 fn carry_roll_result(
     result: &CarryRollResult,
-    units: &UnitBindings,
-    subject_ref: &VersionRef,
+    context: &ParsedContext,
+    evidence: &RatesRequestEvidence,
 ) -> pb::AnalyzeCarryRollResult {
     let value = result.measures();
     pb::AnalyzeCarryRollResult {
         measures: Some(pb::CarryRollMeasures {
-            initial_yield: Some(decimal(value.initial_yield(), &units.rate)),
-            rolled_yield: Some(decimal(value.rolled_yield(), &units.rate)),
-            initial_dirty_price: Some(decimal(value.initial_dirty_price(), &units.price_per_100)),
+            initial_yield: Some(decimal(value.initial_yield(), &context.units.rate)),
+            rolled_yield: Some(decimal(value.rolled_yield(), &context.units.rate)),
+            initial_dirty_price: Some(decimal(
+                value.initial_dirty_price(),
+                &context.units.price_per_100,
+            )),
             horizon_dirty_at_initial_yield: Some(decimal(
                 value.horizon_dirty_at_initial_yield(),
-                &units.price_per_100,
+                &context.units.price_per_100,
             )),
             horizon_dirty_at_rolled_yield: Some(decimal(
                 value.horizon_dirty_at_rolled_yield(),
-                &units.price_per_100,
+                &context.units.price_per_100,
             )),
-            paid_cashflows: Some(decimal(value.paid_cashflows(), &units.price_per_100)),
-            carry: Some(decimal(value.carry(), &units.price_per_100)),
-            roll_down: Some(decimal(value.roll_down(), &units.price_per_100)),
-            total_return: Some(decimal(value.total_return(), &units.price_per_100)),
+            paid_cashflows: Some(decimal(
+                value.paid_cashflows(),
+                &context.units.price_per_100,
+            )),
+            carry: Some(decimal(value.carry(), &context.units.price_per_100)),
+            roll_down: Some(decimal(value.roll_down(), &context.units.price_per_100)),
+            total_return: Some(decimal(value.total_return(), &context.units.price_per_100)),
         }),
-        metadata: Some(metadata(
-            result.schema_id(),
-            ExpectedAlgorithm::carry_roll(),
-            subject_ref,
-            None,
-            None,
-        )),
+        metadata: Some(metadata(result.schema_id(), context, evidence)),
     }
 }
 
 fn futures_delivery_result(
     result: &FuturesDeliveryBasketResult,
-    units: &UnitBindings,
-    subject_ref: &VersionRef,
-    funding_rule_pack: &AnalyticsObjectRef,
     annual_financing_rate: FixedDecimal,
+    context: &ParsedContext,
+    evidence: &RatesRequestEvidence,
 ) -> Result<pb::AnalyzeFuturesDeliveryResult, ApplicationError> {
     Ok(pb::AnalyzeFuturesDeliveryResult {
         candidates: result
@@ -1153,20 +1313,14 @@ fn futures_delivery_result(
                     bond: Some(object_binding(candidate.input().bond())),
                     measures: Some(delivery_measures(
                         candidate.measures(),
-                        units,
+                        &context.units,
                         annual_financing_rate,
                     )?),
                 })
             })
             .collect::<Result<Vec<_>, ApplicationError>>()?,
         ctd_index: u32::try_from(result.ctd_index()).map_err(|_| invalid())?,
-        metadata: Some(metadata(
-            result.ctd().schema_id(),
-            ExpectedAlgorithm::futures_delivery(),
-            subject_ref,
-            Some(funding_rule_pack),
-            None,
-        )),
+        metadata: Some(metadata(result.ctd().schema_id(), context, evidence)),
     })
 }
 
@@ -1206,71 +1360,288 @@ fn delivery_measures(
 
 fn futures_hedge_result(
     result: &FuturesHedgeResult,
-    units: &UnitBindings,
-    subject_ref: &VersionRef,
+    context: &ParsedContext,
+    evidence: &RatesRequestEvidence,
 ) -> pb::AnalyzeFuturesHedgeResult {
     let value = result.measures();
     pb::AnalyzeFuturesHedgeResult {
         measures: Some(pb::FuturesHedgeMeasures {
-            futures_contract_dv01: Some(decimal(value.futures_contract_dv01(), &units.dv01)),
-            raw_contracts: Some(decimal(value.raw_contracts(), &units.contract_count)),
+            futures_contract_dv01: Some(decimal(
+                value.futures_contract_dv01(),
+                &context.units.dv01,
+            )),
+            raw_contracts: Some(decimal(
+                value.raw_contracts(),
+                &context.units.contract_count,
+            )),
             recommended_contracts: value.recommended_contracts(),
-            residual_dv01: Some(decimal(value.residual_dv01(), &units.dv01)),
-            hedge_effectiveness: Some(decimal(value.hedge_effectiveness(), &units.dimensionless)),
+            residual_dv01: Some(decimal(value.residual_dv01(), &context.units.dv01)),
+            hedge_effectiveness: Some(decimal(
+                value.hedge_effectiveness(),
+                &context.units.dimensionless,
+            )),
         }),
-        metadata: Some(metadata(
-            result.schema_id(),
-            ExpectedAlgorithm::futures_hedge(),
-            subject_ref,
-            None,
-            None,
-        )),
-    }
-}
-
-fn object_binding(value: &AnalyticsObjectRef) -> pb::ObjectBinding {
-    pb::ObjectBinding {
-        object: Some(ficant_contracts::ficant::core::v1::VersionRef {
-            id: Some(ficant_contracts::ficant::core::v1::Ulid {
-                value: value.version_ref().id().as_str().to_owned(),
-            }),
-            version: value.version_ref().version().get(),
-        }),
-        content_hash: Some(ficant_contracts::ficant::core::v1::Sha256 {
-            value: value.content_hash().as_bytes().to_vec(),
-        }),
+        metadata: Some(metadata(result.schema_id(), context, evidence)),
     }
 }
 
 fn metadata(
     schema_id: &str,
-    algorithm: ExpectedAlgorithm,
-    subject_ref: &VersionRef,
-    funding_rule_pack: Option<&AnalyticsObjectRef>,
-    tax_rule_pack: Option<&AnalyticsObjectRef>,
+    context: &ParsedContext,
+    evidence: &RatesRequestEvidence,
 ) -> pb::ResultMetadata {
     pb::ResultMetadata {
         schema_id: schema_id.to_owned(),
         engine_id: ENGINE_ID.to_owned(),
         engine_version: ENGINE_VERSION.to_owned(),
-        algorithm: Some(pb::AlgorithmBinding {
-            algorithm_id: algorithm.id.to_owned(),
-            algorithm_version: algorithm.version,
-            convention_profile: algorithm.convention.to_owned(),
-            abi_version: ABI_VERSION,
+        algorithm: Some(algorithm_binding(context.algorithm)),
+        subject_ref: Some(proto_version_ref(&context.subject_ref)),
+        consumed_inputs: evidence
+            .consumed_inputs()
+            .iter()
+            .map(proto_evidence)
+            .collect(),
+        parameter_digest: Some(pb::ParameterDigest {
+            algorithm: Some(algorithm_binding(context.algorithm)),
+            canonical_parameters_sha256: Some(proto_hash(evidence.canonical_parameters_sha256())),
         }),
-        subject_ref: Some(proto_version_ref(subject_ref)),
-        funding_rule_pack: funding_rule_pack.map(object_binding),
-        tax_rule_pack: tax_rule_pack.map(object_binding),
+        request_fingerprint: Some(proto_hash(evidence.request_fingerprint())),
+    }
+}
+
+fn validate_materialized_metadata(
+    context: &ParsedContext,
+    value: &pb::ResultMetadata,
+    expected_units: &[&ProtoUnitRef],
+) -> Result<(), ApplicationError> {
+    if value.schema_id.trim().is_empty()
+        || value.engine_id != ENGINE_ID
+        || value.engine_version != ENGINE_VERSION
+        || value.consumed_inputs.is_empty()
+    {
+        return Err(invalid());
+    }
+    validate_algorithm(value.algorithm.as_ref(), context.algorithm)?;
+    if parse_subject_ref(value.subject_ref.as_ref())? != context.subject_ref {
+        return Err(invalid());
+    }
+    let parameter = value.parameter_digest.as_ref().ok_or_else(invalid)?;
+    validate_algorithm(parameter.algorithm.as_ref(), context.algorithm)?;
+    parse_hash(parameter.canonical_parameters_sha256.as_ref())?;
+    parse_hash(value.request_fingerprint.as_ref())?;
+    for input in &value.consumed_inputs {
+        pb::AnalysisInputRole::try_from(input.role).map_err(|_| invalid())?;
+        if parse_owner(input.owner.as_ref())? != context.owner || input.binding.is_none() {
+            return Err(invalid());
+        }
+    }
+    let mut expected_unit_refs = expected_units
+        .iter()
+        .map(|value| parse_unit(value))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .map(|value| VersionRef::new(value.unit_id().clone(), value.version()))
+        .collect::<Vec<_>>();
+    expected_unit_refs.sort();
+    expected_unit_refs.dedup();
+    let mut actual_unit_refs = Vec::new();
+    for input in value
+        .consumed_inputs
+        .iter()
+        .filter(|input| input.role == pb::AnalysisInputRole::Unit as i32)
+    {
+        let Some(pb::analysis_input_binding::Binding::Object(binding)) = input.binding.as_ref()
+        else {
+            return Err(invalid());
+        };
+        actual_unit_refs.push(parse_object(Some(binding))?.version_ref().clone());
+    }
+    actual_unit_refs.sort();
+    if actual_unit_refs.windows(2).any(|pair| pair[0] == pair[1])
+        || actual_unit_refs != expected_unit_refs
+    {
+        return Err(invalid());
+    }
+    if value
+        .consumed_inputs
+        .windows(2)
+        .any(|pair| pair[0].encode_to_vec().as_slice() > pair[1].encode_to_vec().as_slice())
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn require_metadata_version(
+    metadata: &pb::ResultMetadata,
+    role: pb::AnalysisInputRole,
+    expected: &VersionRef,
+) -> Result<(), ApplicationError> {
+    let matches = metadata
+        .consumed_inputs
+        .iter()
+        .filter(|input| input.role == role as i32)
+        .filter_map(|input| match input.binding.as_ref() {
+            Some(pb::analysis_input_binding::Binding::Object(value)) => Some(value),
+            _ => None,
+        })
+        .map(|value| parse_object(Some(value)))
+        .collect::<Result<Vec<_>, _>>()?;
+    if matches.len() != 1 || matches[0].version_ref() != expected {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn require_metadata_object(
+    metadata: &pb::ResultMetadata,
+    role: pb::AnalysisInputRole,
+    expected: &AnalyticsObjectRef,
+) -> Result<(), ApplicationError> {
+    let matches = metadata
+        .consumed_inputs
+        .iter()
+        .filter(|input| input.role == role as i32)
+        .filter_map(|input| match input.binding.as_ref() {
+            Some(pb::analysis_input_binding::Binding::Object(value)) => Some(value),
+            _ => None,
+        })
+        .map(|value| parse_object(Some(value)))
+        .collect::<Result<Vec<_>, _>>()?;
+    if matches.as_slice() != [expected.clone()] {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn require_metadata_snapshot(
+    metadata: &pb::ResultMetadata,
+    role: pb::AnalysisInputRole,
+    expected: &ImmutableSnapshotBinding,
+) -> Result<(), ApplicationError> {
+    let matches = metadata
+        .consumed_inputs
+        .iter()
+        .filter(|input| input.role == role as i32)
+        .filter_map(|input| match input.binding.as_ref() {
+            Some(pb::analysis_input_binding::Binding::Snapshot(value)) => Some(value),
+            _ => None,
+        })
+        .map(|value| parse_snapshot(Some(value)))
+        .collect::<Result<Vec<_>, _>>()?;
+    if matches.as_slice() != [expected.clone()] {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn proto_evidence(value: &RatesInputEvidence) -> pb::AnalysisInputBinding {
+    let binding = match value.binding() {
+        RatesEvidenceBinding::Object(value) => {
+            pb::analysis_input_binding::Binding::Object(object_binding(value))
+        }
+        RatesEvidenceBinding::Snapshot(value) => {
+            pb::analysis_input_binding::Binding::Snapshot(pb::SnapshotBinding {
+                snapshot_id: Some(proto_ulid(value.id())),
+                content_hash: Some(proto_hash(value.content_hash())),
+            })
+        }
+        RatesEvidenceBinding::Artifact(value) => {
+            pb::analysis_input_binding::Binding::Artifact(pb::ArtifactBinding {
+                artifact_id: Some(proto_ulid(value.id())),
+                content_hash: Some(proto_hash(value.content_hash())),
+            })
+        }
+        RatesEvidenceBinding::CurveNode(value) => {
+            pb::analysis_input_binding::Binding::CurveNode(pb::CurveNodeBinding {
+                curve_node_id: value.curve_node_id().to_owned(),
+                content_hash: Some(proto_hash(value.content_hash())),
+            })
+        }
+    };
+    pb::AnalysisInputBinding {
+        role: proto_role(value.role()) as i32,
+        owner: Some(proto_owner(value.owner())),
+        binding: Some(binding),
+        observed_at: value.observed_at().map(proto_market_time),
+        visible_at: value.visible_at().map(proto_market_time),
+        effective_from: value.effective_from().map(proto_market_time),
+        effective_to: value.effective_to().map(proto_market_time),
+    }
+}
+
+fn proto_role(value: RatesInputRole) -> pb::AnalysisInputRole {
+    match value {
+        RatesInputRole::Subject => pb::AnalysisInputRole::Subject,
+        RatesInputRole::Unit => pb::AnalysisInputRole::Unit,
+        RatesInputRole::Bond => pb::AnalysisInputRole::Bond,
+        RatesInputRole::Calendar => pb::AnalysisInputRole::Calendar,
+        RatesInputRole::CurveSnapshot => pb::AnalysisInputRole::CurveSnapshot,
+        RatesInputRole::DataSnapshot => pb::AnalysisInputRole::DataSnapshot,
+        RatesInputRole::DataSource => pb::AnalysisInputRole::DataSource,
+        RatesInputRole::TaxRulePack => pb::AnalysisInputRole::TaxRulePack,
+        RatesInputRole::FundingRulePack => pb::AnalysisInputRole::FundingRulePack,
+        RatesInputRole::DeliveryRulePack => pb::AnalysisInputRole::DeliveryRulePack,
+        RatesInputRole::FuturesContract => pb::AnalysisInputRole::FuturesContract,
+        RatesInputRole::TargetRiskArtifact => pb::AnalysisInputRole::TargetRiskArtifact,
+        RatesInputRole::DeliveryArtifact => pb::AnalysisInputRole::DeliveryArtifact,
+        RatesInputRole::CtdAnalyticsArtifact => pb::AnalysisInputRole::CtdAnalyticsArtifact,
+        RatesInputRole::CurveRulePack => pb::AnalysisInputRole::CurveRulePack,
+        RatesInputRole::CurveNodeDefinition => pb::AnalysisInputRole::CurveNodeDefinition,
+    }
+}
+
+fn algorithm_binding(value: ExpectedAlgorithm) -> pb::AlgorithmBinding {
+    pb::AlgorithmBinding {
+        algorithm_id: value.id.to_owned(),
+        algorithm_version: value.version,
+        convention_profile: value.convention.to_owned(),
+        abi_version: ABI_VERSION,
+    }
+}
+
+fn object_binding(value: &AnalyticsObjectRef) -> pb::ObjectBinding {
+    pb::ObjectBinding {
+        object: Some(proto_version_ref(value.version_ref())),
+        content_hash: Some(proto_hash(value.content_hash())),
+    }
+}
+
+fn proto_owner(value: &OwnerRef) -> ProtoOwnerRef {
+    ProtoOwnerRef {
+        tenant_id: Some(proto_ulid(value.tenant_id())),
+        owner_id: Some(proto_ulid(value.owner_id())),
     }
 }
 
 fn proto_version_ref(value: &VersionRef) -> ficant_contracts::ficant::core::v1::VersionRef {
     ficant_contracts::ficant::core::v1::VersionRef {
-        id: Some(ficant_contracts::ficant::core::v1::Ulid {
-            value: value.id().as_str().to_owned(),
-        }),
+        id: Some(proto_ulid(value.id())),
         version: value.version().get(),
+    }
+}
+
+fn proto_ulid(value: &Ulid) -> ficant_contracts::ficant::core::v1::Ulid {
+    ficant_contracts::ficant::core::v1::Ulid {
+        value: value.as_str().to_owned(),
+    }
+}
+
+fn proto_hash(value: &ContentHash) -> ficant_contracts::ficant::core::v1::Sha256 {
+    ficant_contracts::ficant::core::v1::Sha256 {
+        value: value.as_bytes().to_vec(),
+    }
+}
+
+fn proto_market_time(value: &MarketTime) -> ficant_contracts::ficant::core::v1::MarketTime {
+    ficant_contracts::ficant::core::v1::MarketTime {
+        instant: Some(prost_types::Timestamp {
+            seconds: value.instant().timestamp(),
+            nanos: i32::try_from(value.instant().timestamp_subsec_nanos())
+                .expect("nanoseconds fit i32"),
+        }),
+        market_timezone: value.market_timezone().to_owned(),
+        local_trading_date: value.local_trading_date().to_string(),
     }
 }
 
@@ -1315,7 +1686,7 @@ fn invalid() -> ApplicationError {
 }
 
 #[cfg(test)]
-mod subject_lineage_tests {
+mod tests {
     use super::proto_version_ref;
     use ficant_domain::primitives::{Ulid, Version, VersionRef};
 

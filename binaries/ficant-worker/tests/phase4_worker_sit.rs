@@ -5,7 +5,8 @@ mod support;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use chrono::DateTime;
+use chrono::{DateTime, NaiveDate, Utc};
+use ficant_api::RatesGrpcService;
 use ficant_application::ports::{
     AppendJournalEvent, ArtifactRepository, BeginBlobStage, BlobStore, EnqueueNode,
     ExecutionExternalInput, ExecutionInstanceIdentity, ExternalInputArtifactBinding,
@@ -17,19 +18,24 @@ use ficant_contracts::ficant::core::v1::{
     DecimalValue, MarketTime, OwnerRef as ProtoOwnerRef, Sha256, Ulid as ProtoUlid, UnitRef,
     VersionRef,
 };
-use ficant_contracts::ficant::market::v1::{
-    BondTaxAttributes, IncomeTaxStatus, ValueAddedTaxStatus,
-};
 use ficant_contracts::ficant::rates::v1::{
-    AlgorithmBinding, AnalysisContext, AnalysisUnits, AnalyzeBondRequest, BondTerms,
-    CalendarBinding, CalendarRequirement, CouponFrequency, ObjectBinding, RiskSummary,
-    analyze_bond_request,
+    AlgorithmBinding, AnalysisContext, AnalysisInputBinding, AnalysisInputRole, AnalysisUnits,
+    AnalyzeBondRequest, CalendarRequirement, ObjectBinding, ResultMetadata, RiskSummary,
+    SnapshotBinding, analysis_input_binding, analyze_bond_request,
 };
 use ficant_contracts::ficant::research::v1::{
     ReadNodeOutputRequest, experiment_service_server::ExperimentService,
 };
-use ficant_domain::analytics::{ALGORITHM_ID, CONVENTION_PROFILE};
-use ficant_domain::primitives::{ContentHash, LineageRef, OwnerRef, Ulid, Version};
+use ficant_domain::analytics::{
+    ALGORITHM_ID, AnalyticsMode, AnalyticsObjectRef, BondTerms, BusinessDayConvention,
+    CONVENTION_PROFILE, CalendarBinding, CalendarRequirement as DomainCalendarRequirement,
+    CouponFrequency, DayCountConvention, FixedDecimal,
+};
+use ficant_domain::market::{BondTaxAttributes, IncomeTaxStatus, ValueAddedTaxStatus};
+use ficant_domain::primitives::{
+    ContentHash, LineageRef, MarketTime as DomainMarketTime, OwnerRef, Ulid, Version,
+    VersionRef as DomainVersionRef,
+};
 use ficant_domain::research::{
     Artifact, ArtifactKind, GraphExternalInput, GraphExternalInputBinding, JournalEventType,
     ResearchEdge, ResearchGraph, ResearchGraphInput, ResearchNode, RunJournal, RunJournalInput,
@@ -37,9 +43,10 @@ use ficant_domain::research::{
 };
 use ficant_domain::{ContentAddressed, Lineaged};
 use ficant_native_nodes::{
-    CgbBondAnalyticsNativeNode, CgbBondRiskSummaryNativeNode, REQUEST_PORT, RESULT_PORT,
-    RISK_INPUT_PORT, RISK_OUTPUT_PORT, analyze_bond_request_type, cgb_bond_analytics_contract,
-    cgb_bond_risk_summary_contract, native_node_source_digest,
+    CgbBondAnalyticsNativeNode, CgbBondRiskSummaryNativeNode, MATERIALIZED_INPUT_PORT,
+    REQUEST_PORT, RESULT_PORT, RISK_INPUT_PORT, RISK_OUTPUT_PORT, analyze_bond_request_type,
+    cgb_bond_analytics_contract, cgb_bond_risk_summary_contract, encode_materialized_bond_input,
+    materialized_bond_input_type, native_node_source_digest,
 };
 use ficant_runtime::{NativeNode, decode_canonical_output_bytes, replay_graph_execution};
 use ficant_server::{ServerSettings, build_grpc_services_with_experiment};
@@ -86,6 +93,13 @@ fn object(suffix: char) -> ObjectBinding {
     }
 }
 
+fn snapshot(suffix: char) -> SnapshotBinding {
+    SnapshotBinding {
+        snapshot_id: Some(proto_id(suffix)),
+        content_hash: Some(proto_hash(&hash(format!("object-{suffix}").as_bytes()))),
+    }
+}
+
 fn unit(suffix: char) -> UnitRef {
     UnitRef {
         unit_id: Some(proto_id(suffix)),
@@ -101,6 +115,18 @@ fn decimal(coefficient: &str, scale: u32, unit: UnitRef) -> DecimalValue {
     }
 }
 
+fn proto_time(instant: &str, local_trading_date: &str) -> MarketTime {
+    let instant = DateTime::parse_from_rfc3339(instant).unwrap();
+    MarketTime {
+        instant: Some(prost_types::Timestamp {
+            seconds: instant.timestamp(),
+            nanos: instant.timestamp_subsec_nanos().cast_signed(),
+        }),
+        market_timezone: "Asia/Shanghai".to_owned(),
+        local_trading_date: local_trading_date.to_owned(),
+    }
+}
+
 fn golden_request() -> AnalyzeBondRequest {
     let units = AnalysisUnits {
         currency_amount: Some(unit('A')),
@@ -113,15 +139,13 @@ fn golden_request() -> AnalyzeBondRequest {
         dimensionless: Some(unit('H')),
         contract_count: Some(unit('J')),
     };
-    let instant = DateTime::parse_from_rfc3339("2026-07-13T10:00:00+08:00").unwrap();
+    let valuation_at = proto_time("2026-07-13T10:00:00+08:00", "2026-07-13");
     AnalyzeBondRequest {
         context: Some(AnalysisContext {
             owner: Some(ProtoOwnerRef {
                 tenant_id: Some(proto_id('0')),
                 owner_id: Some(proto_id('1')),
             }),
-            rule_pack: Some(object('K')),
-            data_snapshot: Some(object('M')),
             algorithm: Some(AlgorithmBinding {
                 algorithm_id: ALGORITHM_ID.to_owned(),
                 algorithm_version: 1,
@@ -133,48 +157,134 @@ fn golden_request() -> AnalyzeBondRequest {
                 id: Some(proto_id('S')),
                 version: 1,
             }),
-            funding_rule_pack: None,
-            tax_rule_pack: None,
+            knowledge_at: Some(valuation_at.clone()),
         }),
         bond: Some(object('N')),
-        valuation_at: Some(MarketTime {
-            instant: Some(prost_types::Timestamp {
-                seconds: instant.timestamp(),
-                nanos: instant.timestamp_subsec_nanos().cast_signed(),
-            }),
-            market_timezone: "Asia/Shanghai".to_owned(),
-            local_trading_date: "2026-07-13".to_owned(),
-        }),
+        valuation_at: Some(valuation_at),
         settlement_date: "2026-07-14".to_owned(),
         calendar_requirement: CalendarRequirement::ReferenceReplay as i32,
-        calendar: Some(CalendarBinding {
-            calendar_id: "CGB-REFERENCE".to_owned(),
-            version: 1,
-            content_hash: Some(proto_hash(&hash(b"calendar-cgb-reference-v1"))),
-            coverage_start: "2005-01-01".to_owned(),
-            coverage_end: "2026-12-31".to_owned(),
-            non_business_days: vec![],
-            work_weekends: vec![],
-        }),
-        terms: Some(BondTerms {
-            first_issue_date: "2026-04-15".to_owned(),
-            current_issue_date: "2026-04-15".to_owned(),
-            maturity_date: "2030-04-15".to_owned(),
-            frequency: CouponFrequency::Annual as i32,
-            coupon_rate: Some(decimal("15", 3, units.rate.unwrap())),
-            face_amount: Some(decimal("100", 0, units.currency_amount.unwrap())),
-            cumulative_issued_amount: Some(decimal("100", 0, unit('A'))),
-            tax_attributes: Some(BondTaxAttributes {
-                value_added_tax_status: ValueAddedTaxStatus::Taxable as i32,
-                income_tax_status: IncomeTaxStatus::Taxable as i32,
-            }),
-        }),
+        calendar: Some(object('C')),
         input: Some(analyze_bond_request::Input::YieldToMaturity(decimal(
             "155",
             4,
             unit('C'),
         ))),
+        data_snapshot: Some(snapshot('M')),
+        tax_rule_pack: Some(object('K')),
     }
+}
+
+fn domain_object(suffix: char) -> AnalyticsObjectRef {
+    AnalyticsObjectRef::new(
+        DomainVersionRef::new(id(suffix), Version::new(1).unwrap()),
+        hash(format!("object-{suffix}").as_bytes()),
+    )
+}
+
+fn materialized_input() -> ficant_domain::analytics::BondAnalyticsInput {
+    let instant = DateTime::parse_from_rfc3339("2026-07-13T10:00:00+08:00")
+        .unwrap()
+        .with_timezone(&Utc);
+    ficant_domain::analytics::BondAnalyticsInput::new(
+        owner(),
+        domain_object('N'),
+        domain_object('K'),
+        domain_object('M'),
+        DomainMarketTime::new(
+            instant,
+            "Asia/Shanghai",
+            NaiveDate::from_ymd_opt(2026, 7, 13).unwrap(),
+        )
+        .unwrap(),
+        NaiveDate::from_ymd_opt(2026, 7, 14).unwrap(),
+        DomainCalendarRequirement::ReferenceReplay,
+        CalendarBinding::new(
+            id('C').to_string(),
+            Version::new(1).unwrap(),
+            hash(b"object-C"),
+            NaiveDate::from_ymd_opt(2005, 1, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2035, 12, 31).unwrap(),
+            vec![],
+            vec![],
+        )
+        .unwrap(),
+        BondTerms::with_issuance(
+            NaiveDate::from_ymd_opt(2026, 4, 15).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 4, 15).unwrap(),
+            NaiveDate::from_ymd_opt(2031, 4, 15).unwrap(),
+            CouponFrequency::Annual,
+            DayCountConvention::ActActBondIsma,
+            BusinessDayConvention::Following,
+            FixedDecimal::from_scaled(15_000_000_000),
+            FixedDecimal::from_scaled(100_000_000_000_000),
+            FixedDecimal::from_scaled(100_000_000_000_000),
+            BondTaxAttributes::new(ValueAddedTaxStatus::Taxable, IncomeTaxStatus::Taxable),
+        )
+        .unwrap(),
+        AnalyticsMode::YieldIn,
+        FixedDecimal::from_scaled(15_500_000_000),
+    )
+    .unwrap()
+}
+
+fn evidence_object(role: AnalysisInputRole, binding: ObjectBinding) -> AnalysisInputBinding {
+    AnalysisInputBinding {
+        role: role as i32,
+        owner: Some(ProtoOwnerRef {
+            tenant_id: Some(proto_id('0')),
+            owner_id: Some(proto_id('1')),
+        }),
+        binding: Some(analysis_input_binding::Binding::Object(binding)),
+        observed_at: None,
+        visible_at: None,
+        effective_from: None,
+        effective_to: None,
+    }
+}
+
+fn effective_evidence_object(
+    role: AnalysisInputRole,
+    binding: ObjectBinding,
+) -> AnalysisInputBinding {
+    let mut evidence = evidence_object(role, binding);
+    evidence.effective_from = Some(proto_time("2005-01-01T00:00:00+08:00", "2005-01-01"));
+    evidence.effective_to = Some(proto_time("2035-12-31T23:59:59+08:00", "2035-12-31"));
+    evidence
+}
+
+fn supplied_metadata(
+    request: &AnalyzeBondRequest,
+    input: &ficant_domain::analytics::BondAnalyticsInput,
+) -> ResultMetadata {
+    let mut consumed_inputs = vec![
+        evidence_object(AnalysisInputRole::Subject, object('S')),
+        evidence_object(AnalysisInputRole::Bond, object('N')),
+        effective_evidence_object(AnalysisInputRole::Calendar, object('C')),
+        effective_evidence_object(AnalysisInputRole::TaxRulePack, object('K')),
+        AnalysisInputBinding {
+            role: AnalysisInputRole::DataSnapshot as i32,
+            owner: Some(ProtoOwnerRef {
+                tenant_id: Some(proto_id('0')),
+                owner_id: Some(proto_id('1')),
+            }),
+            binding: Some(analysis_input_binding::Binding::Snapshot(snapshot('M'))),
+            observed_at: Some(golden_request().valuation_at.unwrap()),
+            visible_at: Some(golden_request().valuation_at.unwrap()),
+            effective_from: None,
+            effective_to: None,
+        },
+    ];
+    for suffix in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J'] {
+        consumed_inputs.push(evidence_object(AnalysisInputRole::Unit, object(suffix)));
+    }
+    consumed_inputs.sort_by_key(prost::Message::encode_to_vec);
+    RatesGrpcService::canonical_materialized_bond_metadata(
+        request,
+        input,
+        FixedDecimal::ZERO,
+        &consumed_inputs,
+    )
+    .unwrap()
 }
 
 #[tokio::test]
@@ -198,6 +308,14 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
     let request = golden_request();
     let request_bytes = request.encode_to_vec();
     let request_hash = ContentHash::digest(&request_bytes);
+    let materialized_input = materialized_input();
+    let materialized_bytes = encode_materialized_bond_input(
+        &materialized_input,
+        FixedDecimal::ZERO,
+        &supplied_metadata(&request, &materialized_input),
+    );
+    let materialized_hash = ContentHash::digest(&materialized_bytes);
+    let materialized_size = i64::try_from(materialized_bytes.len()).unwrap();
     let data_hash = hash(b"object-M");
     let universe_hash = hash(b"worker-sit-universe");
     let rule_hash = hash(b"object-K");
@@ -220,6 +338,35 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
                 request_artifact,
                 verified,
                 IdempotencyKey::new("worker-sit/request-artifact").unwrap(),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let materialized_artifact_id = id('3');
+    let materialized_verified = publish_blob(
+        &blobs,
+        &scope,
+        &materialized_bytes,
+        "worker-sit/materialized-bond-input",
+    )
+    .await;
+    let materialized_artifact = Artifact::new(
+        materialized_artifact_id.clone(),
+        owner(),
+        ArtifactKind::Generic,
+        "application/x-ficant-materialized-bond-input; version=1",
+        materialized_hash.clone(),
+        u64::try_from(materialized_bytes.len()).unwrap(),
+        vec![LineageRef::content_addressed(id('M'), data_hash.clone())],
+    )
+    .unwrap();
+    repository
+        .publish_verified_blob(
+            PublishArtifact::new(
+                materialized_artifact,
+                materialized_verified,
+                IdempotencyKey::new("worker-sit/materialized-bond-input-artifact").unwrap(),
             )
             .unwrap(),
         )
@@ -255,9 +402,19 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
                 .unwrap(),
             ],
         },
-        vec![GraphExternalInput::new("bond-request", analyze_bond_request_type()).unwrap()],
+        vec![
+            GraphExternalInput::new("bond-request", analyze_bond_request_type()).unwrap(),
+            GraphExternalInput::new("materialized-bond-input", materialized_bond_input_type())
+                .unwrap(),
+        ],
         vec![
             GraphExternalInputBinding::new("bond-request", node_id.clone(), REQUEST_PORT).unwrap(),
+            GraphExternalInputBinding::new(
+                "materialized-bond-input",
+                node_id.clone(),
+                MATERIALIZED_INPUT_PORT,
+            )
+            .unwrap(),
         ],
     )
     .unwrap();
@@ -288,10 +445,16 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
     let external =
         ExecutionExternalInput::new("bond-request", analyze_bond_request_type(), request_bytes)
             .unwrap();
+    let materialized_external = ExecutionExternalInput::new(
+        "materialized-bond-input",
+        materialized_bond_input_type(),
+        materialized_bytes,
+    )
+    .unwrap();
     let reproducibility = ReproducibilityIdentity::new(
         &graph,
         ReproducibilityIdentityInput {
-            external_inputs: vec![external],
+            external_inputs: vec![external, materialized_external],
             data_snapshot_hash: data_hash,
             universe_snapshot_hash: universe_hash,
             parameters_hash,
@@ -325,11 +488,18 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
                 graph_id: graph.graph_id().clone(),
                 graph_version: graph.version(),
                 identity,
-                external_input_artifacts: vec![ExternalInputArtifactBinding {
-                    input_id: "bond-request".to_owned(),
-                    artifact_id: request_artifact_id.clone(),
-                    content_hash: request_hash.clone(),
-                }],
+                external_input_artifacts: vec![
+                    ExternalInputArtifactBinding {
+                        input_id: "bond-request".to_owned(),
+                        artifact_id: request_artifact_id.clone(),
+                        content_hash: request_hash.clone(),
+                    },
+                    ExternalInputArtifactBinding {
+                        input_id: "materialized-bond-input".to_owned(),
+                        artifact_id: materialized_artifact_id.clone(),
+                        content_hash: materialized_hash.clone(),
+                    },
+                ],
             },
         )
         .await
@@ -374,6 +544,29 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
         .unwrap();
     let loaded = backend.load(&abandoned, &config.worker_id).await.unwrap();
     backend.begin(&abandoned, &config.worker_id).await.unwrap();
+    sqlx::query(
+        "UPDATE storage.blobs SET blob_size=blob_size+1
+         WHERE tenant_id=$1 AND content_hash=$2",
+    )
+    .bind(owner().tenant_id().as_str())
+    .bind(hex(&materialized_hash))
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(
+        backend.read_inputs(&abandoned, &loaded).await.is_err(),
+        "tampered materialized input must fail before native execution"
+    );
+    sqlx::query(
+        "UPDATE storage.blobs SET blob_size=$3
+         WHERE tenant_id=$1 AND content_hash=$2",
+    )
+    .bind(owner().tenant_id().as_str())
+    .bind(hex(&materialized_hash))
+    .bind(materialized_size)
+    .execute(&pool)
+    .await
+    .unwrap();
     let inputs = backend.read_inputs(&abandoned, &loaded).await.unwrap();
     let executed = backend.execute(&abandoned, &loaded, inputs).await.unwrap();
     let abandoned_completion = backend
@@ -472,8 +665,19 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
     .unwrap();
     assert_eq!(states, ("COMPLETED".to_owned(), "SUCCEEDED".to_owned()));
 
-    assert_eq!(artifact.lineage().len(), 1);
-    assert_eq!(artifact.lineage()[0].object_id(), &request_artifact_id);
+    assert_eq!(artifact.lineage().len(), 2);
+    assert!(
+        artifact
+            .lineage()
+            .iter()
+            .any(|value| value.object_id() == &request_artifact_id)
+    );
+    assert!(
+        artifact
+            .lineage()
+            .iter()
+            .any(|value| value.object_id() == &materialized_artifact_id)
+    );
     let output_bytes = blobs
         .probe_verified(artifact.content_hash())
         .await
@@ -523,8 +727,8 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
         &config.s3_bucket,
         &config.s3_access_key,
         &config.s3_secret_key,
-        config.runtime_image_digest.clone(),
-        config.native_source_digest.clone(),
+        &config.runtime_image_digest,
+        &config.native_source_digest,
     ))
     .unwrap();
     let (_, _, experiment) = build_grpc_services_with_experiment(&settings).unwrap();
@@ -592,8 +796,8 @@ fn server_values(
     s3_bucket: &str,
     s3_access_key: &str,
     s3_secret_key: &str,
-    runtime_image_digest: ContentHash,
-    native_source_digest: ContentHash,
+    runtime_image_digest: &ContentHash,
+    native_source_digest: &ContentHash,
 ) -> BTreeMap<String, String> {
     const KEY: &str = "3031323334353637383961626364656630313233343536373839616263646566";
     BTreeMap::from([
@@ -642,7 +846,7 @@ fn server_values(
         ),
         (
             "FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST".to_owned(),
-            format!("sha256:{}", hex(&runtime_image_digest)),
+            format!("sha256:{}", hex(runtime_image_digest)),
         ),
         (
             "FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION".to_owned(),
@@ -650,7 +854,7 @@ fn server_values(
         ),
         (
             "FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST".to_owned(),
-            format!("sha256:{}", hex(&native_source_digest)),
+            format!("sha256:{}", hex(native_source_digest)),
         ),
         (
             "FICANT_LOOPBACK_SUBJECT".to_owned(),

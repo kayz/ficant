@@ -40,6 +40,13 @@
           "source": "binaries/ficant-bootstrap"
       },
       {
+          "name": "ficant-cgb-futures-pack",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-cgb-futures-pack@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "crates/ficant-cgb-futures-pack"
+      },
+      {
           "name": "ficant-contract-tests",
           "version": "0.1.0",
           "purl": "pkg:cargo/ficant-contract-tests@0.1.0",
@@ -73,6 +80,13 @@
           "purl": "pkg:cargo/ficant-fixed-income-native@0.1.0",
           "ecosystem": "crates.io",
           "source": "crates/ficant-fixed-income-native"
+      },
+      {
+          "name": "ficant-funding-pack",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-funding-pack@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "crates/ficant-funding-pack"
       },
       {
           "name": "ficant-kernel-sys",
@@ -115,6 +129,13 @@
           "purl": "pkg:cargo/ficant-storage@0.1.0",
           "ecosystem": "crates.io",
           "source": "crates/ficant-storage"
+      },
+      {
+          "name": "ficant-tax-pack",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/ficant-tax-pack@0.1.0",
+          "ecosystem": "crates.io",
+          "source": "crates/ficant-tax-pack"
       },
       {
           "name": "ficant-web",

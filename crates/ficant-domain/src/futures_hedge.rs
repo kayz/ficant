@@ -1,6 +1,6 @@
-use crate::analytics::{AnalyticsObjectRef, FixedDecimal, MARKET_TIMEZONE};
+use crate::analytics::{AnalyticsObjectRef, MARKET_TIMEZONE};
 use crate::futures_delivery::CgbFuturesProduct;
-use crate::primitives::{ContentHash, MarketTime, OwnerRef};
+use crate::primitives::{ContentHash, FixedDecimal, MarketTime, OwnerRef};
 use crate::{DomainErrorCode, DomainResult};
 
 pub const FUTURES_HEDGE_RESULT_SCHEMA_ID: &str = "ficant.cgb-futures-hedge.result.v1";

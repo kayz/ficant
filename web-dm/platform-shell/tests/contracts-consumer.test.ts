@@ -5,6 +5,11 @@ import {
 } from "../../packages/contracts-generated/src/ficant/app/v1/registry_pb";
 import { SessionSchema } from "../../packages/contracts-generated/src/ficant/app/v1/session_pb";
 import {
+  MarketTimeSchema,
+  Sha256Schema,
+  UlidSchema,
+} from "../../packages/contracts-generated/src/ficant/core/v1/common_pb";
+import {
   CgbFuturesDeliveryRulePackSchema,
   CgbFuturesProductRuleSchema,
 } from "../../packages/contracts-generated/src/ficant/market/v1/cgb_futures_rule_pb";
@@ -23,6 +28,23 @@ import {
   SubjectCouponTaxRateSchema,
   TaxRulePackSchema,
 } from "../../packages/contracts-generated/src/ficant/market/v1/tax_rule_pb";
+import {
+  AlgorithmBindingSchema,
+  AnalysisContextSchema,
+  AnalysisInputBindingSchema,
+  AnalysisInputRole,
+  AnalyzeBondRequestSchema,
+  AnalyzeCarryRollRequestSchema,
+  AnalyzeFuturesDeliveryRequestSchema,
+  AnalyzeFuturesHedgeRequestSchema,
+  ArtifactBindingSchema,
+  CurveNodeBindingSchema,
+  InterpolateYieldCurveRequestSchema,
+  ObjectBindingSchema,
+  ParameterDigestSchema,
+  ResultMetadataSchema,
+  SnapshotBindingSchema,
+} from "../../packages/contracts-generated/src/ficant/rates/v1/analytics_pb";
 import { describe, expect, it } from "vitest";
 
 describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
@@ -69,6 +91,77 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
         value: new Uint8Array([1]),
       },
     });
+    const snapshotBinding = create(SnapshotBindingSchema, {
+      snapshotId: create(UlidSchema, { value: "01ARZ3NDEKTSV4RRFFQ69G5FAA" }),
+      contentHash: create(Sha256Schema, { value: new Uint8Array(32).fill(1) }),
+    });
+    const artifactBinding = create(ArtifactBindingSchema, {
+      artifactId: create(UlidSchema, { value: "01ARZ3NDEKTSV4RRFFQ69G5FAB" }),
+      contentHash: create(Sha256Schema, { value: new Uint8Array(32).fill(2) }),
+    });
+    const curveNodeBinding = create(CurveNodeBindingSchema, {
+      curveNodeId: "cn.gov.yield-curve.10y",
+      contentHash: create(Sha256Schema, {
+        value: new Uint8Array(32).fill(5),
+      }),
+    });
+    const inputBinding = create(AnalysisInputBindingSchema, {
+      role: AnalysisInputRole.DATA_SNAPSHOT,
+      binding: { case: "snapshot", value: snapshotBinding },
+    });
+    const algorithm = create(AlgorithmBindingSchema, {
+      algorithmId: "rates-reference",
+      algorithmVersion: 1,
+      conventionProfile: "r5d",
+      abiVersion: 1,
+    });
+    const parameterDigest = create(ParameterDigestSchema, {
+      algorithm,
+      canonicalParametersSha256: create(Sha256Schema, {
+        value: new Uint8Array(32).fill(3),
+      }),
+    });
+    const metadata = create(ResultMetadataSchema, {
+      algorithm,
+      consumedInputs: [inputBinding],
+      parameterDigest,
+      requestFingerprint: create(Sha256Schema, {
+        value: new Uint8Array(32).fill(4),
+      }),
+    });
+    const context = create(AnalysisContextSchema, {
+      algorithm,
+      knowledgeAt: create(MarketTimeSchema, {
+        marketTimezone: "Asia/Shanghai",
+        localTradingDate: "2026-08-12",
+      }),
+    });
+    const objectBinding = create(ObjectBindingSchema, {});
+    const bondRequest = create(AnalyzeBondRequestSchema, {
+      context,
+      calendar: objectBinding,
+      dataSnapshot: snapshotBinding,
+      taxRulePack: objectBinding,
+    });
+    const curveRequest = create(InterpolateYieldCurveRequestSchema, {
+      context,
+      curve: snapshotBinding,
+    });
+    const carryRequest = create(AnalyzeCarryRollRequestSchema, {
+      context,
+      curve: snapshotBinding,
+    });
+    const deliveryRequest = create(AnalyzeFuturesDeliveryRequestSchema, {
+      context,
+      dataSnapshot: snapshotBinding,
+      fundingRulePack: objectBinding,
+    });
+    const hedgeRequest = create(AnalyzeFuturesHedgeRequestSchema, {
+      context,
+      targetRiskArtifact: artifactBinding,
+      deliveryArtifact: artifactBinding,
+      ctdAnalyticsArtifact: artifactBinding,
+    });
 
     expect(app.$typeName).toBe("ficant.app.v1.AppDescriptor");
     expect(session.$typeName).toBe("ficant.app.v1.Session");
@@ -84,5 +177,53 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
     expect(rulePack.content?.typeUrl).toBe(
       "type.googleapis.com/ficant.market.v1.CgbFuturesDeliveryRulePack",
     );
+    expect(context.knowledgeAt?.localTradingDate).toBe("2026-08-12");
+    expect("rulePack" in context).toBe(false);
+    expect(inputBinding.binding.case).toBe("snapshot");
+    expect(inputBinding.binding.value?.$typeName).toBe(
+      "ficant.rates.v1.SnapshotBinding",
+    );
+    expect(metadata.consumedInputs[0]?.role).toBe(
+      AnalysisInputRole.DATA_SNAPSHOT,
+    );
+    expect(AnalysisInputRole.CURVE_RULE_PACK).toBe(15);
+    expect(AnalysisInputRole.CURVE_NODE_DEFINITION).toBe(16);
+    const curveNodeInputBinding = create(AnalysisInputBindingSchema, {
+      role: AnalysisInputRole.CURVE_NODE_DEFINITION,
+      binding: { case: "curveNode", value: curveNodeBinding },
+    });
+    expect(curveNodeInputBinding.binding.case).toBe("curveNode");
+    if (curveNodeInputBinding.binding.case !== "curveNode") {
+      throw new Error("curve-node definition evidence must use CurveNodeBinding");
+    }
+    expect(curveNodeInputBinding.binding.value.curveNodeId).toBe(
+      "cn.gov.yield-curve.10y",
+    );
+    expect(metadata.parameterDigest?.algorithm?.algorithmId).toBe(
+      "rates-reference",
+    );
+    expect(metadata.requestFingerprint?.value).toHaveLength(32);
+    expect(bondRequest.calendar?.$typeName).toBe(
+      "ficant.rates.v1.ObjectBinding",
+    );
+    expect(bondRequest.dataSnapshot?.$typeName).toBe(
+      "ficant.rates.v1.SnapshotBinding",
+    );
+    expect("terms" in bondRequest).toBe(false);
+    expect(curveRequest.curve?.$typeName).toBe(
+      "ficant.rates.v1.SnapshotBinding",
+    );
+    expect(carryRequest.curve?.$typeName).toBe(
+      "ficant.rates.v1.SnapshotBinding",
+    );
+    expect("calendar" in carryRequest).toBe(false);
+    expect(deliveryRequest.dataSnapshot?.$typeName).toBe(
+      "ficant.rates.v1.SnapshotBinding",
+    );
+    expect("candidates" in deliveryRequest).toBe(false);
+    expect(hedgeRequest.targetRiskArtifact?.$typeName).toBe(
+      "ficant.rates.v1.ArtifactBinding",
+    );
+    expect("targetDv01" in hedgeRequest).toBe(false);
   });
 });

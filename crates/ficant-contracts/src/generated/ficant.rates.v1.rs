@@ -18,6 +18,68 @@ pub struct AlgorithmBinding {
     #[prost(uint32, tag="4")]
     pub abi_version: u32,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SnapshotBinding {
+    #[prost(message, optional, tag="1")]
+    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ArtifactBinding {
+    #[prost(message, optional, tag="1")]
+    pub artifact_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CurveNodeBinding {
+    #[prost(string, tag="1")]
+    pub curve_node_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+/// AnalysisInputBinding is response evidence built only after the Application
+/// layer verifies the bound input. observed_at represents valuation/as-of time
+/// for roles whose authoritative object uses those terms.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AnalysisInputBinding {
+    #[prost(enumeration="AnalysisInputRole", tag="1")]
+    pub role: i32,
+    #[prost(message, optional, tag="2")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, optional, tag="6")]
+    pub observed_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="7")]
+    pub visible_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="8")]
+    pub effective_from: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="9")]
+    pub effective_to: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(oneof="analysis_input_binding::Binding", tags="3, 4, 5, 10")]
+    pub binding: ::core::option::Option<analysis_input_binding::Binding>,
+}
+/// Nested message and enum types in `AnalysisInputBinding`.
+pub mod analysis_input_binding {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Binding {
+        #[prost(message, tag="3")]
+        Object(super::ObjectBinding),
+        #[prost(message, tag="4")]
+        Snapshot(super::SnapshotBinding),
+        #[prost(message, tag="5")]
+        Artifact(super::ArtifactBinding),
+        #[prost(message, tag="10")]
+        CurveNode(super::CurveNodeBinding),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ParameterDigest {
+    #[prost(message, optional, tag="1")]
+    pub algorithm: ::core::option::Option<AlgorithmBinding>,
+    #[prost(message, optional, tag="2")]
+    pub canonical_parameters_sha256: ::core::option::Option<super::super::core::v1::Sha256>,
+}
 /// AnalysisUnits binds every numerical dimension used by the reference
 /// analytics API to an immutable Unit definition. Inputs must use the matching
 /// binding and responses echo these identities rather than guessing units.
@@ -46,22 +108,16 @@ pub struct AnalysisUnits {
 pub struct AnalysisContext {
     #[prost(message, optional, tag="1")]
     pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
-    #[prost(message, optional, tag="2")]
-    pub rule_pack: ::core::option::Option<ObjectBinding>,
-    #[prost(message, optional, tag="3")]
-    pub data_snapshot: ::core::option::Option<ObjectBinding>,
     #[prost(message, optional, tag="4")]
     pub algorithm: ::core::option::Option<AlgorithmBinding>,
     #[prost(message, optional, tag="5")]
     pub units: ::core::option::Option<AnalysisUnits>,
     #[prost(message, optional, tag="6")]
     pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
-    #[prost(message, optional, tag="7")]
-    pub funding_rule_pack: ::core::option::Option<ObjectBinding>,
-    #[prost(message, optional, tag="8")]
-    pub tax_rule_pack: ::core::option::Option<ObjectBinding>,
+    #[prost(message, optional, tag="9")]
+    pub knowledge_at: ::core::option::Option<super::super::core::v1::MarketTime>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResultMetadata {
     #[prost(string, tag="1")]
     pub schema_id: ::prost::alloc::string::String,
@@ -73,64 +129,12 @@ pub struct ResultMetadata {
     pub algorithm: ::core::option::Option<AlgorithmBinding>,
     #[prost(message, optional, tag="5")]
     pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
-    #[prost(message, optional, tag="6")]
-    pub funding_rule_pack: ::core::option::Option<ObjectBinding>,
-    #[prost(message, optional, tag="7")]
-    pub tax_rule_pack: ::core::option::Option<ObjectBinding>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct BondTerms {
-    #[prost(string, tag="2")]
-    pub maturity_date: ::prost::alloc::string::String,
-    #[prost(enumeration="CouponFrequency", tag="3")]
-    pub frequency: i32,
-    #[prost(message, optional, tag="4")]
-    pub coupon_rate: ::core::option::Option<super::super::core::v1::DecimalValue>,
-    #[prost(message, optional, tag="5")]
-    pub face_amount: ::core::option::Option<super::super::core::v1::DecimalValue>,
-    #[prost(string, tag="6")]
-    pub first_issue_date: ::prost::alloc::string::String,
-    #[prost(string, tag="7")]
-    pub current_issue_date: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="8")]
-    pub cumulative_issued_amount: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, repeated, tag="8")]
+    pub consumed_inputs: ::prost::alloc::vec::Vec<AnalysisInputBinding>,
     #[prost(message, optional, tag="9")]
-    pub tax_attributes: ::core::option::Option<super::super::market::v1::BondTaxAttributes>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct CalendarBinding {
-    #[prost(string, tag="1")]
-    pub calendar_id: ::prost::alloc::string::String,
-    #[prost(uint64, tag="2")]
-    pub version: u64,
-    #[prost(message, optional, tag="3")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(string, tag="4")]
-    pub coverage_start: ::prost::alloc::string::String,
-    #[prost(string, tag="5")]
-    pub coverage_end: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag="6")]
-    pub non_business_days: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, repeated, tag="7")]
-    pub work_weekends: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct YieldCurveNode {
-    #[prost(string, tag="1")]
-    pub maturity_date: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub yield_to_maturity: ::core::option::Option<super::super::core::v1::DecimalValue>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct YieldCurveBinding {
-    #[prost(message, optional, tag="1")]
-    pub curve_snapshot: ::core::option::Option<ObjectBinding>,
-    #[prost(string, tag="2")]
-    pub valuation_date: ::prost::alloc::string::String,
-    #[prost(enumeration="YieldCurveInterpolation", tag="3")]
-    pub interpolation: i32,
-    #[prost(message, repeated, tag="4")]
-    pub nodes: ::prost::alloc::vec::Vec<YieldCurveNode>,
+    pub parameter_digest: ::core::option::Option<ParameterDigest>,
+    #[prost(message, optional, tag="10")]
+    pub request_fingerprint: ::core::option::Option<super::super::core::v1::Sha256>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DerivedCashflow {
@@ -186,9 +190,11 @@ pub struct AnalyzeBondRequest {
     #[prost(enumeration="CalendarRequirement", tag="5")]
     pub calendar_requirement: i32,
     #[prost(message, optional, tag="6")]
-    pub calendar: ::core::option::Option<CalendarBinding>,
-    #[prost(message, optional, tag="7")]
-    pub terms: ::core::option::Option<BondTerms>,
+    pub calendar: ::core::option::Option<ObjectBinding>,
+    #[prost(message, optional, tag="11")]
+    pub data_snapshot: ::core::option::Option<SnapshotBinding>,
+    #[prost(message, optional, tag="12")]
+    pub tax_rule_pack: ::core::option::Option<ObjectBinding>,
     #[prost(oneof="analyze_bond_request::Input", tags="8, 9")]
     pub input: ::core::option::Option<analyze_bond_request::Input>,
 }
@@ -216,7 +222,7 @@ pub struct AnalyzeBondResult {
 /// RiskSummary is the deterministic risk-only projection consumed by
 /// downstream ResearchGraph nodes. Values retain the exact Unit bindings and
 /// source metadata from AnalyzeBondResult; the node must not recompute them.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RiskSummary {
     #[prost(message, optional, tag="1")]
     pub modified_duration: ::core::option::Option<super::super::core::v1::DecimalValue>,
@@ -242,16 +248,16 @@ pub mod analyze_bond_response {
         Error(super::super::super::core::v1::ErrorDetail),
     }
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct InterpolateYieldCurveRequest {
     #[prost(message, optional, tag="1")]
     pub context: ::core::option::Option<AnalysisContext>,
     #[prost(message, optional, tag="2")]
-    pub curve: ::core::option::Option<YieldCurveBinding>,
+    pub curve: ::core::option::Option<SnapshotBinding>,
     #[prost(string, tag="3")]
     pub query_date: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InterpolateYieldCurveResult {
     #[prost(string, tag="1")]
     pub query_date: ::prost::alloc::string::String,
@@ -275,7 +281,7 @@ pub mod interpolate_yield_curve_response {
         Error(super::super::super::core::v1::ErrorDetail),
     }
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AnalyzeCarryRollRequest {
     #[prost(message, optional, tag="1")]
     pub context: ::core::option::Option<AnalysisContext>,
@@ -289,12 +295,8 @@ pub struct AnalyzeCarryRollRequest {
     pub horizon_settlement: ::prost::alloc::string::String,
     #[prost(enumeration="CalendarRequirement", tag="6")]
     pub calendar_requirement: i32,
-    #[prost(message, optional, tag="7")]
-    pub calendar: ::core::option::Option<CalendarBinding>,
-    #[prost(message, optional, tag="8")]
-    pub terms: ::core::option::Option<BondTerms>,
     #[prost(message, optional, tag="9")]
-    pub curve: ::core::option::Option<YieldCurveBinding>,
+    pub curve: ::core::option::Option<SnapshotBinding>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CarryRollMeasures {
@@ -317,7 +319,7 @@ pub struct CarryRollMeasures {
     #[prost(message, optional, tag="9")]
     pub total_return: ::core::option::Option<super::super::core::v1::DecimalValue>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AnalyzeCarryRollResult {
     #[prost(message, optional, tag="1")]
     pub measures: ::core::option::Option<CarryRollMeasures>,
@@ -340,15 +342,6 @@ pub mod analyze_carry_roll_response {
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct FuturesDeliverableCandidate {
-    #[prost(message, optional, tag="1")]
-    pub bond: ::core::option::Option<ObjectBinding>,
-    #[prost(message, optional, tag="2")]
-    pub terms: ::core::option::Option<BondTerms>,
-    #[prost(message, optional, tag="3")]
-    pub spot_clean_price: ::core::option::Option<super::super::core::v1::DecimalValue>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AnalyzeFuturesDeliveryRequest {
     #[prost(message, optional, tag="1")]
     pub context: ::core::option::Option<AnalysisContext>,
@@ -358,16 +351,10 @@ pub struct AnalyzeFuturesDeliveryRequest {
     pub valuation_at: ::core::option::Option<super::super::core::v1::MarketTime>,
     #[prost(string, tag="4")]
     pub purchase_date: ::prost::alloc::string::String,
-    #[prost(string, tag="5")]
-    pub delivery_month_first: ::prost::alloc::string::String,
-    #[prost(string, tag="6")]
-    pub delivery_date: ::prost::alloc::string::String,
-    #[prost(enumeration="CgbFuturesProduct", tag="7")]
-    pub product: i32,
-    #[prost(message, optional, tag="8")]
-    pub futures_clean_price: ::core::option::Option<super::super::core::v1::DecimalValue>,
-    #[prost(message, repeated, tag="10")]
-    pub candidates: ::prost::alloc::vec::Vec<FuturesDeliverableCandidate>,
+    #[prost(message, optional, tag="11")]
+    pub data_snapshot: ::core::option::Option<SnapshotBinding>,
+    #[prost(message, optional, tag="12")]
+    pub funding_rule_pack: ::core::option::Option<ObjectBinding>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FuturesDeliveryMeasures {
@@ -438,25 +425,15 @@ pub struct AnalyzeFuturesHedgeRequest {
     #[prost(message, optional, tag="1")]
     pub context: ::core::option::Option<AnalysisContext>,
     #[prost(message, optional, tag="2")]
-    pub target_risk_artifact: ::core::option::Option<ObjectBinding>,
+    pub target_risk_artifact: ::core::option::Option<ArtifactBinding>,
     #[prost(message, optional, tag="3")]
-    pub delivery_artifact: ::core::option::Option<ObjectBinding>,
+    pub delivery_artifact: ::core::option::Option<ArtifactBinding>,
     #[prost(message, optional, tag="4")]
-    pub ctd_analytics_artifact: ::core::option::Option<ObjectBinding>,
+    pub ctd_analytics_artifact: ::core::option::Option<ArtifactBinding>,
     #[prost(message, optional, tag="5")]
     pub futures_contract: ::core::option::Option<ObjectBinding>,
-    #[prost(message, optional, tag="6")]
-    pub ctd_bond: ::core::option::Option<ObjectBinding>,
     #[prost(message, optional, tag="7")]
     pub valuation_at: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(enumeration="CgbFuturesProduct", tag="8")]
-    pub product: i32,
-    #[prost(message, optional, tag="9")]
-    pub target_dv01: ::core::option::Option<super::super::core::v1::DecimalValue>,
-    #[prost(message, optional, tag="10")]
-    pub ctd_dv01_per_100: ::core::option::Option<super::super::core::v1::DecimalValue>,
-    #[prost(message, optional, tag="11")]
-    pub conversion_factor: ::core::option::Option<super::super::core::v1::DecimalValue>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FuturesHedgeMeasures {
@@ -471,7 +448,7 @@ pub struct FuturesHedgeMeasures {
     #[prost(message, optional, tag="5")]
     pub hedge_effectiveness: ::core::option::Option<super::super::core::v1::DecimalValue>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AnalyzeFuturesHedgeResult {
     #[prost(message, optional, tag="1")]
     pub measures: ::core::option::Option<FuturesHedgeMeasures>,
@@ -495,29 +472,71 @@ pub mod analyze_futures_hedge_response {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
-pub enum CouponFrequency {
+pub enum AnalysisInputRole {
     Unspecified = 0,
-    Annual = 1,
-    Semiannual = 2,
+    Subject = 1,
+    Unit = 2,
+    Bond = 3,
+    Calendar = 4,
+    CurveSnapshot = 5,
+    DataSnapshot = 6,
+    DataSource = 7,
+    TaxRulePack = 8,
+    FundingRulePack = 9,
+    DeliveryRulePack = 10,
+    FuturesContract = 11,
+    TargetRiskArtifact = 12,
+    DeliveryArtifact = 13,
+    CtdAnalyticsArtifact = 14,
+    CurveRulePack = 15,
+    CurveNodeDefinition = 16,
 }
-impl CouponFrequency {
+impl AnalysisInputRole {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "COUPON_FREQUENCY_UNSPECIFIED",
-            Self::Annual => "COUPON_FREQUENCY_ANNUAL",
-            Self::Semiannual => "COUPON_FREQUENCY_SEMIANNUAL",
+            Self::Unspecified => "ANALYSIS_INPUT_ROLE_UNSPECIFIED",
+            Self::Subject => "ANALYSIS_INPUT_ROLE_SUBJECT",
+            Self::Unit => "ANALYSIS_INPUT_ROLE_UNIT",
+            Self::Bond => "ANALYSIS_INPUT_ROLE_BOND",
+            Self::Calendar => "ANALYSIS_INPUT_ROLE_CALENDAR",
+            Self::CurveSnapshot => "ANALYSIS_INPUT_ROLE_CURVE_SNAPSHOT",
+            Self::DataSnapshot => "ANALYSIS_INPUT_ROLE_DATA_SNAPSHOT",
+            Self::DataSource => "ANALYSIS_INPUT_ROLE_DATA_SOURCE",
+            Self::TaxRulePack => "ANALYSIS_INPUT_ROLE_TAX_RULE_PACK",
+            Self::FundingRulePack => "ANALYSIS_INPUT_ROLE_FUNDING_RULE_PACK",
+            Self::DeliveryRulePack => "ANALYSIS_INPUT_ROLE_DELIVERY_RULE_PACK",
+            Self::FuturesContract => "ANALYSIS_INPUT_ROLE_FUTURES_CONTRACT",
+            Self::TargetRiskArtifact => "ANALYSIS_INPUT_ROLE_TARGET_RISK_ARTIFACT",
+            Self::DeliveryArtifact => "ANALYSIS_INPUT_ROLE_DELIVERY_ARTIFACT",
+            Self::CtdAnalyticsArtifact => "ANALYSIS_INPUT_ROLE_CTD_ANALYTICS_ARTIFACT",
+            Self::CurveRulePack => "ANALYSIS_INPUT_ROLE_CURVE_RULE_PACK",
+            Self::CurveNodeDefinition => "ANALYSIS_INPUT_ROLE_CURVE_NODE_DEFINITION",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
-            "COUPON_FREQUENCY_UNSPECIFIED" => Some(Self::Unspecified),
-            "COUPON_FREQUENCY_ANNUAL" => Some(Self::Annual),
-            "COUPON_FREQUENCY_SEMIANNUAL" => Some(Self::Semiannual),
+            "ANALYSIS_INPUT_ROLE_UNSPECIFIED" => Some(Self::Unspecified),
+            "ANALYSIS_INPUT_ROLE_SUBJECT" => Some(Self::Subject),
+            "ANALYSIS_INPUT_ROLE_UNIT" => Some(Self::Unit),
+            "ANALYSIS_INPUT_ROLE_BOND" => Some(Self::Bond),
+            "ANALYSIS_INPUT_ROLE_CALENDAR" => Some(Self::Calendar),
+            "ANALYSIS_INPUT_ROLE_CURVE_SNAPSHOT" => Some(Self::CurveSnapshot),
+            "ANALYSIS_INPUT_ROLE_DATA_SNAPSHOT" => Some(Self::DataSnapshot),
+            "ANALYSIS_INPUT_ROLE_DATA_SOURCE" => Some(Self::DataSource),
+            "ANALYSIS_INPUT_ROLE_TAX_RULE_PACK" => Some(Self::TaxRulePack),
+            "ANALYSIS_INPUT_ROLE_FUNDING_RULE_PACK" => Some(Self::FundingRulePack),
+            "ANALYSIS_INPUT_ROLE_DELIVERY_RULE_PACK" => Some(Self::DeliveryRulePack),
+            "ANALYSIS_INPUT_ROLE_FUTURES_CONTRACT" => Some(Self::FuturesContract),
+            "ANALYSIS_INPUT_ROLE_TARGET_RISK_ARTIFACT" => Some(Self::TargetRiskArtifact),
+            "ANALYSIS_INPUT_ROLE_DELIVERY_ARTIFACT" => Some(Self::DeliveryArtifact),
+            "ANALYSIS_INPUT_ROLE_CTD_ANALYTICS_ARTIFACT" => Some(Self::CtdAnalyticsArtifact),
+            "ANALYSIS_INPUT_ROLE_CURVE_RULE_PACK" => Some(Self::CurveRulePack),
+            "ANALYSIS_INPUT_ROLE_CURVE_NODE_DEFINITION" => Some(Self::CurveNodeDefinition),
             _ => None,
         }
     }
@@ -547,67 +566,6 @@ impl CalendarRequirement {
             "CALENDAR_REQUIREMENT_UNSPECIFIED" => Some(Self::Unspecified),
             "CALENDAR_REQUIREMENT_REFERENCE_REPLAY" => Some(Self::ReferenceReplay),
             "CALENDAR_REQUIREMENT_EXACT_MARKET" => Some(Self::ExactMarket),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum YieldCurveInterpolation {
-    Unspecified = 0,
-    LinearYield = 1,
-}
-impl YieldCurveInterpolation {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "YIELD_CURVE_INTERPOLATION_UNSPECIFIED",
-            Self::LinearYield => "YIELD_CURVE_INTERPOLATION_LINEAR_YIELD",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "YIELD_CURVE_INTERPOLATION_UNSPECIFIED" => Some(Self::Unspecified),
-            "YIELD_CURVE_INTERPOLATION_LINEAR_YIELD" => Some(Self::LinearYield),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum CgbFuturesProduct {
-    Unspecified = 0,
-    Ts = 1,
-    Tf = 2,
-    T = 3,
-    Tl = 4,
-}
-impl CgbFuturesProduct {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "CGB_FUTURES_PRODUCT_UNSPECIFIED",
-            Self::Ts => "CGB_FUTURES_PRODUCT_TS",
-            Self::Tf => "CGB_FUTURES_PRODUCT_TF",
-            Self::T => "CGB_FUTURES_PRODUCT_T",
-            Self::Tl => "CGB_FUTURES_PRODUCT_TL",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "CGB_FUTURES_PRODUCT_UNSPECIFIED" => Some(Self::Unspecified),
-            "CGB_FUTURES_PRODUCT_TS" => Some(Self::Ts),
-            "CGB_FUTURES_PRODUCT_TF" => Some(Self::Tf),
-            "CGB_FUTURES_PRODUCT_T" => Some(Self::T),
-            "CGB_FUTURES_PRODUCT_TL" => Some(Self::Tl),
             _ => None,
         }
     }

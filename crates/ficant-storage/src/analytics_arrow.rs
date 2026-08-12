@@ -15,15 +15,18 @@ use arrow::datatypes::{DataType, Field, Fields, Schema, TimeUnit};
 use arrow::ipc::MetadataVersion;
 use arrow::ipc::reader::FileReader;
 use arrow::ipc::writer::{FileWriter, IpcWriteOptions};
-use chrono::{NaiveDate, TimeDelta};
-use ficant_application::ports::{BondAnalyticsArtifactCodec, EncodedBondAnalyticsArtifact};
+use chrono::{NaiveDate, TimeDelta, Utc};
+use ficant_application::ports::{
+    BondAnalyticsArtifactCodec, BondAnalyticsArtifactFacts, EncodedBondAnalyticsArtifact,
+};
+use ficant_domain::analytics::AnalyticsObjectRef;
 use ficant_domain::analytics::{
     ABI_VERSION, ALGORITHM_ID, ALGORITHM_VERSION, ARTIFACT_CODEC_ID, ARTIFACT_SCHEMA_ID,
-    AnalyticsError, AnalyticsMeasures, BondAnalyticsInput, BondAnalyticsResult, CONVENTION_PROFILE,
-    CalendarResolution, DECIMAL_SCALE, DerivedCashflow, ENGINE_ID, ENGINE_VERSION, FixedDecimal,
-    MARKET_TIMEZONE, utc_micros,
+    AnalyticsError, AnalyticsMeasures, AnalyticsMode, BondAnalyticsInput, BondAnalyticsResult,
+    CONVENTION_PROFILE, CalendarRequirement, CalendarResolution, DECIMAL_SCALE, DerivedCashflow,
+    ENGINE_ID, ENGINE_VERSION, FixedDecimal, MARKET_TIMEZONE, utc_micros,
 };
-use ficant_domain::primitives::ContentHash;
+use ficant_domain::primitives::{ContentHash, MarketTime, Ulid, Version, VersionRef};
 
 const DECIMAL_PRECISION: u8 = 38;
 const DECIMAL_SCALE_I8: i8 = 12;
@@ -92,6 +95,132 @@ impl BondAnalyticsArtifactCodec for ArrowBondAnalyticsCodec {
         BondAnalyticsResult::new(expected_input.clone(), resolution, cashflows, measures)
             .map_err(|_| AnalyticsError::InvalidInput)
     }
+
+    fn decode_facts(&self, bytes: &[u8]) -> Result<BondAnalyticsArtifactFacts, AnalyticsError> {
+        let batch = read_single_batch(bytes)?;
+        let headers_match = string(&batch, 0)? == ARTIFACT_SCHEMA_ID
+            && string(&batch, 1)? == ARTIFACT_CODEC_ID
+            && string(&batch, 2)? == ENGINE_ID
+            && string(&batch, 3)? == ENGINE_VERSION
+            && string(&batch, 4)? == ALGORITHM_ID
+            && string(&batch, 5)? == CONVENTION_PROFILE
+            && uint32(&batch, 7)? == ALGORITHM_VERSION
+            && uint32(&batch, 8)? == ABI_VERSION
+            && string(&batch, 15)? == MARKET_TIMEZONE;
+        if !headers_match {
+            return Err(AnalyticsError::InvalidInput);
+        }
+        let calendar_id = string(&batch, 6)?;
+        if calendar_id.trim().is_empty() || calendar_id != calendar_id.trim() {
+            return Err(AnalyticsError::InvalidInput);
+        }
+        Version::new(uint64(&batch, 9)?).map_err(|_| AnalyticsError::InvalidInput)?;
+        ContentHash::from_bytes(binary(&batch, 10)?).map_err(|_| AnalyticsError::InvalidInput)?;
+        let requirement = match uint8(&batch, 11)? {
+            1 => CalendarRequirement::ReferenceReplay,
+            2 => CalendarRequirement::ExactMarket,
+            _ => return Err(AnalyticsError::InvalidInput),
+        };
+        let resolution = match uint8(&batch, 12)? {
+            1 => CalendarResolution::Exact,
+            2 => CalendarResolution::ProvisionalWeekendOnly,
+            _ => return Err(AnalyticsError::InvalidInput),
+        };
+        if requirement == CalendarRequirement::ExactMarket
+            && resolution != CalendarResolution::Exact
+        {
+            return Err(AnalyticsError::InvalidInput);
+        }
+        if date(&batch, 13)? > date(&batch, 14)? {
+            return Err(AnalyticsError::InvalidInput);
+        }
+        let instant = chrono::DateTime::<Utc>::from_timestamp_micros(timestamp(&batch, 16)?)
+            .ok_or(AnalyticsError::InvalidInput)?;
+        let valuation_at = decode_market_time(instant)?;
+        date(&batch, 17)?;
+        match uint8(&batch, 18)? {
+            1 => AnalyticsMode::YieldIn,
+            2 => AnalyticsMode::PriceIn,
+            _ => return Err(AnalyticsError::InvalidInput),
+        };
+        if !decimal(&batch, 19)?.is_positive() || !decimal(&batch, 29)?.is_positive() {
+            return Err(AnalyticsError::InvalidInput);
+        }
+        let cashflows = decode_cashflows(&batch)?;
+        if cashflows.is_empty()
+            || cashflows.iter().enumerate().any(|(index, cashflow)| {
+                cashflow.sequence() != u32::try_from(index + 1).unwrap_or(u32::MAX)
+                    || (index > 0 && cashflows[index - 1].payment_date() > cashflow.payment_date())
+            })
+        {
+            return Err(AnalyticsError::InvalidInput);
+        }
+        let measures = AnalyticsMeasures::new(
+            decimal(&batch, 31)?,
+            decimal(&batch, 32)?,
+            decimal(&batch, 34)?,
+            decimal(&batch, 35)?,
+            decimal(&batch, 36)?,
+            decimal(&batch, 37)?,
+            decimal(&batch, 38)?,
+        )
+        .map_err(|_| AnalyticsError::InvalidInput)?;
+        if measures.dirty_price() != decimal(&batch, 33)? {
+            return Err(AnalyticsError::InvalidInput);
+        }
+        Ok(BondAnalyticsArtifactFacts::new(
+            valuation_at,
+            object_ref(&batch, 20, 21, 22)?,
+            object_ref(&batch, 23, 24, 25)?,
+            object_ref(&batch, 26, 27, 28)?,
+            measures.dv01(),
+        ))
+    }
+}
+
+fn decode_market_time(instant: chrono::DateTime<Utc>) -> Result<MarketTime, AnalyticsError> {
+    for delta in [-1_i64, 0, 1] {
+        let Some(local_date) = instant
+            .date_naive()
+            .checked_add_signed(TimeDelta::days(delta))
+        else {
+            continue;
+        };
+        if let Ok(value) = MarketTime::new(instant, MARKET_TIMEZONE, local_date) {
+            return Ok(value);
+        }
+    }
+    Err(AnalyticsError::InvalidInput)
+}
+
+fn read_single_batch(bytes: &[u8]) -> Result<RecordBatch, AnalyticsError> {
+    let mut reader =
+        FileReader::try_new(Cursor::new(bytes), None).map_err(|_| AnalyticsError::InvalidInput)?;
+    if reader.schema().as_ref() != &artifact_schema() {
+        return Err(AnalyticsError::InvalidInput);
+    }
+    let batch = reader
+        .next()
+        .ok_or(AnalyticsError::InvalidInput)?
+        .map_err(|_| AnalyticsError::InvalidInput)?;
+    if reader.next().is_some() || batch.num_rows() != 1 || batch.num_columns() != 39 {
+        return Err(AnalyticsError::InvalidInput);
+    }
+    Ok(batch)
+}
+
+fn object_ref(
+    batch: &RecordBatch,
+    id_column: usize,
+    version_column: usize,
+    hash_column: usize,
+) -> Result<AnalyticsObjectRef, AnalyticsError> {
+    let id = Ulid::new(string(batch, id_column)?).map_err(|_| AnalyticsError::InvalidInput)?;
+    let version =
+        Version::new(uint64(batch, version_column)?).map_err(|_| AnalyticsError::InvalidInput)?;
+    let hash = ContentHash::from_bytes(binary(batch, hash_column)?)
+        .map_err(|_| AnalyticsError::InvalidInput)?;
+    Ok(AnalyticsObjectRef::new(VersionRef::new(id, version), hash))
 }
 
 fn artifact_schema() -> Schema {

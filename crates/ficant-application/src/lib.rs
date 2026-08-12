@@ -49,6 +49,16 @@ pub use use_cases::position_views::{
     CapitalUse, PositionSnapshotPayload, PositionView, PositionViews, PositionViewsUseCase,
     PublishPositionSnapshot,
 };
+pub use use_cases::rates_materialization::{
+    BondRatesCommand, BondRatesMaterialization, CarryRatesCommand, CarryRatesMaterialization,
+    CurveRatesCommand, CurveRatesMaterialization, DeliveryRatesCommand,
+    DeliveryRatesMaterialization, HedgeRatesCommand, HedgeRatesMaterialization,
+    ImmutableArtifactBinding, ImmutableCurveNodeBinding, ImmutableSnapshotBinding,
+    MaterializeBondRatesInput, MaterializeCarryRatesInput, MaterializeCurveRatesInput,
+    MaterializeDeliveryRatesInput, MaterializeHedgeRatesInput, RatesEvidenceBinding,
+    RatesInputEvidence, RatesInputRole, RatesRequestEvidence, RatesUnitRequirement,
+    rates_data_source_content_hash,
+};
 pub use use_cases::verified_reads::VerifiedSnapshotReader;
 pub use use_cases::verified_reads::{
     VerifiedArtifactRead, VerifiedReadFacade, VerifiedSignalRead, VerifiedSnapshotRead,

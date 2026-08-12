@@ -1,0 +1,189 @@
+{
+  "schema": "ficant.r5d-portfolio-krd-oracle.expected.v1",
+  "positions": [
+    {
+      "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FAQ",
+      "instrument_id": "01ARZ3NDEKTSV4RRFFQ69G5FAB",
+      "kind": "bond",
+      "nodes": [
+        {
+          "factor_id": "cn.gov.yield.02y",
+          "dv01": "0.005000000000"
+        },
+        {
+          "factor_id": "cn.gov.yield.05y",
+          "dv01": "0.005000000000"
+        },
+        {
+          "factor_id": "cn.gov.yield.10y",
+          "dv01": "0.000000000000"
+        }
+      ],
+      "node_sum_dv01": "0.010000000000",
+      "parallel_shift_dv01": "0.010000000000"
+    },
+    {
+      "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FAZ",
+      "instrument_id": "01ARZ3NDEKTSV4RRFFQ69G5FAF",
+      "kind": "futures",
+      "nodes": [
+        {
+          "factor_id": "cn.gov.yield.02y",
+          "dv01": "100.000000000000"
+        },
+        {
+          "factor_id": "cn.gov.yield.05y",
+          "dv01": "100.000000000000"
+        },
+        {
+          "factor_id": "cn.gov.yield.10y",
+          "dv01": "0.000000000000"
+        }
+      ],
+      "node_sum_dv01": "200.000000000000",
+      "parallel_shift_dv01": "200.000000000000"
+    }
+  ],
+  "node_totals": [
+    {
+      "factor_id": "cn.gov.yield.02y",
+      "dv01": "100.005000000000"
+    },
+    {
+      "factor_id": "cn.gov.yield.05y",
+      "dv01": "100.005000000000"
+    },
+    {
+      "factor_id": "cn.gov.yield.10y",
+      "dv01": "0.000000000000"
+    }
+  ],
+  "portfolio": {
+    "node_sum_dv01": "200.010000000000",
+    "parallel_shift_dv01": "200.010000000000"
+  },
+  "metamorphic_results": {
+    "quantity_multiplier": "3.000000000000",
+    "scaled_positions": [
+      {
+        "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FAQ",
+        "instrument_id": "01ARZ3NDEKTSV4RRFFQ69G5FAB",
+        "kind": "bond",
+        "nodes": [
+          {
+            "factor_id": "cn.gov.yield.02y",
+            "dv01": "0.015000000000"
+          },
+          {
+            "factor_id": "cn.gov.yield.05y",
+            "dv01": "0.015000000000"
+          },
+          {
+            "factor_id": "cn.gov.yield.10y",
+            "dv01": "0.000000000000"
+          }
+        ],
+        "node_sum_dv01": "0.030000000000",
+        "parallel_shift_dv01": "0.030000000000"
+      },
+      {
+        "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FAZ",
+        "instrument_id": "01ARZ3NDEKTSV4RRFFQ69G5FAF",
+        "kind": "futures",
+        "nodes": [
+          {
+            "factor_id": "cn.gov.yield.02y",
+            "dv01": "300.000000000000"
+          },
+          {
+            "factor_id": "cn.gov.yield.05y",
+            "dv01": "300.000000000000"
+          },
+          {
+            "factor_id": "cn.gov.yield.10y",
+            "dv01": "0.000000000000"
+          }
+        ],
+        "node_sum_dv01": "600.000000000000",
+        "parallel_shift_dv01": "600.000000000000"
+      }
+    ],
+    "scaled_node_totals": [
+      {
+        "factor_id": "cn.gov.yield.02y",
+        "dv01": "300.015000000000"
+      },
+      {
+        "factor_id": "cn.gov.yield.05y",
+        "dv01": "300.015000000000"
+      },
+      {
+        "factor_id": "cn.gov.yield.10y",
+        "dv01": "0.000000000000"
+      }
+    ],
+    "scaled_portfolio_node_sum_dv01": "600.030000000000",
+    "scaled_portfolio_parallel_shift_dv01": "600.030000000000",
+    "inverse_position_multiplier": "-1.000000000000",
+    "inverse_positions": [
+      {
+        "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FAQ",
+        "instrument_id": "01ARZ3NDEKTSV4RRFFQ69G5FAB",
+        "kind": "bond",
+        "nodes": [
+          {
+            "factor_id": "cn.gov.yield.02y",
+            "dv01": "-0.005000000000"
+          },
+          {
+            "factor_id": "cn.gov.yield.05y",
+            "dv01": "-0.005000000000"
+          },
+          {
+            "factor_id": "cn.gov.yield.10y",
+            "dv01": "0.000000000000"
+          }
+        ],
+        "node_sum_dv01": "-0.010000000000",
+        "parallel_shift_dv01": "-0.010000000000"
+      },
+      {
+        "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FAZ",
+        "instrument_id": "01ARZ3NDEKTSV4RRFFQ69G5FAF",
+        "kind": "futures",
+        "nodes": [
+          {
+            "factor_id": "cn.gov.yield.02y",
+            "dv01": "-100.000000000000"
+          },
+          {
+            "factor_id": "cn.gov.yield.05y",
+            "dv01": "-100.000000000000"
+          },
+          {
+            "factor_id": "cn.gov.yield.10y",
+            "dv01": "0.000000000000"
+          }
+        ],
+        "node_sum_dv01": "-200.000000000000",
+        "parallel_shift_dv01": "-200.000000000000"
+      }
+    ],
+    "inverse_node_totals": [
+      {
+        "factor_id": "cn.gov.yield.02y",
+        "dv01": "-100.005000000000"
+      },
+      {
+        "factor_id": "cn.gov.yield.05y",
+        "dv01": "-100.005000000000"
+      },
+      {
+        "factor_id": "cn.gov.yield.10y",
+        "dv01": "0.000000000000"
+      }
+    ],
+    "inverse_portfolio_node_sum_dv01": "-200.010000000000",
+    "inverse_portfolio_parallel_shift_dv01": "-200.010000000000"
+  }
+}

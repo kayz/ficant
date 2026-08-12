@@ -1,0 +1,61 @@
+{
+  "schema": "ficant.r5d-portfolio-krd-oracle.inputs.v1",
+  "decimal_scale": 12,
+  "dv01_unit": "DV01_CNY",
+  "reference_price_model": {
+    "registered_face_price": "100.000000000000",
+    "yield_price_multiplier": "100.000000000000",
+    "curve_interpolation_weights": [
+      "0.500000000000",
+      "0.500000000000",
+      "0.000000000000"
+    ]
+  },
+  "factors": [
+    {
+      "factor_id": "cn.gov.yield.02y",
+      "curve_node_id": "cn.gov.yield-curve.02y",
+      "base_yield": "0.025000000000",
+      "bump_yield": "0.000100000000",
+      "direction": "central"
+    },
+    {
+      "factor_id": "cn.gov.yield.05y",
+      "curve_node_id": "cn.gov.yield-curve.05y",
+      "base_yield": "0.030000000000",
+      "bump_yield": "0.000100000000",
+      "direction": "central"
+    },
+    {
+      "factor_id": "cn.gov.yield.10y",
+      "curve_node_id": "cn.gov.yield-curve.10y",
+      "base_yield": "0.035000000000",
+      "bump_yield": "0.000100000000",
+      "direction": "central"
+    }
+  ],
+  "positions": [
+    {
+      "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FAQ",
+      "instrument_id": "01ARZ3NDEKTSV4RRFFQ69G5FAB",
+      "kind": "bond",
+      "quantity": "100.000000000000",
+      "registered_face": "100.000000000000"
+    },
+    {
+      "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FAZ",
+      "instrument_id": "01ARZ3NDEKTSV4RRFFQ69G5FAF",
+      "kind": "futures",
+      "quantity": "2.000000000000",
+      "ctd_instrument_id": "01ARZ3NDEKTSV4RRFFQ69G5FAB",
+      "ctd_registered_face": "100.000000000000",
+      "face_quote_basis": "100.000000000000",
+      "contract_size_in_quote_units": "10000.000000000000",
+      "conversion_factor": "1.000000000000"
+    }
+  ],
+  "metamorphic_cases": {
+    "quantity_multiplier": "3.000000000000",
+    "inverse_position_multiplier": "-1.000000000000"
+  }
+}

@@ -27,6 +27,9 @@ use ficant_native_nodes::{native_node_source_digest, trusted_native_node};
 use ficant_runtime::NativeNode;
 use ficant_storage::postgres::PostgresRepository;
 use ficant_storage::s3::S3BlobStore;
+use ficant_storage::{
+    analytics_arrow::ArrowBondAnalyticsCodec, futures_arrow::ArrowFuturesDeliveryCodec,
+};
 use ficant_tax_pack::TaxRulePackV1Parser;
 use sqlx::postgres::PgPoolOptions;
 use std::collections::BTreeMap;
@@ -282,6 +285,10 @@ pub fn build_grpc_services(
     );
     let definitions: Arc<dyn DefinitionRepository> = repository.clone();
     let subjects: Arc<dyn SubjectRepository> = repository.clone();
+    let data_sources: Arc<dyn DataSourceRepository> = repository.clone();
+    let curve_snapshots: Arc<dyn CurveSnapshotMetadataRepository> = repository.clone();
+    let factors: Arc<dyn FactorTopologyRepository> = repository.clone();
+    let artifacts: Arc<dyn ArtifactRepository> = repository.clone();
     let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository;
     let blobs: Arc<dyn VerifiedBlobReader> = blob_store;
     let rates = build_rates_service(
@@ -291,6 +298,10 @@ pub fn build_grpc_services(
         snapshots.clone(),
         blobs,
         build_integrity_event_sink(),
+        data_sources,
+        curve_snapshots,
+        factors,
+        artifacts,
         settings,
     )?;
     Ok((platform, rates))
@@ -353,6 +364,9 @@ pub fn build_grpc_services_with_experiment_and_registry(
     let journals: Arc<dyn RunJournalRepository> = repository.clone();
     let snapshot_repository: Arc<dyn SnapshotRepository> = repository.clone();
     let artifacts: Arc<dyn ArtifactRepository> = repository.clone();
+    let data_sources: Arc<dyn DataSourceRepository> = repository.clone();
+    let curve_snapshots: Arc<dyn CurveSnapshotMetadataRepository> = repository.clone();
+    let factors: Arc<dyn FactorTopologyRepository> = repository.clone();
     let definitions: Arc<dyn DefinitionRepository> = repository.clone();
     let subjects: Arc<dyn SubjectRepository> = repository.clone();
     let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository;
@@ -364,6 +378,10 @@ pub fn build_grpc_services_with_experiment_and_registry(
         snapshots.clone(),
         blobs.clone(),
         build_integrity_event_sink(),
+        data_sources,
+        curve_snapshots,
+        factors,
+        artifacts.clone(),
         settings,
     )?;
     let registry_identity = Arc::clone(&application);
@@ -502,6 +520,10 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
         snapshots.clone(),
         blobs.clone(),
         build_integrity_event_sink(),
+        data_source_repository.clone(),
+        curve_repository.clone(),
+        factor_repository.clone(),
+        artifacts.clone(),
         settings,
     )?;
     let experiment = ExperimentGrpcService::new(
@@ -654,6 +676,7 @@ pub fn build_grpc_services_with_experiment_registry_and_positions(
     Ok((platform, rates, experiment, registry, positions))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_rates_service(
     application: Arc<dyn PlatformPort>,
     definitions: Arc<dyn DefinitionRepository>,
@@ -661,9 +684,13 @@ fn build_rates_service(
     snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
     blobs: Arc<dyn VerifiedBlobReader>,
     integrity_events: Arc<dyn IntegrityEventSink>,
+    data_sources: Arc<dyn DataSourceRepository>,
+    curve_snapshots: Arc<dyn CurveSnapshotMetadataRepository>,
+    factors: Arc<dyn FactorTopologyRepository>,
+    artifacts: Arc<dyn ArtifactRepository>,
     settings: &ServerSettings,
 ) -> Result<RatesGrpcService, ServerError> {
-    RatesGrpcService::new(
+    RatesGrpcService::new_with_materialization(
         application,
         Arc::new(NativeBondAnalyticsEngine),
         Arc::new(NativeYieldCurveEngine),
@@ -679,6 +706,13 @@ fn build_rates_service(
         Arc::new(FundingRulePackV1Parser),
         Arc::new(TaxRulePackV1Parser),
         Arc::new(NativeFuturesHedgeEngine),
+        data_sources,
+        curve_snapshots,
+        factors,
+        artifacts,
+        Arc::new(CanonicalCurvePointSetDecoder),
+        Arc::new(ArrowBondAnalyticsCodec),
+        Arc::new(ArrowFuturesDeliveryCodec),
         &settings.trace_key,
     )
     .map_err(config)
