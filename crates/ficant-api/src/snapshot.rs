@@ -804,6 +804,9 @@ fn map_data_error(error: DataError) -> ApplicationError {
         | DataError::SchemaMismatch => {
             ApplicationError::new(ApplicationErrorCategory::ValidationFailed, false)
         }
+        DataError::SourceRowViolation {
+            source_record_id, ..
+        } => ApplicationError::observed_after_visible_source_row(source_record_id),
         DataError::SourceUnavailable => {
             ApplicationError::new(ApplicationErrorCategory::StorageUnavailable, true)
         }

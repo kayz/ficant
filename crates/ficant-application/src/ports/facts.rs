@@ -253,6 +253,7 @@ pub struct MarketFactWindow {
     instrument: VersionRef,
     from: MarketTime,
     to: MarketTime,
+    knowledge_at: MarketTime,
     page: PageRequest,
 }
 
@@ -266,6 +267,7 @@ impl MarketFactWindow {
         instrument: VersionRef,
         from: MarketTime,
         to: MarketTime,
+        knowledge_at: MarketTime,
         page: PageRequest,
     ) -> ApplicationResult<Self> {
         if from.instant() > to.instant() {
@@ -275,6 +277,7 @@ impl MarketFactWindow {
             instrument,
             from,
             to,
+            knowledge_at,
             page,
         })
     }
@@ -292,6 +295,11 @@ impl MarketFactWindow {
     #[must_use]
     pub fn to(&self) -> &MarketTime {
         &self.to
+    }
+
+    #[must_use]
+    pub fn knowledge_at(&self) -> &MarketTime {
+        &self.knowledge_at
     }
 
     #[must_use]
@@ -315,11 +323,28 @@ impl MarketFactWindow {
 
     #[must_use]
     pub fn fingerprint(&self) -> OperationFingerprint {
-        let mut canonical = FingerprintBuilder::new("market-fact-window/v1");
+        let mut canonical = FingerprintBuilder::new("market-fact-window/v2");
         canonical.field(2, &version_ref_bytes(&self.instrument));
         canonical.field(3, &market_time_bytes(&self.from));
         canonical.field(4, &market_time_bytes(&self.to));
-        canonical.field(5, self.page.fingerprint().content_hash().as_bytes());
+        canonical.field(5, &market_time_bytes(&self.knowledge_at));
+        canonical.field(6, self.page.fingerprint().content_hash().as_bytes());
+        canonical.finish()
+    }
+
+    /// Returns the immutable query identity embedded in continuation cursors.
+    ///
+    /// This deliberately excludes the cursor itself while binding the access scope, page size,
+    /// exact instrument, observed window, and full knowledge-time evidence.
+    #[must_use]
+    pub fn cursor_binding(&self) -> OperationFingerprint {
+        let mut canonical = FingerprintBuilder::new("market-fact-window-cursor/v1");
+        canonical.field(2, self.page.scope().fingerprint().content_hash().as_bytes());
+        canonical.field(3, &version_ref_bytes(&self.instrument));
+        canonical.field(4, &market_time_bytes(&self.from));
+        canonical.field(5, &market_time_bytes(&self.to));
+        canonical.field(6, &market_time_bytes(&self.knowledge_at));
+        canonical.u64(7, u64::from(self.page.limit()));
         canonical.finish()
     }
 }
@@ -782,6 +807,25 @@ pub trait MarketFactRepository: Send + Sync {
         scope: &AccessScope,
         curve_snapshot_id: Ulid,
     ) -> ApplicationResult<Option<CurveSnapshot>>;
+
+    /// Reads one public historical curve only when its exact visibility time is known and no
+    /// later than the caller's explicit knowledge time.
+    ///
+    /// # Errors
+    ///
+    /// The default fails closed so repositories cannot accidentally expose exact replay reads as
+    /// historical queries.
+    async fn get_curve_snapshot_at(
+        &self,
+        _scope: &AccessScope,
+        _curve_snapshot_id: Ulid,
+        _knowledge_at: &MarketTime,
+    ) -> ApplicationResult<Option<CurveSnapshot>> {
+        Err(ApplicationError::new(
+            ApplicationErrorCategory::StateConflict,
+            false,
+        ))
+    }
 }
 
 /// Application boundary for validated immutable facts, corrections, queries, and curve metadata.
@@ -899,6 +943,22 @@ impl<'a> MarketFactUseCase<'a> {
     ) -> ApplicationResult<Option<CurveSnapshot>> {
         self.repository
             .get_curve_snapshot(scope, curve_snapshot_id)
+            .await
+    }
+
+    /// Reads one public historical curve at an explicit knowledge time.
+    ///
+    /// # Errors
+    ///
+    /// Returns a classified scope, visibility, integrity, or repository error.
+    pub async fn get_curve_at(
+        &self,
+        scope: &AccessScope,
+        curve_snapshot_id: Ulid,
+        knowledge_at: &MarketTime,
+    ) -> ApplicationResult<Option<CurveSnapshot>> {
+        self.repository
+            .get_curve_snapshot_at(scope, curve_snapshot_id, knowledge_at)
             .await
     }
 }

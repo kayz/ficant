@@ -3787,6 +3787,7 @@ fn assert_query_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
             ExpectedField::message("from", ".ficant.core.v1.MarketTime"),
             ExpectedField::message("to", ".ficant.core.v1.MarketTime"),
             ExpectedField::message("page", page_request),
+            ExpectedField::message("knowledge_at", ".ficant.core.v1.MarketTime"),
         ],
     );
     assert_fields(
@@ -3834,7 +3835,10 @@ fn assert_query_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     assert_fields(
         messages,
         "ficant.market.v1.GetCurveSnapshotRequest",
-        &[ExpectedField::message("curve_snapshot_id", id)],
+        &[
+            ExpectedField::message("curve_snapshot_id", id),
+            ExpectedField::message("knowledge_at", ".ficant.core.v1.MarketTime"),
+        ],
     );
     assert_fields(
         messages,

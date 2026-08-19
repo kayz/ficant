@@ -18,7 +18,7 @@ use ficant_application::{
 };
 use ficant_data::{
     CANONICAL_QUOTE_SCHEMA_ID, CanonicalImportEvidence, CanonicalIngestRequest,
-    CanonicalQuoteIngestor, CanonicalSnapshotCodec, DataResult, InstrumentMapping,
+    CanonicalQuoteIngestor, CanonicalSnapshotCodec, DataError, DataResult, InstrumentMapping,
     InstrumentMappingEntry, PointInTimeWindow, RawDecimal, RawQuoteRow, RawQuoteSource,
     canonical_quote_schema_hash,
 };
@@ -208,17 +208,12 @@ async fn published_snapshot_restarts_and_never_reopens_the_external_source() {
     )
     .unwrap();
 
-    let calls = Arc::new(AtomicUsize::new(0));
-    let canonical = {
-        let source = CountingSource {
-            calls: Arc::clone(&calls),
-        };
-        CanonicalQuoteIngestor
-            .ingest(&source, &request)
-            .await
-            .unwrap()
-    };
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let source = DestroyableSource::new();
+    let canonical = CanonicalQuoteIngestor
+        .ingest(&source, &request)
+        .await
+        .unwrap();
+    assert_eq!(source.call_count(), 1);
     let actor_id = Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F00").unwrap();
     let import_evidence = CanonicalImportEvidence::new(
         authorization.version_ref(),
@@ -286,6 +281,16 @@ async fn published_snapshot_restarts_and_never_reopens_the_external_source() {
         (published_snapshot, retry)
     };
     assert_eq!(published_snapshot, retry);
+    source.destroy();
+    assert_eq!(
+        source
+            .read(&data_source, request.window())
+            .await
+            .unwrap_err(),
+        DataError::SourceUnavailable,
+        "the external source contents must be physically unavailable before restart"
+    );
+    let calls_after_destroy_proof = source.call_count();
     drop(store);
     drop(repository);
     pool.close().await;
@@ -322,8 +327,14 @@ async fn published_snapshot_restarts_and_never_reopens_the_external_source() {
     let verified = CanonicalSnapshotCodec
         .decode_verified(snapshot, parquet.bytes(), manifest.bytes())
         .unwrap();
+    assert_eq!(verified.batch().schema(), canonical.batch().schema());
+    assert_eq!(verified.batch().num_rows(), canonical.batch().num_rows());
+    assert_eq!(
+        verified.batch().num_columns(),
+        canonical.batch().num_columns()
+    );
     assert_eq!(verified.batch(), canonical.batch());
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(source.call_count(), calls_after_destroy_proof);
     assert!(events.0.lock().unwrap().is_empty());
     let counts: (i64, i64, i64, i64, i64) = sqlx::query_as(
         "SELECT
@@ -339,26 +350,49 @@ async fn published_snapshot_restarts_and_never_reopens_the_external_source() {
     assert_eq!(counts, (1, 6, 2, 0, 0));
 }
 
-struct CountingSource {
+#[derive(Clone)]
+struct DestroyableSource {
     calls: Arc<AtomicUsize>,
+    rows: Arc<Mutex<Option<Vec<RawQuoteRow>>>>,
+}
+
+impl DestroyableSource {
+    fn new() -> Self {
+        Self {
+            calls: Arc::new(AtomicUsize::new(0)),
+            rows: Arc::new(Mutex::new(Some(vec![RawQuoteRow::new(
+                "record-1",
+                "260011.IB",
+                "2026-07-20T01:30:00Z",
+                "2026-07-20T01:30:05Z",
+                Some(RawDecimal::new("1012300", 4)),
+                Some(RawDecimal::new("1012500", 4)),
+            )]))),
+        }
+    }
+
+    fn destroy(&self) {
+        self.rows.lock().unwrap().take();
+    }
+
+    fn call_count(&self) -> usize {
+        self.calls.load(Ordering::SeqCst)
+    }
 }
 
 #[async_trait]
-impl RawQuoteSource for CountingSource {
+impl RawQuoteSource for DestroyableSource {
     async fn read(
         &self,
         _source: &DataSource,
         _window: &PointInTimeWindow,
     ) -> DataResult<Vec<RawQuoteRow>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        Ok(vec![RawQuoteRow::new(
-            "record-1",
-            "260011.IB",
-            "2026-07-20T01:30:00Z",
-            "2026-07-20T01:30:05Z",
-            Some(RawDecimal::new("1012300", 4)),
-            Some(RawDecimal::new("1012500", 4)),
-        )])
+        self.rows
+            .lock()
+            .unwrap()
+            .clone()
+            .ok_or(DataError::SourceUnavailable)
     }
 }
 

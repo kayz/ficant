@@ -1124,6 +1124,8 @@ pub struct QueryInstrumentFactsRequest {
     pub to: ::core::option::Option<super::super::core::v1::MarketTime>,
     #[prost(message, optional, tag="4")]
     pub page: ::core::option::Option<super::super::core::v1::PageRequest>,
+    #[prost(message, optional, tag="5")]
+    pub knowledge_at: ::core::option::Option<super::super::core::v1::MarketTime>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InstrumentFacts {
@@ -1151,6 +1153,8 @@ pub mod query_instrument_facts_response {
 pub struct GetCurveSnapshotRequest {
     #[prost(message, optional, tag="1")]
     pub curve_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub knowledge_at: ::core::option::Option<super::super::core::v1::MarketTime>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CurveSnapshotPayload {

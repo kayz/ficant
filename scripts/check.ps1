@@ -28,6 +28,8 @@ $steps = @(
     New-FicantCheckStep -Name 'C++ configure' -FilePath 'cmake' -ArgumentList @('-S', 'cpp/fixed-income-kernel', '-B', $cppBuildDirectory, '-G', 'Ninja', "-DCMAKE_CXX_COMPILER=$cppCompiler", '-DCMAKE_BUILD_TYPE=Release')
     New-FicantCheckStep -Name 'C++ build' -FilePath 'cmake' -ArgumentList @('--build', $cppBuildDirectory, '--parallel')
     New-FicantCheckStep -Name 'C++ tests' -FilePath 'ctest' -ArgumentList @('--test-dir', $cppBuildDirectory, '--output-on-failure')
+    New-FicantCheckStep -Name 'Cross-Clang comparator fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-cross-clang-check.ps1')
+    New-FicantCheckStep -Name 'Cross-Clang raw numeric identity' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/check-cross-clang.ps1')
     New-FicantCheckStep -Name 'Acceptance-matrix integrity' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', 'tests/iteration-3/verify_acceptance_matrix.py')
     New-FicantCheckStep -Name 'Phase 2B acceptance-matrix integrity' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', 'tests/phase2b/verify_acceptance_matrix.py')
     New-FicantCheckStep -Name 'Phase 2C acceptance-matrix integrity' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', 'tests/phase2c/verify_acceptance_matrix.py')

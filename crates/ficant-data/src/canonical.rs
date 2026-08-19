@@ -15,6 +15,7 @@ use ficant_domain::primitives::{
 };
 use rust_decimal::Decimal;
 
+use crate::error::SourceRowViolationReason;
 use crate::source::parse_source_time;
 use crate::{
     DataError, DataResult, InstrumentMapping, PointInTimeWindow, RawDecimal, RawQuoteRow,
@@ -186,12 +187,15 @@ struct CanonicalRow {
 }
 
 fn validate_row(request: &CanonicalIngestRequest, raw: &RawQuoteRow) -> DataResult<CanonicalRow> {
-    require_source_text(raw.source_record_id())?;
+    let source_record_id = canonical_source_record_id(raw.source_record_id())?;
     require_source_text(raw.instrument_key())?;
     let observed_at = parse_source_time(raw.observed_at())?;
     let visible_at = parse_source_time(raw.visible_at())?;
     if observed_at > visible_at {
-        return Err(DataError::QualityRuleFailed);
+        return Err(DataError::SourceRowViolation {
+            source_record_id,
+            reason: SourceRowViolationReason::ObservedAfterVisible,
+        });
     }
     if observed_at > request.window.as_of().instant()
         || visible_at > request.window.visible_at_cutoff().instant()
@@ -234,7 +238,7 @@ fn validate_row(request: &CanonicalIngestRequest, raw: &RawQuoteRow) -> DataResu
         return Err(DataError::QualityRuleFailed);
     }
     Ok(CanonicalRow {
-        source_record_id: raw.source_record_id().to_owned(),
+        source_record_id,
         instrument,
         observed_at,
         visible_at,
@@ -242,6 +246,18 @@ fn validate_row(request: &CanonicalIngestRequest, raw: &RawQuoteRow) -> DataResu
         bid,
         ask,
     })
+}
+
+fn canonical_source_record_id(value: &str) -> DataResult<String> {
+    if value.is_empty()
+        || value.len() > 128
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+    {
+        return Err(DataError::QualityRuleFailed);
+    }
+    Ok(value.to_owned())
 }
 
 fn require_source_text(value: &str) -> DataResult<()> {

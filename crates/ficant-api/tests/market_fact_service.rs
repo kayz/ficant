@@ -195,6 +195,24 @@ impl MarketFactRepository for Repository {
         }
         Ok(value)
     }
+
+    async fn get_curve_snapshot_at(
+        &self,
+        scope: &AccessScope,
+        curve_snapshot_id: Ulid,
+        knowledge_at: &MarketTime,
+    ) -> ApplicationResult<Option<ficant_domain::market::CurveSnapshot>> {
+        let value = self.curve.lock().unwrap().clone().map(|value| value.0);
+        let Some(value) = value else {
+            return Ok(None);
+        };
+        scope.authorize(value.owner())?;
+        assert_eq!(value.id(), &curve_snapshot_id);
+        let is_visible = value
+            .visible_at()
+            .is_some_and(|visible_at| visible_at.instant() <= knowledge_at.instant());
+        Ok(is_visible.then_some(value))
+    }
 }
 
 #[async_trait]
@@ -356,6 +374,7 @@ async fn admin_round_trips_all_fact_variants_and_both_roles_query_them() {
                 instrument: Some(version_ref('B')),
                 from: Some(market_time(0)),
                 to: Some(market_time(8)),
+                knowledge_at: Some(market_time(8)),
                 page: Some(core::PageRequest {
                     page_size: 20,
                     cursor: String::new(),
@@ -388,9 +407,35 @@ async fn admin_round_trips_all_fact_variants_and_both_roles_query_them() {
         ));
     }
 
+    assert_missing_fact_knowledge_fails(&researcher).await;
+
     assert_eq!(repository.governed_appends.load(Ordering::SeqCst), 4);
     assert_eq!(repository.governed_corrections.load(Ordering::SeqCst), 1);
     assert_eq!(repository.legacy_writes.load(Ordering::SeqCst), 0);
+}
+
+async fn assert_missing_fact_knowledge_fails(service: &MarketFactGrpcService) {
+    let response = service
+        .query_instrument_facts(Request::new(pb::QueryInstrumentFactsRequest {
+            instrument: Some(version_ref('B')),
+            from: Some(market_time(0)),
+            to: Some(market_time(8)),
+            page: Some(core::PageRequest {
+                page_size: 20,
+                cursor: String::new(),
+            }),
+            knowledge_at: None,
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(matches!(
+        response.result,
+        Some(pb::query_instrument_facts_response::Result::Error(core::ErrorDetail {
+            code,
+            ..
+        })) if code == core::ErrorCode::ValidationFailed as i32
+    ));
 }
 
 #[tokio::test]
@@ -424,10 +469,31 @@ async fn curve_publish_hashes_canonical_points_and_get_requires_verified_bytes()
         "the server, not the caller, owns the canonical point hash",
     );
 
+    for knowledge_at in [None, Some(market_time(5))] {
+        let response = researcher
+            .get_curve_snapshot(Request::new(pb::GetCurveSnapshotRequest {
+                curve_snapshot_id: Some(proto_id('X')),
+                knowledge_at,
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(matches!(
+            response.result,
+            Some(pb::get_curve_snapshot_response::Result::Error(_))
+        ));
+        assert_eq!(
+            repository.verified_reads.load(Ordering::SeqCst),
+            0,
+            "missing or future knowledge must fail before immutable blob reads"
+        );
+    }
+
     for reader in [&admin, &researcher] {
         let response = reader
             .get_curve_snapshot(Request::new(pb::GetCurveSnapshotRequest {
                 curve_snapshot_id: Some(proto_id('X')),
+                knowledge_at: Some(market_time(6)),
             }))
             .await
             .unwrap()
@@ -442,6 +508,7 @@ async fn curve_publish_hashes_canonical_points_and_get_requires_verified_bytes()
     let tampered = researcher
         .get_curve_snapshot(Request::new(pb::GetCurveSnapshotRequest {
             curve_snapshot_id: Some(proto_id('X')),
+            knowledge_at: Some(market_time(6)),
         }))
         .await
         .unwrap()

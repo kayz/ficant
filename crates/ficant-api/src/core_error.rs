@@ -95,6 +95,13 @@ impl CoreBusinessErrorMapper {
                     description: "exact DataSource 未获 Platform Admin 授权".to_owned(),
                 }]
             }
+            Some(ApplicationErrorDetail::SourceRowViolation {
+                source_record_id,
+                reason: _,
+            }) => vec![FieldViolation {
+                field: format!("source_rows[id={source_record_id}].observed_at"),
+                description: "观测时间不得晚于可见时间".to_owned(),
+            }],
             None => Vec::new(),
         };
 

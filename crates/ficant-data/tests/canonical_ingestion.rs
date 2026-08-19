@@ -131,6 +131,29 @@ fn canonical_schema_freezes_all_sixteen_fields_and_metadata() {
 }
 
 #[tokio::test]
+async fn reversed_bitemporal_row_carries_safe_exact_source_identity_and_closed_reason() {
+    let request = request(DataSourceKind::FileNdjson, "file-binding", "quotes");
+    let error = ingest_error(
+        &request,
+        vec![row(
+            "source-row-17",
+            "260011.IB",
+            "2026-07-20T01:31:00Z",
+            "2026-07-20T01:30:00Z",
+            Some(("10123", 2)),
+            None,
+        )],
+    )
+    .await;
+
+    assert!(matches!(error, DataError::SourceRowViolation { .. }));
+    assert_eq!(
+        error.observed_after_visible_source_record_id(),
+        Some("source-row-17")
+    );
+}
+
+#[tokio::test]
 async fn every_point_in_time_and_quality_violation_fails_the_whole_batch() {
     let request = request(DataSourceKind::FileNdjson, "file-binding", "quotes");
     let invalid_rows = [
@@ -225,7 +248,9 @@ async fn every_point_in_time_and_quality_violation_fails_the_whole_batch() {
     for case in cases {
         assert!(matches!(
             ingest_error(&request, vec![case]).await,
-            DataError::PointInTimeViolation | DataError::QualityRuleFailed
+            DataError::PointInTimeViolation
+                | DataError::QualityRuleFailed
+                | DataError::SourceRowViolation { .. }
         ));
     }
 }

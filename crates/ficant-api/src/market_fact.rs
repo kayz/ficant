@@ -312,13 +312,23 @@ impl MarketFactGrpcService {
         request: &pb::GetCurveSnapshotRequest,
     ) -> Result<pb::CurveSnapshotPayload, ApplicationError> {
         let requested_id = parse_ulid(request.curve_snapshot_id.as_ref())?;
+        let knowledge_at = parse_market_time(request.knowledge_at.as_ref())?;
+        let historical = MarketFactUseCase::new(self.facts.as_ref())
+            .get_curve_at(
+                principal.access_scope(),
+                requested_id.clone(),
+                &knowledge_at,
+            )
+            .await?
+            .ok_or_else(not_found)?;
         let metadata = self
             .curve_metadata
             .get_curve_snapshot_metadata(principal.access_scope(), requested_id.clone())
             .await?
             .ok_or_else(not_found)?;
         let snapshot = metadata.snapshot();
-        if snapshot.id() != &requested_id
+        if snapshot != &historical
+            || snapshot.id() != &requested_id
             || snapshot.point_schema() != CURVE_POINT_SCHEMA
             || snapshot.curve_family_id().is_none()
         {
@@ -451,16 +461,18 @@ impl MarketFactService for MarketFactGrpcService {
                     parse_version_ref(payload.instrument.as_ref()),
                     parse_market_time(payload.from.as_ref()),
                     parse_market_time(payload.to.as_ref()),
+                    parse_market_time(payload.knowledge_at.as_ref()),
                     parse_cursor(
                         self.cursor_codec.as_ref(),
                         principal.access_scope(),
                         &page.cursor,
                     ),
                 ) {
-                    (Ok(instrument), Ok(from), Ok(to), Ok(cursor)) => {
+                    (Ok(instrument), Ok(from), Ok(to), Ok(knowledge_at), Ok(cursor)) => {
                         match PageRequest::new(principal.access_scope().clone(), cursor, limit)
-                            .and_then(|page| MarketFactWindow::new(instrument, from, to, page))
-                        {
+                            .and_then(|page| {
+                                MarketFactWindow::new(instrument, from, to, knowledge_at, page)
+                            }) {
                             Err(error) => Err(error),
                             Ok(query) => {
                                 MarketFactUseCase::new(self.facts.as_ref())
@@ -469,10 +481,11 @@ impl MarketFactService for MarketFactGrpcService {
                             }
                         }
                     }
-                    (Err(error), _, _, _)
-                    | (_, Err(error), _, _)
-                    | (_, _, Err(error), _)
-                    | (_, _, _, Err(error)) => Err(error),
+                    (Err(error), _, _, _, _)
+                    | (_, Err(error), _, _, _)
+                    | (_, _, Err(error), _, _)
+                    | (_, _, _, Err(error), _)
+                    | (_, _, _, _, Err(error)) => Err(error),
                 }
             }
         };
