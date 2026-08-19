@@ -10,6 +10,11 @@
     "cargo_version": "1.96.1",
     "command": ["tree", "--locked", "--all-features", "--target", "all", "--prefix", "none", "--format", "{p}"]
   },
+  "accepted_historical_secret_false_positives": [
+    "0ccd079f8a575b82b3f107e506e3d8e6dcc215f6:python/tests/test_contract_import.py:generic-api-key:123",
+    "0ccd079f8a575b82b3f107e506e3d8e6dcc215f6:python/tests/test_contract_import.py:generic-api-key:310",
+    "0ccd079f8a575b82b3f107e506e3d8e6dcc215f6:web-dm/platform-shell/tests/contracts-consumer.test.ts:generic-api-key:127"
+  ],
   "first_party_packages": [
       {
           "name": "ficant-acceptance",

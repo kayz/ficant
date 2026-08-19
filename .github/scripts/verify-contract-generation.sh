@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-CONTRACT_BASE_SHA=737807302351fe8feee425a89d666caf3d611f96
-DESCRIPTOR_SHA256=faecbe1713c036e3031352b76c7b6b82a07d42b83ab9fdca02421a5d87d2072c
+CONTRACT_BASE_SHA=6c805930f201b3d82bbcbee9030b791e48fb08e7
+DESCRIPTOR_SHA256=93445a41c2ca01f03f37aa1e172fa72ca58272ff3375c736d55e9c646c6a1749
 
 die() {
   printf 'contract-generation: %s\n' "$1" >&2
@@ -62,6 +62,8 @@ verify_trees() {
   tracked=$(tree_digest "$3") || die "cannot hash $3"
   if [[ $a != "$b" || $a != "$tracked" ]]; then
     printf 'contract-generation: drift a=%s b=%s tracked=%s\n' "$a" "$b" "$tracked" >&2
+    diff -qr "$1" "$2" >&2 || true
+    diff -qr "$1" "$3" >&2 || true
     return 1
   fi
 }
@@ -95,7 +97,7 @@ repo=$(git rev-parse --show-toplevel 2>/dev/null) || die 'not in a Git worktree'
 cd "$repo" || die 'cannot enter repository root'
 status=$(git status --porcelain) || die 'cannot inspect worktree status'
 [[ -z $status ]] || die 'worktree must be clean'
-for command in git tar python3 sha256sum awk mktemp mkdir rm cp buf cargo uv corepack; do
+for command in git tar python3 sha256sum awk mktemp mkdir rm cp diff buf cargo uv corepack; do
   command -v "$command" >/dev/null || die "missing tool: $command"
 done
 [[ $(buf --version) == '1.56.0' ]] || die 'Buf must be 1.56.0'
