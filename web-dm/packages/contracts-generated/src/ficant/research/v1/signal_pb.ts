@@ -6,13 +6,15 @@ import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { LineageRef, MarketTime, OwnerRef, Ulid, VersionRef } from "../../core/v1/common_pb";
 import { file_ficant_core_v1_common } from "../../core/v1/common_pb";
+import type { FormalOutputEvidence } from "../../core/v1/evidence_pb";
+import { file_ficant_core_v1_evidence } from "../../core/v1/evidence_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file ficant/research/v1/signal.proto.
  */
 export const file_ficant_research_v1_signal: GenFile = /*@__PURE__*/
-  fileDesc("Ch9maWNhbnQvcmVzZWFyY2gvdjEvc2lnbmFsLnByb3RvEhJmaWNhbnQucmVzZWFyY2gudjEi7QMKCVNpZ25hbFNldBIrCg1zaWduYWxfc2V0X2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBInCgVvd25lchgCIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEiwKCGFydGlmYWN0GAMgASgLMhouZmljYW50LmNvcmUudjEuTGluZWFnZVJlZhIvChFleHBlcmltZW50X3J1bl9pZBgEIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSMQoNZGF0YV9zbmFwc2hvdBgFIAEoCzIaLmZpY2FudC5jb3JlLnYxLkxpbmVhZ2VSZWYSNQoRdW5pdmVyc2Vfc25hcHNob3QYBiABKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmEi4KCnJ1bGVfcGFja3MYByADKAsyGi5maWNhbnQuY29yZS52MS5WZXJzaW9uUmVmEjMKD2lucHV0X2FydGlmYWN0cxgIIAMoCzIaLmZpY2FudC5jb3JlLnYxLkxpbmVhZ2VSZWYSLgoKdmFsaWRfZnJvbRgJIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSLAoIdmFsaWRfdG8YCiABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lYgZwcm90bzM", [file_ficant_core_v1_common]);
+  fileDesc("Ch9maWNhbnQvcmVzZWFyY2gvdjEvc2lnbmFsLnByb3RvEhJmaWNhbnQucmVzZWFyY2gudjEirAQKCVNpZ25hbFNldBIrCg1zaWduYWxfc2V0X2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBInCgVvd25lchgCIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEiwKCGFydGlmYWN0GAMgASgLMhouZmljYW50LmNvcmUudjEuTGluZWFnZVJlZhIvChFleHBlcmltZW50X3J1bl9pZBgEIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSMQoNZGF0YV9zbmFwc2hvdBgFIAEoCzIaLmZpY2FudC5jb3JlLnYxLkxpbmVhZ2VSZWYSNQoRdW5pdmVyc2Vfc25hcHNob3QYBiABKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmEi4KCnJ1bGVfcGFja3MYByADKAsyGi5maWNhbnQuY29yZS52MS5WZXJzaW9uUmVmEjMKD2lucHV0X2FydGlmYWN0cxgIIAMoCzIaLmZpY2FudC5jb3JlLnYxLkxpbmVhZ2VSZWYSLgoKdmFsaWRfZnJvbRgJIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSLAoIdmFsaWRfdG8YCiABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEj0KD2Zvcm1hbF9ldmlkZW5jZRgLIAEoCzIkLmZpY2FudC5jb3JlLnYxLkZvcm1hbE91dHB1dEV2aWRlbmNlYgZwcm90bzM", [file_ficant_core_v1_common, file_ficant_core_v1_evidence]);
 
 /**
  * SignalSet is an immutable, lineaged artifact subtype; it is not an Order.
@@ -69,6 +71,11 @@ export type SignalSet = Message<"ficant.research.v1.SignalSet"> & {
    * @generated from field: ficant.core.v1.MarketTime valid_to = 10;
    */
   validTo?: MarketTime;
+
+  /**
+   * @generated from field: ficant.core.v1.FormalOutputEvidence formal_evidence = 11;
+   */
+  formalEvidence?: FormalOutputEvidence;
 };
 
 /**

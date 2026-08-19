@@ -3,6 +3,7 @@ syntax = "proto3";
 package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
+import "ficant/core/v1/evidence.proto";
 
 // SignalSet is an immutable, lineaged artifact subtype; it is not an Order.
 message SignalSet {
@@ -16,4 +17,5 @@ message SignalSet {
   repeated ficant.core.v1.LineageRef input_artifacts = 8;
   ficant.core.v1.MarketTime valid_from = 9;
   ficant.core.v1.MarketTime valid_to = 10;
+  ficant.core.v1.FormalOutputEvidence formal_evidence = 11;
 }

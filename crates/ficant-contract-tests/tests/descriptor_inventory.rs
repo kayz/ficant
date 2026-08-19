@@ -293,6 +293,7 @@ fn descriptor_inventory_is_unique_and_preserves_phase1_semantics() {
     assert_no_floating_point_fields(descriptor_set);
     assert_no_parallel_contract_representations(descriptor_set);
     assert_shared_types(&messages);
+    assert_r7b_formal_evidence_contracts(&messages, &top_level_enums(descriptor_set));
     assert_subject_contracts(&messages);
     assert_r5d_rates_contracts(&messages, &top_level_enums(descriptor_set));
     assert_phase1_objects(&messages);
@@ -736,6 +737,7 @@ fn r5c_data_health_contracts_are_exact() {
             ExpectedField::message("request_fingerprint", ".ficant.core.v1.Sha256"),
             ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
             ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
+            ExpectedField::message("formal_evidence", ".ficant.core.v1.FormalOutputEvidence"),
         ],
     );
     assert_fields(
@@ -839,6 +841,7 @@ fn r4d_a_bond_curve_and_portfolio_risk_contracts_are_exact() {
                 ".ficant.research.v1.PriceSourceSummary",
             ),
             ExpectedField::message("coverage", ".ficant.research.v1.CoverageDeclaration"),
+            ExpectedField::message("formal_evidence", ".ficant.core.v1.FormalOutputEvidence"),
         ],
     );
     assert_fields(
@@ -1571,6 +1574,212 @@ fn assert_shared_types(messages: &BTreeMap<String, &DescriptorProto>) {
     );
 }
 
+fn assert_r7b_formal_evidence_contracts(
+    messages: &BTreeMap<String, &DescriptorProto>,
+    enums: &BTreeMap<String, &EnumDescriptorProto>,
+) {
+    let hash = ".ficant.core.v1.Sha256";
+    let input = ".ficant.core.v1.FormalInputBinding";
+
+    assert_enum(
+        enums,
+        "ficant.core.v1.FormalInputKind",
+        &[
+            ("FORMAL_INPUT_KIND_UNSPECIFIED", 0),
+            ("FORMAL_INPUT_KIND_SUBJECT", 1),
+            ("FORMAL_INPUT_KIND_DATA_SNAPSHOT", 2),
+            ("FORMAL_INPUT_KIND_UNIVERSE_SNAPSHOT", 3),
+            ("FORMAL_INPUT_KIND_RULE_PACK", 4),
+            ("FORMAL_INPUT_KIND_ARTIFACT", 5),
+            ("FORMAL_INPUT_KIND_DEFINITION", 6),
+            ("FORMAL_INPUT_KIND_INSTRUMENT", 7),
+            ("FORMAL_INPUT_KIND_CALENDAR", 8),
+            ("FORMAL_INPUT_KIND_UNIT", 9),
+            ("FORMAL_INPUT_KIND_DATA_SOURCE", 10),
+            ("FORMAL_INPUT_KIND_CURVE_SNAPSHOT", 11),
+            ("FORMAL_INPUT_KIND_FACTOR_DEFINITION", 12),
+            ("FORMAL_INPUT_KIND_POSITION_SNAPSHOT", 13),
+            ("FORMAL_INPUT_KIND_DATA_HEALTH_PROFILE", 14),
+            ("FORMAL_INPUT_KIND_CURVE_NODE_DEFINITION", 15),
+        ],
+    );
+
+    let named = messages
+        .get("ficant.core.v1.NamedContentRef")
+        .expect("NamedContentRef exists");
+    assert_exact_tagged_fields(
+        named,
+        &[
+            ("identity", 1, Type::String, None, false),
+            ("content_hash", 2, Type::Message, Some(hash), false),
+        ],
+    );
+
+    let binding = messages
+        .get("ficant.core.v1.FormalInputBinding")
+        .expect("FormalInputBinding exists");
+    assert_exact_tagged_fields(
+        binding,
+        &[
+            ("role", 1, Type::String, None, false),
+            (
+                "kind",
+                2,
+                Type::Enum,
+                Some(".ficant.core.v1.FormalInputKind"),
+                false,
+            ),
+            (
+                "owner",
+                3,
+                Type::Message,
+                Some(".ficant.core.v1.OwnerRef"),
+                false,
+            ),
+            (
+                "object_ref",
+                4,
+                Type::Message,
+                Some(".ficant.core.v1.LineageRef"),
+                false,
+            ),
+            (
+                "observed_at",
+                5,
+                Type::Message,
+                Some(".ficant.core.v1.MarketTime"),
+                false,
+            ),
+            (
+                "visible_at",
+                6,
+                Type::Message,
+                Some(".ficant.core.v1.MarketTime"),
+                false,
+            ),
+            (
+                "effective_from",
+                7,
+                Type::Message,
+                Some(".ficant.core.v1.MarketTime"),
+                false,
+            ),
+            (
+                "effective_to",
+                8,
+                Type::Message,
+                Some(".ficant.core.v1.MarketTime"),
+                false,
+            ),
+            (
+                "named_ref",
+                9,
+                Type::Message,
+                Some(".ficant.core.v1.NamedContentRef"),
+                false,
+            ),
+        ],
+    );
+    assert_field_oneof(binding, "object_ref", "reference");
+    assert_field_oneof(binding, "named_ref", "reference");
+
+    for (message_name, fields) in [
+        (
+            "ficant.core.v1.CodeBinding",
+            vec![
+                ("git_commit_sha", 1, Type::String, None, false),
+                ("git_tree_sha", 2, Type::String, None, false),
+                ("digest", 3, Type::Message, Some(hash), false),
+            ],
+        ),
+        (
+            "ficant.core.v1.RuntimeBinding",
+            vec![
+                ("image_digest", 1, Type::Message, Some(hash), false),
+                ("environment_digest", 2, Type::Message, Some(hash), false),
+            ],
+        ),
+        (
+            "ficant.core.v1.FormalImplementationBinding",
+            vec![
+                ("role", 1, Type::String, None, false),
+                ("digest", 2, Type::Message, Some(hash), false),
+            ],
+        ),
+    ] {
+        assert_exact_tagged_fields(
+            messages
+                .get(message_name)
+                .unwrap_or_else(|| panic!("{message_name} exists")),
+            &fields,
+        );
+    }
+
+    let evidence = messages
+        .get("ficant.core.v1.FormalOutputEvidence")
+        .expect("FormalOutputEvidence exists");
+    assert_eq!(evidence.field.len(), 10, "FormalOutputEvidence field drift");
+    for (name, number, field_type, type_name, repeated) in [
+        ("schema_id", 1, Type::String, None, false),
+        ("subject", 2, Type::Message, Some(input), false),
+        ("consumed_inputs", 3, Type::Message, Some(input), true),
+        (
+            "code",
+            4,
+            Type::Message,
+            Some(".ficant.core.v1.CodeBinding"),
+            false,
+        ),
+        (
+            "runtime",
+            5,
+            Type::Message,
+            Some(".ficant.core.v1.RuntimeBinding"),
+            false,
+        ),
+        (
+            "implementations",
+            6,
+            Type::Message,
+            Some(".ficant.core.v1.FormalImplementationBinding"),
+            true,
+        ),
+        ("parameters_hash", 7, Type::Message, Some(hash), false),
+        ("result_hash", 9, Type::Message, Some(hash), false),
+        ("output_identity", 10, Type::Message, Some(hash), false),
+    ] {
+        assert_exact_field(
+            evidence, name, number, field_type, type_name, repeated, false,
+        );
+    }
+    assert_exact_field(evidence, "seed", 8, Type::Uint64, None, false, true);
+
+    let submit = messages
+        .get("ficant.research.v1.SubmitGraphRunRequest")
+        .expect("SubmitGraphRunRequest exists");
+    assert_exact_field(
+        submit,
+        "subject",
+        12,
+        Type::Message,
+        Some(input),
+        false,
+        false,
+    );
+    let trace = messages
+        .get("ficant.research.v1.GraphOutputTrace")
+        .expect("GraphOutputTrace exists");
+    assert_exact_field(
+        trace,
+        "formal_outputs",
+        4,
+        Type::Message,
+        Some(".ficant.core.v1.FormalOutputEvidence"),
+        true,
+        false,
+    );
+}
+
 fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     let id = ".ficant.core.v1.Ulid";
     let version = ".ficant.core.v1.VersionRef";
@@ -1943,6 +2152,13 @@ fn assert_r5d_rates_contracts(
                 false,
             ),
             ("request_fingerprint", 10, Type::Message, Some(hash), false),
+            (
+                "formal_evidence",
+                11,
+                Type::Message,
+                Some(".ficant.core.v1.FormalOutputEvidence"),
+                false,
+            ),
         ],
     );
     assert_reserved_tags(messages, "ficant.rates.v1.ResultMetadata", &[6, 7]);
@@ -2377,6 +2593,7 @@ fn assert_phase1_objects(messages: &BTreeMap<String, &DescriptorProto>) {
                 ExpectedField::message("content_hash", hash),
                 ExpectedField::scalar("blob_size", Type::Uint64),
                 ExpectedField::repeated_message("lineage", lineage),
+                ExpectedField::message("formal_evidence", ".ficant.core.v1.FormalOutputEvidence"),
             ],
         ),
         (
@@ -2392,6 +2609,7 @@ fn assert_phase1_objects(messages: &BTreeMap<String, &DescriptorProto>) {
                 ExpectedField::repeated_message("input_artifacts", lineage),
                 ExpectedField::message("valid_from", time),
                 ExpectedField::message("valid_to", time),
+                ExpectedField::message("formal_evidence", ".ficant.core.v1.FormalOutputEvidence"),
             ],
         ),
         (
@@ -3379,6 +3597,8 @@ fn assert_phase4_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
                     ".ficant.research.v1.ExecutionExternalInput",
                 ),
                 ExpectedField::message("digest", hash),
+                ExpectedField::message("subject", ".ficant.core.v1.FormalInputBinding"),
+                ExpectedField::message("code", ".ficant.core.v1.CodeBinding"),
             ],
         ),
         (
@@ -3399,6 +3619,7 @@ fn assert_phase4_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
                 ExpectedField::message("value_type", typed_value),
                 ExpectedField::message("artifact", lineage),
                 ExpectedField::message("content_hash", hash),
+                ExpectedField::message("formal_evidence", ".ficant.core.v1.FormalOutputEvidence"),
             ],
         ),
         (
@@ -4683,6 +4904,7 @@ fn assert_position_snapshot_contract(messages: &BTreeMap<String, &DescriptorProt
             ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
             ExpectedField::repeated_message("positions", ".ficant.research.v1.PositionView"),
             ExpectedField::message("coverage", ".ficant.research.v1.CoverageDeclaration"),
+            ExpectedField::message("formal_evidence", ".ficant.core.v1.FormalOutputEvidence"),
         ],
     );
     assert_fields(
@@ -4694,6 +4916,7 @@ fn assert_position_snapshot_contract(messages: &BTreeMap<String, &DescriptorProt
             ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
             ExpectedField::message("total_capital_requirement", ".ficant.core.v1.DecimalValue"),
             ExpectedField::message("coverage", ".ficant.research.v1.CoverageDeclaration"),
+            ExpectedField::message("formal_evidence", ".ficant.core.v1.FormalOutputEvidence"),
         ],
     );
     for (request, response, success, success_type) in [

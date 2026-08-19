@@ -4,6 +4,7 @@ package ficant.rates.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
+import "ficant/core/v1/evidence.proto";
 import "ficant/market/v1/tax_rule.proto";
 
 message ObjectBinding {
@@ -112,6 +113,7 @@ message ResultMetadata {
   repeated AnalysisInputBinding consumed_inputs = 8;
   ParameterDigest parameter_digest = 9;
   ficant.core.v1.Sha256 request_fingerprint = 10;
+  ficant.core.v1.FormalOutputEvidence formal_evidence = 11;
 }
 
 enum CalendarRequirement {

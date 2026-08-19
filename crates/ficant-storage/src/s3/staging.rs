@@ -16,6 +16,60 @@ use std::sync::Arc;
 use super::content_addressed::content_key;
 use crate::postgres::common::{application_error, lock_idempotency, map_sqlx_error};
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImmutableObjectBackup {
+    key: String,
+    content_hash: ContentHash,
+    size: u64,
+    bytes: Vec<u8>,
+}
+
+impl ImmutableObjectBackup {
+    /// Creates one recovery object after proving that its immutable key is the SHA-256 of its
+    /// exact bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a hash mismatch when the key, digest, or payload disagree.
+    pub fn new(key: impl Into<String>, bytes: Vec<u8>) -> ApplicationResult<Self> {
+        let key = key.into();
+        let content_hash = ContentHash::digest(&bytes);
+        if bytes.is_empty() || key != content_key(&content_hash) {
+            return Err(application_error(
+                ApplicationErrorCategory::HashMismatch,
+                false,
+            ));
+        }
+        let size = u64::try_from(bytes.len()).map_err(|_| validation_error())?;
+        Ok(Self {
+            key,
+            content_hash,
+            size,
+            bytes,
+        })
+    }
+
+    #[must_use]
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    #[must_use]
+    pub fn content_hash(&self) -> &ContentHash {
+        &self.content_hash
+    }
+
+    #[must_use]
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    #[must_use]
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+}
+
 #[derive(Clone)]
 pub struct S3BlobStore {
     pub(super) client: Arc<dyn ObjectStore>,
@@ -78,6 +132,66 @@ impl S3BlobStore {
         };
         hash.verify(&bytes).map_err(map_domain_error)?;
         Ok(Some(bytes))
+    }
+
+    /// Enumerates every immutable object and verifies its key, size, and bytes before returning a
+    /// stable recovery snapshot. Staging objects are deliberately excluded.
+    ///
+    /// # Errors
+    ///
+    /// Returns a fail-closed storage or hash error for an incomplete listing, nested immutable
+    /// prefix, missing object, size drift, or key/content disagreement.
+    pub async fn list_immutable_objects(&self) -> ApplicationResult<Vec<ImmutableObjectBackup>> {
+        let listing = self
+            .client
+            .list_with_delimiter(Some(&Path::from("immutable")))
+            .await
+            .map_err(|_| storage_error())?;
+        if !listing.common_prefixes.is_empty() {
+            return Err(application_error(
+                ApplicationErrorCategory::ImmutableViolation,
+                false,
+            ));
+        }
+        let mut metadata = listing.objects;
+        metadata.sort_by(|left, right| left.location.cmp(&right.location));
+        let mut objects = Vec::with_capacity(metadata.len());
+        for value in metadata {
+            let key = value.location.to_string();
+            let bytes = self.read_object(&key).await?.ok_or_else(storage_error)?;
+            if u64::try_from(bytes.len()).map_err(|_| validation_error())? != value.size {
+                return Err(application_error(
+                    ApplicationErrorCategory::HashMismatch,
+                    false,
+                ));
+            }
+            objects.push(ImmutableObjectBackup::new(key, bytes)?);
+        }
+        Ok(objects)
+    }
+
+    /// Restores one pre-validated immutable recovery object. Existing exact bytes replay; any
+    /// existing drift fails closed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a storage or hash error when the object cannot be restored exactly.
+    pub async fn restore_immutable_object(
+        &self,
+        object: ImmutableObjectBackup,
+    ) -> ApplicationResult<()> {
+        let exact = ImmutableObjectBackup::new(object.key.clone(), object.bytes.clone())?;
+        match self.read_object(exact.key()).await? {
+            Some(existing) if existing == exact.bytes => Ok(()),
+            Some(_) => Err(application_error(
+                ApplicationErrorCategory::ImmutableViolation,
+                false,
+            )),
+            None => {
+                let key = exact.key.clone();
+                self.put_object(&key, exact.bytes).await
+            }
+        }
     }
 
     #[must_use]

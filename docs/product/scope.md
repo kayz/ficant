@@ -113,9 +113,15 @@ ResearchNodeContract 与 ResearchGraph 是版本化 Definition：节点合同绑
 
 首个生产 NativeNode 是 CGB 固收分析节点：它消费既有 `ficant.rates.v1.AnalyzeBondRequest`，经与 gRPC API 共用的 Rust/C++ 生产计算路径生成确定性 `AnalyzeBondResult`；不是测试桩、模拟定价或第二套算法。节点输出采用确定性多端口 envelope，Artifact 和结果 digest 绑定可复现身份、合同、实现、上游 Artifact 和输出 hash，因此同一冻结身份的不同 Run 必须得到同一结果，任何漂移均失败关闭。
 
-生产 `ExperimentService` 从认证 scope 接收 graph run 提交；Server required-read 并交叉校验 Data/Universe Snapshot、RulePack、外部 Artifact 和 Ceph payload，只使用部署注入的 runtime、environment 与 source identity。Repository 在一个 PostgreSQL transaction 内创建并启动 Run、写 Journal、冻结 graph/identity/bindings 并发布拓扑首节点；相同幂等请求精确重放，任一字段漂移冲突。每个节点任务冻结计划 Artifact ID；worker 用数据库时钟和 `FOR UPDATE SKIP LOCKED` 领取 lease，只有当前 lease/fencing epoch 才能开始、续租或完成。enqueue/begin/complete 都从冻结 graph 与 Journal 校验 resume node，后继节点由 Repository 唯一派生。输出先提升到 Ceph RGW，随后在同一 PostgreSQL 事务中校验并写 Artifact、canonical output manifest、Journal、checkpoint、节点状态、后继任务或 Run 完成并释放 lease。持久查询支持 run、manifest/checkpoint、递归输出追踪和 11 个可复现维度比较。
+生产 `ExperimentService` 从认证 scope 接收 graph run 提交；Server required-read 并交叉校验 Data/Universe Snapshot、RulePack、exact Subject、外部 Artifact 和 Ceph payload，只使用部署注入且与编译内嵌值一致的 Code、runtime、environment 与 implementation identity。Repository 在任何 blob stage 前持久化 output publication intent；worker 用数据库时钟和 `FOR UPDATE SKIP LOCKED` 领取 lease，只有当前 lease/fencing epoch 才能开始、续租或完成。enqueue/begin/complete 都从冻结 graph 与 Journal 校验 resume node，后继节点由 Repository 唯一派生。stage/promote 后的中断由 exact intent forward-only 恢复，完成事务同时核对 Artifact、manifest、formal evidence、hash/size 和 fence。持久查询支持 run、manifest/checkpoint、typed formal trace 和 Data、Universe、Graph、Parameters、Runtime、Environment、Seed、RulePack、Implementation、ExternalInput、Result、Subject、Code 共 13 个比较维度。
 
 真实 PostgreSQL 16 + Ceph RGW 已验证正式 application 提交与持久查询、对象提升后/事务前 worker 中断、attempt 2 重新领取、旧 fencing epoch 拒绝、`AnalyzeBondResult -> RiskSummary` 强类型两节点推进、上游篡改失败、Artifact/Journal/checkpoint/Run 原子收口与最终重放。Phase 4 的退出范围仍限于 Rust NativeNode 执行闭环，不包含 GeneratedNode/gVisor、业务 UI 或 Phase 5 Lab。
+
+## 2026-08 / R7B 正式证据与恢复（实施候选）
+
+正式分析输出固定为五个 Rates 结果、Portfolio KRD、PositionViews、成功 CapitalUse、DataHealthReport，以及 Experiment Artifact/SignalSet。它们共用 `FormalOutputEvidence` 与单一 canonical identity 算法：exact Subject、stable typed actual inputs、Code commit/tree、实际 Runtime/environment、实现、参数/seed 和 result bytes 任一漂移都会改变 identity。同步 Analytics 成功前持久化 canonical payload/evidence；Graph Artifact/SignalSet 在完成事务中持久化并交叉核对证据。基础 Definition/Fact/Snapshot CRUD 读取不是正式分析输出，不添加该包装。
+
+R7B 同时提供 output intent crash recovery、生产 orphan maintenance、隔离 PostgreSQL/Ceph dump + 完整 immutable-object manifest + source-destroy/fresh-restore，以及 exact private authority MANUAL 的 clean-checkout literal runner。这些能力证明本地候选的确定性和可恢复性，不等于生产 HA/PITR、已运营备份、版本发布或部署。AC30–AC33 仍需最终候选真实取证、公共合并和独立 authority 绑定后才能点亮。
 
 ## WebApp 产品边界
 

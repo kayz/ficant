@@ -3,9 +3,13 @@ ARG RUNTIME_IMAGE=mcr.microsoft.com/dotnet/runtime-deps@sha256:c62d6267bf8f029da
 FROM ${RUST_IMAGE} AS builder
 
 ARG BINARY
+ARG FICANT_CODE_COMMIT_SHA
+ARG FICANT_CODE_TREE_SHA
 ENV RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu \
     CARGO_HTTP_MULTIPLEXING=false \
-    CARGO_NET_RETRY=10
+    CARGO_NET_RETRY=10 \
+    FICANT_CODE_COMMIT_SHA=${FICANT_CODE_COMMIT_SHA} \
+    FICANT_CODE_TREE_SHA=${FICANT_CODE_TREE_SHA}
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY binaries ./binaries

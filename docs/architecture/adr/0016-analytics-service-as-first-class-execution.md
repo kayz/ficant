@@ -25,7 +25,7 @@ ficant 此前把一切执行收敛到 `ResearchGraph → ExperimentRun → Artif
 |---|---|---|
 | 语义 | 有状态运行，有生命周期与恢复 | **幂等查询** |
 | 触发 | 提交后异步执行 | 同步应答 |
-| 状态 | 有（Journal、checkpoint、lease） | **无** |
+| 状态 | 有（Journal、checkpoint、lease、publication intent） | **无运行生命周期；正式结果按 identity 不可变持久化** |
 | 频率 | 批处理 | 交易前查询、分钟到日内 |
 | 血缘 | 完整 | **同样完整** |
 
@@ -34,7 +34,8 @@ ficant 此前把一切执行收敛到 `ResearchGraph → ExperimentRun → Artif
 `AnalyticsService` 不是"轻量版实验"，它在以下方面与 ResearchGraph **要求相同**：
 
 - 必须绑定数据快照、规则包版本、主体版本
-- 结果必须可进血缘、可追溯、可复现
+- 结果必须携带同一 `FormalOutputEvidence`：typed actual inputs、exact Subject、Code、Runtime/environment、实现、参数/seed 与 result hash
+- 结果必须可进血缘、可追溯、可恢复重读
 - 相同输入必须产生逐位相同的输出
 
 ### 不同的允许
@@ -42,6 +43,7 @@ ficant 此前把一切执行收敛到 `ResearchGraph → ExperimentRun → Artif
 - 结果**可缓存**（因为幂等）
 - 不产生 RunJournal 条目，不占用 lease queue
 - 不要求中断恢复语义
+- 成功应答前按稳定 output identity 持久化 canonical payload/evidence；这不是查询生命周期状态
 
 ### 承载范围
 
@@ -59,6 +61,7 @@ ficant 此前把一切执行收敛到 `ResearchGraph → ExperimentRun → Artif
 - Phase 2E 的形态被正规化，不再是架构外的孤例。
 - 结果缓存需要以"快照 + 规则版本 + 主体版本 + 输入"的完整键寻址，否则缓存会成为跨版本污染源。
 - 两种运行模式并存增加了架构表面积；缓解方式是两者共用同一套绑定与血缘机制，只在状态管理上分叉。
+- R7B 将这一共用机制收敛为 Runtime 纯策略中的 domain-separated canonical v1 identity。ResearchGraph 另以 stage 前 publication intent、lease fence 和完成事务处理 crash recovery；AnalyticsService 不复制这些运行状态。
 - 约束占用查询（ADR-0012、ACCEPTANCE E 组）以本形态承载，是其第一个非 rates 的使用者。
 
 ## 验证与失效条件

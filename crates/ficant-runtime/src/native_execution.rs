@@ -1,10 +1,717 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
-use ficant_domain::DomainErrorCode;
-use ficant_domain::primitives::{ContentHash, Ulid, Version};
+use ficant_domain::primitives::{ContentHash, LineageRef, MarketTime, OwnerRef, Ulid, Version};
 use ficant_domain::research::{ResearchGraph, ResearchNode, TypedValue};
+use ficant_domain::{DomainErrorCode, DomainResult};
 
 use crate::RuntimeError;
+
+const FORMAL_EVIDENCE_DOMAIN: &str = "ficant/formal-output-evidence/v1";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FormalInputKind {
+    Subject,
+    DataSnapshot,
+    UniverseSnapshot,
+    RulePack,
+    Artifact,
+    Definition,
+    Instrument,
+    Calendar,
+    Unit,
+    DataSource,
+    CurveSnapshot,
+    FactorDefinition,
+    PositionSnapshot,
+    DataHealthProfile,
+    CurveNodeDefinition,
+}
+
+impl FormalInputKind {
+    const fn code(self) -> u8 {
+        match self {
+            Self::Subject => 1,
+            Self::DataSnapshot => 2,
+            Self::UniverseSnapshot => 3,
+            Self::RulePack => 4,
+            Self::Artifact => 5,
+            Self::Definition => 6,
+            Self::Instrument => 7,
+            Self::Calendar => 8,
+            Self::Unit => 9,
+            Self::DataSource => 10,
+            Self::CurveSnapshot => 11,
+            Self::FactorDefinition => 12,
+            Self::PositionSnapshot => 13,
+            Self::DataHealthProfile => 14,
+            Self::CurveNodeDefinition => 15,
+        }
+    }
+
+    const fn uses_named_reference(self) -> bool {
+        matches!(self, Self::FactorDefinition | Self::CurveNodeDefinition)
+    }
+
+    const fn uses_versioned_object(self) -> bool {
+        matches!(
+            self,
+            Self::Subject
+                | Self::RulePack
+                | Self::Definition
+                | Self::Instrument
+                | Self::Calendar
+                | Self::Unit
+                | Self::DataSource
+                | Self::DataHealthProfile
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NamedContentRef {
+    identity: String,
+    content_hash: ContentHash,
+}
+
+impl NamedContentRef {
+    /// Creates a stable named reference with exact content identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidValue` when the identity is not canonical ASCII.
+    pub fn new(identity: impl Into<String>, content_hash: ContentHash) -> DomainResult<Self> {
+        let identity = identity.into();
+        ensure_stable_identity(&identity)?;
+        Ok(Self {
+            identity,
+            content_hash,
+        })
+    }
+
+    #[must_use]
+    pub fn identity(&self) -> &str {
+        &self.identity
+    }
+
+    #[must_use]
+    pub fn content_hash(&self) -> &ContentHash {
+        &self.content_hash
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FormalInputReference {
+    Object(LineageRef),
+    Named(NamedContentRef),
+}
+
+impl FormalInputReference {
+    fn canonical_bytes(&self) -> Vec<u8> {
+        let mut writer = CanonicalWriter::new("formal-input-reference/v1");
+        match self {
+            Self::Object(reference) => {
+                writer.field(2, &[1]);
+                writer.field(3, &object_reference_bytes(reference));
+            }
+            Self::Named(reference) => {
+                writer.field(2, &[2]);
+                writer.field(3, reference.identity.as_bytes());
+                writer.field(4, reference.content_hash.as_bytes());
+            }
+        }
+        writer.finish()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormalInputBindingInput {
+    pub role: String,
+    pub kind: FormalInputKind,
+    pub owner: OwnerRef,
+    pub reference: FormalInputReference,
+    pub observed_at: Option<MarketTime>,
+    pub visible_at: Option<MarketTime>,
+    pub effective_from: Option<MarketTime>,
+    pub effective_to: Option<MarketTime>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormalInputBinding {
+    role: String,
+    kind: FormalInputKind,
+    owner: OwnerRef,
+    reference: FormalInputReference,
+    observed_at: Option<MarketTime>,
+    visible_at: Option<MarketTime>,
+    effective_from: Option<MarketTime>,
+    effective_to: Option<MarketTime>,
+}
+
+impl FormalInputBinding {
+    /// Creates one typed, role-bearing exact input binding.
+    ///
+    /// # Errors
+    ///
+    /// Returns a domain error for invalid roles, reference shapes, or time intervals.
+    pub fn new(input: FormalInputBindingInput) -> DomainResult<Self> {
+        ensure_role(&input.role)?;
+        validate_reference(input.kind, &input.reference)?;
+        validate_times(
+            input.observed_at.as_ref(),
+            input.visible_at.as_ref(),
+            input.effective_from.as_ref(),
+            input.effective_to.as_ref(),
+        )?;
+        Ok(Self {
+            role: input.role,
+            kind: input.kind,
+            owner: input.owner,
+            reference: input.reference,
+            observed_at: input.observed_at,
+            visible_at: input.visible_at,
+            effective_from: input.effective_from,
+            effective_to: input.effective_to,
+        })
+    }
+
+    #[must_use]
+    pub fn role(&self) -> &str {
+        &self.role
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> FormalInputKind {
+        self.kind
+    }
+
+    #[must_use]
+    pub fn owner(&self) -> &OwnerRef {
+        &self.owner
+    }
+
+    #[must_use]
+    pub fn reference(&self) -> &FormalInputReference {
+        &self.reference
+    }
+
+    #[must_use]
+    pub fn observed_at(&self) -> Option<&MarketTime> {
+        self.observed_at.as_ref()
+    }
+
+    #[must_use]
+    pub fn visible_at(&self) -> Option<&MarketTime> {
+        self.visible_at.as_ref()
+    }
+
+    #[must_use]
+    pub fn effective_from(&self) -> Option<&MarketTime> {
+        self.effective_from.as_ref()
+    }
+
+    #[must_use]
+    pub fn effective_to(&self) -> Option<&MarketTime> {
+        self.effective_to.as_ref()
+    }
+
+    #[must_use]
+    pub fn canonical_bytes(&self) -> Vec<u8> {
+        let mut writer = CanonicalWriter::new("formal-input-binding/v1");
+        writer.field(2, self.role.as_bytes());
+        writer.field(3, &[self.kind.code()]);
+        writer.field(4, &owner_bytes(&self.owner));
+        writer.field(5, &self.reference.canonical_bytes());
+        writer.optional(6, self.observed_at.as_ref().map(market_time_bytes));
+        writer.optional(7, self.visible_at.as_ref().map(market_time_bytes));
+        writer.optional(8, self.effective_from.as_ref().map(market_time_bytes));
+        writer.optional(9, self.effective_to.as_ref().map(market_time_bytes));
+        writer.finish()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CodeBinding {
+    git_commit_sha: String,
+    git_tree_sha: String,
+    digest: ContentHash,
+}
+
+impl CodeBinding {
+    /// Creates a public source-code binding from exact Git commit and tree SHAs.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidValue` unless both values are canonical 40-character lowercase SHAs.
+    pub fn new(
+        git_commit_sha: impl Into<String>,
+        git_tree_sha: impl Into<String>,
+    ) -> DomainResult<Self> {
+        let git_commit_sha = git_commit_sha.into();
+        let git_tree_sha = git_tree_sha.into();
+        ensure_git_sha(&git_commit_sha)?;
+        ensure_git_sha(&git_tree_sha)?;
+        let digest = code_digest(&git_commit_sha, &git_tree_sha);
+        Ok(Self {
+            git_commit_sha,
+            git_tree_sha,
+            digest,
+        })
+    }
+
+    /// Reconstructs a code binding and checks a claimed digest.
+    ///
+    /// # Errors
+    ///
+    /// Returns a domain error for invalid SHAs or a mismatched claimed digest.
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn from_claimed(
+        git_commit_sha: impl Into<String>,
+        git_tree_sha: impl Into<String>,
+        claimed_digest: ContentHash,
+    ) -> DomainResult<Self> {
+        let value = Self::new(git_commit_sha, git_tree_sha)?;
+        if value.digest != claimed_digest {
+            return Err(DomainErrorCode::ContentHashMismatch);
+        }
+        Ok(value)
+    }
+
+    #[must_use]
+    pub fn git_commit_sha(&self) -> &str {
+        &self.git_commit_sha
+    }
+
+    #[must_use]
+    pub fn git_tree_sha(&self) -> &str {
+        &self.git_tree_sha
+    }
+
+    #[must_use]
+    pub fn digest(&self) -> &ContentHash {
+        &self.digest
+    }
+
+    #[must_use]
+    pub fn canonical_bytes(&self) -> Vec<u8> {
+        let mut writer = CanonicalWriter::new("code-binding/v1");
+        writer.field(2, self.git_commit_sha.as_bytes());
+        writer.field(3, self.git_tree_sha.as_bytes());
+        writer.field(4, self.digest.as_bytes());
+        writer.finish()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeBinding {
+    image_digest: ContentHash,
+    environment_digest: ContentHash,
+}
+
+impl RuntimeBinding {
+    #[must_use]
+    pub const fn new(image_digest: ContentHash, environment_digest: ContentHash) -> Self {
+        Self {
+            image_digest,
+            environment_digest,
+        }
+    }
+
+    #[must_use]
+    pub fn image_digest(&self) -> &ContentHash {
+        &self.image_digest
+    }
+
+    #[must_use]
+    pub fn environment_digest(&self) -> &ContentHash {
+        &self.environment_digest
+    }
+
+    fn canonical_bytes(&self) -> Vec<u8> {
+        let mut writer = CanonicalWriter::new("runtime-binding/v1");
+        writer.field(2, self.image_digest.as_bytes());
+        writer.field(3, self.environment_digest.as_bytes());
+        writer.finish()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormalImplementationBinding {
+    role: String,
+    digest: ContentHash,
+}
+
+impl FormalImplementationBinding {
+    /// Creates a stable role-to-implementation digest binding.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidValue` when the role is not canonical.
+    pub fn new(role: impl Into<String>, digest: ContentHash) -> DomainResult<Self> {
+        let role = role.into();
+        ensure_role(&role)?;
+        Ok(Self { role, digest })
+    }
+
+    #[must_use]
+    pub fn role(&self) -> &str {
+        &self.role
+    }
+
+    #[must_use]
+    pub fn digest(&self) -> &ContentHash {
+        &self.digest
+    }
+
+    fn canonical_bytes(&self) -> Vec<u8> {
+        let mut writer = CanonicalWriter::new("formal-implementation-binding/v1");
+        writer.field(2, self.role.as_bytes());
+        writer.field(3, self.digest.as_bytes());
+        writer.finish()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormalOutputEvidenceInput {
+    pub schema_id: String,
+    pub subject: FormalInputBinding,
+    pub consumed_inputs: Vec<FormalInputBinding>,
+    pub code: CodeBinding,
+    pub runtime: RuntimeBinding,
+    pub implementations: Vec<FormalImplementationBinding>,
+    pub parameters_hash: ContentHash,
+    pub seed: Option<u64>,
+    pub result_hash: ContentHash,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormalOutputEvidence {
+    schema_id: String,
+    subject: FormalInputBinding,
+    consumed_inputs: Vec<FormalInputBinding>,
+    code: CodeBinding,
+    runtime: RuntimeBinding,
+    implementations: Vec<FormalImplementationBinding>,
+    parameters_hash: ContentHash,
+    seed: Option<u64>,
+    result_hash: ContentHash,
+    output_identity: ContentHash,
+}
+
+impl FormalOutputEvidence {
+    /// Creates canonical evidence and derives its stable output identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a domain error for invalid schema, Subject, duplicate roles, or implementations.
+    pub fn new(mut input: FormalOutputEvidenceInput) -> DomainResult<Self> {
+        ensure_stable_identity(&input.schema_id)?;
+        if input.subject.kind != FormalInputKind::Subject || input.subject.role != "subject" {
+            return Err(DomainErrorCode::BrokenLineage);
+        }
+
+        input.consumed_inputs.sort_by(compare_inputs);
+        if input
+            .consumed_inputs
+            .windows(2)
+            .any(|pair| pair[0].role == pair[1].role)
+            || input
+                .consumed_inputs
+                .iter()
+                .any(|binding| binding.role == "subject")
+        {
+            return Err(DomainErrorCode::BrokenLineage);
+        }
+        input
+            .implementations
+            .sort_by(|left, right| left.role.cmp(&right.role));
+        if input
+            .implementations
+            .windows(2)
+            .any(|pair| pair[0].role == pair[1].role)
+        {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+
+        let mut result = Self {
+            schema_id: input.schema_id,
+            subject: input.subject,
+            consumed_inputs: input.consumed_inputs,
+            code: input.code,
+            runtime: input.runtime,
+            implementations: input.implementations,
+            parameters_hash: input.parameters_hash,
+            seed: input.seed,
+            result_hash: input.result_hash,
+            output_identity: ContentHash::digest(b"uninitialized"),
+        };
+        result.output_identity = ContentHash::digest(&result.identity_bytes());
+        Ok(result)
+    }
+
+    /// Reconstructs canonical evidence and checks its claimed output identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a domain error for invalid evidence or a mismatched identity.
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn from_claimed(
+        input: FormalOutputEvidenceInput,
+        claimed_identity: ContentHash,
+    ) -> DomainResult<Self> {
+        let value = Self::new(input)?;
+        if value.output_identity != claimed_identity {
+            return Err(DomainErrorCode::ContentHashMismatch);
+        }
+        Ok(value)
+    }
+
+    #[must_use]
+    pub fn schema_id(&self) -> &str {
+        &self.schema_id
+    }
+
+    #[must_use]
+    pub fn subject(&self) -> &FormalInputBinding {
+        &self.subject
+    }
+
+    #[must_use]
+    pub fn consumed_inputs(&self) -> &[FormalInputBinding] {
+        &self.consumed_inputs
+    }
+
+    #[must_use]
+    pub fn code(&self) -> &CodeBinding {
+        &self.code
+    }
+
+    #[must_use]
+    pub fn runtime(&self) -> &RuntimeBinding {
+        &self.runtime
+    }
+
+    #[must_use]
+    pub fn implementations(&self) -> &[FormalImplementationBinding] {
+        &self.implementations
+    }
+
+    #[must_use]
+    pub fn parameters_hash(&self) -> &ContentHash {
+        &self.parameters_hash
+    }
+
+    #[must_use]
+    pub const fn seed(&self) -> Option<u64> {
+        self.seed
+    }
+
+    #[must_use]
+    pub fn result_hash(&self) -> &ContentHash {
+        &self.result_hash
+    }
+
+    #[must_use]
+    pub fn output_identity(&self) -> &ContentHash {
+        &self.output_identity
+    }
+
+    #[must_use]
+    pub fn canonical_bytes(&self) -> Vec<u8> {
+        let mut writer = CanonicalWriter::new("formal-output-evidence-record/v1");
+        writer.field(2, &self.identity_bytes());
+        writer.field(3, self.output_identity.as_bytes());
+        writer.finish()
+    }
+
+    fn identity_bytes(&self) -> Vec<u8> {
+        let mut writer = CanonicalWriter::new(FORMAL_EVIDENCE_DOMAIN);
+        writer.field(2, self.schema_id.as_bytes());
+        writer.field(3, &self.subject.canonical_bytes());
+        writer.u64(4, self.consumed_inputs.len() as u64);
+        for input in &self.consumed_inputs {
+            writer.field(5, &input.canonical_bytes());
+        }
+        writer.field(6, &self.code.canonical_bytes());
+        writer.field(7, &self.runtime.canonical_bytes());
+        writer.u64(8, self.implementations.len() as u64);
+        for implementation in &self.implementations {
+            writer.field(9, &implementation.canonical_bytes());
+        }
+        writer.field(10, self.parameters_hash.as_bytes());
+        writer.optional_u64(11, self.seed);
+        writer.field(12, self.result_hash.as_bytes());
+        writer.finish()
+    }
+}
+
+fn validate_reference(kind: FormalInputKind, reference: &FormalInputReference) -> DomainResult<()> {
+    match (kind.uses_named_reference(), reference) {
+        (true, FormalInputReference::Named(_)) => Ok(()),
+        (true, FormalInputReference::Object(_)) | (false, FormalInputReference::Named(_)) => {
+            Err(DomainErrorCode::BrokenLineage)
+        }
+        (false, FormalInputReference::Object(reference)) => {
+            if reference.content_hash().is_none()
+                || reference.version().is_some() != kind.uses_versioned_object()
+            {
+                return Err(DomainErrorCode::BrokenLineage);
+            }
+            Ok(())
+        }
+    }
+}
+
+fn validate_times(
+    observed_at: Option<&MarketTime>,
+    visible_at: Option<&MarketTime>,
+    effective_from: Option<&MarketTime>,
+    effective_to: Option<&MarketTime>,
+) -> DomainResult<()> {
+    if observed_at
+        .zip(visible_at)
+        .is_some_and(|(observed, visible)| observed.instant() > visible.instant())
+        || effective_from.is_some() != effective_to.is_some()
+        || effective_from
+            .zip(effective_to)
+            .is_some_and(|(from, to)| from.instant() >= to.instant())
+    {
+        return Err(DomainErrorCode::InvalidEffectiveTime);
+    }
+    Ok(())
+}
+
+fn compare_inputs(left: &FormalInputBinding, right: &FormalInputBinding) -> Ordering {
+    left.role
+        .cmp(&right.role)
+        .then_with(|| left.canonical_bytes().cmp(&right.canonical_bytes()))
+}
+
+fn code_digest(commit: &str, tree: &str) -> ContentHash {
+    let mut writer = CanonicalWriter::new("code-binding-digest/v1");
+    writer.field(2, commit.as_bytes());
+    writer.field(3, tree.as_bytes());
+    ContentHash::digest(&writer.finish())
+}
+
+fn object_reference_bytes(reference: &LineageRef) -> Vec<u8> {
+    let mut writer = CanonicalWriter::new("exact-lineage-reference/v1");
+    writer.field(2, reference.object_id().as_str().as_bytes());
+    writer.optional_u64(3, reference.version().map(Version::get));
+    writer.optional(
+        4,
+        reference
+            .content_hash()
+            .map(|hash| hash.as_bytes().to_vec()),
+    );
+    writer.finish()
+}
+
+fn owner_bytes(owner: &OwnerRef) -> Vec<u8> {
+    let mut writer = CanonicalWriter::new("owner-ref/v1");
+    writer.field(2, owner.tenant_id().as_str().as_bytes());
+    writer.field(3, owner.owner_id().as_str().as_bytes());
+    writer.finish()
+}
+
+fn market_time_bytes(time: &MarketTime) -> Vec<u8> {
+    let mut writer = CanonicalWriter::new("market-time/v1");
+    writer.field(2, &time.instant().timestamp().to_be_bytes());
+    writer.field(3, &time.instant().timestamp_subsec_nanos().to_be_bytes());
+    writer.field(4, time.market_timezone().as_bytes());
+    writer.field(5, time.local_trading_date().to_string().as_bytes());
+    writer.finish()
+}
+
+fn ensure_git_sha(value: &str) -> DomainResult<()> {
+    if value.len() != 40
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(DomainErrorCode::InvalidValue);
+    }
+    Ok(())
+}
+
+fn ensure_role(value: &str) -> DomainResult<()> {
+    if value.is_empty()
+        || value.len() > 128
+        || value.trim() != value
+        || !value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
+        })
+    {
+        return Err(DomainErrorCode::InvalidValue);
+    }
+    Ok(())
+}
+
+fn ensure_stable_identity(value: &str) -> DomainResult<()> {
+    if value.is_empty()
+        || value.len() > 256
+        || value.trim() != value
+        || !value.is_ascii()
+        || value.bytes().any(|byte| byte.is_ascii_whitespace())
+    {
+        return Err(DomainErrorCode::InvalidValue);
+    }
+    Ok(())
+}
+
+struct CanonicalWriter {
+    bytes: Vec<u8>,
+}
+
+impl CanonicalWriter {
+    fn new(domain: &str) -> Self {
+        let mut value = Self {
+            bytes: b"FICANT-EVIDENCE\0".to_vec(),
+        };
+        value.field(1, domain.as_bytes());
+        value
+    }
+
+    fn field(&mut self, tag: u16, value: &[u8]) {
+        self.bytes.extend_from_slice(&tag.to_be_bytes());
+        self.bytes
+            .extend_from_slice(&(value.len() as u64).to_be_bytes());
+        self.bytes.extend_from_slice(value);
+    }
+
+    fn u64(&mut self, tag: u16, value: u64) {
+        self.field(tag, &value.to_be_bytes());
+    }
+
+    fn optional_u64(&mut self, tag: u16, value: Option<u64>) {
+        let mut bytes = Vec::with_capacity(9);
+        match value {
+            Some(value) => {
+                bytes.push(1);
+                bytes.extend_from_slice(&value.to_be_bytes());
+            }
+            None => bytes.push(0),
+        }
+        self.field(tag, &bytes);
+    }
+
+    fn optional(&mut self, tag: u16, value: Option<Vec<u8>>) {
+        let mut bytes = Vec::new();
+        match value {
+            Some(value) => {
+                bytes.push(1);
+                bytes.extend_from_slice(&(value.len() as u64).to_be_bytes());
+                bytes.extend_from_slice(&value);
+            }
+            None => bytes.push(0),
+        }
+        self.field(tag, &bytes);
+    }
+
+    fn finish(self) -> Vec<u8> {
+        self.bytes
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NodeImplementation {
@@ -106,6 +813,8 @@ pub struct ReproducibilityIdentity {
     environment_digest: ContentHash,
     seed: u64,
     node_implementations: Vec<NodeImplementation>,
+    subject: Option<FormalInputBinding>,
+    code: Option<CodeBinding>,
     digest: ContentHash,
 }
 
@@ -119,6 +828,33 @@ impl ReproducibilityIdentity {
     pub fn new(
         graph: &ResearchGraph,
         input: ReproducibilityIdentityInput,
+    ) -> Result<Self, RuntimeError> {
+        Self::build(graph, input, None, None)
+    }
+
+    /// Freezes the exact Subject and source code identity in addition to the legacy graph inputs.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidValue` unless `subject` is the exact binding for the canonical `subject`
+    /// role, or unless the remaining graph bindings fail the same checks as [`Self::new`].
+    pub fn new_formal(
+        graph: &ResearchGraph,
+        input: ReproducibilityIdentityInput,
+        subject: FormalInputBinding,
+        code: CodeBinding,
+    ) -> Result<Self, RuntimeError> {
+        if subject.kind() != FormalInputKind::Subject || subject.role() != "subject" {
+            return Err(invalid());
+        }
+        Self::build(graph, input, Some(subject), Some(code))
+    }
+
+    fn build(
+        graph: &ResearchGraph,
+        input: ReproducibilityIdentityInput,
+        subject: Option<FormalInputBinding>,
+        code: Option<CodeBinding>,
     ) -> Result<Self, RuntimeError> {
         let mut external_inputs = input.external_inputs;
         external_inputs.sort_by(|left, right| left.input_id.cmp(&right.input_id));
@@ -174,6 +910,8 @@ impl ReproducibilityIdentity {
             environment_digest: input.environment_digest,
             seed: input.seed,
             node_implementations: implementations,
+            subject,
+            code,
             digest: ContentHash::digest(b"uninitialized"),
         };
         result.digest = ContentHash::digest(&result.canonical_bytes());
@@ -224,6 +962,14 @@ impl ReproducibilityIdentity {
     pub fn node_implementations(&self) -> &[NodeImplementation] {
         &self.node_implementations
     }
+    #[must_use]
+    pub fn subject(&self) -> Option<&FormalInputBinding> {
+        self.subject.as_ref()
+    }
+    #[must_use]
+    pub fn code(&self) -> Option<&CodeBinding> {
+        self.code.as_ref()
+    }
 
     fn implementation(&self, node_id: &Ulid) -> Option<&ContentHash> {
         self.node_implementations
@@ -233,7 +979,12 @@ impl ReproducibilityIdentity {
     }
 
     fn canonical_bytes(&self) -> Vec<u8> {
-        let mut bytes = b"ficant/reproducibility-identity/v1".to_vec();
+        let formal = self.subject.is_some() && self.code.is_some();
+        let mut bytes = if formal {
+            b"ficant/reproducibility-identity/v2".to_vec()
+        } else {
+            b"ficant/reproducibility-identity/v1".to_vec()
+        };
         push_u64(&mut bytes, self.external_inputs.len() as u64);
         for input in &self.external_inputs {
             push_str(&mut bytes, &input.input_id);
@@ -261,6 +1012,14 @@ impl ReproducibilityIdentity {
         for binding in &self.node_implementations {
             push_str(&mut bytes, binding.node_id.as_str());
             bytes.extend_from_slice(binding.implementation_digest.as_bytes());
+        }
+        if let (Some(subject), Some(code)) = (&self.subject, &self.code) {
+            let subject_bytes = subject.canonical_bytes();
+            push_u64(&mut bytes, subject_bytes.len() as u64);
+            bytes.extend_from_slice(&subject_bytes);
+            let code_bytes = code.canonical_bytes();
+            push_u64(&mut bytes, code_bytes.len() as u64);
+            bytes.extend_from_slice(&code_bytes);
         }
         bytes
     }
@@ -872,6 +1631,8 @@ pub enum ComparisonDimension {
     Seed,
     Implementation,
     Result,
+    Subject,
+    Code,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -926,6 +1687,12 @@ pub fn compare_experiments(
     }
     if l.node_implementations != r.node_implementations {
         differences.insert(ComparisonDimension::Implementation);
+    }
+    if l.subject != r.subject {
+        differences.insert(ComparisonDimension::Subject);
+    }
+    if l.code != r.code {
+        differences.insert(ComparisonDimension::Code);
     }
     if left.result_digest != right.result_digest {
         differences.insert(ComparisonDimension::Result);

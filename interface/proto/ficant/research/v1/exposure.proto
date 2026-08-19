@@ -4,6 +4,7 @@ package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
+import "ficant/core/v1/evidence.proto";
 import "ficant/research/v1/coverage.proto";
 
 message RiskAlgorithmBinding {
@@ -37,6 +38,7 @@ message PortfolioKeyRateExposure {
   ficant.core.v1.Ulid futures_data_snapshot_id = 8;
   PriceSourceSummary source_confidence = 9;
   CoverageDeclaration coverage = 10;
+  ficant.core.v1.FormalOutputEvidence formal_evidence = 11;
 }
 
 message CalculateKeyRateDv01Request {

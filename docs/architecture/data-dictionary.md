@@ -64,6 +64,24 @@ Application → BondAnalyticsArtifactCodec port ← Storage Arrow codec
 
 SignalSet 除承载 Artifact 自身引用外的 lineage 集合必须与持久化 Artifact 的完整 lineage 一致；Snapshot、Run、RulePack、tenant、owner、hash 或 size 任一漂移都 fail closed。
 
+## 正式输出证据与身份
+
+R7B 的 `FormalOutputEvidence` 是同步 Analytics 与异步 ResearchGraph 共用的正式输出信封，不是任意 CRUD 响应 metadata。当前范围固定为五个 Rates 结果、Portfolio KRD、PositionViews、成功 CapitalUse、DataHealthReport、Artifact 与 SignalSet。
+
+| 组成 | 不变量 |
+|---|---|
+| `subject` | versioned Subject object ref；exact owner/version/content hash |
+| `consumed_inputs` | 具有稳定 role 的封闭 kind；object 或 named content ref 二选一；严格排序且 role 唯一；适用时携 observed/visible/effective time |
+| `code` | 40 位小写 Git commit/tree 与二者的 domain-separated digest；Server/Worker 编译值必须等于部署设置 |
+| `runtime` | 实际 image config SHA-256 与 canonical environment digest |
+| `implementations` | 按 role 稳定排序的实现摘要 |
+| 参数与结果 | parameters hash、optional seed、result hash；result hash 必须等于 canonical payload bytes |
+| `output_identity` | 对以上全部字段使用长度分隔、domain-separated canonical v1 bytes 重算；request/run/attempt/lease/clock 不进入 identity |
+
+同步正式输出在成功响应前写入 `analytics.formal_outputs`，同 identity 的 bytes/evidence 漂移失败关闭。Graph Artifact/SignalSet 由发布命令单独携带同一 evidence，并以 `research.artifact_formal_evidence` 的规范化关联记录交叉核对受保护的 legacy domain payload；完整 trace 只展开正式 evidence，legacy Artifact 普通读取兼容但 full-formal trace 返回 `LineageIncomplete`。
+
+Graph output 在任何 blob stage 前先写 `research.output_publication_intents`。intent 精确绑定 task/fence、Artifact、payload hash/size、manifest 与 formal evidence；complete 在同一 PostgreSQL 事务消费 intent。Ceph promote 与 PostgreSQL 不是分布式事务，超龄无 intent/无正式引用对象由有界 orphan maintenance 清理，active intent 与已引用对象不得删除。
+
 ## 单位与 Decimal
 
 协议中的 Decimal 唯一表示为 `coefficient(string) + scale + UnitRef`，禁止隐式 float。Application 先读取同租户精确 Unit version，形成不可伪造的 resolved proof；Storage 在任何写入前用持久 Definition 再复核 dimension、scale 和有效 precision。

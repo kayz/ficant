@@ -287,6 +287,166 @@ impl PlatformRole {
         }
     }
 }
+/// Some immutable definitions have stable domain identifiers rather than ULIDs.
+/// They remain content addressed and must never be represented by fabricated
+/// object identities.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NamedContentRef {
+    #[prost(string, tag="1")]
+    pub identity: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub content_hash: ::core::option::Option<Sha256>,
+}
+/// Every formal input is role-bearing, typed, owner-scoped, exact and content
+/// addressed. Times are present only when they are part of the consumed fact.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FormalInputBinding {
+    #[prost(string, tag="1")]
+    pub role: ::prost::alloc::string::String,
+    #[prost(enumeration="FormalInputKind", tag="2")]
+    pub kind: i32,
+    #[prost(message, optional, tag="3")]
+    pub owner: ::core::option::Option<OwnerRef>,
+    #[prost(message, optional, tag="5")]
+    pub observed_at: ::core::option::Option<MarketTime>,
+    #[prost(message, optional, tag="6")]
+    pub visible_at: ::core::option::Option<MarketTime>,
+    #[prost(message, optional, tag="7")]
+    pub effective_from: ::core::option::Option<MarketTime>,
+    #[prost(message, optional, tag="8")]
+    pub effective_to: ::core::option::Option<MarketTime>,
+    #[prost(oneof="formal_input_binding::Reference", tags="4, 9")]
+    pub reference: ::core::option::Option<formal_input_binding::Reference>,
+}
+/// Nested message and enum types in `FormalInputBinding`.
+pub mod formal_input_binding {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Reference {
+        #[prost(message, tag="4")]
+        ObjectRef(super::LineageRef),
+        #[prost(message, tag="9")]
+        NamedRef(super::NamedContentRef),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CodeBinding {
+    #[prost(string, tag="1")]
+    pub git_commit_sha: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub git_tree_sha: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="3")]
+    pub digest: ::core::option::Option<Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RuntimeBinding {
+    #[prost(message, optional, tag="1")]
+    pub image_digest: ::core::option::Option<Sha256>,
+    #[prost(message, optional, tag="2")]
+    pub environment_digest: ::core::option::Option<Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FormalImplementationBinding {
+    #[prost(string, tag="1")]
+    pub role: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub digest: ::core::option::Option<Sha256>,
+}
+/// FormalOutputEvidence uses one canonical identity algorithm for synchronous
+/// Analytics and asynchronous ResearchGraph outputs. Request/run/attempt/clock
+/// identities are deliberately absent.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FormalOutputEvidence {
+    #[prost(string, tag="1")]
+    pub schema_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub subject: ::core::option::Option<FormalInputBinding>,
+    #[prost(message, repeated, tag="3")]
+    pub consumed_inputs: ::prost::alloc::vec::Vec<FormalInputBinding>,
+    #[prost(message, optional, tag="4")]
+    pub code: ::core::option::Option<CodeBinding>,
+    #[prost(message, optional, tag="5")]
+    pub runtime: ::core::option::Option<RuntimeBinding>,
+    #[prost(message, repeated, tag="6")]
+    pub implementations: ::prost::alloc::vec::Vec<FormalImplementationBinding>,
+    #[prost(message, optional, tag="7")]
+    pub parameters_hash: ::core::option::Option<Sha256>,
+    #[prost(uint64, optional, tag="8")]
+    pub seed: ::core::option::Option<u64>,
+    #[prost(message, optional, tag="9")]
+    pub result_hash: ::core::option::Option<Sha256>,
+    #[prost(message, optional, tag="10")]
+    pub output_identity: ::core::option::Option<Sha256>,
+}
+/// FormalInputKind closes the object-type dimension that a bare LineageRef
+/// cannot safely infer from an ULID alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum FormalInputKind {
+    Unspecified = 0,
+    Subject = 1,
+    DataSnapshot = 2,
+    UniverseSnapshot = 3,
+    RulePack = 4,
+    Artifact = 5,
+    Definition = 6,
+    Instrument = 7,
+    Calendar = 8,
+    Unit = 9,
+    DataSource = 10,
+    CurveSnapshot = 11,
+    FactorDefinition = 12,
+    PositionSnapshot = 13,
+    DataHealthProfile = 14,
+    CurveNodeDefinition = 15,
+}
+impl FormalInputKind {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "FORMAL_INPUT_KIND_UNSPECIFIED",
+            Self::Subject => "FORMAL_INPUT_KIND_SUBJECT",
+            Self::DataSnapshot => "FORMAL_INPUT_KIND_DATA_SNAPSHOT",
+            Self::UniverseSnapshot => "FORMAL_INPUT_KIND_UNIVERSE_SNAPSHOT",
+            Self::RulePack => "FORMAL_INPUT_KIND_RULE_PACK",
+            Self::Artifact => "FORMAL_INPUT_KIND_ARTIFACT",
+            Self::Definition => "FORMAL_INPUT_KIND_DEFINITION",
+            Self::Instrument => "FORMAL_INPUT_KIND_INSTRUMENT",
+            Self::Calendar => "FORMAL_INPUT_KIND_CALENDAR",
+            Self::Unit => "FORMAL_INPUT_KIND_UNIT",
+            Self::DataSource => "FORMAL_INPUT_KIND_DATA_SOURCE",
+            Self::CurveSnapshot => "FORMAL_INPUT_KIND_CURVE_SNAPSHOT",
+            Self::FactorDefinition => "FORMAL_INPUT_KIND_FACTOR_DEFINITION",
+            Self::PositionSnapshot => "FORMAL_INPUT_KIND_POSITION_SNAPSHOT",
+            Self::DataHealthProfile => "FORMAL_INPUT_KIND_DATA_HEALTH_PROFILE",
+            Self::CurveNodeDefinition => "FORMAL_INPUT_KIND_CURVE_NODE_DEFINITION",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FORMAL_INPUT_KIND_UNSPECIFIED" => Some(Self::Unspecified),
+            "FORMAL_INPUT_KIND_SUBJECT" => Some(Self::Subject),
+            "FORMAL_INPUT_KIND_DATA_SNAPSHOT" => Some(Self::DataSnapshot),
+            "FORMAL_INPUT_KIND_UNIVERSE_SNAPSHOT" => Some(Self::UniverseSnapshot),
+            "FORMAL_INPUT_KIND_RULE_PACK" => Some(Self::RulePack),
+            "FORMAL_INPUT_KIND_ARTIFACT" => Some(Self::Artifact),
+            "FORMAL_INPUT_KIND_DEFINITION" => Some(Self::Definition),
+            "FORMAL_INPUT_KIND_INSTRUMENT" => Some(Self::Instrument),
+            "FORMAL_INPUT_KIND_CALENDAR" => Some(Self::Calendar),
+            "FORMAL_INPUT_KIND_UNIT" => Some(Self::Unit),
+            "FORMAL_INPUT_KIND_DATA_SOURCE" => Some(Self::DataSource),
+            "FORMAL_INPUT_KIND_CURVE_SNAPSHOT" => Some(Self::CurveSnapshot),
+            "FORMAL_INPUT_KIND_FACTOR_DEFINITION" => Some(Self::FactorDefinition),
+            "FORMAL_INPUT_KIND_POSITION_SNAPSHOT" => Some(Self::PositionSnapshot),
+            "FORMAL_INPUT_KIND_DATA_HEALTH_PROFILE" => Some(Self::DataHealthProfile),
+            "FORMAL_INPUT_KIND_CURVE_NODE_DEFINITION" => Some(Self::CurveNodeDefinition),
+            _ => None,
+        }
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubjectStateSnapshot {
     #[prost(message, optional, tag="1")]

@@ -191,9 +191,73 @@ mod wire_byte_regression {
         }
     }
 
+    #[async_trait::async_trait]
+    impl ficant_application::ports::SubjectRepository for Fixture {
+        async fn register_subject(
+            &self,
+            _: ficant_domain::subject::SubjectRecord,
+        ) -> ficant_application::ports::ApplicationResult<ficant_domain::subject::SubjectRecord>
+        {
+            unreachable!("read-only adapter fixture")
+        }
+
+        async fn get_subject(
+            &self,
+            reference: VersionRef,
+        ) -> ficant_application::ports::ApplicationResult<
+            Option<ficant_domain::subject::SubjectRecord>,
+        > {
+            Ok((reference == *self.snapshot.subject_ref()).then(|| fixture_subject(self)))
+        }
+
+        async fn register_subject_state(
+            &self,
+            _: ficant_domain::subject::SubjectStateSnapshot,
+        ) -> ficant_application::ports::ApplicationResult<
+            ficant_domain::subject::SubjectStateSnapshot,
+        > {
+            unreachable!("read-only adapter fixture")
+        }
+
+        async fn get_subject_state(
+            &self,
+            _: Ulid,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> ficant_application::ports::ApplicationResult<
+            Option<ficant_domain::subject::SubjectStateSnapshot>,
+        > {
+            unreachable!("read-only adapter fixture")
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ficant_application::ports::FormalOutputRepository for Fixture {
+        async fn publish(
+            &self,
+            scope: &ficant_application::ports::AccessScope,
+            record: ficant_application::ports::FormalOutputRecord,
+        ) -> ficant_application::ports::ApplicationResult<
+            ficant_application::ports::FormalOutputRecord,
+        > {
+            scope.authorize(record.owner())?;
+            record.verify()?;
+            Ok(record)
+        }
+
+        async fn get(
+            &self,
+            _: &ficant_application::ports::AccessScope,
+            _: &ficant_domain::primitives::ContentHash,
+        ) -> ficant_application::ports::ApplicationResult<
+            Option<ficant_application::ports::FormalOutputRecord>,
+        > {
+            Ok(None)
+        }
+    }
+
     use ficant_api::{
-        DataHealthGrpcService, PlatformApplication, PlatformPort, PortfolioRiskGrpcService,
-        SessionPolicy, SystemClock, TrustedIdentity,
+        DataHealthGrpcService, FormalOutputPublisher, PlatformApplication, PlatformPort,
+        PortfolioRiskGrpcService, SessionPolicy, SystemClock, TrustedIdentity,
     };
     use ficant_contracts::ficant::core::v1 as core_pb;
     use ficant_contracts::ficant::research::v1 as research_pb;
@@ -204,6 +268,47 @@ mod wire_byte_regression {
     use tonic::Request;
 
     const TRACE_KEY: &[u8] = b"0123456789abcdef0123456789abcdef";
+
+    fn formal_publisher(repository: Arc<Fixture>) -> FormalOutputPublisher {
+        FormalOutputPublisher::new(
+            repository,
+            ficant_runtime::CodeBinding::new(
+                "34402344c7d2c9238dc171af52ac4db77eb6b462",
+                "f66e03c55703837d6f2aee9959eba482612272f1",
+            )
+            .unwrap(),
+            ficant_runtime::RuntimeBinding::new(
+                ContentHash::digest(b"test-server-image"),
+                ContentHash::digest(b"test-server-environment"),
+            ),
+        )
+    }
+
+    fn fixture_subject(fixture: &Fixture) -> ficant_domain::subject::SubjectRecord {
+        use ficant_domain::subject::{
+            AccessSet, FundingTier, Subject, SubjectRecord, SubjectVersion, TaxTreatment,
+        };
+        let reference = fixture.snapshot.subject_ref().clone();
+        SubjectRecord::new(
+            Subject::new_owned(
+                reference.id().clone(),
+                fixture.snapshot.owner().clone(),
+                "R7B fixture subject",
+            )
+            .unwrap(),
+            SubjectVersion::new(
+                reference,
+                AccessSet::new(["cn.gov"], ["rates"]).unwrap(),
+                FundingTier::DrAvailable,
+                TaxTreatment::new("vat-none", "income-none").unwrap(),
+                "fixture-assessment",
+                "fixture-liability",
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    }
 
     struct StatelessDeliveryEngine {
         calls: Arc<AtomicUsize>,
@@ -272,7 +377,8 @@ mod wire_byte_regression {
             }),
             TRACE_KEY,
         )
-        .unwrap();
+        .unwrap()
+        .with_formal_outputs(fixture.clone(), formal_publisher(fixture.clone()));
         let health = DataHealthGrpcService::new(
             identity,
             fixture.scope.clone(),
@@ -287,7 +393,8 @@ mod wire_byte_regression {
             fixture.clone(),
             TRACE_KEY,
         )
-        .unwrap();
+        .unwrap()
+        .with_formal_outputs(fixture.clone(), formal_publisher(fixture.clone()));
 
         let unauthorized_publish = health
             .publish_data_health_threshold_profile(Request::new(
@@ -312,10 +419,12 @@ mod wire_byte_regression {
             .await
             .unwrap()
             .into_inner();
-        assert!(matches!(
-            before.result,
-            Some(research_pb::calculate_key_rate_dv01_response::Result::Exposure(_))
-        ));
+        let Some(research_pb::calculate_key_rate_dv01_response::Result::Exposure(exposure)) =
+            before.result.as_ref()
+        else {
+            panic!("unexpected portfolio result: {before:?}");
+        };
+        assert_portfolio_evidence(exposure);
         let before_bytes = before.encode_to_vec();
         let engine_calls_before_health = engine_calls(&fixture, &delivery_calls);
 
@@ -341,6 +450,18 @@ mod wire_byte_regression {
             after_bytes, before_bytes,
             "the complete protobuf response bytes must not change after a warning health query"
         );
+    }
+
+    fn assert_portfolio_evidence(exposure: &research_pb::PortfolioKeyRateExposure) {
+        let formal = exposure
+            .formal_evidence
+            .as_ref()
+            .expect("successful Portfolio KRD must carry formal evidence");
+        assert_eq!(
+            formal.schema_id,
+            "ficant.research.v1.PortfolioKeyRateExposure"
+        );
+        assert!(formal.output_identity.is_some());
     }
 
     async fn assert_repeatable_warning_health_report(
@@ -387,6 +508,12 @@ mod wire_byte_regression {
         else {
             panic!("the worst-health fixture must produce a report");
         };
+        let formal = report
+            .formal_evidence
+            .as_ref()
+            .expect("successful DataHealth report must carry formal evidence");
+        assert_eq!(formal.schema_id, "ficant.research.v1.DataHealthReport");
+        assert!(formal.output_identity.is_some());
         assert_eq!(report.state, research_pb::DataHealthState::Warning as i32);
         assert_eq!(
             report

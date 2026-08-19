@@ -173,7 +173,7 @@ R5b 在 R5a 之后建立 `CoverageDeclaration`，R5c 在 R5a 之后建立 `DataH
 | **R6A** | **角色、白名单与输入服务组合** | 平台管理员/研究用户分离；实现并生产组合 Definition、Fact、Snapshot 输入面；数据源白名单和基础数据变更留痕 | AC37 |
 | **R6B** | **Artifact 服务与拓扑闭合** | 实现 verified Artifact 查询面并保留既有 server-owned publish use case；建立“声明即生产可达”门禁；收敛为单一 gRPC/gRPC-Web route builder，并删除 `ficant-web` 逻辑孤儿 | —（服务拓扑闭合） |
 | **R7A** | **分层与双时间重取证** | 虚构市场零核心改动；重取证双时间与不可变性；跨 clang 原始数值比对；按 AC04 实证决定是否拆分 domain crates | AC04 AC11–AC13 |
-| **R7B** | **一期证据与恢复收口** | 完整代码/镜像/输入血缘、确定性与恢复；MANUAL、运行手册、当前能力文档及全量重取证 | AC30–AC33 |
+| **R7B** | **一期证据与恢复收口** | 全部正式输出共用 typed `FormalOutputEvidence` 与单一 identity；Graph exact Subject/Code、13 维比较、stage 前 intent、fenced recovery 和 orphan maintenance；隔离 PG/Ceph source-destroy/fresh-restore；exact authority MANUAL clean-checkout runner | AC30–AC33 |
 | **独立治理轮** | **远端仓库与发布治理** | 由 Human/CICD 决定轻量 PR 检查、CODEOWNERS/审批/status checks、Dependabot、secret scanning、push protection、Release 对齐和签名策略；不进入 OPAID 产品迭代 | — |
 
 ### 2026-08 系统完整性重排
@@ -183,6 +183,8 @@ R5b 在 R5a 之后建立 `CoverageDeclaration`，R5c 在 R5a 之后建立 `DataH
 原 R6 拆为 R6A / R6B，分别承担身份与输入面、Artifact 与服务拓扑；原 R7 拆为 R7A / R7B，分别承担架构/双时间重取证和完整血缘/恢复收口，避免把公共服务实现、跨编译器裁决、MANUAL 与恢复证据耦合在一个候选中。GitHub 远端权限、安全、PR 和 Release 策略单列治理轮，只能由 Human/CICD 授权，不进入 OPAID 产品迭代或任一 AC 的产品证据。
 
 Python node runtime、DMQuant、Policy / Constraint、完整 DataHealth 扩展和 AI / GeneratedNode 沙箱继续明确顺延至 v0.2；它们不得作为 v0.1 已实现能力宣传。后续不预建 R5E / R6 / R7 brief，占位文件只会制造第二状态源；每轮开始时再冻结其唯一 Human brief。
+
+R7B 的正式输出边界不扩大产品域：Definition、Fact、Snapshot CRUD 仍是输入事实，不因 required-read 而成为分析输出；Portfolio360/COGA WebApp 仍在本轮非目标。同步 Analytics 与异步 ResearchGraph 只共用证据/身份不变量，不合并执行生命周期：前者无 Run/lease，但按 identity 持久化 immutable result；后者用 durable publication intent、lease fence 与原子完成事务恢复。
 
 ### R1 为什么这么小
 

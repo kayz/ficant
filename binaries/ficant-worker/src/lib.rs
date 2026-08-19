@@ -1,17 +1,27 @@
 mod production;
 
 use std::fmt;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use ficant_application::ports::{StoredExecutionIdentity, VerifiedBlobRef};
 use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid};
-use ficant_domain::research::{Artifact, ResearchGraph};
-use ficant_runtime::{NativeNode, NativePortValue};
+use ficant_domain::research::{Artifact, ExperimentRun, ResearchGraph};
+use ficant_runtime::{CodeBinding, FormalOutputEvidence, NativeNode, NativePortValue};
 use tokio::sync::watch;
 use tokio::time::{Instant, sleep, sleep_until};
 
 pub use production::ProductionWorkerBackend;
+
+#[must_use]
+pub const fn compiled_git_commit_sha() -> &'static str {
+    env!("FICANT_COMPILED_GIT_COMMIT_SHA")
+}
+
+#[must_use]
+pub const fn compiled_git_tree_sha() -> &'static str {
+    env!("FICANT_COMPILED_GIT_TREE_SHA")
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkerConfig {
@@ -21,6 +31,7 @@ pub struct WorkerConfig {
     pub s3_access_key: String,
     pub s3_secret_key: String,
     pub worker_id: Ulid,
+    pub code: CodeBinding,
     pub runtime_image_digest: ContentHash,
     pub environment_attestation: String,
     pub native_source_digest: ContentHash,
@@ -28,6 +39,8 @@ pub struct WorkerConfig {
     pub renew_interval: Duration,
     pub idle_poll_interval: Duration,
     pub node_timeout: Duration,
+    pub orphan_grace: Duration,
+    pub orphan_interval: Duration,
 }
 
 impl WorkerConfig {
@@ -37,6 +50,11 @@ impl WorkerConfig {
     ///
     /// Returns an invalid-configuration error without including secret values.
     pub fn from_env() -> Result<Self, WorkerError> {
+        let code = CodeBinding::new(
+            required_env("FICANT_CODE_COMMIT_SHA")?,
+            required_env("FICANT_CODE_TREE_SHA")?,
+        )
+        .map_err(|_| WorkerError::InvalidConfiguration("FICANT_CODE_COMMIT_SHA"))?;
         let value = Self {
             database_url: required_env("FICANT_WORKER_DATABASE_URL")?,
             s3_endpoint: required_env("FICANT_WORKER_S3_ENDPOINT")?,
@@ -45,6 +63,7 @@ impl WorkerConfig {
             s3_secret_key: required_env("FICANT_WORKER_S3_SECRET_KEY")?,
             worker_id: Ulid::new(required_env("FICANT_WORKER_ID")?)
                 .map_err(|_| WorkerError::InvalidConfiguration("FICANT_WORKER_ID"))?,
+            code,
             runtime_image_digest: required_sha256_env("FICANT_WORKER_RUNTIME_IMAGE_DIGEST")?,
             environment_attestation: required_env("FICANT_WORKER_ENVIRONMENT_ATTESTATION")?,
             native_source_digest: required_sha256_env("FICANT_WORKER_NATIVE_SOURCE_DIGEST")?,
@@ -52,6 +71,8 @@ impl WorkerConfig {
             renew_interval: seconds_env("FICANT_WORKER_RENEW_SECONDS", 20)?,
             idle_poll_interval: milliseconds_env("FICANT_WORKER_IDLE_POLL_MS", 500)?,
             node_timeout: seconds_env("FICANT_WORKER_NODE_TIMEOUT_SECONDS", 30)?,
+            orphan_grace: required_seconds_env("FICANT_WORKER_ORPHAN_GRACE_SECONDS")?,
+            orphan_interval: required_seconds_env("FICANT_WORKER_ORPHAN_INTERVAL_SECONDS")?,
         };
         value.validate()?;
         Ok(value)
@@ -72,6 +93,11 @@ impl WorkerConfig {
             return Err(WorkerError::InvalidConfiguration("worker endpoint"));
         }
         canonical_environment_digest(&self.environment_attestation)?;
+        if self.code.git_commit_sha() != compiled_git_commit_sha()
+            || self.code.git_tree_sha() != compiled_git_tree_sha()
+        {
+            return Err(WorkerError::InvalidConfiguration("FICANT_CODE_COMMIT_SHA"));
+        }
         if self.native_source_digest != ficant_native_nodes::native_node_source_digest() {
             return Err(WorkerError::InvalidConfiguration(
                 "FICANT_WORKER_NATIVE_SOURCE_DIGEST",
@@ -81,7 +107,12 @@ impl WorkerConfig {
             || self.renew_interval.is_zero()
             || self.idle_poll_interval.is_zero()
             || self.node_timeout.is_zero()
+            || self.orphan_grace.is_zero()
+            || self.orphan_interval.is_zero()
             || self.renew_interval >= self.lease_duration
+            || self.orphan_grace > Duration::from_hours(720)
+            || self.orphan_interval > Duration::from_hours(24)
+            || self.orphan_interval > self.orphan_grace
         {
             return Err(WorkerError::InvalidConfiguration("worker duration"));
         }
@@ -114,16 +145,27 @@ pub struct ClaimedTask {
 #[derive(Clone, Debug)]
 pub struct LoadedTask {
     pub owner: OwnerRef,
+    pub run: ExperimentRun,
     pub graph: ResearchGraph,
     pub stored_identity: StoredExecutionIdentity,
 }
 
 #[derive(Clone, Debug)]
 pub struct NodeCompletion {
+    pub publication_intent_id: Ulid,
     pub artifact: Artifact,
+    pub formal_evidence: FormalOutputEvidence,
     pub verified_blob: VerifiedBlobRef,
     pub verified_payload: Vec<u8>,
     pub output_manifest: Vec<u8>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PreparedNodePublication {
+    pub publication_intent_id: Ulid,
+    pub artifact: Artifact,
+    pub formal_evidence: FormalOutputEvidence,
+    pub execution: ExecutedNode,
 }
 
 #[derive(Clone, Debug)]
@@ -161,10 +203,12 @@ pub enum WorkerStep {
     Begin,
     ReadInput,
     Execute,
+    Prepare,
     Promote,
     Renew,
     Complete,
     Fail,
+    Maintenance,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -241,11 +285,19 @@ pub trait WorkerBackend: Send + Sync {
         inputs: PreparedInputs,
     ) -> Result<ExecutedNode, WorkerError>;
 
+    async fn prepare_publication(
+        &self,
+        task: &ClaimedTask,
+        loaded: &LoadedTask,
+        worker_id: &Ulid,
+        execution: ExecutedNode,
+    ) -> Result<PreparedNodePublication, WorkerError>;
+
     async fn promote(
         &self,
         task: &ClaimedTask,
         loaded: &LoadedTask,
-        execution: ExecutedNode,
+        publication: PreparedNodePublication,
     ) -> Result<NodeCompletion, WorkerError>;
 
     async fn complete(
@@ -261,6 +313,10 @@ pub trait WorkerBackend: Send + Sync {
         worker_id: &Ulid,
         failure_hash: ContentHash,
     ) -> Result<(), WorkerError>;
+
+    async fn maintain_orphans(&self, _cutoff_unix_seconds: i64) -> Result<(), WorkerError> {
+        Ok(())
+    }
 }
 
 /// Claims and executes work until a graceful drain signal is observed.
@@ -276,7 +332,23 @@ pub async fn run_worker(
     drain: watch::Receiver<bool>,
 ) -> Result<(), WorkerError> {
     config.validate()?;
+    let mut next_maintenance = Instant::now();
     while !*drain.borrow() {
+        if Instant::now() >= next_maintenance {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|_| WorkerError::InvalidConfiguration("worker system clock"))?;
+            let cutoff = now
+                .checked_sub(config.orphan_grace)
+                .ok_or(WorkerError::InvalidConfiguration("worker orphan grace"))?;
+            backend
+                .maintain_orphans(
+                    i64::try_from(cutoff.as_secs())
+                        .map_err(|_| WorkerError::InvalidConfiguration("worker orphan cutoff"))?,
+                )
+                .await?;
+            next_maintenance = Instant::now() + config.orphan_interval;
+        }
         let lease_id = derived_id(
             b"ficant/worker-lease/v1",
             &[
@@ -321,7 +393,10 @@ pub async fn run_claimed(
     let work = async {
         let inputs = backend.read_inputs(task, &loaded).await?;
         let execution = backend.execute(task, &loaded, inputs).await?;
-        backend.promote(task, &loaded, execution).await
+        let publication = backend
+            .prepare_publication(task, &loaded, &config.worker_id, execution)
+            .await?;
+        backend.promote(task, &loaded, publication).await
     };
     tokio::pin!(work);
 
@@ -373,6 +448,8 @@ fn validate_loaded(
         || loaded.graph.digest() != &task.graph_digest
         || loaded.stored_identity.identity.run_id() != &task.run_id
         || loaded.stored_identity.identity.digest() != &task.execution_identity_digest
+        || persisted.subject().is_none()
+        || persisted.code() != Some(&config.code)
         || persisted.runtime_image_digest() != &config.runtime_image_digest
         || persisted.environment_digest() != &config.environment_digest()?
         || persisted
@@ -491,6 +568,13 @@ pub fn canonical_environment_digest(value: &str) -> Result<ContentHash, WorkerEr
 
 fn seconds_env(name: &'static str, default: u64) -> Result<Duration, WorkerError> {
     duration_env(name, default, Duration::from_secs)
+}
+
+fn required_seconds_env(name: &'static str) -> Result<Duration, WorkerError> {
+    required_env(name)?
+        .parse::<u64>()
+        .map(Duration::from_secs)
+        .map_err(|_| WorkerError::InvalidConfiguration(name))
 }
 
 fn milliseconds_env(name: &'static str, default: u64) -> Result<Duration, WorkerError> {

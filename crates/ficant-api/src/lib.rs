@@ -9,6 +9,7 @@ mod data_source_registry;
 mod error;
 mod experiment;
 mod factor_registry;
+mod formal_evidence;
 mod governance;
 mod grpc_web;
 mod market_definition;
@@ -30,6 +31,7 @@ pub use data_source_registry::DataSourceRegistryGrpcService;
 pub use error::{PlatformFailure, PlatformFailureCode, SafeErrorMapper};
 pub use experiment::{ExperimentGrpcService, TrustedExperimentScope, TrustedNodeCatalog};
 pub use factor_registry::FactorRegistryGrpcService;
+pub use formal_evidence::FormalOutputPublisher;
 pub use governance::FoundationChangeGrpcService;
 pub use grpc_web::{
     GrpcWebServeError, GrpcWebServerConfig, PlatformGrpcService, ProductionGrpcServices,

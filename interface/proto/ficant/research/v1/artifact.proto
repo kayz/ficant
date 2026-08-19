@@ -4,6 +4,7 @@ package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
+import "ficant/core/v1/evidence.proto";
 import "ficant/research/v1/signal.proto";
 
 enum ArtifactKind {
@@ -22,6 +23,7 @@ message Artifact {
   ficant.core.v1.Sha256 content_hash = 5;
   uint64 blob_size = 6;
   repeated ficant.core.v1.LineageRef lineage = 7;
+  ficant.core.v1.FormalOutputEvidence formal_evidence = 8;
 }
 
 message GetArtifactRequest {

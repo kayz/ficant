@@ -118,15 +118,22 @@ services:
 
   ficant-server:
     <<: *rust-service
+    image: ficant/server:dev
     build:
       context: ../..
       dockerfile: deploy/dev/RustService.Dockerfile
       args:
         BINARY: ficant-server
+        FICANT_CODE_COMMIT_SHA: "${FICANT_CODE_COMMIT_SHA:?FICANT_CODE_COMMIT_SHA is derived by scripts/dev-up.ps1}"
+        FICANT_CODE_TREE_SHA: "${FICANT_CODE_TREE_SHA:?FICANT_CODE_TREE_SHA is derived by scripts/dev-up.ps1}"
     environment:
       FICANT_CONFIG: /etc/ficant/ficant.toml
       FICANT_GRPC_BIND: "0.0.0.0:8080"
       FICANT_GRPC_WEB_ALLOWED_ORIGINS: "http://127.0.0.1:${FICANT_UI_PORT:-18083}"
+      FICANT_CODE_COMMIT_SHA: "${FICANT_CODE_COMMIT_SHA:?FICANT_CODE_COMMIT_SHA is derived by scripts/dev-up.ps1}"
+      FICANT_CODE_TREE_SHA: "${FICANT_CODE_TREE_SHA:?FICANT_CODE_TREE_SHA is derived by scripts/dev-up.ps1}"
+      FICANT_SERVER_RUNTIME_IMAGE_DIGEST: "${FICANT_SERVER_RUNTIME_IMAGE_DIGEST:?FICANT_SERVER_RUNTIME_IMAGE_DIGEST is derived by scripts/dev-up.ps1}"
+      FICANT_SERVER_ENVIRONMENT_ATTESTATION: "${FICANT_SERVER_ENVIRONMENT_ATTESTATION:?FICANT_SERVER_ENVIRONMENT_ATTESTATION is derived by scripts/dev-up.ps1}"
       FICANT_PLATFORM_SIGNING_KEY_HEX: "${FICANT_PLATFORM_SIGNING_KEY_HEX:?FICANT_PLATFORM_SIGNING_KEY_HEX is required}"
       FICANT_PLATFORM_TRACE_KEY_HEX: "${FICANT_PLATFORM_TRACE_KEY_HEX:?FICANT_PLATFORM_TRACE_KEY_HEX is required}"
       FICANT_BOOTSTRAP_SUBJECT: "${FICANT_BOOTSTRAP_SUBJECT:?FICANT_BOOTSTRAP_SUBJECT is required}"
@@ -164,8 +171,12 @@ services:
       dockerfile: deploy/dev/RustService.Dockerfile
       args:
         BINARY: ficant-worker
+        FICANT_CODE_COMMIT_SHA: "${FICANT_CODE_COMMIT_SHA:?FICANT_CODE_COMMIT_SHA is derived by scripts/dev-up.ps1}"
+        FICANT_CODE_TREE_SHA: "${FICANT_CODE_TREE_SHA:?FICANT_CODE_TREE_SHA is derived by scripts/dev-up.ps1}"
     environment:
       FICANT_CONFIG: /etc/ficant/ficant.toml
+      FICANT_CODE_COMMIT_SHA: "${FICANT_CODE_COMMIT_SHA:?FICANT_CODE_COMMIT_SHA is derived by scripts/dev-up.ps1}"
+      FICANT_CODE_TREE_SHA: "${FICANT_CODE_TREE_SHA:?FICANT_CODE_TREE_SHA is derived by scripts/dev-up.ps1}"
       FICANT_WORKER_DATABASE_URL: "postgres://ficant:${FICANT_POSTGRES_PASSWORD:?FICANT_POSTGRES_PASSWORD is required}@postgres:5432/ficant"
       FICANT_WORKER_S3_ENDPOINT: "http://ceph-rgw:9000"
       FICANT_WORKER_S3_BUCKET: "${FICANT_S3_BUCKET:-ficant}"
@@ -176,6 +187,8 @@ services:
       FICANT_WORKER_RENEW_SECONDS: "20"
       FICANT_WORKER_IDLE_POLL_MS: "500"
       FICANT_WORKER_NODE_TIMEOUT_SECONDS: "30"
+      FICANT_WORKER_ORPHAN_GRACE_SECONDS: "3600"
+      FICANT_WORKER_ORPHAN_INTERVAL_SECONDS: "300"
       FICANT_WORKER_RUNTIME_IMAGE_DIGEST: "${FICANT_WORKER_RUNTIME_IMAGE_DIGEST:?FICANT_WORKER_RUNTIME_IMAGE_DIGEST is derived by scripts/dev-up.ps1}"
       FICANT_WORKER_ENVIRONMENT_ATTESTATION: |-
         ficant.worker.environment.v1

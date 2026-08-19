@@ -50,7 +50,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 .\scripts\check-fast.ps1
 ```
 
-它运行 `cargo fmt`、离线 workspace check、R5D 精确 crate 邻接表与 L1→L2 语法依赖门禁、非环境 Rust 测试和 Storage library 测试；不会连接 PostgreSQL、Ceph RGW、GitHub 或目标服务器。R6A 真实输入平面 SIT 被显式标记为 integration-only，普通 workspace test 只报告 ignored；未知 workspace package/依赖边，以及 `research/**` 对 analytics/curves/futures 模块的直接或 façade 引用，都会默认失败。
+它运行 `cargo fmt`、离线 workspace check、R5D 精确 crate 邻接表与 L1→L2 语法依赖门禁、R7B MANUAL/恢复清单负向 fixture、非环境 Rust 测试和 Storage library 测试；不会连接 PostgreSQL、Ceph RGW、GitHub 或目标服务器。R6A 真实输入平面 SIT 与 R7B 真实 source-destroy/fresh-restore 被显式标记为 integration-only；未知 workspace package/依赖边，以及 `research/**` 对 analytics/curves/futures 模块的直接或 façade 引用，都会默认失败。
 
 完整本地回归：
 
@@ -77,7 +77,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 - `FICANT_TEST_S3_SECRET_KEY`
 - `FICANT_TEST_RUNTIME_IMAGE_DIGEST`
 
-脚本不会创建、部署或清理服务器，也不会打印这些值。数据库必须可以安全地被测试 migration 重置；不得指向共享、测试发布或生产数据库。集成计划依次覆盖 migration、Phase 1 正向业务闭环、13 项负向不变量、Phase 2B Carry/Roll-down、Phase 2C 国债期货交割、Phase 2D 套保、Phase 3A/3B 数据与快照，以及 R6A 生产 Definition/Fact/Snapshot 输入平面的授权导入、零副作用拒绝、重启重读和治理证据。
+脚本不会连接或清理目标服务器，也不会打印这些值。调用者提供的数据库必须可安全重置，不得指向共享、测试发布或生产数据库。集成计划依次覆盖 migration、Phase 1 正向业务闭环、13 项负向不变量、Phase 2B Carry/Roll-down、Phase 2C 国债期货交割、Phase 2D 套保、Phase 3A/3B 数据与快照、R6A 生产输入平面，以及 R7B 自建隔离 PostgreSQL/Ceph source 与 restore project 的真实销毁恢复证明。R7B runner 只删除其名称受限的临时 project/volume；细节见 [`operations/recovery.md`](operations/recovery.md)。
 
 仓库内 `deploy/dev/docker-compose.yml` 是当前唯一的本地 Compose 拓扑，提供锁定基础镜像摘要的 PostgreSQL、单节点 Ceph RGW、migration、三个 Rust 服务和 React Platform Shell；它不是生产 Ceph 部署模板。日常开发只调用下面的包装脚本：
 
@@ -96,6 +96,20 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 ```
 
 `dev-up.ps1` 可能为了冷构建或缺失的锁定基础镜像访问网络。它不会替代 `check.ps1 -IncludeIntegration` 所需的 `FICANT_TEST_*` 变量；测试调用者仍须把本地服务地址和本轮精确 runtime image digest 映射到测试变量。包装脚本不提供删除数据卷的选项；如确需销毁本地数据，必须单独审查精确 Compose project 和卷目标。检查脚本本身仍不自动启动、停止、清理或下载该夹具。
+
+R7B 另提供 clean-candidate 恢复与 private MANUAL 入口：
+
+```powershell
+.\scripts\check-recovery.ps1 -ListOnly
+.\scripts\check-recovery.ps1
+
+.\scripts\check-manual.ps1 `
+    -AuthorityRoot C:\path\to\ficant-authority `
+    -ExpectedAuthorityCommit <40-hex> `
+    -ExpectedPublicCommit <40-hex>
+```
+
+恢复入口绑定 clean public commit/tree 与实际 Worker image config digest；MANUAL runner 另绑定 clean authority checkout、manifest 中三份文档 hash 和 marker 顺序，在临时 detached public checkout 原样执行命令。尖括号只用于本页说明，不能出现在获批 MANUAL literal block 中。
 
 ## 本地依赖能力
 

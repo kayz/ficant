@@ -4,6 +4,7 @@ package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
+import "ficant/core/v1/evidence.proto";
 import "ficant/core/v1/governance.proto";
 import "ficant/research/v1/coverage.proto";
 
@@ -92,6 +93,7 @@ message DataHealthReport {
   ficant.core.v1.Sha256 request_fingerprint = 15;
   ficant.core.v1.Sha256 content_hash = 16;
   repeated ficant.core.v1.LineageRef lineage = 17;
+  ficant.core.v1.FormalOutputEvidence formal_evidence = 18;
 }
 
 message GetDataHealthReportResponse {

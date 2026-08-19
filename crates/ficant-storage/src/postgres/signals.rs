@@ -8,6 +8,7 @@ use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid};
 use ficant_domain::research::{Artifact, ArtifactKind, SignalSet};
 use ficant_domain::{ContentAddressed, Lineaged};
+use ficant_runtime::FormalOutputEvidence;
 use sqlx::PgConnection;
 use sqlx::types::chrono::{DateTime, Utc};
 
@@ -52,6 +53,32 @@ impl SignalRepository for PostgresRepository {
         .await
         .map_err(map_sqlx_error)?;
         payload.map(|bytes| decode_signal(&bytes)).transpose()
+    }
+
+    async fn get_formal_evidence(
+        &self,
+        scope: &AccessScope,
+        signal_set_id: Ulid,
+    ) -> Result<Option<FormalOutputEvidence>, ApplicationError> {
+        let mut connection = self.pool().acquire().await.map_err(map_sqlx_error)?;
+        let Some(signal) = load_persisted_signal(
+            &mut connection,
+            scope.tenant_id().as_str(),
+            signal_set_id.as_str(),
+        )
+        .await?
+        else {
+            return Ok(None);
+        };
+        scope.authorize(signal.owner())?;
+        let artifact = super::artifacts::load_persisted_artifact(
+            &mut connection,
+            scope.tenant_id().as_str(),
+            signal.artifact().object_id().as_str(),
+        )
+        .await?
+        .ok_or_else(lineage_incomplete)?;
+        super::artifacts::load_artifact_formal_evidence(&mut connection, &artifact).await
     }
 
     async fn get_integrity_checked(
@@ -201,7 +228,8 @@ pub(crate) async fn persist_signal(
     )
     .await?;
     if outcome == IdempotencyOutcome::Replay {
-        return require_exact_persisted_signal(transaction, signal).await;
+        return require_exact_persisted_signal(transaction, signal, command.formal_evidence())
+            .await;
     }
 
     publish_blob_reference(
@@ -234,7 +262,7 @@ pub(crate) async fn persist_signal(
     .await
     .map_err(map_sqlx_error)?;
     insert_lineage(transaction, tenant_id, signal_id, signal.lineage()).await?;
-    require_exact_persisted_signal(transaction, signal).await
+    require_exact_persisted_signal(transaction, signal, command.formal_evidence()).await
 }
 
 async fn validate_artifact_binding(
@@ -262,12 +290,18 @@ async fn validate_artifact_binding(
             false,
         ));
     }
+    let actual_evidence =
+        super::artifacts::load_artifact_formal_evidence(transaction, &artifact).await?;
+    if actual_evidence.as_ref() != command.formal_evidence() {
+        return Err(lineage_incomplete());
+    }
     Ok(())
 }
 
 async fn require_exact_persisted_signal(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     expected: &SignalSet,
+    expected_evidence: Option<&FormalOutputEvidence>,
 ) -> Result<SignalSet, ApplicationError> {
     let persisted = load_persisted_signal(
         transaction,
@@ -277,6 +311,18 @@ async fn require_exact_persisted_signal(
     .await?
     .ok_or_else(immutable_violation)?;
     if &persisted != expected {
+        return Err(immutable_violation());
+    }
+    let artifact = super::artifacts::load_persisted_artifact(
+        transaction,
+        expected.owner().tenant_id().as_str(),
+        expected.artifact().object_id().as_str(),
+    )
+    .await?
+    .ok_or_else(lineage_incomplete)?;
+    let actual_evidence =
+        super::artifacts::load_artifact_formal_evidence(transaction, &artifact).await?;
+    if actual_evidence.as_ref() != expected_evidence {
         return Err(immutable_violation());
     }
     Ok(persisted)

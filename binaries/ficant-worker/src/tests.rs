@@ -4,25 +4,32 @@ use std::time::Duration;
 use async_trait::async_trait;
 use ficant_application::ports::{
     ExecutionExternalInput, ExternalInputArtifactBinding, NodeImplementation,
-    ReproducibilityIdentity, ReproducibilityIdentityInput, StoredExecutionIdentity,
+    ReproducibilityIdentity, ReproducibilityIdentityInput, RulePackBinding,
+    StoredExecutionIdentity,
 };
-use ficant_domain::primitives::{ContentHash, LineageRef, OwnerRef, Ulid, Version};
+use ficant_domain::ContentAddressed;
+use ficant_domain::primitives::{ContentHash, LineageRef, OwnerRef, Ulid, Version, VersionRef};
 use ficant_domain::research::{
-    Artifact, ArtifactKind, GraphExternalInput, GraphExternalInputBinding, ResearchGraph,
-    ResearchGraphInput, ResearchNode,
+    Artifact, ArtifactKind, ExperimentRun, ExperimentRunInput, GraphExternalInput,
+    GraphExternalInputBinding, ResearchGraph, ResearchGraphInput, ResearchNode,
 };
 use ficant_native_nodes::{
     CgbBondAnalyticsNativeNode, MATERIALIZED_INPUT_PORT, REQUEST_PORT, analyze_bond_request_type,
     cgb_bond_analytics_contract, materialized_bond_input_type, native_node_source_digest,
     native_node_source_digest_attestation,
 };
-use ficant_runtime::{ExecutionInstanceIdentity, NativeNode, NativePortValue};
+use ficant_runtime::{
+    CodeBinding, ExecutionInstanceIdentity, FormalImplementationBinding, FormalInputBinding,
+    FormalInputBindingInput, FormalInputKind, FormalInputReference, FormalOutputEvidence,
+    FormalOutputEvidenceInput, NativeNode, NativePortValue, RuntimeBinding,
+};
 use tokio::sync::watch;
 
 use super::{
     ClaimedTask, ExecutedNode, InputEvidence, InputSource, LoadedTask, NodeCompletion,
-    PreparedInputs, WorkerBackend, WorkerConfig, WorkerError, WorkerStep,
-    canonical_environment_digest, run_claimed, run_worker,
+    PreparedInputs, PreparedNodePublication, WorkerBackend, WorkerConfig, WorkerError, WorkerStep,
+    canonical_environment_digest, compiled_git_commit_sha, compiled_git_tree_sha, run_claimed,
+    run_worker,
 };
 
 struct FakeBackend {
@@ -182,12 +189,43 @@ impl WorkerBackend for FakeBackend {
 
     async fn promote(
         &self,
-        task: &ClaimedTask,
-        loaded: &LoadedTask,
-        execution: ExecutedNode,
+        _task: &ClaimedTask,
+        _loaded: &LoadedTask,
+        publication: PreparedNodePublication,
     ) -> Result<NodeCompletion, WorkerError> {
         self.record(WorkerStep::Promote)?;
+        let PreparedNodePublication {
+            publication_intent_id,
+            artifact,
+            formal_evidence,
+            execution,
+        } = publication;
         let hash = ContentHash::digest(&execution.output_envelope);
+        assert_eq!(artifact.content_hash(), &hash);
+        Ok(NodeCompletion {
+            publication_intent_id,
+            artifact,
+            formal_evidence,
+            verified_blob: ficant_application::ports::VerifiedBlobRef::new(
+                ContentHash::digest(&execution.output_envelope),
+                u64::try_from(execution.output_envelope.len()).unwrap(),
+            )
+            .unwrap(),
+            verified_payload: execution.output_envelope,
+            output_manifest: b"manifest".to_vec(),
+        })
+    }
+
+    async fn prepare_publication(
+        &self,
+        task: &ClaimedTask,
+        loaded: &LoadedTask,
+        _worker_id: &Ulid,
+        execution: ExecutedNode,
+    ) -> Result<PreparedNodePublication, WorkerError> {
+        self.record(WorkerStep::Prepare)?;
+        let hash = ContentHash::digest(&execution.output_envelope);
+        let formal_evidence = formal_evidence(loaded, &execution);
         let artifact = Artifact::new(
             task.planned_artifact_id.clone(),
             loaded.owner.clone(),
@@ -207,15 +245,11 @@ impl WorkerBackend for FakeBackend {
                 .collect(),
         )
         .unwrap();
-        Ok(NodeCompletion {
+        Ok(PreparedNodePublication {
+            publication_intent_id: id('P'),
             artifact,
-            verified_blob: ficant_application::ports::VerifiedBlobRef::new(
-                ContentHash::digest(&execution.output_envelope),
-                u64::try_from(execution.output_envelope.len()).unwrap(),
-            )
-            .unwrap(),
-            verified_payload: execution.output_envelope,
-            output_manifest: b"manifest".to_vec(),
+            formal_evidence,
+            execution,
         })
     }
 
@@ -249,6 +283,7 @@ async fn successful_task_promotes_before_atomic_complete() {
             WorkerStep::Begin,
             WorkerStep::ReadInput,
             WorkerStep::Execute,
+            WorkerStep::Prepare,
             WorkerStep::Promote,
             WorkerStep::Complete,
         ]
@@ -272,6 +307,7 @@ async fn execution_failure_after_begin_is_atomically_failed() {
             WorkerStep::Begin,
             WorkerStep::ReadInput,
             WorkerStep::Execute,
+            WorkerStep::Prepare,
             WorkerStep::Promote,
             WorkerStep::Fail,
         ]
@@ -295,6 +331,7 @@ async fn retryable_failure_leaves_the_lease_for_reclaim_instead_of_marking_faile
             WorkerStep::Begin,
             WorkerStep::ReadInput,
             WorkerStep::Execute,
+            WorkerStep::Prepare,
             WorkerStep::Promote,
         ]
     );
@@ -358,6 +395,46 @@ fn renewal_must_be_shorter_than_lease_duration() {
     assert_eq!(
         config.validate(),
         Err(WorkerError::InvalidConfiguration("worker duration"))
+    );
+}
+
+#[test]
+fn orphan_maintenance_intervals_are_bounded_and_ordered() {
+    let mut changed = config();
+    changed.orphan_interval = changed.orphan_grace + Duration::from_secs(1);
+    assert_eq!(
+        changed.validate(),
+        Err(WorkerError::InvalidConfiguration("worker duration"))
+    );
+
+    let mut changed = config();
+    changed.orphan_grace = Duration::from_secs(2_592_001);
+    assert_eq!(
+        changed.validate(),
+        Err(WorkerError::InvalidConfiguration("worker duration"))
+    );
+
+    let mut changed = config();
+    changed.orphan_interval = Duration::from_secs(86_401);
+    changed.orphan_grace = changed.orphan_interval;
+    assert_eq!(
+        changed.validate(),
+        Err(WorkerError::InvalidConfiguration("worker duration"))
+    );
+}
+
+#[test]
+fn configured_code_must_equal_the_binary_code() {
+    let replacement = if compiled_git_commit_sha().starts_with('0') {
+        "1111111111111111111111111111111111111111"
+    } else {
+        "0000000000000000000000000000000000000000"
+    };
+    let mut changed = config();
+    changed.code = CodeBinding::new(replacement, compiled_git_tree_sha()).unwrap();
+    assert_eq!(
+        changed.validate(),
+        Err(WorkerError::InvalidConfiguration("FICANT_CODE_COMMIT_SHA"))
     );
 }
 
@@ -431,6 +508,7 @@ fn config() -> WorkerConfig {
         s3_access_key: "access".to_owned(),
         s3_secret_key: "secret".to_owned(),
         worker_id: id('W'),
+        code: CodeBinding::new(compiled_git_commit_sha(), compiled_git_tree_sha()).unwrap(),
         runtime_image_digest: ContentHash::digest(b"runtime"),
         environment_attestation: environment_attestation().to_owned(),
         native_source_digest: native_node_source_digest(),
@@ -438,6 +516,8 @@ fn config() -> WorkerConfig {
         renew_interval: Duration::from_millis(100),
         idle_poll_interval: Duration::from_millis(1),
         node_timeout: Duration::from_millis(100),
+        orphan_grace: Duration::from_mins(1),
+        orphan_interval: Duration::from_secs(10),
     }
 }
 
@@ -456,6 +536,7 @@ fn claim() -> ClaimedTask {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn loaded() -> LoadedTask {
     let owner = OwnerRef::new(id('N'), id('O'));
     let request = analyze_bond_request_type();
@@ -494,7 +575,27 @@ fn loaded() -> LoadedTask {
         b"materialized".to_vec(),
     )
     .unwrap();
-    let reproducibility = ReproducibilityIdentity::new(
+    let subject = FormalInputBinding::new(FormalInputBindingInput {
+        role: "subject".to_owned(),
+        kind: FormalInputKind::Subject,
+        owner: owner.clone(),
+        reference: FormalInputReference::Object(
+            LineageRef::new(
+                id('S'),
+                Some(Version::new(1).unwrap()),
+                Some(ContentHash::digest(b"subject")),
+            )
+            .unwrap(),
+        ),
+        observed_at: None,
+        visible_at: None,
+        effective_from: None,
+        effective_to: None,
+    })
+    .unwrap();
+    let code = CodeBinding::new(compiled_git_commit_sha(), compiled_git_tree_sha()).unwrap();
+    let rule_hash = ContentHash::digest(b"rule");
+    let reproducibility = ReproducibilityIdentity::new_formal(
         &graph,
         ReproducibilityIdentityInput {
             external_inputs: vec![input.clone(), materialized_input.clone()],
@@ -504,12 +605,18 @@ fn loaded() -> LoadedTask {
             runtime_image_digest: ContentHash::digest(b"runtime"),
             environment_digest: canonical_environment_digest(environment_attestation()).unwrap(),
             seed: 7,
-            rule_pack_bindings: vec![],
+            rule_pack_bindings: vec![RulePackBinding {
+                rule_pack_id: id('Q').to_string(),
+                version: Version::new(1).unwrap(),
+                content_hash: rule_hash.clone(),
+            }],
             node_implementations: vec![NodeImplementation {
                 node_id: node.node_id().clone(),
                 implementation_digest: executor.implementation_digest().clone(),
             }],
         },
+        subject,
+        code,
     )
     .unwrap();
     let identity = ExecutionInstanceIdentity::from_reproducibility(id('R'), reproducibility);
@@ -533,9 +640,50 @@ fn loaded() -> LoadedTask {
     };
     LoadedTask {
         owner,
+        run: ExperimentRun::new(ExperimentRunInput {
+            experiment_run_id: id('R'),
+            owner: stored_identity.owner.clone(),
+            data_snapshot: LineageRef::content_addressed(id('Y'), ContentHash::digest(b"data")),
+            universe_snapshot: LineageRef::content_addressed(
+                id('V'),
+                ContentHash::digest(b"universe"),
+            ),
+            rule_packs: vec![VersionRef::new(id('Q'), Version::new(1).unwrap())],
+            runtime_image_digest: ContentHash::digest(b"runtime"),
+            parameters_hash: ContentHash::digest(b"parameters"),
+            seed: 7,
+        })
+        .unwrap(),
         graph,
         stored_identity,
     }
+}
+
+fn formal_evidence(loaded: &LoadedTask, execution: &ExecutedNode) -> FormalOutputEvidence {
+    let reproducibility = loaded.stored_identity.identity.reproducibility();
+    FormalOutputEvidence::new(FormalOutputEvidenceInput {
+        schema_id: "ficant.test.NodeOutput".to_owned(),
+        subject: reproducibility.subject().unwrap().clone(),
+        consumed_inputs: vec![],
+        code: reproducibility.code().unwrap().clone(),
+        runtime: RuntimeBinding::new(
+            reproducibility.runtime_image_digest().clone(),
+            reproducibility.environment_digest().clone(),
+        ),
+        implementations: vec![
+            FormalImplementationBinding::new(
+                "node-implementation",
+                reproducibility.node_implementations()[0]
+                    .implementation_digest
+                    .clone(),
+            )
+            .unwrap(),
+        ],
+        parameters_hash: reproducibility.parameters_hash().clone(),
+        seed: Some(reproducibility.seed()),
+        result_hash: execution.output_envelope_hash.clone(),
+    })
+    .unwrap()
 }
 
 fn environment_attestation() -> &'static str {

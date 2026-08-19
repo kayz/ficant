@@ -1,10 +1,11 @@
 use async_trait::async_trait;
+use ficant_domain::ContentAddressed;
 use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid, Version};
 use ficant_domain::research::{Artifact, ExperimentRun, ResearchGraph};
 pub use ficant_runtime::{
-    ExecutionExternalInput, ExecutionInstanceIdentity, GraphNodeEvent, GraphReplayResult,
-    NodeImplementation, ReproducibilityIdentity, ReproducibilityIdentityInput, RulePackBinding,
-    replay_graph_execution,
+    ExecutionExternalInput, ExecutionInstanceIdentity, FormalOutputEvidence, GraphNodeEvent,
+    GraphReplayResult, NodeImplementation, ReproducibilityIdentity, ReproducibilityIdentityInput,
+    RulePackBinding, replay_graph_execution,
 };
 
 use super::{AccessScope, ApplicationResult, IdempotencyKey, VerifiedBlobRef};
@@ -59,7 +60,9 @@ pub struct BeginNode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompleteNode {
     pub fence: NodeLeaseFence,
+    pub publication_intent_id: Ulid,
     pub artifact: Artifact,
+    pub formal_evidence: FormalOutputEvidence,
     /// Capability returned by the object store after hashing the promoted immutable object.
     ///
     /// The repository, rather than the worker, binds this proof to the planned Artifact.
@@ -69,6 +72,87 @@ pub struct CompleteNode {
     pub output_manifest: Vec<u8>,
     pub succeeded_event_id: Ulid,
     pub checkpoint_event_id: Ulid,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OutputPublicationIntentState {
+    Prepared,
+    Completed,
+    Abandoned,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PrepareOutputPublication {
+    fence: NodeLeaseFence,
+    intent_id: Ulid,
+    artifact: Artifact,
+    formal_evidence: FormalOutputEvidence,
+}
+
+impl PrepareOutputPublication {
+    /// Creates the durable publication intent that must precede any blob staging.
+    ///
+    /// # Errors
+    ///
+    /// Returns `LineageIncomplete` when the Artifact is not a formal output or its output identity
+    /// is not available for the intent.
+    pub fn new(
+        fence: NodeLeaseFence,
+        intent_id: Ulid,
+        artifact: Artifact,
+        formal_evidence: FormalOutputEvidence,
+    ) -> ApplicationResult<Self> {
+        if formal_evidence.result_hash() != artifact.content_hash()
+            || formal_evidence.subject().owner() != artifact.owner()
+        {
+            return Err(crate::ApplicationError::new(
+                crate::ApplicationErrorCategory::LineageIncomplete,
+                false,
+            ));
+        }
+        Ok(Self {
+            fence,
+            intent_id,
+            artifact,
+            formal_evidence,
+        })
+    }
+
+    #[must_use]
+    pub fn fence(&self) -> &NodeLeaseFence {
+        &self.fence
+    }
+
+    #[must_use]
+    pub fn intent_id(&self) -> &Ulid {
+        &self.intent_id
+    }
+
+    #[must_use]
+    pub fn artifact(&self) -> &Artifact {
+        &self.artifact
+    }
+
+    #[must_use]
+    pub fn formal_evidence(&self) -> &FormalOutputEvidence {
+        &self.formal_evidence
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutputPublicationIntent {
+    pub tenant_id: Ulid,
+    pub intent_id: Ulid,
+    pub run_id: Ulid,
+    pub node_id: Ulid,
+    pub task_id: Ulid,
+    pub execution_identity_digest: ContentHash,
+    pub planned_artifact_id: Ulid,
+    pub output_identity: ContentHash,
+    pub result_hash: ContentHash,
+    pub blob_size: u64,
+    pub formal_evidence_hash: ContentHash,
+    pub state: OutputPublicationIntentState,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -156,6 +240,8 @@ pub enum ComparisonDimension {
     Implementation,
     ExternalInput,
     Result,
+    Subject,
+    Code,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -163,6 +249,95 @@ pub struct GraphRunComparison {
     pub left_run_id: Ulid,
     pub right_run_id: Ulid,
     pub differing_dimensions: Vec<ComparisonDimension>,
+}
+
+/// Compares every frozen `ResearchGraph` reproducibility dimension in its public stable order.
+///
+/// `result_differs` is supplied by the repository after it has required-read and compared the
+/// terminal output bytes/manifest. Run ids, attempts, leases and clocks are intentionally absent.
+#[must_use]
+pub fn compare_graph_run_dimensions(
+    left: &ReproducibilityIdentity,
+    right: &ReproducibilityIdentity,
+    result_differs: bool,
+) -> Vec<ComparisonDimension> {
+    let mut differences = Vec::new();
+    push_dimension(
+        &mut differences,
+        ComparisonDimension::Data,
+        left.data_snapshot_hash() != right.data_snapshot_hash(),
+    );
+    push_dimension(
+        &mut differences,
+        ComparisonDimension::Universe,
+        left.universe_snapshot_hash() != right.universe_snapshot_hash(),
+    );
+    push_dimension(
+        &mut differences,
+        ComparisonDimension::Graph,
+        left.graph_digest() != right.graph_digest(),
+    );
+    push_dimension(
+        &mut differences,
+        ComparisonDimension::Parameters,
+        left.parameters_hash() != right.parameters_hash(),
+    );
+    push_dimension(
+        &mut differences,
+        ComparisonDimension::Runtime,
+        left.runtime_image_digest() != right.runtime_image_digest(),
+    );
+    push_dimension(
+        &mut differences,
+        ComparisonDimension::Environment,
+        left.environment_digest() != right.environment_digest(),
+    );
+    push_dimension(
+        &mut differences,
+        ComparisonDimension::Seed,
+        left.seed() != right.seed(),
+    );
+    push_dimension(
+        &mut differences,
+        ComparisonDimension::RulePack,
+        left.rule_pack_bindings() != right.rule_pack_bindings(),
+    );
+    push_dimension(
+        &mut differences,
+        ComparisonDimension::Implementation,
+        left.node_implementations() != right.node_implementations(),
+    );
+    push_dimension(
+        &mut differences,
+        ComparisonDimension::ExternalInput,
+        left.external_inputs() != right.external_inputs(),
+    );
+    push_dimension(
+        &mut differences,
+        ComparisonDimension::Result,
+        result_differs,
+    );
+    push_dimension(
+        &mut differences,
+        ComparisonDimension::Subject,
+        left.subject() != right.subject(),
+    );
+    push_dimension(
+        &mut differences,
+        ComparisonDimension::Code,
+        left.code() != right.code(),
+    );
+    differences
+}
+
+fn push_dimension(
+    differences: &mut Vec<ComparisonDimension>,
+    dimension: ComparisonDimension,
+    differs: bool,
+) {
+    if differs {
+        differences.push(dimension);
+    }
 }
 
 /// Derives the immutable Artifact identity from result-affecting identity plus logical node.
@@ -254,6 +429,17 @@ pub trait Phase4ExecutionRepository: Send + Sync {
     async fn enqueue_node(&self, command: EnqueueNode) -> ApplicationResult<()>;
 
     async fn begin_node(&self, command: BeginNode) -> ApplicationResult<NodeBeginResult>;
+
+    /// Durably records the exact formal output after calculation and before any blob staging.
+    async fn prepare_output_publication(
+        &self,
+        _command: PrepareOutputPublication,
+    ) -> ApplicationResult<OutputPublicationIntent> {
+        Err(crate::ApplicationError::new(
+            crate::ApplicationErrorCategory::StateConflict,
+            false,
+        ))
+    }
 
     /// Atomically publishes/reuses the verified Artifact, records the output manifest, appends
     /// `NodeSucceeded` and `NodeCheckpointed`, completes the lease, and advances the graph/run.

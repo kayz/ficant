@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package ficant.core.v1;
+
+import "ficant/core/v1/common.proto";
+
+// FormalInputKind closes the object-type dimension that a bare LineageRef
+// cannot safely infer from an ULID alone.
+enum FormalInputKind {
+  FORMAL_INPUT_KIND_UNSPECIFIED = 0;
+  FORMAL_INPUT_KIND_SUBJECT = 1;
+  FORMAL_INPUT_KIND_DATA_SNAPSHOT = 2;
+  FORMAL_INPUT_KIND_UNIVERSE_SNAPSHOT = 3;
+  FORMAL_INPUT_KIND_RULE_PACK = 4;
+  FORMAL_INPUT_KIND_ARTIFACT = 5;
+  FORMAL_INPUT_KIND_DEFINITION = 6;
+  FORMAL_INPUT_KIND_INSTRUMENT = 7;
+  FORMAL_INPUT_KIND_CALENDAR = 8;
+  FORMAL_INPUT_KIND_UNIT = 9;
+  FORMAL_INPUT_KIND_DATA_SOURCE = 10;
+  FORMAL_INPUT_KIND_CURVE_SNAPSHOT = 11;
+  FORMAL_INPUT_KIND_FACTOR_DEFINITION = 12;
+  FORMAL_INPUT_KIND_POSITION_SNAPSHOT = 13;
+  FORMAL_INPUT_KIND_DATA_HEALTH_PROFILE = 14;
+  FORMAL_INPUT_KIND_CURVE_NODE_DEFINITION = 15;
+}
+
+// Some immutable definitions have stable domain identifiers rather than ULIDs.
+// They remain content addressed and must never be represented by fabricated
+// object identities.
+message NamedContentRef {
+  string identity = 1;
+  Sha256 content_hash = 2;
+}
+
+// Every formal input is role-bearing, typed, owner-scoped, exact and content
+// addressed. Times are present only when they are part of the consumed fact.
+message FormalInputBinding {
+  string role = 1;
+  FormalInputKind kind = 2;
+  OwnerRef owner = 3;
+  oneof reference {
+    LineageRef object_ref = 4;
+    NamedContentRef named_ref = 9;
+  }
+  MarketTime observed_at = 5;
+  MarketTime visible_at = 6;
+  MarketTime effective_from = 7;
+  MarketTime effective_to = 8;
+}
+
+message CodeBinding {
+  string git_commit_sha = 1;
+  string git_tree_sha = 2;
+  Sha256 digest = 3;
+}
+
+message RuntimeBinding {
+  Sha256 image_digest = 1;
+  Sha256 environment_digest = 2;
+}
+
+message FormalImplementationBinding {
+  string role = 1;
+  Sha256 digest = 2;
+}
+
+// FormalOutputEvidence uses one canonical identity algorithm for synchronous
+// Analytics and asynchronous ResearchGraph outputs. Request/run/attempt/clock
+// identities are deliberately absent.
+message FormalOutputEvidence {
+  string schema_id = 1;
+  FormalInputBinding subject = 2;
+  repeated FormalInputBinding consumed_inputs = 3;
+  CodeBinding code = 4;
+  RuntimeBinding runtime = 5;
+  repeated FormalImplementationBinding implementations = 6;
+  Sha256 parameters_hash = 7;
+  optional uint64 seed = 8;
+  Sha256 result_hash = 9;
+  Sha256 output_identity = 10;
+}

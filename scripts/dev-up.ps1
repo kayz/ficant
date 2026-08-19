@@ -112,16 +112,62 @@ function Invoke-Native {
     }
 }
 
+function Get-GitCodeIdentity {
+    $status = (& git -C $repoRoot status --porcelain=v1 --untracked-files=all)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Unable to inspect the public FICANT Git worktree.'
+    }
+    if ($status) {
+        throw 'FICANT Code identity requires a clean public Git worktree.'
+    }
+
+    $commit = (& git -C $repoRoot rev-parse HEAD | Select-Object -First 1).Trim()
+    if ($LASTEXITCODE -ne 0 -or $commit -notmatch '^[0-9a-f]{40}$') {
+        throw "Public Git commit identity is not canonical: '$commit'."
+    }
+    $tree = (& git -C $repoRoot rev-parse 'HEAD^{tree}' | Select-Object -First 1).Trim()
+    if ($LASTEXITCODE -ne 0 -or $tree -notmatch '^[0-9a-f]{40}$') {
+        throw "Public Git tree identity is not canonical: '$tree'."
+    }
+    return @{
+        Commit = $commit
+        Tree = $tree
+    }
+}
+
+function Get-ImageConfigDigest {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Image,
+        [Parameter(Mandatory)]
+        [string]$Role
+    )
+
+    $digest = (& docker image inspect --format '{{.Id}}' $Image)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to inspect the locally built $Role image '$Image'."
+    }
+    $digest = ($digest | Select-Object -First 1).Trim()
+    if ($digest -notmatch '^sha256:[0-9a-f]{64}$') {
+        throw "$Role image identity is not a canonical SHA-256 digest: '$digest'."
+    }
+    return $digest
+}
+
+function Get-EnvironmentDigest {
+    param(
+        [Parameter(Mandatory)]
+        [string]$CanonicalAttestation
+    )
+
+    $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($CanonicalAttestation)
+    $digest = [System.Security.Cryptography.SHA256]::HashData($bytes)
+    return "sha256:$([Convert]::ToHexString($digest).ToLowerInvariant())"
+}
+
 function Get-WorkerAttestation {
     $workerImage = 'ficant/worker:dev'
-    $runtimeDigest = (& docker image inspect --format '{{.Id}}' $workerImage)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Unable to inspect the locally built Worker image '$workerImage'."
-    }
-    $runtimeDigest = ($runtimeDigest | Select-Object -First 1).Trim()
-    if ($runtimeDigest -notmatch '^sha256:[0-9a-f]{64}$') {
-        throw "Worker image identity is not a canonical SHA-256 digest: '$runtimeDigest'."
-    }
+    $runtimeDigest = Get-ImageConfigDigest -Image $workerImage -Role 'Worker'
 
     $sourceArguments = @(
         'run',
@@ -235,8 +281,9 @@ function Test-GrpcWebSession {
 
 if ($ListOnly) {
     Write-Output "Generate or reuse ignored local credentials: $environmentFile"
+    Write-Output 'Require a clean public Git worktree and derive exact HEAD commit/tree for both Rust builds and runtime settings.'
     Write-Output 'Build the complete pinned development topology with temporary fail-closed attestation placeholders.'
-    Write-Output 'Derive the Worker runtime image digest and embedded native source digest from ficant/worker:dev.'
+    Write-Output 'Derive Server/Worker image config digests and the embedded Worker native source digest from the built images.'
     Write-Output "docker compose --project-directory `"$composeDirectory`" --env-file `"$environmentFile`" --file `"$composeFile`" --profile dev --profile ui up --detach --no-build --remove-orphans --wait"
     Write-Output 'Verify the Platform Shell and a real GetCurrentSession gRPC-Web response through /ficant-api.'
     exit 0
@@ -268,8 +315,19 @@ if (-not (Test-Path -LiteralPath $environmentFile -PathType Leaf)) {
 $localEnvironment = Read-LocalEnvironment -LiteralPath $environmentFile
 Assert-LocalEnvironment -Values $localEnvironment
 
+$codeIdentity = Get-GitCodeIdentity
+$env:FICANT_CODE_COMMIT_SHA = $codeIdentity.Commit
+$env:FICANT_CODE_TREE_SHA = $codeIdentity.Tree
 $env:FICANT_WORKER_RUNTIME_IMAGE_DIGEST = "sha256:$('0' * 64)"
 $env:FICANT_WORKER_NATIVE_SOURCE_DIGEST = "sha256:$('0' * 64)"
+$env:FICANT_SERVER_RUNTIME_IMAGE_DIGEST = "sha256:$('0' * 64)"
+$serverEnvironment = @(
+    'ficant.server.environment.v1',
+    'arch=amd64',
+    'os=linux',
+    'profile=development'
+) -join "`n"
+$env:FICANT_SERVER_ENVIRONMENT_ATTESTATION = Get-EnvironmentDigest -CanonicalAttestation $serverEnvironment
 $buildArguments = @(
     'compose',
     '--project-directory', $composeDirectory,
@@ -284,6 +342,7 @@ Invoke-Native -FilePath 'docker' -ArgumentList $buildArguments
 $workerAttestation = Get-WorkerAttestation
 $env:FICANT_WORKER_RUNTIME_IMAGE_DIGEST = $workerAttestation.RuntimeDigest
 $env:FICANT_WORKER_NATIVE_SOURCE_DIGEST = $workerAttestation.SourceDigest
+$env:FICANT_SERVER_RUNTIME_IMAGE_DIGEST = Get-ImageConfigDigest -Image 'ficant/server:dev' -Role 'Server'
 
 $composeArguments = @(
     'compose',

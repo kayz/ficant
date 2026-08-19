@@ -4,6 +4,7 @@ pub mod data_health;
 pub mod data_snapshot;
 pub mod data_sources;
 pub mod factor_topology;
+pub mod formal_outputs;
 pub mod funding_rule;
 pub mod futures_delivery;
 pub mod futures_hedge;

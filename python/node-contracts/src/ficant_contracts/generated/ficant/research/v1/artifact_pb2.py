@@ -24,38 +24,39 @@ _sym_db = _symbol_database.Default()
 
 from ficant.core.v1 import common_pb2 as ficant_dot_core_dot_v1_dot_common__pb2
 from ficant.core.v1 import error_pb2 as ficant_dot_core_dot_v1_dot_error__pb2
+from ficant.core.v1 import evidence_pb2 as ficant_dot_core_dot_v1_dot_evidence__pb2
 from ficant.research.v1 import signal_pb2 as ficant_dot_research_dot_v1_dot_signal__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!ficant/research/v1/artifact.proto\x12\x12\x66icant.research.v1\x1a\x1b\x66icant/core/v1/common.proto\x1a\x1a\x66icant/core/v1/error.proto\x1a\x1f\x66icant/research/v1/signal.proto\"\xd4\x02\n\x08\x41rtifact\x12\x35\n\x0b\x61rtifact_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\nartifactId\x12.\n\x05owner\x18\x02 \x01(\x0b\x32\x18.ficant.core.v1.OwnerRefR\x05owner\x12\x34\n\x04kind\x18\x03 \x01(\x0e\x32 .ficant.research.v1.ArtifactKindR\x04kind\x12\x1d\n\nmedia_type\x18\x04 \x01(\tR\tmediaType\x12\x39\n\x0c\x63ontent_hash\x18\x05 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0b\x63ontentHash\x12\x1b\n\tblob_size\x18\x06 \x01(\x04R\x08\x62lobSize\x12\x34\n\x07lineage\x18\x07 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x07lineage\"K\n\x12GetArtifactRequest\x12\x35\n\x0b\x61rtifact_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\nartifactId\"\x90\x01\n\x13GetArtifactResponse\x12:\n\x08\x61rtifact\x18\x01 \x01(\x0b\x32\x1c.ficant.research.v1.ArtifactH\x00R\x08\x61rtifact\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result\"O\n\x13GetSignalSetRequest\x12\x38\n\rsignal_set_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0bsignalSetId\"\x95\x01\n\x14GetSignalSetResponse\x12>\n\nsignal_set\x18\x01 \x01(\x0b\x32\x1d.ficant.research.v1.SignalSetH\x00R\tsignalSet\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result\"u\n\x0bLineagePage\x12\x34\n\x07lineage\x18\x01 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x07lineage\x12\x30\n\x04page\x18\x02 \x01(\x0b\x32\x1c.ficant.core.v1.PageResponseR\x04page\"\x84\x01\n\x1aReadArtifactLineageRequest\x12\x35\n\x0b\x61rtifact_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\nartifactId\x12/\n\x04page\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.PageRequestR\x04page\"\xa2\x01\n\x1bReadArtifactLineageResponse\x12\x44\n\x0clineage_page\x18\x01 \x01(\x0b\x32\x1f.ficant.research.v1.LineagePageH\x00R\x0blineagePage\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result\"\x88\x01\n\x1bReadSignalSetLineageRequest\x12\x38\n\rsignal_set_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0bsignalSetId\x12/\n\x04page\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.PageRequestR\x04page\"\xa3\x01\n\x1cReadSignalSetLineageResponse\x12\x44\n\x0clineage_page\x18\x01 \x01(\x0b\x32\x1f.ficant.research.v1.LineagePageH\x00R\x0blineagePage\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result*\xc8\x01\n\x0c\x41rtifactKind\x12\x1d\n\x19\x41RTIFACT_KIND_UNSPECIFIED\x10\x00\x12\x19\n\x15\x41RTIFACT_KIND_GENERIC\x10\x01\x12\x1c\n\x18\x41RTIFACT_KIND_SIGNAL_SET\x10\x05\"\x04\x08\x02\x10\x04*\x1c\x41RTIFACT_KIND_CURVE_SNAPSHOT*\x1b\x41RTIFACT_KIND_DATA_SNAPSHOT*\x1f\x41RTIFACT_KIND_UNIVERSE_SNAPSHOT2\xc7\x03\n\x0f\x41rtifactService\x12^\n\x0bGetArtifact\x12&.ficant.research.v1.GetArtifactRequest\x1a\'.ficant.research.v1.GetArtifactResponse\x12\x61\n\x0cGetSignalSet\x12\'.ficant.research.v1.GetSignalSetRequest\x1a(.ficant.research.v1.GetSignalSetResponse\x12v\n\x13ReadArtifactLineage\x12..ficant.research.v1.ReadArtifactLineageRequest\x1a/.ficant.research.v1.ReadArtifactLineageResponse\x12y\n\x14ReadSignalSetLineage\x12/.ficant.research.v1.ReadSignalSetLineageRequest\x1a\x30.ficant.research.v1.ReadSignalSetLineageResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!ficant/research/v1/artifact.proto\x12\x12\x66icant.research.v1\x1a\x1b\x66icant/core/v1/common.proto\x1a\x1a\x66icant/core/v1/error.proto\x1a\x1d\x66icant/core/v1/evidence.proto\x1a\x1f\x66icant/research/v1/signal.proto\"\xa3\x03\n\x08\x41rtifact\x12\x35\n\x0b\x61rtifact_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\nartifactId\x12.\n\x05owner\x18\x02 \x01(\x0b\x32\x18.ficant.core.v1.OwnerRefR\x05owner\x12\x34\n\x04kind\x18\x03 \x01(\x0e\x32 .ficant.research.v1.ArtifactKindR\x04kind\x12\x1d\n\nmedia_type\x18\x04 \x01(\tR\tmediaType\x12\x39\n\x0c\x63ontent_hash\x18\x05 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0b\x63ontentHash\x12\x1b\n\tblob_size\x18\x06 \x01(\x04R\x08\x62lobSize\x12\x34\n\x07lineage\x18\x07 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x07lineage\x12M\n\x0f\x66ormal_evidence\x18\x08 \x01(\x0b\x32$.ficant.core.v1.FormalOutputEvidenceR\x0e\x66ormalEvidence\"K\n\x12GetArtifactRequest\x12\x35\n\x0b\x61rtifact_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\nartifactId\"\x90\x01\n\x13GetArtifactResponse\x12:\n\x08\x61rtifact\x18\x01 \x01(\x0b\x32\x1c.ficant.research.v1.ArtifactH\x00R\x08\x61rtifact\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result\"O\n\x13GetSignalSetRequest\x12\x38\n\rsignal_set_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0bsignalSetId\"\x95\x01\n\x14GetSignalSetResponse\x12>\n\nsignal_set\x18\x01 \x01(\x0b\x32\x1d.ficant.research.v1.SignalSetH\x00R\tsignalSet\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result\"u\n\x0bLineagePage\x12\x34\n\x07lineage\x18\x01 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x07lineage\x12\x30\n\x04page\x18\x02 \x01(\x0b\x32\x1c.ficant.core.v1.PageResponseR\x04page\"\x84\x01\n\x1aReadArtifactLineageRequest\x12\x35\n\x0b\x61rtifact_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\nartifactId\x12/\n\x04page\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.PageRequestR\x04page\"\xa2\x01\n\x1bReadArtifactLineageResponse\x12\x44\n\x0clineage_page\x18\x01 \x01(\x0b\x32\x1f.ficant.research.v1.LineagePageH\x00R\x0blineagePage\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result\"\x88\x01\n\x1bReadSignalSetLineageRequest\x12\x38\n\rsignal_set_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0bsignalSetId\x12/\n\x04page\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.PageRequestR\x04page\"\xa3\x01\n\x1cReadSignalSetLineageResponse\x12\x44\n\x0clineage_page\x18\x01 \x01(\x0b\x32\x1f.ficant.research.v1.LineagePageH\x00R\x0blineagePage\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result*\xc8\x01\n\x0c\x41rtifactKind\x12\x1d\n\x19\x41RTIFACT_KIND_UNSPECIFIED\x10\x00\x12\x19\n\x15\x41RTIFACT_KIND_GENERIC\x10\x01\x12\x1c\n\x18\x41RTIFACT_KIND_SIGNAL_SET\x10\x05\"\x04\x08\x02\x10\x04*\x1c\x41RTIFACT_KIND_CURVE_SNAPSHOT*\x1b\x41RTIFACT_KIND_DATA_SNAPSHOT*\x1f\x41RTIFACT_KIND_UNIVERSE_SNAPSHOT2\xc7\x03\n\x0f\x41rtifactService\x12^\n\x0bGetArtifact\x12&.ficant.research.v1.GetArtifactRequest\x1a\'.ficant.research.v1.GetArtifactResponse\x12\x61\n\x0cGetSignalSet\x12\'.ficant.research.v1.GetSignalSetRequest\x1a(.ficant.research.v1.GetSignalSetResponse\x12v\n\x13ReadArtifactLineage\x12..ficant.research.v1.ReadArtifactLineageRequest\x1a/.ficant.research.v1.ReadArtifactLineageResponse\x12y\n\x14ReadSignalSetLineage\x12/.ficant.research.v1.ReadSignalSetLineageRequest\x1a\x30.ficant.research.v1.ReadSignalSetLineageResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'ficant.research.v1.artifact_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_ARTIFACTKIND']._serialized_start=1672
-  _globals['_ARTIFACTKIND']._serialized_end=1872
-  _globals['_ARTIFACT']._serialized_start=148
-  _globals['_ARTIFACT']._serialized_end=488
-  _globals['_GETARTIFACTREQUEST']._serialized_start=490
-  _globals['_GETARTIFACTREQUEST']._serialized_end=565
-  _globals['_GETARTIFACTRESPONSE']._serialized_start=568
-  _globals['_GETARTIFACTRESPONSE']._serialized_end=712
-  _globals['_GETSIGNALSETREQUEST']._serialized_start=714
-  _globals['_GETSIGNALSETREQUEST']._serialized_end=793
-  _globals['_GETSIGNALSETRESPONSE']._serialized_start=796
-  _globals['_GETSIGNALSETRESPONSE']._serialized_end=945
-  _globals['_LINEAGEPAGE']._serialized_start=947
-  _globals['_LINEAGEPAGE']._serialized_end=1064
-  _globals['_READARTIFACTLINEAGEREQUEST']._serialized_start=1067
-  _globals['_READARTIFACTLINEAGEREQUEST']._serialized_end=1199
-  _globals['_READARTIFACTLINEAGERESPONSE']._serialized_start=1202
-  _globals['_READARTIFACTLINEAGERESPONSE']._serialized_end=1364
-  _globals['_READSIGNALSETLINEAGEREQUEST']._serialized_start=1367
-  _globals['_READSIGNALSETLINEAGEREQUEST']._serialized_end=1503
-  _globals['_READSIGNALSETLINEAGERESPONSE']._serialized_start=1506
-  _globals['_READSIGNALSETLINEAGERESPONSE']._serialized_end=1669
-  _globals['_ARTIFACTSERVICE']._serialized_start=1875
-  _globals['_ARTIFACTSERVICE']._serialized_end=2330
+  _globals['_ARTIFACTKIND']._serialized_start=1782
+  _globals['_ARTIFACTKIND']._serialized_end=1982
+  _globals['_ARTIFACT']._serialized_start=179
+  _globals['_ARTIFACT']._serialized_end=598
+  _globals['_GETARTIFACTREQUEST']._serialized_start=600
+  _globals['_GETARTIFACTREQUEST']._serialized_end=675
+  _globals['_GETARTIFACTRESPONSE']._serialized_start=678
+  _globals['_GETARTIFACTRESPONSE']._serialized_end=822
+  _globals['_GETSIGNALSETREQUEST']._serialized_start=824
+  _globals['_GETSIGNALSETREQUEST']._serialized_end=903
+  _globals['_GETSIGNALSETRESPONSE']._serialized_start=906
+  _globals['_GETSIGNALSETRESPONSE']._serialized_end=1055
+  _globals['_LINEAGEPAGE']._serialized_start=1057
+  _globals['_LINEAGEPAGE']._serialized_end=1174
+  _globals['_READARTIFACTLINEAGEREQUEST']._serialized_start=1177
+  _globals['_READARTIFACTLINEAGEREQUEST']._serialized_end=1309
+  _globals['_READARTIFACTLINEAGERESPONSE']._serialized_start=1312
+  _globals['_READARTIFACTLINEAGERESPONSE']._serialized_end=1474
+  _globals['_READSIGNALSETLINEAGEREQUEST']._serialized_start=1477
+  _globals['_READSIGNALSETLINEAGEREQUEST']._serialized_end=1613
+  _globals['_READSIGNALSETLINEAGERESPONSE']._serialized_start=1616
+  _globals['_READSIGNALSETLINEAGERESPONSE']._serialized_end=1779
+  _globals['_ARTIFACTSERVICE']._serialized_start=1985
+  _globals['_ARTIFACTSERVICE']._serialized_end=2440
 # @@protoc_insertion_point(module_scope)
