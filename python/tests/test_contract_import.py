@@ -95,6 +95,8 @@ from ficant.rates.v1.analytics_pb2 import (  # noqa: E402
 )
 from ficant.rates.v1.analytics_pb2_grpc import RatesAnalyticsServiceStub  # noqa: E402
 from ficant.research.v1.experiment_pb2 import ExperimentRun  # noqa: E402
+from ficant.research.v1 import artifact_pb2  # noqa: E402
+from ficant.research.v1.artifact_pb2_grpc import ArtifactServiceStub  # noqa: E402
 from ficant.research.v1.coverage_pb2 import (  # noqa: E402
     CoverageDeclaration,
     PriceSourceSummary,
@@ -314,6 +316,27 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert MarketDefinitionServiceStub.__name__ == "MarketDefinitionServiceStub"
     assert MarketFactServiceStub.__name__ == "MarketFactServiceStub"
     assert SnapshotServiceStub.__name__ == "SnapshotServiceStub"
+    assert ArtifactServiceStub.__name__ == "ArtifactServiceStub"
+    artifact = artifact_pb2.Artifact(kind=artifact_pb2.ARTIFACT_KIND_GENERIC)
+    artifact_response = artifact_pb2.GetArtifactResponse(artifact=artifact)
+    lineage_page = artifact_pb2.LineagePage()
+    lineage_response = artifact_pb2.ReadArtifactLineageResponse(
+        lineage_page=lineage_page
+    )
+    assert artifact_response.WhichOneof("result") == "artifact"
+    assert lineage_response.WhichOneof("result") == "lineage_page"
+    assert {
+        method.name
+        for method in artifact_pb2.DESCRIPTOR.services_by_name["ArtifactService"].methods
+    } == {
+        "GetArtifact",
+        "GetSignalSet",
+        "ReadArtifactLineage",
+        "ReadSignalSetLineage",
+    }
+    assert set(artifact_pb2.ArtifactKind.values()) == {0, 1, 5}
+    assert not hasattr(artifact_pb2, "PublishArtifactRequest")
+    assert not hasattr(artifact_pb2, "PublishSignalSetRequest")
     assert rule_pack.DESCRIPTOR.fields_by_name["content"].message_type.full_name == "google.protobuf.Any"
     assert cgb_pack.DESCRIPTOR.full_name == "ficant.market.v1.CgbFuturesDeliveryRulePack"
     assert cgb_product.HasField("product_code")

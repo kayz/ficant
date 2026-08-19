@@ -1,5 +1,6 @@
 //! Frozen platform transport boundary for the Phase 1 application shell.
 
+mod artifact;
 mod canonical_snapshot;
 mod core_error;
 mod curve_points;
@@ -20,6 +21,7 @@ mod session;
 mod snapshot;
 mod subject_registry;
 
+pub use artifact::ArtifactGrpcService;
 pub use canonical_snapshot::CanonicalSnapshotCodecAdapter;
 pub use core_error::CoreBusinessErrorMapper;
 pub use curve_points::CanonicalCurvePointSetDecoder;
@@ -30,13 +32,8 @@ pub use experiment::{ExperimentGrpcService, TrustedExperimentScope, TrustedNodeC
 pub use factor_registry::FactorRegistryGrpcService;
 pub use governance::FoundationChangeGrpcService;
 pub use grpc_web::{
-    GrpcWebServeError, GrpcWebServerConfig, PlatformGrpcService, serve_grpc_web,
-    serve_grpc_web_with_r6a_input_plane, serve_grpc_web_with_rates,
-    serve_grpc_web_with_rates_and_experiment,
-    serve_grpc_web_with_rates_and_experiment_and_registry,
-    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions,
-    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk,
-    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk_and_data_health,
+    GrpcWebServeError, GrpcWebServerConfig, PlatformGrpcService, ProductionGrpcServices,
+    ProductionRouteSet, build_production_routes, serve_grpc_web_routes, serve_production_routes,
 };
 pub use market_definition::MarketDefinitionGrpcService;
 pub use market_fact::MarketFactGrpcService;

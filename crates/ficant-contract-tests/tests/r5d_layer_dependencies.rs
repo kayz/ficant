@@ -113,8 +113,8 @@ fn cargo_metadata_matches_frozen_workspace_adjacency() {
     let expected = expected_workspace_adjacency();
     assert_eq!(
         expected.len(),
-        19,
-        "R5D freezes the workspace architecture at exactly 19 packages"
+        18,
+        "R6B freezes the workspace architecture at exactly 18 Cargo packages"
     );
     let mut actual = BTreeMap::new();
     let mut package_ids = BTreeSet::new();
@@ -408,7 +408,6 @@ fn expected_workspace_adjacency() -> BTreeMap<String, BTreeSet<String>> {
             "ficant-tax-pack",
             &["ficant-application", "ficant-contracts", "ficant-domain"],
         ),
-        ("ficant-web", &["ficant-bootstrap"]),
         (
             "ficant-worker",
             &[

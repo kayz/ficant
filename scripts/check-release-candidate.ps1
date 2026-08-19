@@ -16,7 +16,6 @@ $storageConfigDigest = [string]$storageLock.oci.config_digest
 $images = @(
     "$imagePrefix-server:sha-$candidateSha"
     "$imagePrefix-worker:sha-$candidateSha"
-    "$imagePrefix-web:sha-$candidateSha"
     "$imagePrefix-ui:sha-$candidateSha"
 )
 $bindingSteps = @(
@@ -54,13 +53,9 @@ $buildSteps = @(
         'build', '--pull=false', '--file', 'deploy/dev/RustService.Dockerfile',
         '--build-arg', 'BINARY=ficant-worker', '--tag', $images[1], '.'
     )
-    New-FicantCheckStep -Name 'Build release web image' -FilePath 'docker' -ArgumentList @(
-        'build', '--pull=false', '--file', 'deploy/dev/RustService.Dockerfile',
-        '--build-arg', 'BINARY=ficant-web', '--tag', $images[2], '.'
-    )
     New-FicantCheckStep -Name 'Build release UI image' -FilePath 'docker' -ArgumentList @(
         'build', '--pull=false', '--file', 'deploy/test/FicantUi.Dockerfile',
-        '--tag', $images[3], '.'
+        '--tag', $images[2], '.'
     )
     New-FicantCheckStep -Name 'Pull locked Ceph RGW storage runtime' -FilePath 'docker' -ArgumentList @(
         'pull', $storageImage
@@ -219,8 +214,7 @@ try {
         FICANT_S3_PORT = [string]($portBase + 1)
         FICANT_SERVER_PORT = [string]($portBase + 2)
         FICANT_WORKER_PORT = [string]($portBase + 3)
-        FICANT_WEB_PORT = [string]($portBase + 4)
-        FICANT_UI_PORT = [string]($portBase + 5)
+        FICANT_UI_PORT = [string]($portBase + 4)
     }
     $savedRuntimeEnvironment = @{}
     foreach ($entry in $runtimeEnvironment.GetEnumerator()) {
@@ -232,14 +226,12 @@ try {
         Invoke-ReleaseCompose -ArgumentList @('run', '--rm', 'migration')
         Invoke-ReleaseCompose -ArgumentList @(
             'up', '-d', '--remove-orphans', '--wait', '--wait-timeout', '180',
-            'ficant-server', 'ficant-worker', 'ficant-web', 'ficant-ui'
+            'ficant-server', 'ficant-worker', 'ficant-ui'
         )
 
         $worker = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$($portBase + 3)/worker-ready"
-        $web = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$($portBase + 4)/web-ready"
-        $ui = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$($portBase + 5)/ficant/"
-        if ($worker.Content.Trim() -ne 'ok' -or $web.Content.Trim() -ne 'ok' -or
-            $ui.Content -notlike '*<div id="root">*') {
+        $ui = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$($portBase + 4)/ficant/"
+        if ($worker.Content.Trim() -ne 'ok' -or $ui.Content -notlike '*<div id="root">*') {
             throw 'Release readiness or UI smoke failed.'
         }
         $requiredMigrations = @(

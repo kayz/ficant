@@ -5,7 +5,10 @@ use ficant_domain::{ContentAddressed, DomainErrorCode};
 
 use super::blob_store::VerifiedBlobRef;
 use super::fingerprint::{FingerprintBuilder, signal_bytes};
-use super::{AccessScope, ApplicationResult, IdempotencyKey, OperationFingerprint};
+use super::{
+    AccessScope, ApplicationResult, IdempotencyKey, IntegrityEventSink, OperationFingerprint,
+    SafeTraceContext,
+};
 use crate::map_domain_error;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -83,4 +86,22 @@ pub trait SignalRepository: Send + Sync {
         scope: &AccessScope,
         signal_set_id: Ulid,
     ) -> ApplicationResult<Option<SignalSet>>;
+
+    /// Reads immutable metadata with a safe context for repository-level integrity events.
+    ///
+    /// Production repositories should override this method when SQL/payload/lineage validation
+    /// happens below the application facade. The default preserves metadata-only fixture ports.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same classified read error as [`Self::get`].
+    async fn get_integrity_checked(
+        &self,
+        scope: &AccessScope,
+        signal_set_id: Ulid,
+        _trace: SafeTraceContext,
+        _sink: &dyn IntegrityEventSink,
+    ) -> ApplicationResult<Option<SignalSet>> {
+        self.get(scope, signal_set_id).await
+    }
 }

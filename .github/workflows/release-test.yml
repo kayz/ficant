@@ -103,8 +103,6 @@ jobs:
             binary: ficant-server
           - package: ficant-worker
             binary: ficant-worker
-          - package: ficant-web
-            binary: ficant-web
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -175,7 +173,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [ficant-server, ficant-worker, ficant-web, ficant-ui]
+        package: [ficant-server, ficant-worker, ficant-ui]
     steps:
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
@@ -250,7 +248,7 @@ jobs:
           VERSION: ${{ needs.authorize.outputs.version }}
         run: |
           set -euo pipefail
-          for package in ficant-server ficant-worker ficant-web ficant-ui; do
+          for package in ficant-server ficant-worker ficant-ui; do
             image="ghcr.io/${{ github.repository_owner }}/$package"
             docker buildx imagetools create \
               --tag "$image:$VERSION" \

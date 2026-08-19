@@ -14,10 +14,9 @@ EXPECTED_SERVICES = {
     "migration",
     "ficant-server",
     "ficant-worker",
-    "ficant-web",
     "ficant-ui",
 }
-APP_SERVICES = {"ficant-server", "ficant-worker", "ficant-web", "ficant-ui"}
+APP_SERVICES = {"ficant-server", "ficant-worker", "ficant-ui"}
 CEPH_SERVICE = "ceph-rgw"
 POSTGRES_IMAGE = (
     "postgres@sha256:"

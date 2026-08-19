@@ -1,5 +1,11 @@
 # 交付发布说明
 
+## R6B Artifact 与生产拓扑候选（2026-08-19）
+
+- 公共 ArtifactService 收敛为 verified Artifact/SignalSet metadata 与有序 lineage 查询；发布继续只由 Rates、ResearchGraph 和 Worker 的 server-owned verified publish 路径完成，不保留 caller-supplied metadata 发布入口。
+- `ficant-web` 健康检查孤儿进程已从 Cargo、Compose、镜像、扫描、部署和健康/冒烟矩阵删除；`ficant-ui` 是唯一静态 Platform Shell，并继续把 `/ficant-api/` 直接反代 `ficant-server`。当前应用镜像集合为 Server、Worker、UI，Ceph RGW 仍由独立锁定运行时管理。
+- 下方旧版本章节保留其发生时的历史拓扑事实，不代表 R6B 之后的当前包或镜像集合；R6B 最终测试与残余风险以当前迭代 brief 为准。
+
 ## Phase 3B 不可变 Parquet Snapshot 候选（2026-07-20）
 
 - 新增确定性 Canonical Quote Parquet codec 与 `ficant.data.snapshot-manifest.v1` canonical JSON；固定 Arrow/Parquet `59.1.0`、单 row group、无压缩、无 dictionary、writer/data page v2，并把 schema、hash/size/rows、点时窗口、DataSource/映射/Calendar/Unit/Instrument 血缘、质量与 writer 参数完整绑定。

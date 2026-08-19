@@ -4,9 +4,6 @@ use crate::{ContentAddressed, DomainErrorCode, DomainResult, Lineaged};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArtifactKind {
     Generic,
-    CurveSnapshot,
-    DataSnapshot,
-    UniverseSnapshot,
     SignalSet,
 }
 

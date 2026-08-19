@@ -41,18 +41,6 @@ pub struct Artifact {
     #[prost(message, repeated, tag="7")]
     pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishArtifactRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub artifact: ::core::option::Option<Artifact>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishArtifactResponse {
-    #[prost(message, optional, tag="1")]
-    pub artifact: ::core::option::Option<Artifact>,
-}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetArtifactRequest {
     #[prost(message, optional, tag="1")]
@@ -60,20 +48,18 @@ pub struct GetArtifactRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetArtifactResponse {
-    #[prost(message, optional, tag="1")]
-    pub artifact: ::core::option::Option<Artifact>,
+    #[prost(oneof="get_artifact_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_artifact_response::Result>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishSignalSetRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub signal_set: ::core::option::Option<SignalSet>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishSignalSetResponse {
-    #[prost(message, optional, tag="1")]
-    pub signal_set: ::core::option::Option<SignalSet>,
+/// Nested message and enum types in `GetArtifactResponse`.
+pub mod get_artifact_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Artifact(super::Artifact),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetSignalSetRequest {
@@ -82,8 +68,25 @@ pub struct GetSignalSetRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSignalSetResponse {
-    #[prost(message, optional, tag="1")]
-    pub signal_set: ::core::option::Option<SignalSet>,
+    #[prost(oneof="get_signal_set_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_signal_set_response::Result>,
+}
+/// Nested message and enum types in `GetSignalSetResponse`.
+pub mod get_signal_set_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        SignalSet(super::SignalSet),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LineagePage {
+    #[prost(message, repeated, tag="1")]
+    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="2")]
+    pub page: ::core::option::Option<super::super::core::v1::PageResponse>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ReadArtifactLineageRequest {
@@ -94,10 +97,18 @@ pub struct ReadArtifactLineageRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadArtifactLineageResponse {
-    #[prost(message, repeated, tag="1")]
-    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="2")]
-    pub page: ::core::option::Option<super::super::core::v1::PageResponse>,
+    #[prost(oneof="read_artifact_lineage_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<read_artifact_lineage_response::Result>,
+}
+/// Nested message and enum types in `ReadArtifactLineageResponse`.
+pub mod read_artifact_lineage_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        LineagePage(super::LineagePage),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ReadSignalSetLineageRequest {
@@ -108,19 +119,24 @@ pub struct ReadSignalSetLineageRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadSignalSetLineageResponse {
-    #[prost(message, repeated, tag="1")]
-    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="2")]
-    pub page: ::core::option::Option<super::super::core::v1::PageResponse>,
+    #[prost(oneof="read_signal_set_lineage_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<read_signal_set_lineage_response::Result>,
+}
+/// Nested message and enum types in `ReadSignalSetLineageResponse`.
+pub mod read_signal_set_lineage_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        LineagePage(super::LineagePage),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum ArtifactKind {
     Unspecified = 0,
     Generic = 1,
-    CurveSnapshot = 2,
-    DataSnapshot = 3,
-    UniverseSnapshot = 4,
     SignalSet = 5,
 }
 impl ArtifactKind {
@@ -132,9 +148,6 @@ impl ArtifactKind {
         match self {
             Self::Unspecified => "ARTIFACT_KIND_UNSPECIFIED",
             Self::Generic => "ARTIFACT_KIND_GENERIC",
-            Self::CurveSnapshot => "ARTIFACT_KIND_CURVE_SNAPSHOT",
-            Self::DataSnapshot => "ARTIFACT_KIND_DATA_SNAPSHOT",
-            Self::UniverseSnapshot => "ARTIFACT_KIND_UNIVERSE_SNAPSHOT",
             Self::SignalSet => "ARTIFACT_KIND_SIGNAL_SET",
         }
     }
@@ -143,9 +156,6 @@ impl ArtifactKind {
         match value {
             "ARTIFACT_KIND_UNSPECIFIED" => Some(Self::Unspecified),
             "ARTIFACT_KIND_GENERIC" => Some(Self::Generic),
-            "ARTIFACT_KIND_CURVE_SNAPSHOT" => Some(Self::CurveSnapshot),
-            "ARTIFACT_KIND_DATA_SNAPSHOT" => Some(Self::DataSnapshot),
-            "ARTIFACT_KIND_UNIVERSE_SNAPSHOT" => Some(Self::UniverseSnapshot),
             "ARTIFACT_KIND_SIGNAL_SET" => Some(Self::SignalSet),
             _ => None,
         }

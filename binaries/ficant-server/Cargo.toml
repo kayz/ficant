@@ -25,6 +25,9 @@ tokio = { workspace = true }
 [dev-dependencies]
 ficant-contracts = { path = "../../crates/ficant-contracts" }
 ficant-domain = { path = "../../crates/ficant-domain" }
+object_store = { workspace = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
 tonic = { workspace = true }
 
 [lints]

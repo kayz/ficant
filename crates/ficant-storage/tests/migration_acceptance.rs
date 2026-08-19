@@ -39,7 +39,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
 
-    let expected_migration_versions = (1_i64..=23).collect::<Vec<_>>();
+    let expected_migration_versions = (1_i64..=24).collect::<Vec<_>>();
     let applied_before_repeat: Vec<(i64, bool)> =
         sqlx::query_as("SELECT version, success FROM public._sqlx_migrations ORDER BY version")
             .fetch_all(&pool)
@@ -111,6 +111,14 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
             .count(),
         1,
         "0023 must be recorded exactly once after its successful application"
+    );
+    assert_eq!(
+        applied_before_repeat
+            .iter()
+            .filter(|(version, success)| *version == 24 && *success)
+            .count(),
+        1,
+        "0024 must be recorded exactly once after its successful application"
     );
 
     let rows = sqlx::query(
@@ -201,6 +209,20 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     .await
     .expect("independent artifact identity column must be observable");
     assert!(artifact_column);
+    let artifact_kind_constraint: String = sqlx::query_scalar(
+        "SELECT pg_get_constraintdef(oid)
+         FROM pg_constraint
+         WHERE conrelid = 'research.artifacts'::regclass
+           AND conname = 'artifacts_kind_check'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("R6B Artifact kind constraint must be observable");
+    assert!(artifact_kind_constraint.contains("'GENERIC'::text"));
+    assert!(artifact_kind_constraint.contains("'SIGNAL_SET'::text"));
+    assert!(!artifact_kind_constraint.contains("'CURVE_SNAPSHOT'::text"));
+    assert!(!artifact_kind_constraint.contains("'DATA_SNAPSHOT'::text"));
+    assert!(!artifact_kind_constraint.contains("'UNIVERSE_SNAPSHOT'::text"));
     let issuance_columns: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)
          FROM information_schema.columns
@@ -845,6 +867,94 @@ async fn r6a_refuses_to_invent_owner_for_legacy_subject_rows() {
             .expect("migration history must remain inspectable");
     assert_eq!(recorded, 0);
     std::fs::remove_dir_all(fixture).expect("Subject fixture must be removed");
+}
+
+#[tokio::test]
+async fn r6b_refuses_to_reclassify_legacy_artifact_kinds() {
+    let _guard = migration_test_lock().lock().await;
+    let pool = support::postgres_pool().await;
+    support::reset_postgres(&pool).await;
+    let source =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../migrations/postgresql");
+    let fixture = std::env::temp_dir().join(format!(
+        "ficant-legacy-artifact-0024-migration-{}",
+        std::process::id()
+    ));
+    if fixture.exists() {
+        std::fs::remove_dir_all(&fixture).expect("stale Artifact fixture must be removable");
+    }
+    std::fs::create_dir(&fixture).expect("Artifact fixture directory must be creatable");
+    for version in 1..=23 {
+        let prefix = format!("{version:04}_");
+        let migration = std::fs::read_dir(&source)
+            .expect("migration source must be readable")
+            .map(Result::unwrap)
+            .find(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+            .expect("every pre-0024 migration must exist");
+        std::fs::copy(migration.path(), fixture.join(migration.file_name()))
+            .expect("pre-0024 migration must copy without mutation");
+    }
+    sqlx::migrate::Migrator::new(fixture.clone())
+        .await
+        .expect("pre-R6B Artifact fixture must load")
+        .run(&pool)
+        .await
+        .expect("0001..0023 migrations must apply");
+    sqlx::raw_sql(
+        "INSERT INTO storage.blobs
+             (tenant_id, content_hash, object_key, blob_size)
+         VALUES
+             ('01ARZ3NDEKTSV4RRFFQ69G5F01', repeat('aa', 32),
+              'immutable/' || repeat('aa', 32), 1);
+         INSERT INTO research.artifacts
+             (tenant_id, artifact_id, owner_id, kind, media_type, content_hash, blob_size,
+              idempotency_key, fingerprint, payload)
+         VALUES
+             ('01ARZ3NDEKTSV4RRFFQ69G5F01', '01ARZ3NDEKTSV4RRFFQ69G5H05',
+              '01ARZ3NDEKTSV4RRFFQ69G5F02', 'CURVE_SNAPSHOT', 'application/legacy',
+              repeat('aa', 32), 1, 'legacy-r6b-artifact',
+              decode(repeat('11', 32), 'hex'), decode('01', 'hex'));",
+    )
+    .execute(&pool)
+    .await
+    .expect("one real pre-R6B orphan Artifact kind must be seedable");
+    std::fs::copy(
+        source.join("0024_r6b_artifact_topology.sql"),
+        fixture.join("0024_r6b_artifact_topology.sql"),
+    )
+    .expect("0024 migration must copy without mutation");
+    let error = sqlx::migrate::Migrator::new(fixture.clone())
+        .await
+        .expect("R6B Artifact guard fixture must load")
+        .run(&pool)
+        .await
+        .expect_err("legacy orphan Artifact kinds must block R6B");
+    assert!(
+        error
+            .to_string()
+            .contains("unsupported legacy Artifact kind"),
+        "the failure must require an explicit authority migration: {error}",
+    );
+    let preserved: (i64, i64) = sqlx::query_as(
+        "SELECT
+             (SELECT COUNT(*) FROM research.artifacts WHERE kind='CURVE_SNAPSHOT'),
+             (SELECT COUNT(*) FROM public._sqlx_migrations WHERE version=24)",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("failed R6B migration state must remain queryable");
+    assert_eq!(preserved, (1, 0));
+    let constraint: String = sqlx::query_scalar(
+        "SELECT pg_get_constraintdef(oid)
+         FROM pg_constraint
+         WHERE conrelid='research.artifacts'::regclass
+           AND conname='artifacts_kind_check'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("legacy Artifact kind constraint must remain intact");
+    assert!(constraint.contains("'CURVE_SNAPSHOT'::text"));
+    std::fs::remove_dir_all(fixture).expect("Artifact fixture must be removed");
 }
 
 #[tokio::test]

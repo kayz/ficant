@@ -664,9 +664,6 @@ const fn verification_status_code(value: VerificationStatus) -> u8 {
 const fn artifact_kind_code(value: ArtifactKind) -> u8 {
     match value {
         ArtifactKind::Generic => 1,
-        ArtifactKind::CurveSnapshot => 2,
-        ArtifactKind::DataSnapshot => 3,
-        ArtifactKind::UniverseSnapshot => 4,
         ArtifactKind::SignalSet => 5,
     }
 }

@@ -12,7 +12,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 
-RUST_SERVICES = {"ficant-server", "ficant-worker", "ficant-web"}
+RUST_SERVICES = {"ficant-server", "ficant-worker"}
 PERSISTENCE_SERVICES = {"postgres", "ceph-rgw"}
 INIT_SERVICES = {"migration"}
 EXPECTED_SERVICES = RUST_SERVICES | PERSISTENCE_SERVICES | INIT_SERVICES
@@ -35,11 +35,6 @@ EXPECTED_DEPENDENCIES = {
         "ceph-rgw": "service_healthy",
     },
     "ficant-worker": {
-        "migration": "service_completed_successfully",
-        "ceph-rgw": "service_healthy",
-        "ficant-server": "service_healthy",
-    },
-    "ficant-web": {
         "migration": "service_completed_successfully",
         "ceph-rgw": "service_healthy",
         "ficant-server": "service_healthy",
@@ -386,7 +381,7 @@ def validate_resolved(document: dict[str, Any], project: str) -> list[str]:
 
 def validate_runtime(document: list[dict[str, Any]], project: str) -> list[str]:
     failures: list[str] = []
-    record(len(document) == len(EXPECTED_SERVICES), "runtime inspection must contain exactly six containers", failures)
+    record(len(document) == len(EXPECTED_SERVICES), "runtime inspection must contain exactly five containers", failures)
     inspected_services: set[str] = set()
 
     for container in document:

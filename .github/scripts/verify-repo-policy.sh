@@ -279,7 +279,6 @@ baseline_paths=(
   binaries/ficant-bootstrap/Cargo.toml binaries/ficant-bootstrap/src/lib.rs
   binaries/ficant-server/Cargo.toml binaries/ficant-server/src/main.rs
   binaries/ficant-worker/Cargo.toml binaries/ficant-worker/src/main.rs
-  binaries/ficant-web/Cargo.toml binaries/ficant-web/src/main.rs
   deploy/dev/docker-compose.yml deploy/dev/Ceph.Dockerfile deploy/dev/ceph-entrypoint.sh
   deploy/dev/config/ficant.toml deploy/dev/toolchain.lock.toml
   .github/workflows/ci.yml .github/scripts/verify-repo-policy.sh

@@ -100,15 +100,15 @@ rollback_current() {
     echo "Deployment failed; restoring $current." >&2
     export FICANT_DEPLOY_SHA=$current
     verify_storage_runtime
-    "${compose[@]}" pull ficant-server ficant-worker ficant-web ficant-ui
+    "${compose[@]}" pull ficant-server ficant-worker ficant-ui
     configure_execution_identity "$current" true
-    "${compose[@]}" up -d --remove-orphans --wait --wait-timeout 180 postgres ceph-rgw ficant-server ficant-worker ficant-web ficant-ui
+    "${compose[@]}" up -d --remove-orphans --wait --wait-timeout 180 postgres ceph-rgw ficant-server ficant-worker ficant-ui
     FICANT_DEPLOY_SHA=$current "$root/bin/healthcheck.sh"
     FICANT_DEPLOY_SHA=$current "$root/bin/smoke-test.sh"
     record failed true
   else
     echo 'First deployment failed; stopping application containers.' >&2
-    "${compose[@]}" stop ficant-server ficant-worker ficant-web ficant-ui || true
+    "${compose[@]}" stop ficant-server ficant-worker ficant-ui || true
     record failed false
   fi
 }
@@ -116,11 +116,11 @@ rollback_current() {
 trap 'status=$?; if [[ $status -ne 0 ]]; then rollback_current || true; fi; exit $status' ERR
 
 verify_storage_runtime
-"${compose[@]}" pull postgres ficant-server ficant-worker ficant-web ficant-ui
+"${compose[@]}" pull postgres ficant-server ficant-worker ficant-ui
 configure_execution_identity "$sha"
 "${compose[@]}" up -d --wait --wait-timeout 180 postgres ceph-rgw
 "${compose[@]}" run --rm migration
-"${compose[@]}" up -d --remove-orphans --wait --wait-timeout 180 ficant-server ficant-worker ficant-web ficant-ui
+"${compose[@]}" up -d --remove-orphans --wait --wait-timeout 180 ficant-server ficant-worker ficant-ui
 FICANT_DEPLOY_SHA=$sha "$root/bin/healthcheck.sh"
 FICANT_DEPLOY_SHA=$sha "$root/bin/smoke-test.sh"
 

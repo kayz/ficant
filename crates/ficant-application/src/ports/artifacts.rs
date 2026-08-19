@@ -5,8 +5,13 @@ use ficant_domain::{ContentAddressed, DomainErrorCode};
 
 use super::blob_store::VerifiedBlobRef;
 use super::fingerprint::{FingerprintBuilder, artifact_bytes};
-use super::{AccessScope, ApplicationResult, IdempotencyKey, OperationFingerprint};
+use super::{
+    AccessScope, ApplicationResult, IdempotencyKey, IntegrityEventSink, OperationFingerprint,
+    SafeTraceContext,
+};
 use crate::map_domain_error;
+
+pub const ARTIFACT_READ_SCOPE: &str = "artifacts:read";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PublishArtifact {
@@ -86,4 +91,22 @@ pub trait ArtifactRepository: Send + Sync {
         scope: &AccessScope,
         artifact_id: Ulid,
     ) -> ApplicationResult<Option<Artifact>>;
+
+    /// Reads immutable metadata with a safe context for repository-level integrity events.
+    ///
+    /// Production repositories should override this method when SQL/payload/lineage validation
+    /// happens below the application facade. The default preserves metadata-only fixture ports.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same classified read error as [`Self::get_metadata`].
+    async fn get_integrity_checked_metadata(
+        &self,
+        scope: &AccessScope,
+        artifact_id: Ulid,
+        _trace: SafeTraceContext,
+        _sink: &dyn IntegrityEventSink,
+    ) -> ApplicationResult<Option<Artifact>> {
+        self.get_metadata(scope, artifact_id).await
+    }
 }

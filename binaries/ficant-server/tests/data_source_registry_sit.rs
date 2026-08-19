@@ -2,18 +2,12 @@ use std::collections::BTreeMap;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::time::Duration;
 
-use ficant_api::{
-    GrpcWebServerConfig,
-    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk,
-};
+use ficant_api::{GrpcWebServerConfig, build_production_routes, serve_production_routes};
 use ficant_contracts::ficant::market::v1::{
     GetDataSourceRequest, data_source_registry_service_client::DataSourceRegistryServiceClient,
     get_data_source_response,
 };
-use ficant_server::{
-    ServerSettings,
-    build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk,
-};
+use ficant_server::{ServerSettings, build_production_grpc_services};
 use tonic::Request;
 
 const KEY: &str = "3031323334353637383961626364656630313233343536373839616263646566";
@@ -22,27 +16,15 @@ const KEY: &str = "3031323334353637383961626364656630313233343536373839616263646
 async fn production_composition_exposes_the_real_data_source_registry() {
     let address = free_address();
     let settings = ServerSettings::try_from_values(&values(address)).unwrap();
-    let (platform, rates, experiment, registry, positions, factors, portfolio_risk, data_sources) =
-        build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk(
-            &settings,
-        )
-        .unwrap();
-    let server = tokio::spawn(
-        serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk(
-            GrpcWebServerConfig {
-                bind: address,
-                allowed_origins: vec!["http://127.0.0.1:4174".to_owned()],
-            },
-            platform,
-            rates,
-            experiment,
-            registry,
-            positions,
-            factors,
-            portfolio_risk,
-            data_sources,
-        ),
-    );
+    let services = build_production_grpc_services(&settings).unwrap();
+    let routes = build_production_routes(services).unwrap();
+    let server = tokio::spawn(serve_production_routes(
+        GrpcWebServerConfig {
+            bind: address,
+            allowed_origins: vec!["http://127.0.0.1:4174".to_owned()],
+        },
+        routes,
+    ));
     wait_until_listening(address).await;
 
     let mut client = DataSourceRegistryServiceClient::connect(format!("http://{address}"))

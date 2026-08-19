@@ -182,17 +182,6 @@ services:
       ficant-server:
         condition: service_healthy
 
-  ficant-web:
-    <<: *app-service
-    image: ${FICANT_IMAGE_PREFIX:?FICANT_IMAGE_PREFIX is required}-web:sha-${FICANT_DEPLOY_SHA:?FICANT_DEPLOY_SHA is required}
-    ports:
-      - 127.0.0.1:${FICANT_WEB_PORT:-28082}:8080
-    depends_on:
-      migration:
-        condition: service_completed_successfully
-      ficant-server:
-        condition: service_healthy
-
   ficant-ui:
     <<: *secure-service
     image: ${FICANT_IMAGE_PREFIX:?FICANT_IMAGE_PREFIX is required}-ui:sha-${FICANT_DEPLOY_SHA:?FICANT_DEPLOY_SHA is required}

@@ -13,6 +13,7 @@ $steps = @(
     New-FicantCheckStep -Name 'Rust formatting' -FilePath 'cargo' -ArgumentList @('fmt', '--all', '--', '--check')
     New-FicantCheckStep -Name 'Rust workspace check' -FilePath 'cargo' -ArgumentList @('check', '--offline', '--workspace', '--all-targets', '--locked')
     New-FicantCheckStep -Name 'R5D layer dependency gate' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-contract-tests', '--test', 'r5d_layer_dependencies')
+    New-FicantCheckStep -Name 'R6B descriptor-to-production topology gate' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-server', '--test', 'service_topology')
     New-FicantCheckStep -Name 'Rust non-environment tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--workspace', '--locked', '--exclude', 'ficant-acceptance', '--exclude', 'ficant-data', '--exclude', 'ficant-storage', '--exclude', 'ficant-contract-tests')
     New-FicantCheckStep -Name 'Rust storage library tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--lib')
     New-FicantCheckStep -Name 'Phase 3A canonical data tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-data', '--test', 'canonical_ingestion')

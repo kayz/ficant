@@ -86,7 +86,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 .\scripts\dev-up.ps1
 ```
 
-首次启动会生成 ignored 的 `deploy/dev/.env.local`；后续启动复用它。该文件包含一次性本地 PostgreSQL、S3、Platform、cursor 和 bootstrap 身份凭据，不进入 Git，也不应复用共享、测试发布或生产凭据。脚本先用正式 Dockerfile 构建完整拓扑，从实际 `ficant/worker:dev` 镜像取得 OCI image ID 和内嵌 native source digest，再以这些受信值启动服务；最后经 UI `/ficant-api` 调用真实 `GetCurrentSession` gRPC-Web，必须同时取得已认证 Session 和成功 trailer。可选端口仍可在启动前通过 `FICANT_POSTGRES_PORT`、`FICANT_S3_PORT`、`FICANT_SERVER_PORT`、`FICANT_WORKER_PORT`、`FICANT_WEB_PORT` 与 `FICANT_UI_PORT` 覆盖。
+首次启动会生成 ignored 的 `deploy/dev/.env.local`；后续启动复用它。该文件包含一次性本地 PostgreSQL、S3、Platform、cursor 和 bootstrap 身份凭据，不进入 Git，也不应复用共享、测试发布或生产凭据。脚本先用正式 Dockerfile 构建完整拓扑，从实际 `ficant/worker:dev` 镜像取得 OCI image ID 和内嵌 native source digest，再以这些受信值启动服务；最后经 UI `/ficant-api` 调用真实 `GetCurrentSession` gRPC-Web，必须同时取得已认证 Session 和成功 trailer。可选端口仍可在启动前通过 `FICANT_POSTGRES_PORT`、`FICANT_S3_PORT`、`FICANT_SERVER_PORT`、`FICANT_WORKER_PORT` 与 `FICANT_UI_PORT` 覆盖。
 
 停止容器和网络但保留 `postgres-data`、`ceph-data` 命名卷：
 

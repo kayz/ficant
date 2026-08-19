@@ -215,7 +215,12 @@ impl<'a> VerifiedReadFacade<'a> {
     ) -> ApplicationResult<VerifiedArtifactRead> {
         let artifact = self
             .artifacts
-            .get_metadata(scope, artifact_id.clone())
+            .get_integrity_checked_metadata(
+                scope,
+                artifact_id.clone(),
+                trace.clone(),
+                self.integrity_events,
+            )
             .await?
             .ok_or_else(not_found)?;
         scope.authorize(artifact.owner())?;
@@ -253,7 +258,12 @@ impl<'a> VerifiedReadFacade<'a> {
     ) -> ApplicationResult<VerifiedSignalRead> {
         let signal = self
             .signals
-            .get(scope, signal_id.clone())
+            .get_integrity_checked(
+                scope,
+                signal_id.clone(),
+                trace.clone(),
+                self.integrity_events,
+            )
             .await?
             .ok_or_else(not_found)?;
         scope.authorize(signal.owner())?;
@@ -262,7 +272,12 @@ impl<'a> VerifiedReadFacade<'a> {
         }
         let artifact = self
             .artifacts
-            .get_metadata(scope, signal.artifact().object_id().clone())
+            .get_integrity_checked_metadata(
+                scope,
+                signal.artifact().object_id().clone(),
+                trace.clone(),
+                self.integrity_events,
+            )
             .await?
             .ok_or_else(not_found)?;
         validate_signal_artifact(&signal, &artifact)?;
@@ -328,46 +343,22 @@ fn lineage_sets_match_exactly(signal: &SignalSet, artifact: &Artifact) -> bool {
     {
         return false;
     }
-    let mut expected = signal
-        .lineage()
-        .iter()
-        .filter(|reference| *reference != signal.artifact())
-        .collect::<Vec<_>>();
-    let mut actual = artifact.lineage().iter().collect::<Vec<_>>();
+    let expected = signal.lineage().get(1..).unwrap_or_default();
+    let actual = artifact.lineage();
     if expected.len() != actual.len() {
         return false;
     }
-    expected.sort_by(|left, right| compare_lineage(left, right));
-    actual.sort_by(|left, right| compare_lineage(left, right));
-    if expected.windows(2).any(|pair| pair[0] == pair[1])
-        || actual.windows(2).any(|pair| pair[0] == pair[1])
-    {
+    if has_duplicate_lineage(expected) || has_duplicate_lineage(actual) {
         return false;
     }
     expected == actual
 }
 
-fn compare_lineage(
-    left: &ficant_domain::primitives::LineageRef,
-    right: &ficant_domain::primitives::LineageRef,
-) -> std::cmp::Ordering {
-    left.object_id()
-        .as_str()
-        .cmp(right.object_id().as_str())
-        .then_with(|| {
-            left.version()
-                .map(ficant_domain::primitives::Version::get)
-                .cmp(&right.version().map(ficant_domain::primitives::Version::get))
-        })
-        .then_with(|| {
-            left.content_hash()
-                .map(ficant_domain::primitives::ContentHash::as_bytes)
-                .cmp(
-                    &right
-                        .content_hash()
-                        .map(ficant_domain::primitives::ContentHash::as_bytes),
-                )
-        })
+fn has_duplicate_lineage(lineage: &[ficant_domain::primitives::LineageRef]) -> bool {
+    lineage
+        .iter()
+        .enumerate()
+        .any(|(index, reference)| lineage[..index].contains(reference))
 }
 
 fn validate_snapshot_identity(

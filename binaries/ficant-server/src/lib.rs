@@ -1,12 +1,12 @@
 use ficant_api::{
-    CanonicalCurvePointSetDecoder, CanonicalSnapshotCodecAdapter, DataHealthGrpcService,
-    DataSourceRegistryGrpcService, ExperimentGrpcService, FactorRegistryGrpcService,
-    FoundationChangeGrpcService, GrpcWebServeError, GrpcWebServerConfig,
+    ArtifactGrpcService, CanonicalCurvePointSetDecoder, CanonicalSnapshotCodecAdapter,
+    DataHealthGrpcService, DataSourceRegistryGrpcService, ExperimentGrpcService,
+    FactorRegistryGrpcService, FoundationChangeGrpcService, GrpcWebServeError, GrpcWebServerConfig,
     MarketDefinitionGrpcService, MarketFactGrpcService, PlatformApplication, PlatformGrpcService,
-    PlatformPort, PortfolioRiskGrpcService, PositionSnapshotGrpcService, RatesGrpcService,
-    SessionPolicy, SnapshotGrpcService, SubjectRegistryGrpcService, SystemClock,
-    TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
-    serve_grpc_web_with_r6a_input_plane,
+    PlatformPort, PortfolioRiskGrpcService, PositionSnapshotGrpcService, ProductionGrpcServices,
+    RatesGrpcService, SessionPolicy, SnapshotGrpcService, SubjectRegistryGrpcService, SystemClock,
+    TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog, build_production_routes,
+    serve_production_routes,
 };
 use ficant_application::ports::{
     AccessScope, AeadCursorCodec, ArtifactRepository, BlobStore, CursorKey,
@@ -14,8 +14,8 @@ use ficant_application::ports::{
     DataSourceAuthorizationRepository, DataSourceRepository, DefinitionRepository,
     ExperimentRepository, FactorTopologyRepository, FoundationChangeRepository, IntegrityEventSink,
     MarketFactRepository, Phase4ExecutionRepository, PositionSnapshotRepository,
-    RunJournalRepository, SnapshotRepository, SnapshotVerifiedReadMetadataRepository,
-    SubjectRepository, VerifiedBlobReader,
+    RunJournalRepository, SignalRepository, SnapshotRepository,
+    SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobReader,
 };
 use ficant_application::{ApplicationError, map_runtime_error};
 use ficant_cgb_futures_pack::CgbFuturesDeliveryRulePackParser;
@@ -533,32 +533,15 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
     ))
 }
 
-/// Composes the complete R6A production service set over one identity and persistence boundary.
+/// Composes every public production service over one identity and persistence boundary.
 ///
 /// # Errors
 ///
 /// Returns a redacted composition error when trusted configuration or adapters cannot be built.
-#[allow(clippy::type_complexity, clippy::too_many_lines)]
-pub fn build_grpc_services_with_r6a_input_plane(
+#[allow(clippy::too_many_lines)]
+pub fn build_production_grpc_services(
     settings: &ServerSettings,
-) -> Result<
-    (
-        PlatformGrpcService,
-        RatesGrpcService,
-        ExperimentGrpcService,
-        SubjectRegistryGrpcService,
-        PositionSnapshotGrpcService,
-        FactorRegistryGrpcService,
-        PortfolioRiskGrpcService,
-        DataSourceRegistryGrpcService,
-        DataHealthGrpcService,
-        MarketDefinitionGrpcService,
-        MarketFactGrpcService,
-        SnapshotGrpcService,
-        FoundationChangeGrpcService,
-    ),
-    ServerError,
-> {
+) -> Result<ProductionGrpcServices, ServerError> {
     let application = build_platform_application(settings)?;
     let platform =
         PlatformGrpcService::new(Arc::clone(&application), &settings.trace_key).map_err(config)?;
@@ -597,6 +580,7 @@ pub fn build_grpc_services_with_r6a_input_plane(
     let market_facts: Arc<dyn MarketFactRepository> = repository.clone();
     let curve_repository: Arc<dyn CurveSnapshotMetadataRepository> = repository.clone();
     let artifacts: Arc<dyn ArtifactRepository> = repository.clone();
+    let signals: Arc<dyn SignalRepository> = repository.clone();
     let definitions: Arc<dyn DefinitionRepository> = repository.clone();
     let subjects: Arc<dyn SubjectRepository> = repository.clone();
     let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository.clone();
@@ -622,7 +606,7 @@ pub fn build_grpc_services_with_r6a_input_plane(
         snapshot_repository.clone(),
         Arc::clone(&cursor),
         phase4,
-        artifacts,
+        artifacts.clone(),
         definitions.clone(),
         snapshots.clone(),
         blobs.clone(),
@@ -723,8 +707,8 @@ pub fn build_grpc_services_with_r6a_input_plane(
         &settings.experiment_database_url,
         snapshot_repository,
         writable_blobs,
-        snapshots,
-        blobs,
+        snapshots.clone(),
+        blobs.clone(),
         build_integrity_event_sink(),
         &settings.trace_key,
     )
@@ -732,7 +716,7 @@ pub fn build_grpc_services_with_r6a_input_plane(
     let foundation_change = FoundationChangeGrpcService::new(
         Arc::clone(&application),
         foundation_changes,
-        cursor,
+        Arc::clone(&cursor),
         &settings.trace_key,
     )
     .map_err(config)?;
@@ -748,7 +732,18 @@ pub fn build_grpc_services_with_r6a_input_plane(
         &settings.trace_key,
     )
     .map_err(config)?;
-    Ok((
+    let artifact = ArtifactGrpcService::new(
+        Arc::clone(&application),
+        artifacts,
+        signals,
+        snapshots,
+        blobs,
+        build_integrity_event_sink(),
+        cursor,
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+    Ok(ProductionGrpcServices {
         platform,
         rates,
         experiment,
@@ -758,10 +753,55 @@ pub fn build_grpc_services_with_r6a_input_plane(
         portfolio_risk,
         data_sources,
         data_health,
-        market_definitions,
-        market_fact,
-        snapshot,
-        foundation_change,
+        definitions: market_definitions,
+        facts: market_fact,
+        snapshots: snapshot,
+        governance: foundation_change,
+        artifacts: artifact,
+    })
+}
+
+/// Preserves the R6A focused-construction surface without defining a production route set.
+///
+/// # Errors
+///
+/// Returns a redacted composition error when trusted configuration or adapters cannot be built.
+#[allow(clippy::type_complexity)]
+pub fn build_grpc_services_with_r6a_input_plane(
+    settings: &ServerSettings,
+) -> Result<
+    (
+        PlatformGrpcService,
+        RatesGrpcService,
+        ExperimentGrpcService,
+        SubjectRegistryGrpcService,
+        PositionSnapshotGrpcService,
+        FactorRegistryGrpcService,
+        PortfolioRiskGrpcService,
+        DataSourceRegistryGrpcService,
+        DataHealthGrpcService,
+        MarketDefinitionGrpcService,
+        MarketFactGrpcService,
+        SnapshotGrpcService,
+        FoundationChangeGrpcService,
+    ),
+    ServerError,
+> {
+    let services = build_production_grpc_services(settings)?;
+    Ok((
+        services.platform,
+        services.rates,
+        services.experiment,
+        services.registry,
+        services.positions,
+        services.factors,
+        services.portfolio_risk,
+        services.data_sources,
+        services.data_health,
+        services.definitions,
+        services.facts,
+        services.snapshots,
+        services.governance,
     ))
 }
 
@@ -921,39 +961,14 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         .filter_map(|key| env::var(key).ok().map(|value| ((*key).to_owned(), value)))
         .collect();
     let settings = ServerSettings::try_from_values(&values)?;
-    let (
-        platform,
-        rates,
-        experiment,
-        registry,
-        positions,
-        factors,
-        portfolio_risk,
-        data_sources,
-        data_health,
-        market_definitions,
-        market_facts,
-        snapshots,
-        governance,
-    ) = build_grpc_services_with_r6a_input_plane(&settings)?;
-    serve_grpc_web_with_r6a_input_plane(
+    let services = build_production_grpc_services(&settings)?;
+    let routes = build_production_routes(services)?;
+    serve_production_routes(
         GrpcWebServerConfig {
             bind: settings.bind,
             allowed_origins: settings.allowed_origins.clone(),
         },
-        platform,
-        rates,
-        experiment,
-        registry,
-        positions,
-        factors,
-        portfolio_risk,
-        data_sources,
-        data_health,
-        market_definitions,
-        market_facts,
-        snapshots,
-        governance,
+        routes,
     )
     .await?;
     Ok(())

@@ -3,15 +3,15 @@ syntax = "proto3";
 package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
 import "ficant/research/v1/signal.proto";
 
 enum ArtifactKind {
   ARTIFACT_KIND_UNSPECIFIED = 0;
   ARTIFACT_KIND_GENERIC = 1;
-  ARTIFACT_KIND_CURVE_SNAPSHOT = 2;
-  ARTIFACT_KIND_DATA_SNAPSHOT = 3;
-  ARTIFACT_KIND_UNIVERSE_SNAPSHOT = 4;
   ARTIFACT_KIND_SIGNAL_SET = 5;
+  reserved 2 to 4;
+  reserved "ARTIFACT_KIND_CURVE_SNAPSHOT", "ARTIFACT_KIND_DATA_SNAPSHOT", "ARTIFACT_KIND_UNIVERSE_SNAPSHOT";
 }
 
 message Artifact {
@@ -24,30 +24,15 @@ message Artifact {
   repeated ficant.core.v1.LineageRef lineage = 7;
 }
 
-message PublishArtifactRequest {
-  string idempotency_key = 1;
-  Artifact artifact = 2;
-}
-
-message PublishArtifactResponse {
-  Artifact artifact = 1;
-}
-
 message GetArtifactRequest {
   ficant.core.v1.Ulid artifact_id = 1;
 }
 
 message GetArtifactResponse {
-  Artifact artifact = 1;
-}
-
-message PublishSignalSetRequest {
-  string idempotency_key = 1;
-  SignalSet signal_set = 2;
-}
-
-message PublishSignalSetResponse {
-  SignalSet signal_set = 1;
+  oneof result {
+    Artifact artifact = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
 }
 
 message GetSignalSetRequest {
@@ -55,7 +40,15 @@ message GetSignalSetRequest {
 }
 
 message GetSignalSetResponse {
-  SignalSet signal_set = 1;
+  oneof result {
+    SignalSet signal_set = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message LineagePage {
+  repeated ficant.core.v1.LineageRef lineage = 1;
+  ficant.core.v1.PageResponse page = 2;
 }
 
 message ReadArtifactLineageRequest {
@@ -64,8 +57,10 @@ message ReadArtifactLineageRequest {
 }
 
 message ReadArtifactLineageResponse {
-  repeated ficant.core.v1.LineageRef lineage = 1;
-  ficant.core.v1.PageResponse page = 2;
+  oneof result {
+    LineagePage lineage_page = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
 }
 
 message ReadSignalSetLineageRequest {
@@ -74,14 +69,14 @@ message ReadSignalSetLineageRequest {
 }
 
 message ReadSignalSetLineageResponse {
-  repeated ficant.core.v1.LineageRef lineage = 1;
-  ficant.core.v1.PageResponse page = 2;
+  oneof result {
+    LineagePage lineage_page = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
 }
 
 service ArtifactService {
-  rpc PublishArtifact(PublishArtifactRequest) returns (PublishArtifactResponse);
   rpc GetArtifact(GetArtifactRequest) returns (GetArtifactResponse);
-  rpc PublishSignalSet(PublishSignalSetRequest) returns (PublishSignalSetResponse);
   rpc GetSignalSet(GetSignalSetRequest) returns (GetSignalSetResponse);
   rpc ReadArtifactLineage(ReadArtifactLineageRequest) returns (ReadArtifactLineageResponse);
   rpc ReadSignalSetLineage(ReadSignalSetLineageRequest) returns (ReadSignalSetLineageResponse);

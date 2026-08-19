@@ -26,7 +26,7 @@ PROJECT = "ficant-dev"
 
 PERSISTENCE_SERVICES = {"postgres", "ceph-rgw"}
 INIT_SERVICES = {"migration"}
-RUST_SERVICES = {"ficant-server", "ficant-worker", "ficant-web"}
+RUST_SERVICES = {"ficant-server", "ficant-worker"}
 POSTGRES_IMAGE = "postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74"
 CEPH_IMAGE = "quay.io/ceph/ceph@sha256:6b4b5ae33acd3d736eb26d2a19238bce71a22f9cfb99cca887ba6312d0957644"
 CEPH_RUNTIME_IMAGE = "ficant/ceph-rgw-runtime:dev"
@@ -65,11 +65,6 @@ def resolved_document() -> dict[str, object]:
                     "ceph-rgw": "service_healthy",
                 },
                 "ficant-worker": {
-                    "migration": "service_completed_successfully",
-                    "ceph-rgw": "service_healthy",
-                    "ficant-server": "service_healthy",
-                },
-                "ficant-web": {
                     "migration": "service_completed_successfully",
                     "ceph-rgw": "service_healthy",
                     "ficant-server": "service_healthy",
@@ -835,8 +830,8 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         for marker in (
             "scan-storage-runtime:",
             "image-ref: ${{ needs.authorize.outputs.storage_image }}",
-            "package: [ficant-server, ficant-worker, ficant-web, ficant-ui]",
-            "for package in ficant-server ficant-worker ficant-web ficant-ui",
+            "package: [ficant-server, ficant-worker, ficant-ui]",
+            "for package in ficant-server ficant-worker ficant-ui",
             "Configure test object-store credentials",
             "Verify locked storage runtime is already prepared",
             '"$actual" == "$config" || "$actual" == "$index"',

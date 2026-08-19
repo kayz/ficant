@@ -23,11 +23,6 @@
       "build_arg": "ficant-worker"
     },
     {
-      "name": "ficant-web",
-      "dockerfile": "deploy/dev/RustService.Dockerfile",
-      "build_arg": "ficant-web"
-    },
-    {
       "name": "ficant-ui",
       "dockerfile": "deploy/test/FicantUi.Dockerfile",
       "build_arg": null
