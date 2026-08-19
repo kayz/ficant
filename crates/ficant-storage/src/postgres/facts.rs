@@ -9,7 +9,7 @@ use ficant_application::ports::{
     PublishCurveSnapshot, ResolvedMarketFactProof, market_fact_content_hash,
 };
 use ficant_domain::market::CurveSnapshot;
-use ficant_domain::primitives::Ulid;
+use ficant_domain::primitives::{MarketTime, Ulid};
 use ficant_domain::{ContentAddressed, Lineaged, VersionedDefinition};
 use sqlx::types::chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
@@ -42,7 +42,16 @@ struct StoredCurveSnapshotRow {
     referenced_blob_size: Option<i64>,
 }
 
-type StoredFactRow = (DateTime<Utc>, String, String, String, String, i64, Vec<u8>);
+type StoredFactRow = (
+    DateTime<Utc>,
+    DateTime<Utc>,
+    String,
+    String,
+    String,
+    String,
+    i64,
+    Vec<u8>,
+);
 
 impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredCurveSnapshotRow {
     fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
@@ -193,6 +202,19 @@ impl MarketFactRepository for PostgresRepository {
             .await?
             .map(|metadata| metadata.snapshot().clone()))
     }
+
+    async fn get_curve_snapshot_at(
+        &self,
+        scope: &AccessScope,
+        curve_snapshot_id: Ulid,
+        knowledge_at: &MarketTime,
+    ) -> Result<Option<CurveSnapshot>, ApplicationError> {
+        Ok(
+            load_curve_snapshot_metadata_at(self, scope, curve_snapshot_id, knowledge_at)
+                .await?
+                .map(|metadata| metadata.snapshot().clone()),
+        )
+    }
 }
 
 async fn query_market_fact_window(
@@ -206,17 +228,28 @@ async fn query_market_fact_window(
         .cursor()
         .map(|value| parse_fact_cursor(value.opaque_value()))
         .transpose()?;
+    let expected_binding =
+        crate::s3::content_addressed::hash_hex(query.cursor_binding().content_hash());
+    let cursor = cursor
+        .map(|(binding, time, kind, id)| {
+            if binding != expected_binding {
+                return Err(invalid());
+            }
+            Ok((time, kind, id))
+        })
+        .transpose()?;
     let rows = fetch_market_fact_rows(repository, scope, &query, cursor).await?;
     let page_len = usize::try_from(query.page().limit()).map_err(|_| invalid())?;
     let has_more = rows.len() > page_len;
     let page_rows = rows.into_iter().take(page_len).collect::<Vec<_>>();
     let next_cursor = if has_more {
-        let (time, kind, id, _, _, _, _) = page_rows.last().ok_or_else(storage_error)?;
+        let (time, _, kind, id, _, _, _, _) = page_rows.last().ok_or_else(storage_error)?;
         Some(Cursor::issue(
             repository.cursor_codec(),
             scope,
             format!(
-                "{}.{}.{}.{}",
+                "{}.{}.{}.{}.{}",
+                expected_binding,
                 time.timestamp(),
                 time.timestamp_subsec_nanos(),
                 kind,
@@ -229,7 +262,7 @@ async fn query_market_fact_window(
     let items = page_rows
         .into_iter()
         .map(
-            |(time, kind, id, owner_id, instrument_id, version, payload)| {
+            |(time, visible_at, kind, id, owner_id, instrument_id, version, payload)| {
                 let fact = decode_fact(&payload)?;
                 validate_fact_row(
                     &fact,
@@ -239,6 +272,7 @@ async fn query_market_fact_window(
                     &instrument_id,
                     version,
                     time,
+                    visible_at,
                     scope,
                     &query,
                 )?;
@@ -266,26 +300,28 @@ async fn fetch_market_fact_rows(
     );
     sqlx::query_as(
         "WITH facts AS (
-           SELECT fact_time, '1'::text AS kind, cashflow_id::text AS fact_id,
+           SELECT fact_time, fact_time AS visible_at, '1'::text AS kind,
+                  cashflow_id::text AS fact_id,
                   owner_id::text, instrument_id::text, instrument_version, payload
            FROM market.cashflows WHERE tenant_id=$1 AND instrument_id=$2
              AND instrument_version=$3 AND fact_time BETWEEN $4 AND $5
              AND owner_id::text=ANY($6::text[])
-           UNION ALL SELECT fact_time, '2', quote_id::text, owner_id::text,
-                  instrument_id::text, instrument_version, payload FROM market.quotes
+           UNION ALL SELECT fact_time, received_at, '2', quote_id::text, owner_id::text,
+                   instrument_id::text, instrument_version, payload FROM market.quotes
            WHERE tenant_id=$1 AND instrument_id=$2 AND instrument_version=$3
              AND fact_time BETWEEN $4 AND $5 AND owner_id::text=ANY($6::text[])
-           UNION ALL SELECT fact_time, '3', trade_id::text, owner_id::text,
+           UNION ALL SELECT fact_time, fact_time, '3', trade_id::text, owner_id::text,
                   instrument_id::text, instrument_version, payload FROM market.trades
            WHERE tenant_id=$1 AND instrument_id=$2 AND instrument_version=$3
              AND fact_time BETWEEN $4 AND $5 AND owner_id::text=ANY($6::text[])
-           UNION ALL SELECT fact_time, '4', valuation_id::text, owner_id::text,
+           UNION ALL SELECT fact_time, fact_time, '4', valuation_id::text, owner_id::text,
                   instrument_id::text, instrument_version, payload FROM market.valuations
            WHERE tenant_id=$1 AND instrument_id=$2 AND instrument_version=$3
              AND fact_time BETWEEN $4 AND $5 AND owner_id::text=ANY($6::text[]))
-         SELECT fact_time,kind,fact_id,owner_id,instrument_id,instrument_version,payload FROM facts
-         WHERE NOT $7 OR (fact_time,kind,fact_id)>($8,$9,$10)
-         ORDER BY fact_time,kind,fact_id LIMIT $11",
+         SELECT fact_time,visible_at,kind,fact_id,owner_id,instrument_id,instrument_version,payload
+         FROM facts
+         WHERE visible_at <= $7 AND (NOT $8 OR (fact_time,kind,fact_id)>($9,$10,$11))
+         ORDER BY fact_time,kind,fact_id LIMIT $12",
     )
     .bind(scope.tenant_id().as_str())
     .bind(query.instrument().id().as_str())
@@ -293,6 +329,7 @@ async fn fetch_market_fact_rows(
     .bind(query.from().instant())
     .bind(query.to().instant())
     .bind(owner_strings(scope))
+    .bind(query.knowledge_at().instant())
     .bind(has_cursor)
     .bind(cursor_time)
     .bind(cursor_kind)
@@ -301,6 +338,46 @@ async fn fetch_market_fact_rows(
     .fetch_all(repository.pool())
     .await
     .map_err(map_sqlx_error)
+}
+
+async fn load_curve_snapshot_metadata_at(
+    repository: &PostgresRepository,
+    scope: &AccessScope,
+    curve_snapshot_id: Ulid,
+    knowledge_at: &MarketTime,
+) -> Result<Option<CurveSnapshotMetadata>, ApplicationError> {
+    let owners = owner_strings(scope);
+    let row: Option<StoredCurveSnapshotRow> = sqlx::query_as(
+        "SELECT curve.payload, curve.owner_id::text, curve.as_of,
+                curve.currency_unit_id::text, curve.currency_unit_version,
+                curve.curve_kind, curve.calendar_id::text, curve.calendar_version,
+                curve.rule_pack_id::text, curve.rule_pack_version, curve.point_schema,
+                curve.content_hash::text, curve.blob_size, curve.visible_at,
+                curve.curve_family_id, blob.blob_size AS referenced_blob_size
+         FROM market.curve_snapshots curve
+         LEFT JOIN storage.blobs blob
+           ON blob.tenant_id=curve.tenant_id AND blob.content_hash=curve.content_hash
+         WHERE curve.tenant_id=$1 AND curve.curve_snapshot_id=$2
+           AND curve.owner_id::text = ANY($3::text[])
+           AND curve.visible_at IS NOT NULL AND curve.visible_at <= $4",
+    )
+    .bind(scope.tenant_id().as_str())
+    .bind(curve_snapshot_id.as_str())
+    .bind(&owners)
+    .bind(knowledge_at.instant())
+    .fetch_optional(repository.pool())
+    .await
+    .map_err(map_sqlx_error)?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let curve = decode_curve_snapshot(&row.payload)?;
+    validate_curve_snapshot_row(&row, &curve, scope, &curve_snapshot_id)?;
+    let visible_at = curve.visible_at().ok_or_else(storage_error)?;
+    if visible_at.instant() > knowledge_at.instant() {
+        return Err(storage_error());
+    }
+    curve_snapshot_metadata(&row, curve).map(Some)
 }
 
 async fn persist_curve_snapshot(
@@ -481,6 +558,13 @@ async fn load_curve_snapshot_metadata(
     };
     let curve = decode_curve_snapshot(&row.payload)?;
     validate_curve_snapshot_row(&row, &curve, scope, &curve_snapshot_id)?;
+    curve_snapshot_metadata(&row, curve).map(Some)
+}
+
+fn curve_snapshot_metadata(
+    row: &StoredCurveSnapshotRow,
+    curve: CurveSnapshot,
+) -> Result<CurveSnapshotMetadata, ApplicationError> {
     let Some(referenced_blob_size) = row.referenced_blob_size else {
         return Err(lineage_error());
     };
@@ -488,7 +572,7 @@ async fn load_curve_snapshot_metadata(
         return Err(storage_error());
     }
     let blob_size = u64::try_from(row.blob_size).map_err(|_| storage_error())?;
-    CurveSnapshotMetadata::new(curve, blob_size).map(Some)
+    CurveSnapshotMetadata::new(curve, blob_size)
 }
 
 fn validate_curve_snapshot_row(
@@ -983,6 +1067,7 @@ fn validate_fact_row(
     stored_instrument_id: &str,
     stored_instrument_version: i64,
     stored_time: DateTime<Utc>,
+    stored_visible_at: DateTime<Utc>,
     scope: &AccessScope,
     query: &MarketFactWindow,
 ) -> Result<(), ApplicationError> {
@@ -994,7 +1079,9 @@ fn validate_fact_row(
         && instrument == query.instrument()
         && instrument.id().as_str() == stored_instrument_id
         && u64::try_from(stored_instrument_version).ok() == Some(instrument.version().get())
-        && database_time_matches(fact_time(fact), stored_time);
+        && database_time_matches(fact_time(fact), stored_time)
+        && database_time_matches(fact_visible_time(fact), stored_visible_at)
+        && fact_visible_time(fact) <= query.knowledge_at().instant();
     if valid { Ok(()) } else { Err(storage_error()) }
 }
 
@@ -1025,6 +1112,13 @@ fn fact_time(fact: &MarketFact) -> DateTime<Utc> {
     }
 }
 
+fn fact_visible_time(fact: &MarketFact) -> DateTime<Utc> {
+    match fact {
+        MarketFact::Quote(value) => value.received_at().instant(),
+        _ => fact_time(fact),
+    }
+}
+
 fn database_time_matches(decoded: DateTime<Utc>, stored: DateTime<Utc>) -> bool {
     decoded.timestamp() == stored.timestamp()
         && decoded.timestamp_subsec_micros() == stored.timestamp_subsec_micros()
@@ -1039,8 +1133,14 @@ const fn fact_kind(fact: &MarketFact) -> MarketFactKind {
     }
 }
 
-fn parse_fact_cursor(value: &str) -> Result<(DateTime<Utc>, String, String), ApplicationError> {
+fn parse_fact_cursor(
+    value: &str,
+) -> Result<(String, DateTime<Utc>, String, String), ApplicationError> {
     let mut fields = value.split('.');
+    let binding = fields
+        .next()
+        .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .ok_or_else(invalid)?;
     let seconds = fields
         .next()
         .and_then(|value| value.parse::<i64>().ok())
@@ -1055,7 +1155,12 @@ fn parse_fact_cursor(value: &str) -> Result<(DateTime<Utc>, String, String), App
         .filter(|value| matches!(*value, "1" | "2" | "3" | "4"));
     let id = fields.next().and_then(|value| Ulid::new(value).ok());
     match (kind, id, fields.next()) {
-        (Some(kind), Some(id), None) => Ok((timestamp, kind.to_owned(), id.as_str().to_owned())),
+        (Some(kind), Some(id), None) => Ok((
+            binding.to_ascii_lowercase(),
+            timestamp,
+            kind.to_owned(),
+            id.as_str().to_owned(),
+        )),
         _ => Err(invalid()),
     }
 }

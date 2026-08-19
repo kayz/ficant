@@ -171,6 +171,7 @@ message QueryInstrumentFactsRequest {
   ficant.core.v1.MarketTime from = 2;
   ficant.core.v1.MarketTime to = 3;
   ficant.core.v1.PageRequest page = 4;
+  ficant.core.v1.MarketTime knowledge_at = 5;
 }
 
 message InstrumentFacts {
@@ -189,6 +190,7 @@ message QueryInstrumentFactsResponse {
 
 message GetCurveSnapshotRequest {
   ficant.core.v1.Ulid curve_snapshot_id = 1;
+  ficant.core.v1.MarketTime knowledge_at = 2;
 }
 
 message CurveSnapshotPayload {

@@ -118,6 +118,36 @@ fn invalid_value_chain_maps_to_validation_without_inventing_a_field() {
 }
 
 #[test]
+fn source_row_bitemporal_violation_maps_to_one_stable_client_safe_field() {
+    let mapper = CoreBusinessErrorMapper::new(TRACE_KEY).expect("valid trace key");
+    let error = ApplicationError::observed_after_visible_source_row("source-row-17".to_owned());
+
+    let detail = mapper.map("snapshot.import-canonical", "adapter", &error);
+
+    assert_eq!(detail.code, ErrorCode::ValidationFailed as i32);
+    assert_eq!(detail.field_violations.len(), 1);
+    assert_eq!(
+        detail.field_violations[0].field,
+        "source_rows[id=source-row-17].observed_at"
+    );
+    assert_eq!(
+        detail.field_violations[0].description,
+        "观测时间不得晚于可见时间"
+    );
+
+    let unsafe_error = ApplicationError::observed_after_visible_source_row(
+        "../../postgres://user:credential@host/raw".to_owned(),
+    );
+    assert!(
+        mapper
+            .map("snapshot.import-canonical", "adapter", &unsafe_error)
+            .field_violations
+            .is_empty(),
+        "unsafe source identities must never cross the client boundary"
+    );
+}
+
+#[test]
 fn trace_is_stable_nonempty_operation_scoped_and_does_not_leak_sources() {
     let mapper = CoreBusinessErrorMapper::new(TRACE_KEY).expect("valid trace key");
     let error = ApplicationError::new(ApplicationErrorCategory::StorageUnavailable, true);

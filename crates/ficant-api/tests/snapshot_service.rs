@@ -171,6 +171,51 @@ async fn role_and_authorization_drift_fail_before_adapter_blob_or_repository() {
 }
 
 #[tokio::test]
+async fn reversed_source_row_returns_exact_typed_violation_before_any_write() {
+    let fixture = Fixture::new_with_row(
+        DataSourceAuthorizationState::Active,
+        1,
+        RawQuoteRow::new(
+            "source-row-17",
+            "260011.IB",
+            "2026-08-13T02:00:01Z",
+            "2026-08-13T02:00:00Z",
+            Some(RawDecimal::new("1010000", 4)),
+            Some(RawDecimal::new("1010100", 4)),
+        ),
+    );
+    let service = fixture.service(PlatformRole::Researcher, ["data-sources:import"]);
+
+    let response = service
+        .import_canonical_quote_snapshot(Request::new(fixture.import_request()))
+        .await
+        .unwrap()
+        .into_inner();
+    let Some(pb::import_canonical_quote_snapshot_response::Result::Error(error)) = response.result
+    else {
+        panic!("reversed source row must fail the whole import");
+    };
+
+    assert_eq!(error.code, core::ErrorCode::ValidationFailed as i32);
+    assert_eq!(error.field_violations.len(), 1);
+    assert_eq!(
+        error.field_violations[0].field,
+        "source_rows[id=source-row-17].observed_at"
+    );
+    assert_eq!(
+        error.field_violations[0].description,
+        "观测时间不得晚于可见时间"
+    );
+    assert_eq!(fixture.raw_reads.load(Ordering::SeqCst), 1);
+    assert_eq!(fixture.ports.blob_stages.load(Ordering::SeqCst), 0);
+    assert_eq!(fixture.ports.governed_writes.load(Ordering::SeqCst), 0);
+    assert_eq!(fixture.ports.legacy_writes.load(Ordering::SeqCst), 0);
+    assert!(fixture.ports.staged.lock().unwrap().is_empty());
+    assert!(fixture.ports.blobs.lock().unwrap().is_empty());
+    assert!(fixture.ports.snapshots.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn admin_publishes_server_hashed_universe_while_researcher_direct_write_is_closed() {
     let fixture = Fixture::new(DataSourceAuthorizationState::Active, 1);
     let researcher = fixture.service(
@@ -231,6 +276,25 @@ struct Fixture {
 
 impl Fixture {
     fn new(state: DataSourceAuthorizationState, authorization_version: u64) -> Self {
+        Self::new_with_row(
+            state,
+            authorization_version,
+            RawQuoteRow::new(
+                "record-1",
+                "260011.IB",
+                "2026-08-13T02:00:00Z",
+                "2026-08-13T02:00:01Z",
+                Some(RawDecimal::new("1010000", 4)),
+                Some(RawDecimal::new("1010100", 4)),
+            ),
+        )
+    }
+
+    fn new_with_row(
+        state: DataSourceAuthorizationState,
+        authorization_version: u64,
+        raw_row: RawQuoteRow,
+    ) -> Self {
         let owner = owner();
         let calendar = calendar();
         let unit = unit();
@@ -283,6 +347,7 @@ impl Fixture {
                     "admin-file-binding",
                     Arc::new(RawSource {
                         reads: Arc::clone(&raw_reads),
+                        row: raw_row,
                     }),
                 )
                 .unwrap(),
@@ -743,20 +808,14 @@ impl IntegrityEventSink for Ports {
 
 struct RawSource {
     reads: Arc<AtomicUsize>,
+    row: RawQuoteRow,
 }
 
 #[async_trait]
 impl RawQuoteSource for RawSource {
     async fn read(&self, _: &DataSource, _: &PointInTimeWindow) -> DataResult<Vec<RawQuoteRow>> {
         self.reads.fetch_add(1, Ordering::SeqCst);
-        Ok(vec![RawQuoteRow::new(
-            "record-1",
-            "260011.IB",
-            "2026-08-13T02:00:00Z",
-            "2026-08-13T02:00:01Z",
-            Some(RawDecimal::new("1010000", 4)),
-            Some(RawDecimal::new("1010100", 4)),
-        )])
+        Ok(vec![self.row.clone()])
     }
 }
 

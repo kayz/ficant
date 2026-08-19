@@ -624,71 +624,242 @@ async fn market_fact_query_uses_scoped_aead_cursor_across_pages() {
     let owner = test_owner();
     let scope = support::access_scope(&owner);
     let definitions = seed_market_definitions(&repository, &owner).await;
-    let first = quote_fact(
+    let visible_at = submicro_market_time(500_000_000);
+    let first = quote_fact_at(
         "01ARZ3NDEKTSV4RRFFQ69G5F70",
         "quote-page-1",
         submicro_market_time(123_456_000),
+        visible_at.clone(),
         &owner,
         &definitions,
     );
-    let second = quote_fact(
+    let second = quote_fact_at(
         "01ARZ3NDEKTSV4RRFFQ69G5F71",
         "quote-page-2",
         submicro_market_time(123_457_000),
+        visible_at.clone(),
         &owner,
         &definitions,
     );
     append_legacy_market_fact(&repository, &scope, first.clone(), "repo:quote:first").await;
     append_legacy_market_fact(&repository, &scope, second.clone(), "repo:quote:second").await;
 
-    let window = |page| {
-        MarketFactWindow::new(
-            definitions.instrument.clone(),
-            market_time(7),
-            market_time(10),
-            page,
-        )
-        .unwrap()
-    };
-    let first_page = repository
+    assert_fact_visibility_boundaries(
+        &repository,
+        &scope,
+        &definitions.instrument,
+        &visible_at,
+        &[first.clone(), second.clone()],
+    )
+    .await;
+    assert_fact_cursor_bindings(
+        &repository,
+        &scope,
+        &definitions.instrument,
+        &owner,
+        &first,
+        &second,
+    )
+    .await;
+    assert_fact_sql_drift_fails_closed(
+        &pool,
+        &repository,
+        &scope,
+        &definitions.instrument,
+        &owner,
+        &visible_at,
+        first.id(),
+    )
+    .await;
+}
+
+fn fact_window(
+    instrument: &VersionRef,
+    page: PageRequest,
+    knowledge_at: MarketTime,
+) -> MarketFactWindow {
+    MarketFactWindow::new(
+        instrument.clone(),
+        market_time(7),
+        market_time(10),
+        knowledge_at,
+        page,
+    )
+    .unwrap()
+}
+
+async fn assert_fact_visibility_boundaries(
+    repository: &PostgresRepository,
+    scope: &AccessScope,
+    instrument: &VersionRef,
+    visible_at: &MarketTime,
+    expected: &[MarketFact],
+) {
+    let early = repository
         .query_instrument_window(
-            &scope,
-            window(PageRequest::new(scope.clone(), None, 1).unwrap()),
+            scope,
+            fact_window(
+                instrument,
+                PageRequest::new(scope.clone(), None, 10).unwrap(),
+                submicro_market_time(499_999_999),
+            ),
         )
         .await
         .unwrap();
-    assert_eq!(first_page.items(), std::slice::from_ref(&first));
+    assert!(early.items().is_empty());
+    for knowledge_at in [visible_at.clone(), submicro_market_time(500_000_001)] {
+        assert_eq!(
+            repository
+                .query_instrument_window(
+                    scope,
+                    fact_window(
+                        instrument,
+                        PageRequest::new(scope.clone(), None, 10).unwrap(),
+                        knowledge_at,
+                    ),
+                )
+                .await
+                .unwrap()
+                .items(),
+            expected
+        );
+    }
+}
+
+async fn assert_fact_cursor_bindings(
+    repository: &PostgresRepository,
+    scope: &AccessScope,
+    instrument: &VersionRef,
+    owner: &OwnerRef,
+    first: &MarketFact,
+    second: &MarketFact,
+) {
+    let first_page = repository
+        .query_instrument_window(
+            scope,
+            fact_window(
+                instrument,
+                PageRequest::new(scope.clone(), None, 1).unwrap(),
+                market_time(10),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first_page.items(), std::slice::from_ref(first));
     let cursor = first_page.next_cursor().cloned().unwrap();
     assert!(!cursor.as_str().contains("01ARZ3NDEKTSV4RRFFQ69G5F70"));
     let second_page = repository
         .query_instrument_window(
-            &scope,
-            window(PageRequest::new(scope.clone(), Some(cursor.clone()), 1).unwrap()),
+            scope,
+            fact_window(
+                instrument,
+                PageRequest::new(scope.clone(), Some(cursor.clone()), 1).unwrap(),
+                market_time(10),
+            ),
         )
         .await
         .unwrap();
-    assert_eq!(second_page.items(), &[second]);
+    assert_eq!(second_page.items(), std::slice::from_ref(second));
     assert!(second_page.next_cursor().is_none());
-
+    let cross_knowledge = repository
+        .query_instrument_window(
+            scope,
+            fact_window(
+                instrument,
+                PageRequest::new(scope.clone(), Some(cursor.clone()), 1).unwrap(),
+                market_time(9),
+            ),
+        )
+        .await
+        .expect_err("a cursor is bound to the full knowledge-time query identity");
+    assert_eq!(
+        cross_knowledge.category(),
+        ficant_application::ApplicationErrorCategory::ValidationFailed
+    );
+    let timezone_drift = repository
+        .query_instrument_window(
+            scope,
+            fact_window(
+                instrument,
+                PageRequest::new(scope.clone(), Some(cursor.clone()), 1).unwrap(),
+                MarketTime::new(
+                    market_time(10).instant(),
+                    "UTC",
+                    NaiveDate::from_ymd_opt(2025, 1, 15).unwrap(),
+                )
+                .unwrap(),
+            ),
+        )
+        .await
+        .expect_err("cursor identity binds timezone and local trading date, not only the instant");
+    assert_eq!(
+        timezone_drift.category(),
+        ficant_application::ApplicationErrorCategory::ValidationFailed
+    );
     let denied = OwnerRef::new(
         owner.tenant_id().clone(),
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F09").unwrap(),
     );
     assert!(PageRequest::new(support::access_scope(&denied), Some(cursor), 1).is_err());
+}
 
+async fn assert_fact_sql_drift_fails_closed(
+    pool: &PgPool,
+    repository: &PostgresRepository,
+    scope: &AccessScope,
+    instrument: &VersionRef,
+    owner: &OwnerRef,
+    visible_at: &MarketTime,
+    first_id: &Ulid,
+) {
+    sqlx::query(
+        "UPDATE market.quotes SET received_at=received_at-INTERVAL '0.1 second'
+         WHERE tenant_id=$1 AND quote_id=$2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(first_id.as_str())
+    .execute(pool)
+    .await
+    .unwrap();
+    let visibility_drift = repository
+        .query_instrument_window(
+            scope,
+            fact_window(
+                instrument,
+                PageRequest::new(scope.clone(), None, 10).unwrap(),
+                submicro_market_time(500_000_001),
+            ),
+        )
+        .await
+        .expect_err("fact SQL visibility drift must not bypass decoded evidence");
+    assert_eq!(
+        visibility_drift.category(),
+        ficant_application::ApplicationErrorCategory::StorageUnavailable
+    );
+    sqlx::query("UPDATE market.quotes SET received_at=$3 WHERE tenant_id=$1 AND quote_id=$2")
+        .bind(owner.tenant_id().as_str())
+        .bind(first_id.as_str())
+        .bind(visible_at.instant())
+        .execute(pool)
+        .await
+        .unwrap();
     sqlx::query(
         "UPDATE market.quotes SET fact_time=fact_time-INTERVAL '1 second'
          WHERE tenant_id=$1 AND quote_id=$2",
     )
     .bind(owner.tenant_id().as_str())
-    .bind(first.id().as_str())
-    .execute(&pool)
+    .bind(first_id.as_str())
+    .execute(pool)
     .await
     .unwrap();
     let projection_drift = repository
         .query_instrument_window(
-            &scope,
-            window(PageRequest::new(scope.clone(), None, 10).unwrap()),
+            scope,
+            fact_window(
+                instrument,
+                PageRequest::new(scope.clone(), None, 10).unwrap(),
+                market_time(10),
+            ),
         )
         .await
         .expect_err("fact SQL projection drift must not return a decoded payload");
@@ -833,6 +1004,7 @@ async fn typed_quote_source_round_trips_the_exact_registered_data_source_ref() {
             MarketFactWindow::new(
                 definitions.instrument,
                 market_time(7),
+                market_time(9),
                 market_time(9),
                 PageRequest::new(scope.clone(), None, 10).unwrap(),
             )
@@ -1120,6 +1292,8 @@ async fn curve_snapshot_publication_consumes_verified_blob_and_is_scoped() {
         )],
         input_kind: ArtifactInputKind::ExternalFixture,
     })
+    .unwrap()
+    .with_knowledge_time(submicro_market_time(500_000_000), "cn.gov.zero")
     .unwrap();
     let verified = stage_verified_blob(&pool, owner.clone(), "curve:blob:fixture:v1", bytes).await;
     let actor = Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F89").unwrap();
@@ -1157,6 +1331,29 @@ async fn curve_snapshot_publication_consumes_verified_blob_and_is_scoped() {
             .unwrap(),
         Some(curve.clone())
     );
+    assert_eq!(
+        repository
+            .get_curve_snapshot_at(
+                &scope,
+                curve.id().clone(),
+                &submicro_market_time(499_999_999),
+            )
+            .await
+            .unwrap(),
+        None
+    );
+    for knowledge_at in [
+        submicro_market_time(500_000_000),
+        submicro_market_time(500_000_001),
+    ] {
+        assert_eq!(
+            repository
+                .get_curve_snapshot_at(&scope, curve.id().clone(), &knowledge_at)
+                .await
+                .unwrap(),
+            Some(curve.clone())
+        );
+    }
     let curve_metadata = repository
         .get_curve_snapshot_metadata(&scope, curve.id().clone())
         .await
@@ -1167,6 +1364,38 @@ async fn curve_snapshot_publication_consumes_verified_blob_and_is_scoped() {
         curve_metadata.blob_size(),
         u64::try_from(bytes.len()).unwrap()
     );
+
+    sqlx::query(
+        "UPDATE market.curve_snapshots SET visible_at=visible_at-INTERVAL '0.1 second'
+         WHERE tenant_id=$1 AND curve_snapshot_id=$2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(curve.id().as_str())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let visibility_drift = repository
+        .get_curve_snapshot_at(
+            &scope,
+            curve.id().clone(),
+            &submicro_market_time(500_000_001),
+        )
+        .await
+        .expect_err("curve SQL visibility drift must fail after payload decoding");
+    assert_eq!(
+        visibility_drift.category(),
+        ficant_application::ApplicationErrorCategory::StorageUnavailable
+    );
+    sqlx::query(
+        "UPDATE market.curve_snapshots SET visible_at=$3
+         WHERE tenant_id=$1 AND curve_snapshot_id=$2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(curve.id().as_str())
+    .bind(curve.visible_at().unwrap().instant())
+    .execute(&pool)
+    .await
+    .unwrap();
 
     sqlx::query(
         "UPDATE market.curve_snapshots SET point_schema='tampered-schema'
@@ -2545,13 +2774,31 @@ fn quote_fact(
     owner: &OwnerRef,
     definitions: &MarketDefinitions,
 ) -> MarketFact {
+    quote_fact_at(
+        quote_id,
+        external_id,
+        observed_at.clone(),
+        observed_at,
+        owner,
+        definitions,
+    )
+}
+
+fn quote_fact_at(
+    quote_id: &str,
+    external_id: &str,
+    observed_at: MarketTime,
+    received_at: MarketTime,
+    owner: &OwnerRef,
+    definitions: &MarketDefinitions,
+) -> MarketFact {
     MarketFact::Quote(
         Quote::new(QuoteInput {
             quote_id: Ulid::new(quote_id).unwrap(),
             instrument: definitions.instrument.clone(),
             owner: owner.clone(),
             source: FactSource::new("fixture-feed", external_id, 1).unwrap(),
-            received_at: observed_at.clone(),
+            received_at,
             observed_at,
             bid: Some(DecimalValue::new("210", 4, definitions.price.clone()).unwrap()),
             ask: Some(DecimalValue::new("220", 4, definitions.price.clone()).unwrap()),

@@ -3,6 +3,7 @@ use ficant_application::ports::{AccessScope, PositionSnapshotRepository, Snapsho
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_domain::primitives::{MarketTime, Ulid, VersionRef};
 use ficant_domain::research::PositionSnapshot;
+use sqlx::types::chrono::{DateTime, Utc};
 
 use super::PostgresRepository;
 use super::codec::decode_snapshot;
@@ -16,8 +17,8 @@ impl PositionSnapshotRepository for PostgresRepository {
         snapshot_id: Ulid,
         knowledge_at: MarketTime,
     ) -> Result<Option<PositionSnapshot>, ApplicationError> {
-        let payload: Option<(Vec<u8>,)> = sqlx::query_as(
-            "SELECT payload FROM research.position_snapshots
+        let payload: Option<(Vec<u8>, DateTime<Utc>)> = sqlx::query_as(
+            "SELECT payload, visible_at FROM research.position_snapshots
              WHERE tenant_id = $1 AND snapshot_id = $2
                AND owner_id::text = ANY($3::text[]) AND visible_at <= $4",
         )
@@ -29,7 +30,7 @@ impl PositionSnapshotRepository for PostgresRepository {
         .await
         .map_err(map_sqlx_error)?;
         payload
-            .map(|(payload,)| decode_position(&payload, &knowledge_at))
+            .map(|(payload, visible_at)| decode_position(&payload, visible_at, &knowledge_at))
             .transpose()
     }
 
@@ -40,8 +41,8 @@ impl PositionSnapshotRepository for PostgresRepository {
         observed_at: MarketTime,
         knowledge_at: MarketTime,
     ) -> Result<Option<PositionSnapshot>, ApplicationError> {
-        let rows: Vec<(Vec<u8>,)> = sqlx::query_as(
-            "SELECT payload FROM research.position_snapshots
+        let rows: Vec<(Vec<u8>, DateTime<Utc>)> = sqlx::query_as(
+            "SELECT payload, visible_at FROM research.position_snapshots
              WHERE tenant_id = $1 AND subject_id = $2 AND subject_version = $3
                AND owner_id::text = ANY($4::text[]) AND observed_at = $5 AND visible_at <= $6
              ORDER BY visible_at DESC",
@@ -55,8 +56,8 @@ impl PositionSnapshotRepository for PostgresRepository {
         .fetch_all(self.pool())
         .await
         .map_err(map_sqlx_error)?;
-        for (payload,) in rows {
-            let value = decode_position(&payload, &knowledge_at)?;
+        for (payload, visible_at) in rows {
+            let value = decode_position(&payload, visible_at, &knowledge_at)?;
             if value.subject_ref() == &subject_ref && value.observed_at() == &observed_at {
                 return Ok(Some(value));
             }
@@ -67,16 +68,23 @@ impl PositionSnapshotRepository for PostgresRepository {
 
 fn decode_position(
     payload: &[u8],
+    stored_visible_at: DateTime<Utc>,
     knowledge_at: &MarketTime,
 ) -> Result<PositionSnapshot, ApplicationError> {
     match decode_snapshot(payload)? {
         SnapshotValue::Position(value)
-            if value.visible_at().instant() <= knowledge_at.instant() =>
+            if database_time_matches(value.visible_at().instant(), stored_visible_at)
+                && value.visible_at().instant() <= knowledge_at.instant() =>
         {
             Ok(value)
         }
         _ => Err(invalid()),
     }
+}
+
+fn database_time_matches(decoded: DateTime<Utc>, stored: DateTime<Utc>) -> bool {
+    decoded.timestamp() == stored.timestamp()
+        && decoded.timestamp_subsec_micros() == stored.timestamp_subsec_micros()
 }
 
 fn owners(scope: &AccessScope) -> Vec<String> {

@@ -33,6 +33,15 @@ pub enum ApplicationErrorDetail {
         data_source_ref: Option<VersionRef>,
         import_interface: ImportInterface,
     },
+    SourceRowViolation {
+        source_record_id: String,
+        reason: SourceRowViolationReason,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SourceRowViolationReason {
+    ObservedAfterVisible,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -102,6 +111,22 @@ impl ApplicationError {
         }
     }
 
+    /// Builds a typed, client-safe canonical source-row violation.
+    #[must_use]
+    pub fn observed_after_visible_source_row(source_record_id: String) -> Self {
+        let detail = is_safe_source_record_id(&source_record_id).then_some(
+            ApplicationErrorDetail::SourceRowViolation {
+                source_record_id,
+                reason: SourceRowViolationReason::ObservedAfterVisible,
+            },
+        );
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail,
+        }
+    }
+
     #[must_use]
     pub fn category(&self) -> ApplicationErrorCategory {
         self.category
@@ -124,6 +149,14 @@ fn is_safe_rule_pack_path(value: &str) -> bool {
         && value.bytes().all(|byte| {
             byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'[' | b']' | b'=' | b'-')
         })
+}
+
+fn is_safe_source_record_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 #[must_use]

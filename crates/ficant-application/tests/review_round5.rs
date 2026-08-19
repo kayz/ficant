@@ -44,6 +44,7 @@ fn r5_commands_reject_invalid_intent_and_derive_fingerprint_from_every_business_
         version_ref('K', 1),
         time(4),
         time(3),
+        time(5),
         PageRequest::new(scope(), None, 10).unwrap(),
     )
     .unwrap_err();

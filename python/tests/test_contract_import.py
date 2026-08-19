@@ -15,7 +15,7 @@ sys.path.insert(0, str(GENERATED_ROOT))
 
 from ficant.app.v1.registry_pb2 import AppRegistry  # noqa: E402
 from ficant.app.v1.session_pb2 import Session  # noqa: E402
-from ficant.core.v1.common_pb2 import DecimalValue, OwnerRef, Sha256, Ulid, UnitRef  # noqa: E402
+from ficant.core.v1.common_pb2 import DecimalValue, MarketTime, OwnerRef, Sha256, Ulid, UnitRef  # noqa: E402
 from ficant.core.v1.governance_pb2 import (  # noqa: E402
     PLATFORM_ROLE_RESEARCHER,
     ChangeJustification,
@@ -65,8 +65,10 @@ from ficant.market.v1.fact_pb2 import (  # noqa: E402
     Cashflow,
     CurvePointSet,
     CurveSnapshotInput,
+    GetCurveSnapshotRequest,
     MarketFact,
     PublishCurveSnapshotRequest,
+    QueryInstrumentFactsRequest,
 )
 from ficant.market.v1.fact_pb2_grpc import MarketFactServiceStub  # noqa: E402
 from ficant.market.v1.instrument_pb2 import Instrument  # noqa: E402
@@ -146,6 +148,8 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
         points=CurvePointSet(),
         curve=curve_input,
     )
+    fact_query = QueryInstrumentFactsRequest(knowledge_at=MarketTime())
+    curve_query = GetCurveSnapshotRequest(knowledge_at=MarketTime())
     authorization = DataSourceAuthorization()
     data_snapshot = DataSnapshot()
     mapping = InstrumentMapping()
@@ -273,6 +277,10 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert "content_hash" not in CurveSnapshotInput.DESCRIPTOR.fields_by_name
     assert "curve_snapshot" not in PublishCurveSnapshotRequest.DESCRIPTOR.fields_by_name
     assert curve_publish.curve.DESCRIPTOR.full_name == "ficant.market.v1.CurveSnapshotInput"
+    assert fact_query.HasField("knowledge_at")
+    assert QueryInstrumentFactsRequest.DESCRIPTOR.fields_by_name["knowledge_at"].number == 5
+    assert curve_query.HasField("knowledge_at")
+    assert GetCurveSnapshotRequest.DESCRIPTOR.fields_by_name["knowledge_at"].number == 2
     assert authorization.DESCRIPTOR.fields_by_name["mapping_hash"].number == 14
     assert data_snapshot.DESCRIPTOR.fields_by_name["authorization_ref"].number == 9
     assert mapping.DESCRIPTOR.fields_by_name["content_hash"].number == 5

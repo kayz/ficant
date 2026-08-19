@@ -52,9 +52,11 @@ import {
   CashflowType,
   CurvePointSetSchema,
   CurveSnapshotInputSchema,
+  GetCurveSnapshotRequestSchema,
   MarketFactSchema,
   MarketFactService,
   PublishCurveSnapshotRequestSchema,
+  QueryInstrumentFactsRequestSchema,
 } from "../../packages/contracts-generated/src/ficant/market/v1/fact_pb";
 import { MarketRulePackSchema } from "../../packages/contracts-generated/src/ficant/market/v1/rule_pb";
 import {
@@ -151,6 +153,12 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
       points: create(CurvePointSetSchema, {}),
       curve: curveInput,
     });
+    const knowledgeAt = create(MarketTimeSchema, {
+      marketTimezone: "Asia/Shanghai",
+      localTradingDate: "2026-08-19",
+    });
+    const factQuery = create(QueryInstrumentFactsRequestSchema, { knowledgeAt });
+    const curveQuery = create(GetCurveSnapshotRequestSchema, { knowledgeAt });
     const authorization = create(DataSourceAuthorizationSchema, {});
     const dataSnapshot = create(DataSnapshotSchema, {});
     const mapping = create(InstrumentMappingSchema, {});
@@ -331,6 +339,8 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
     expect(curvePublish.curve?.$typeName).toBe(
       "ficant.market.v1.CurveSnapshotInput",
     );
+    expect(factQuery.knowledgeAt?.marketTimezone).toBe("Asia/Shanghai");
+    expect(curveQuery.knowledgeAt?.localTradingDate).toBe("2026-08-19");
     expect(authorization.$typeName).toBe(
       "ficant.market.v1.DataSourceAuthorization",
     );

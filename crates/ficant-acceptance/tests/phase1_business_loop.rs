@@ -553,6 +553,7 @@ async fn phase1_business_loop_persists_restart_safe_complete_lineage() {
                 instrument_ref,
                 fixture.market_time_literal("2025-01-15T00:00:00Z"),
                 fixture.market_time_literal("2025-06-16T00:00:00Z"),
+                fixture.market_time_literal("2025-06-16T00:00:00Z"),
                 PageRequest::new(scope.clone(), None, 10).unwrap(),
             )
             .unwrap(),
