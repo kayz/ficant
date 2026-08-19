@@ -102,6 +102,10 @@ Human 同时批准在下方原始冻结闭集之外追加四个实施路径；�
 
 Human 明确批准追加 `crates/ficant-api/tests/phase2e_sdk_live.rs`，且仅允许把既有 live Python SDK parity fixture 从无正式输出仓储的 legacy Rates 构造器机械迁移到 `FormalOutputPublisher` 生产构造器；不得改变既有业务输入、数值断言或 Python SDK parity 判据。
 
+### Human 批准的集成 fixture 隔离扩展（2026-08-20）
+
+Human 明确批准追加 `crates/ficant-acceptance/tests/phase1_business_loop.rs`、`crates/ficant-acceptance/tests/negative_invariants.rs`、`crates/ficant-data/tests/dual_source_sit.rs` 与 `crates/ficant-data/tests/snapshot_publication_sit.rs`，且仅允许在数据库重置夹具中清理 R7B 新增的 `analytics` schema。已在允许闭集内的 `binaries/ficant-server/tests/r6a_governed_input_sit.rs` 与 `binaries/ficant-server/tests/r6b_artifact_service_sit.rs` 同步执行同一机械修正；不得改变任何业务输入、业务断言或验收判据。
+
 ## 6. 最终真实测试证据
 
 **R7B execution base：** public `34402344c7d2c9238dc171af52ac4db77eb6b462`，Git tree `f66e03c55703837d6f2aee9959eba482612272f1`。**Human-approved authority：** private PR #23 rebase-merged commit `3e028bcadd9fe973450d35b092e03a7485a54881`；`verify-authority.ps1` exit `0`，三份文档完整且 manifest 仍绑定 execution base。公共实施从独立分支 `agent/r7b-evidence-recovery` 开始。
