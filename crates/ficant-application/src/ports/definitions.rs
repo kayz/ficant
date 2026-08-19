@@ -1,14 +1,26 @@
 use async_trait::async_trait;
 use ficant_domain::VersionedDefinition;
+use ficant_domain::governance::{
+    FoundationChangeOperation, FoundationChangeRecord, FoundationChangeRecordInput,
+    FoundationResourceKind, FoundationResourceRef, PlatformRole,
+};
 use ficant_domain::market::{
     Bond, Calendar, FuturesContract, Instrument, InstrumentKind, MarketRulePack, Unit,
 };
-use ficant_domain::primitives::{MarketTime, OwnerRef, Ulid, Version};
+use ficant_domain::primitives::{ContentHash, MarketTime, OwnerRef, Ulid, Version, VersionRef};
 
-use super::fingerprint::{FingerprintBuilder, definition_bytes, owner_bytes};
-use super::{AccessScope, ApplicationResult, IdempotencyKey, OperationFingerprint};
-use crate::map_domain_error;
+use super::fingerprint::{
+    FingerprintBuilder, definition_bytes, definition_content_hash, owner_bytes,
+};
+use super::{
+    AccessScope, ApplicationResult, CursorPage, FoundationChangeContext, IdempotencyKey,
+    OperationFingerprint, PageRequest,
+};
+use crate::{ApplicationError, ApplicationErrorCategory, map_domain_error};
 use ficant_domain::DomainErrorCode;
+
+pub const DEFINITION_READ_SCOPE: &str = "definitions:read";
+pub const DEFINITION_WRITE_SCOPE: &str = "definitions:write";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DefinitionKind {
@@ -200,6 +212,12 @@ impl DefinitionValue {
     }
 }
 
+/// Returns the canonical immutable content identity for a stored Definition value.
+#[must_use]
+pub fn stored_definition_content_hash(value: &DefinitionValue) -> ContentHash {
+    definition_content_hash(value)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AppendDefinitionVersion {
     expected_latest_version: Option<Version>,
@@ -262,8 +280,140 @@ impl AppendDefinitionVersion {
     }
 }
 
+/// One complete Definition append bound to a server-derived administrator principal and evidence.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GovernedAppendDefinitionVersion {
+    change_context: FoundationChangeContext,
+    append: AppendDefinitionVersion,
+    fingerprint: OperationFingerprint,
+}
+
+impl GovernedAppendDefinitionVersion {
+    /// Creates a governed Definition append command.
+    ///
+    /// # Errors
+    ///
+    /// Returns forbidden unless the active principal is a Platform Admin with Definition write
+    /// scope for the exact owner. Also returns the same validation/version errors as the immutable
+    /// Definition append intent.
+    pub fn new(
+        change_context: FoundationChangeContext,
+        expected_latest_version: Option<Version>,
+        value: DefinitionValue,
+        idempotency_key: IdempotencyKey,
+    ) -> ApplicationResult<Self> {
+        change_context.principal().authorize_mutation(
+            PlatformRole::PlatformAdmin,
+            DEFINITION_WRITE_SCOPE,
+            value.owner(),
+        )?;
+        let append = AppendDefinitionVersion::new(expected_latest_version, value, idempotency_key)?;
+        let mut canonical = FingerprintBuilder::new("append-definition-version/v2");
+        canonical.field(
+            2,
+            change_context
+                .principal()
+                .fingerprint()
+                .content_hash()
+                .as_bytes(),
+        );
+        canonical.optional_u64(3, append.expected_latest_version().map(Version::get));
+        canonical.field(4, &definition_bytes(append.value()));
+        canonical.field(5, &change_bytes(change_context.change()));
+        let fingerprint = canonical.finish();
+        Ok(Self {
+            change_context,
+            append,
+            fingerprint,
+        })
+    }
+
+    #[must_use]
+    pub fn change_context(&self) -> &FoundationChangeContext {
+        &self.change_context
+    }
+
+    #[must_use]
+    pub fn scope(&self) -> &AccessScope {
+        self.change_context.principal().access_scope()
+    }
+
+    #[must_use]
+    pub fn expected_latest_version(&self) -> Option<Version> {
+        self.append.expected_latest_version()
+    }
+
+    #[must_use]
+    pub fn value(&self) -> &DefinitionValue {
+        self.append.value()
+    }
+
+    #[must_use]
+    pub fn idempotency_key(&self) -> &IdempotencyKey {
+        self.append.idempotency_key()
+    }
+
+    #[must_use]
+    pub fn fingerprint(&self) -> &OperationFingerprint {
+        &self.fingerprint
+    }
+
+    /// Returns the canonical immutable content identity for the appended Definition.
+    #[must_use]
+    pub fn value_content_hash(&self) -> ContentHash {
+        definition_content_hash(self.value())
+    }
+
+    /// Materializes the append-only change record after storage resolves the previous version.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation failure if the immutable Definition value cannot form an exact
+    /// versioned governance resource.
+    pub fn change_record(
+        &self,
+        before_hash: Option<ContentHash>,
+    ) -> ApplicationResult<FoundationChangeRecord> {
+        FoundationChangeRecord::new(FoundationChangeRecordInput {
+            record_id: self.change_context.record_id().clone(),
+            actor_id: self.change_context.principal().actor_id().clone(),
+            owner: self.value().owner().clone(),
+            active_role: PlatformRole::PlatformAdmin,
+            operation: FoundationChangeOperation::AppendMarketDefinition,
+            resource: FoundationResourceRef::versioned(
+                FoundationResourceKind::MarketDefinition,
+                VersionRef::new(
+                    Ulid::new(self.value().identity().to_owned()).map_err(map_domain_error)?,
+                    Version::new(self.value().version()).map_err(map_domain_error)?,
+                ),
+            ),
+            before_hash,
+            after_hash: definition_content_hash(self.value()),
+            change: self.change_context.change().clone(),
+            request_fingerprint: self.fingerprint.content_hash().clone(),
+            occurred_at: self.change_context.occurred_at().clone(),
+            authorization_ref: None,
+        })
+        .map_err(map_domain_error)
+    }
+}
+
 #[async_trait]
 pub trait DefinitionRepository: Send + Sync {
+    /// Atomically creates the identity when appending v1 and appends the complete definition.
+    ///
+    /// Implementations must not expose an identity without its v1 value. The default is
+    /// deliberately fail-closed so legacy fixture repositories cannot masquerade as R6A-ready.
+    async fn append_complete(
+        &self,
+        _command: GovernedAppendDefinitionVersion,
+    ) -> ApplicationResult<DefinitionValue> {
+        Err(ApplicationError::new(
+            ApplicationErrorCategory::StateConflict,
+            false,
+        ))
+    }
+
     /// Creates an immutable definition identity.
     ///
     /// # Errors
@@ -304,6 +454,105 @@ pub trait DefinitionRepository: Send + Sync {
         definition_id: Ulid,
         instant: MarketTime,
     ) -> ApplicationResult<Option<DefinitionValue>>;
+
+    /// Lists immutable versions under the scope already bound into `page`.
+    async fn list_versions(
+        &self,
+        _scope: &AccessScope,
+        _definition_id: Ulid,
+        _page: PageRequest,
+    ) -> ApplicationResult<CursorPage<DefinitionValue>> {
+        Err(ApplicationError::new(
+            ApplicationErrorCategory::StateConflict,
+            false,
+        ))
+    }
+}
+
+/// Application boundary for the complete Definition service surface.
+pub struct DefinitionUseCase<'a> {
+    repository: &'a dyn DefinitionRepository,
+}
+
+impl<'a> DefinitionUseCase<'a> {
+    #[must_use]
+    pub const fn new(repository: &'a dyn DefinitionRepository) -> Self {
+        Self { repository }
+    }
+
+    /// Appends one fully governed immutable Definition version.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, validation, concurrency, immutable, or repository failures without
+    /// falling back to the legacy ungoverned append port.
+    pub async fn append(
+        &self,
+        command: GovernedAppendDefinitionVersion,
+    ) -> ApplicationResult<DefinitionValue> {
+        command.scope().authorize(command.value().owner())?;
+        self.repository.append_complete(command).await
+    }
+
+    /// Reads one exact immutable Definition version under the supplied access scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization or repository failures.
+    pub async fn get_exact(
+        &self,
+        scope: &AccessScope,
+        definition_id: Ulid,
+        version: Version,
+    ) -> ApplicationResult<Option<DefinitionValue>> {
+        self.repository
+            .get_version(scope, definition_id, version)
+            .await
+    }
+
+    /// Resolves the Definition version effective at one market instant.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, validation, or repository failures.
+    pub async fn resolve_as_of(
+        &self,
+        scope: &AccessScope,
+        definition_id: Ulid,
+        instant: MarketTime,
+    ) -> ApplicationResult<Option<DefinitionValue>> {
+        self.repository
+            .resolve_as_of(scope, definition_id, instant)
+            .await
+    }
+
+    /// Lists immutable Definition versions using a cursor bound to the same access scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns forbidden for a mismatched cursor scope and otherwise propagates repository
+    /// failures.
+    pub async fn list_versions(
+        &self,
+        scope: &AccessScope,
+        definition_id: Ulid,
+        page: PageRequest,
+    ) -> ApplicationResult<CursorPage<DefinitionValue>> {
+        page.authorize_scope(scope)?;
+        self.repository
+            .list_versions(scope, definition_id, page)
+            .await
+    }
+}
+
+fn change_bytes(change: &ficant_domain::governance::ChangeJustification) -> Vec<u8> {
+    let mut canonical = FingerprintBuilder::new("change-justification/v1");
+    canonical.field(2, change.reason().as_bytes());
+    for source in change.sources() {
+        canonical.field(3, source.uri().as_bytes());
+        canonical.field(4, source.sha256().as_bytes());
+    }
+    canonical.into_bytes()
 }
 
 const fn definition_kind_code(kind: DefinitionKind) -> u8 {

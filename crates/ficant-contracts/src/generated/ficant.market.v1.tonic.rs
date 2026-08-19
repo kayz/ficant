@@ -153,6 +153,98 @@ pub mod data_source_registry_service_client {
                 );
             self.inner.unary(req, path, codec).await
         }
+        ///
+        pub async fn publish_data_source_authorization(
+            &mut self,
+            request: impl tonic::IntoRequest<
+                super::PublishDataSourceAuthorizationRequest,
+            >,
+        ) -> std::result::Result<
+            tonic::Response<super::PublishDataSourceAuthorizationResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/ficant.market.v1.DataSourceRegistryService/PublishDataSourceAuthorization",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "ficant.market.v1.DataSourceRegistryService",
+                        "PublishDataSourceAuthorization",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn get_data_source_authorization(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetDataSourceAuthorizationRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetDataSourceAuthorizationResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/ficant.market.v1.DataSourceRegistryService/GetDataSourceAuthorization",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "ficant.market.v1.DataSourceRegistryService",
+                        "GetDataSourceAuthorization",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn list_data_source_authorizations(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListDataSourceAuthorizationsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListDataSourceAuthorizationsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/ficant.market.v1.DataSourceRegistryService/ListDataSourceAuthorizations",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "ficant.market.v1.DataSourceRegistryService",
+                        "ListDataSourceAuthorizations",
+                    ),
+                );
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -182,6 +274,30 @@ pub mod data_source_registry_service_server {
             request: tonic::Request<super::GetDataSourceRequest>,
         ) -> std::result::Result<
             tonic::Response<super::GetDataSourceResponse>,
+            tonic::Status,
+        >;
+        ///
+        async fn publish_data_source_authorization(
+            &self,
+            request: tonic::Request<super::PublishDataSourceAuthorizationRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::PublishDataSourceAuthorizationResponse>,
+            tonic::Status,
+        >;
+        ///
+        async fn get_data_source_authorization(
+            &self,
+            request: tonic::Request<super::GetDataSourceAuthorizationRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::GetDataSourceAuthorizationResponse>,
+            tonic::Status,
+        >;
+        ///
+        async fn list_data_source_authorizations(
+            &self,
+            request: tonic::Request<super::ListDataSourceAuthorizationsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListDataSourceAuthorizationsResponse>,
             tonic::Status,
         >;
     }
@@ -363,6 +479,170 @@ pub mod data_source_registry_service_server {
                     };
                     Box::pin(fut)
                 }
+                "/ficant.market.v1.DataSourceRegistryService/PublishDataSourceAuthorization" => {
+                    #[allow(non_camel_case_types)]
+                    struct PublishDataSourceAuthorizationSvc<
+                        T: DataSourceRegistryService,
+                    >(
+                        pub Arc<T>,
+                    );
+                    impl<
+                        T: DataSourceRegistryService,
+                    > tonic::server::UnaryService<
+                        super::PublishDataSourceAuthorizationRequest,
+                    > for PublishDataSourceAuthorizationSvc<T> {
+                        type Response = super::PublishDataSourceAuthorizationResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::PublishDataSourceAuthorizationRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as DataSourceRegistryService>::publish_data_source_authorization(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = PublishDataSourceAuthorizationSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/ficant.market.v1.DataSourceRegistryService/GetDataSourceAuthorization" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetDataSourceAuthorizationSvc<T: DataSourceRegistryService>(
+                        pub Arc<T>,
+                    );
+                    impl<
+                        T: DataSourceRegistryService,
+                    > tonic::server::UnaryService<
+                        super::GetDataSourceAuthorizationRequest,
+                    > for GetDataSourceAuthorizationSvc<T> {
+                        type Response = super::GetDataSourceAuthorizationResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::GetDataSourceAuthorizationRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as DataSourceRegistryService>::get_data_source_authorization(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetDataSourceAuthorizationSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/ficant.market.v1.DataSourceRegistryService/ListDataSourceAuthorizations" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListDataSourceAuthorizationsSvc<T: DataSourceRegistryService>(
+                        pub Arc<T>,
+                    );
+                    impl<
+                        T: DataSourceRegistryService,
+                    > tonic::server::UnaryService<
+                        super::ListDataSourceAuthorizationsRequest,
+                    > for ListDataSourceAuthorizationsSvc<T> {
+                        type Response = super::ListDataSourceAuthorizationsResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::ListDataSourceAuthorizationsRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as DataSourceRegistryService>::list_data_source_authorizations(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListDataSourceAuthorizationsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 _ => {
                     Box::pin(async move {
                         let mut response = http::Response::new(
@@ -498,11 +778,11 @@ pub mod market_definition_service_client {
             self
         }
         ///
-        pub async fn append_instrument(
+        pub async fn append_definition(
             &mut self,
-            request: impl tonic::IntoRequest<super::AppendInstrumentRequest>,
+            request: impl tonic::IntoRequest<super::AppendDefinitionRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::AppendInstrumentResponse>,
+            tonic::Response<super::AppendDefinitionResponse>,
             tonic::Status,
         > {
             self.inner
@@ -515,164 +795,14 @@ pub mod market_definition_service_client {
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/ficant.market.v1.MarketDefinitionService/AppendInstrument",
+                "/ficant.market.v1.MarketDefinitionService/AppendDefinition",
             );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(
                     GrpcMethod::new(
                         "ficant.market.v1.MarketDefinitionService",
-                        "AppendInstrument",
-                    ),
-                );
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn append_bond(
-            &mut self,
-            request: impl tonic::IntoRequest<super::AppendBondRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendBondResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/ficant.market.v1.MarketDefinitionService/AppendBond",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "ficant.market.v1.MarketDefinitionService",
-                        "AppendBond",
-                    ),
-                );
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn append_futures_contract(
-            &mut self,
-            request: impl tonic::IntoRequest<super::AppendFuturesContractRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendFuturesContractResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/ficant.market.v1.MarketDefinitionService/AppendFuturesContract",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "ficant.market.v1.MarketDefinitionService",
-                        "AppendFuturesContract",
-                    ),
-                );
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn append_calendar(
-            &mut self,
-            request: impl tonic::IntoRequest<super::AppendCalendarRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendCalendarResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/ficant.market.v1.MarketDefinitionService/AppendCalendar",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "ficant.market.v1.MarketDefinitionService",
-                        "AppendCalendar",
-                    ),
-                );
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn append_unit(
-            &mut self,
-            request: impl tonic::IntoRequest<super::AppendUnitRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendUnitResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/ficant.market.v1.MarketDefinitionService/AppendUnit",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "ficant.market.v1.MarketDefinitionService",
-                        "AppendUnit",
-                    ),
-                );
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn append_market_rule_pack(
-            &mut self,
-            request: impl tonic::IntoRequest<super::AppendMarketRulePackRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendMarketRulePackResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/ficant.market.v1.MarketDefinitionService/AppendMarketRulePack",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "ficant.market.v1.MarketDefinitionService",
-                        "AppendMarketRulePack",
+                        "AppendDefinition",
                     ),
                 );
             self.inner.unary(req, path, codec).await
@@ -783,51 +913,11 @@ pub mod market_definition_service_server {
     #[async_trait]
     pub trait MarketDefinitionService: std::marker::Send + std::marker::Sync + 'static {
         ///
-        async fn append_instrument(
+        async fn append_definition(
             &self,
-            request: tonic::Request<super::AppendInstrumentRequest>,
+            request: tonic::Request<super::AppendDefinitionRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::AppendInstrumentResponse>,
-            tonic::Status,
-        >;
-        ///
-        async fn append_bond(
-            &self,
-            request: tonic::Request<super::AppendBondRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendBondResponse>,
-            tonic::Status,
-        >;
-        ///
-        async fn append_futures_contract(
-            &self,
-            request: tonic::Request<super::AppendFuturesContractRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendFuturesContractResponse>,
-            tonic::Status,
-        >;
-        ///
-        async fn append_calendar(
-            &self,
-            request: tonic::Request<super::AppendCalendarRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendCalendarResponse>,
-            tonic::Status,
-        >;
-        ///
-        async fn append_unit(
-            &self,
-            request: tonic::Request<super::AppendUnitRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendUnitResponse>,
-            tonic::Status,
-        >;
-        ///
-        async fn append_market_rule_pack(
-            &self,
-            request: tonic::Request<super::AppendMarketRulePackRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendMarketRulePackResponse>,
+            tonic::Response<super::AppendDefinitionResponse>,
             tonic::Status,
         >;
         ///
@@ -933,25 +1023,25 @@ pub mod market_definition_service_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/ficant.market.v1.MarketDefinitionService/AppendInstrument" => {
+                "/ficant.market.v1.MarketDefinitionService/AppendDefinition" => {
                     #[allow(non_camel_case_types)]
-                    struct AppendInstrumentSvc<T: MarketDefinitionService>(pub Arc<T>);
+                    struct AppendDefinitionSvc<T: MarketDefinitionService>(pub Arc<T>);
                     impl<
                         T: MarketDefinitionService,
-                    > tonic::server::UnaryService<super::AppendInstrumentRequest>
-                    for AppendInstrumentSvc<T> {
-                        type Response = super::AppendInstrumentResponse;
+                    > tonic::server::UnaryService<super::AppendDefinitionRequest>
+                    for AppendDefinitionSvc<T> {
+                        type Response = super::AppendDefinitionResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::AppendInstrumentRequest>,
+                            request: tonic::Request<super::AppendDefinitionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as MarketDefinitionService>::append_instrument(
+                                <T as MarketDefinitionService>::append_definition(
                                         &inner,
                                         request,
                                     )
@@ -966,250 +1056,7 @@ pub mod market_definition_service_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = AppendInstrumentSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/ficant.market.v1.MarketDefinitionService/AppendBond" => {
-                    #[allow(non_camel_case_types)]
-                    struct AppendBondSvc<T: MarketDefinitionService>(pub Arc<T>);
-                    impl<
-                        T: MarketDefinitionService,
-                    > tonic::server::UnaryService<super::AppendBondRequest>
-                    for AppendBondSvc<T> {
-                        type Response = super::AppendBondResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::AppendBondRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as MarketDefinitionService>::append_bond(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = AppendBondSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/ficant.market.v1.MarketDefinitionService/AppendFuturesContract" => {
-                    #[allow(non_camel_case_types)]
-                    struct AppendFuturesContractSvc<T: MarketDefinitionService>(
-                        pub Arc<T>,
-                    );
-                    impl<
-                        T: MarketDefinitionService,
-                    > tonic::server::UnaryService<super::AppendFuturesContractRequest>
-                    for AppendFuturesContractSvc<T> {
-                        type Response = super::AppendFuturesContractResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::AppendFuturesContractRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as MarketDefinitionService>::append_futures_contract(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = AppendFuturesContractSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/ficant.market.v1.MarketDefinitionService/AppendCalendar" => {
-                    #[allow(non_camel_case_types)]
-                    struct AppendCalendarSvc<T: MarketDefinitionService>(pub Arc<T>);
-                    impl<
-                        T: MarketDefinitionService,
-                    > tonic::server::UnaryService<super::AppendCalendarRequest>
-                    for AppendCalendarSvc<T> {
-                        type Response = super::AppendCalendarResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::AppendCalendarRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as MarketDefinitionService>::append_calendar(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = AppendCalendarSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/ficant.market.v1.MarketDefinitionService/AppendUnit" => {
-                    #[allow(non_camel_case_types)]
-                    struct AppendUnitSvc<T: MarketDefinitionService>(pub Arc<T>);
-                    impl<
-                        T: MarketDefinitionService,
-                    > tonic::server::UnaryService<super::AppendUnitRequest>
-                    for AppendUnitSvc<T> {
-                        type Response = super::AppendUnitResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::AppendUnitRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as MarketDefinitionService>::append_unit(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = AppendUnitSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/ficant.market.v1.MarketDefinitionService/AppendMarketRulePack" => {
-                    #[allow(non_camel_case_types)]
-                    struct AppendMarketRulePackSvc<T: MarketDefinitionService>(
-                        pub Arc<T>,
-                    );
-                    impl<
-                        T: MarketDefinitionService,
-                    > tonic::server::UnaryService<super::AppendMarketRulePackRequest>
-                    for AppendMarketRulePackSvc<T> {
-                        type Response = super::AppendMarketRulePackResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::AppendMarketRulePackRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as MarketDefinitionService>::append_market_rule_pack(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = AppendMarketRulePackSvc(inner);
+                        let method = AppendDefinitionSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -1511,11 +1358,11 @@ pub mod market_fact_service_client {
             self
         }
         ///
-        pub async fn append_cashflow(
+        pub async fn append_market_fact(
             &mut self,
-            request: impl tonic::IntoRequest<super::AppendCashflowRequest>,
+            request: impl tonic::IntoRequest<super::AppendMarketFactRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::AppendCashflowResponse>,
+            tonic::Response<super::AppendMarketFactResponse>,
             tonic::Status,
         > {
             self.inner
@@ -1528,24 +1375,24 @@ pub mod market_fact_service_client {
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/ficant.market.v1.MarketFactService/AppendCashflow",
+                "/ficant.market.v1.MarketFactService/AppendMarketFact",
             );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(
                     GrpcMethod::new(
                         "ficant.market.v1.MarketFactService",
-                        "AppendCashflow",
+                        "AppendMarketFact",
                     ),
                 );
             self.inner.unary(req, path, codec).await
         }
         ///
-        pub async fn append_quote(
+        pub async fn correct_market_fact(
             &mut self,
-            request: impl tonic::IntoRequest<super::AppendQuoteRequest>,
+            request: impl tonic::IntoRequest<super::CorrectMarketFactRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::AppendQuoteResponse>,
+            tonic::Response<super::CorrectMarketFactResponse>,
             tonic::Status,
         > {
             self.inner
@@ -1558,68 +1405,14 @@ pub mod market_fact_service_client {
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/ficant.market.v1.MarketFactService/AppendQuote",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("ficant.market.v1.MarketFactService", "AppendQuote"),
-                );
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn append_trade(
-            &mut self,
-            request: impl tonic::IntoRequest<super::AppendTradeRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendTradeResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/ficant.market.v1.MarketFactService/AppendTrade",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("ficant.market.v1.MarketFactService", "AppendTrade"),
-                );
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn append_valuation(
-            &mut self,
-            request: impl tonic::IntoRequest<super::AppendValuationRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendValuationResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/ficant.market.v1.MarketFactService/AppendValuation",
+                "/ficant.market.v1.MarketFactService/CorrectMarketFact",
             );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(
                     GrpcMethod::new(
                         "ficant.market.v1.MarketFactService",
-                        "AppendValuation",
+                        "CorrectMarketFact",
                     ),
                 );
             self.inner.unary(req, path, codec).await
@@ -1730,35 +1523,19 @@ pub mod market_fact_service_server {
     #[async_trait]
     pub trait MarketFactService: std::marker::Send + std::marker::Sync + 'static {
         ///
-        async fn append_cashflow(
+        async fn append_market_fact(
             &self,
-            request: tonic::Request<super::AppendCashflowRequest>,
+            request: tonic::Request<super::AppendMarketFactRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::AppendCashflowResponse>,
+            tonic::Response<super::AppendMarketFactResponse>,
             tonic::Status,
         >;
         ///
-        async fn append_quote(
+        async fn correct_market_fact(
             &self,
-            request: tonic::Request<super::AppendQuoteRequest>,
+            request: tonic::Request<super::CorrectMarketFactRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::AppendQuoteResponse>,
-            tonic::Status,
-        >;
-        ///
-        async fn append_trade(
-            &self,
-            request: tonic::Request<super::AppendTradeRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendTradeResponse>,
-            tonic::Status,
-        >;
-        ///
-        async fn append_valuation(
-            &self,
-            request: tonic::Request<super::AppendValuationRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendValuationResponse>,
+            tonic::Response<super::CorrectMarketFactResponse>,
             tonic::Status,
         >;
         ///
@@ -1863,25 +1640,28 @@ pub mod market_fact_service_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/ficant.market.v1.MarketFactService/AppendCashflow" => {
+                "/ficant.market.v1.MarketFactService/AppendMarketFact" => {
                     #[allow(non_camel_case_types)]
-                    struct AppendCashflowSvc<T: MarketFactService>(pub Arc<T>);
+                    struct AppendMarketFactSvc<T: MarketFactService>(pub Arc<T>);
                     impl<
                         T: MarketFactService,
-                    > tonic::server::UnaryService<super::AppendCashflowRequest>
-                    for AppendCashflowSvc<T> {
-                        type Response = super::AppendCashflowResponse;
+                    > tonic::server::UnaryService<super::AppendMarketFactRequest>
+                    for AppendMarketFactSvc<T> {
+                        type Response = super::AppendMarketFactResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::AppendCashflowRequest>,
+                            request: tonic::Request<super::AppendMarketFactRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as MarketFactService>::append_cashflow(&inner, request)
+                                <T as MarketFactService>::append_market_fact(
+                                        &inner,
+                                        request,
+                                    )
                                     .await
                             };
                             Box::pin(fut)
@@ -1893,7 +1673,7 @@ pub mod market_fact_service_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = AppendCashflowSvc(inner);
+                        let method = AppendMarketFactSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -1909,25 +1689,28 @@ pub mod market_fact_service_server {
                     };
                     Box::pin(fut)
                 }
-                "/ficant.market.v1.MarketFactService/AppendQuote" => {
+                "/ficant.market.v1.MarketFactService/CorrectMarketFact" => {
                     #[allow(non_camel_case_types)]
-                    struct AppendQuoteSvc<T: MarketFactService>(pub Arc<T>);
+                    struct CorrectMarketFactSvc<T: MarketFactService>(pub Arc<T>);
                     impl<
                         T: MarketFactService,
-                    > tonic::server::UnaryService<super::AppendQuoteRequest>
-                    for AppendQuoteSvc<T> {
-                        type Response = super::AppendQuoteResponse;
+                    > tonic::server::UnaryService<super::CorrectMarketFactRequest>
+                    for CorrectMarketFactSvc<T> {
+                        type Response = super::CorrectMarketFactResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::AppendQuoteRequest>,
+                            request: tonic::Request<super::CorrectMarketFactRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as MarketFactService>::append_quote(&inner, request)
+                                <T as MarketFactService>::correct_market_fact(
+                                        &inner,
+                                        request,
+                                    )
                                     .await
                             };
                             Box::pin(fut)
@@ -1939,99 +1722,7 @@ pub mod market_fact_service_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = AppendQuoteSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/ficant.market.v1.MarketFactService/AppendTrade" => {
-                    #[allow(non_camel_case_types)]
-                    struct AppendTradeSvc<T: MarketFactService>(pub Arc<T>);
-                    impl<
-                        T: MarketFactService,
-                    > tonic::server::UnaryService<super::AppendTradeRequest>
-                    for AppendTradeSvc<T> {
-                        type Response = super::AppendTradeResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::AppendTradeRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as MarketFactService>::append_trade(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = AppendTradeSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/ficant.market.v1.MarketFactService/AppendValuation" => {
-                    #[allow(non_camel_case_types)]
-                    struct AppendValuationSvc<T: MarketFactService>(pub Arc<T>);
-                    impl<
-                        T: MarketFactService,
-                    > tonic::server::UnaryService<super::AppendValuationRequest>
-                    for AppendValuationSvc<T> {
-                        type Response = super::AppendValuationResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::AppendValuationRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as MarketFactService>::append_valuation(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = AppendValuationSvc(inner);
+                        let method = CorrectMarketFactSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

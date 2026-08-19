@@ -9,8 +9,8 @@ pub use error::{
     map_runtime_error,
 };
 pub use ports::{
-    AccessScope, AeadCursorCodec, Cursor, CursorKey, CursorPage, IdempotencyKey,
-    OperationFingerprint, PageRequest,
+    AccessScope, AeadCursorCodec, AuthorizedPrincipal, Cursor, CursorKey, CursorPage,
+    IdempotencyKey, OperationFingerprint, PageRequest,
 };
 pub use use_cases::bond_analytics::{
     BOND_ANALYTICS_MEDIA_TYPE, BondAnalyticsReplay, CalculateBondAnalytics, PublishBondAnalytics,
@@ -23,7 +23,10 @@ pub use use_cases::data_health::{
     DataHealthQuery, DataHealthThresholdProfilePayload, GetDataHealthReport,
     PublishDataHealthThresholdProfile,
 };
-pub use use_cases::data_snapshot::{DataSnapshotPayloads, PublishDataSnapshot};
+pub use use_cases::data_snapshot::{
+    DataSnapshotPayloads, PublishDataSnapshot, PublishUniverseSnapshot, SnapshotUseCase,
+    UniverseSnapshotIntent, verify_universe_snapshot_manifest,
+};
 pub use use_cases::data_sources::DataSourceUseCase;
 pub use use_cases::factor_topology::FactorTopologyUseCase;
 pub use use_cases::futures_delivery::{
@@ -36,6 +39,10 @@ pub use use_cases::futures_delivery::{
 pub use use_cases::futures_hedge::{
     CalculateFuturesHedge, FUTURES_HEDGE_MEDIA_TYPE, FuturesHedgeReplay, PublishFuturesHedge,
     ReplayFuturesHedge,
+};
+pub use use_cases::governed_inputs::{
+    AuthorizedDataSource, FOUNDATION_CHANGE_READ_SCOPE, FoundationChangeUseCase,
+    GovernedInputUseCase,
 };
 pub use use_cases::phase1_business_loop::{
     Phase1BusinessInput, Phase1BusinessLoop, Phase1BusinessResult, StagedArtifact, StagedSnapshot,

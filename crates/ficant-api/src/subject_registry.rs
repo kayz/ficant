@@ -1,12 +1,19 @@
 use crate::core_error::CoreBusinessErrorMapper;
 use crate::error::{PlatformFailure, PlatformFailureCode};
 use crate::grpc_web::request_credential;
+use crate::market_definition::{owner, parse_change, parse_owner, server_market_time};
 use crate::registry::PlatformPort;
 use chrono::{DateTime, Utc};
-use ficant_application::ports::SubjectRepository;
+use ficant_application::ports::{
+    AuthorizedPrincipal, FoundationChangeContext, GovernedPublishSubjectState,
+    GovernedRegisterSubject, IdempotencyKey, SubjectRepository,
+};
 use ficant_application::{ApplicationError, ApplicationErrorCategory, map_domain_error};
 use ficant_contracts::ficant::core::v1 as pb;
 use ficant_contracts::ficant::core::v1::registry_service_server::RegistryService;
+use ficant_domain::governance::{
+    FoundationResourceKind, FoundationResourceRef, PlatformRole, deterministic_change_record_id,
+};
 use ficant_domain::primitives::{DecimalValue, Ulid, UnitRef, Version, VersionRef};
 use ficant_domain::subject::{
     AccessSet, ConstraintSetRef, FundingTier, LimitCeiling, Subject, SubjectRecord,
@@ -48,20 +55,21 @@ impl SubjectRegistryGrpcService {
         &self,
         request: &Request<impl Sized>,
         required_scope: &str,
-    ) -> Result<(), ApplicationError> {
+        required_role: Option<PlatformRole>,
+    ) -> Result<AuthorizedPrincipal, ApplicationError> {
         let credential = request_credential(request.metadata());
         let session = self
             .identity
             .current_session(&credential)
             .map_err(|failure| platform_application_error(&failure))?;
-        if session.has_scope(required_scope) {
-            Ok(())
-        } else {
-            Err(ApplicationError::new(
-                ApplicationErrorCategory::Forbidden,
-                false,
-            ))
+        let principal = session.authorized_principal()?;
+        if !principal.has_scope(required_scope) {
+            return Err(forbidden());
         }
+        if let Some(role) = required_role {
+            principal.require_role(role)?;
+        }
+        Ok(principal)
     }
 
     fn error(
@@ -72,6 +80,68 @@ impl SubjectRegistryGrpcService {
         self.errors
             .map(operation, "subject-registry-application", error)
     }
+
+    async fn register_subject_command(
+        &self,
+        principal: AuthorizedPrincipal,
+        request: &pb::RegisterSubjectRequest,
+    ) -> Result<SubjectRecord, ApplicationError> {
+        let value = parse_subject_record(request)?;
+        let idempotency_key = IdempotencyKey::new(request.idempotency_key.clone())?;
+        let change = parse_change(request.change.as_ref())?;
+        let resource = FoundationResourceRef::versioned(
+            FoundationResourceKind::Subject,
+            value.version().reference().clone(),
+        );
+        let occurred_at = server_market_time();
+        let record_id = deterministic_change_record_id(
+            &occurred_at,
+            principal.actor_id(),
+            &resource,
+            idempotency_key.as_str(),
+        )
+        .map_err(map_domain_error)?;
+        let context =
+            FoundationChangeContext::administrator(principal, change, record_id, occurred_at)?;
+        self.repository
+            .register_governed_subject(GovernedRegisterSubject::new(
+                context,
+                value,
+                idempotency_key,
+            )?)
+            .await
+    }
+
+    async fn publish_subject_state_command(
+        &self,
+        principal: AuthorizedPrincipal,
+        request: &pb::RegisterSubjectStateRequest,
+    ) -> Result<SubjectStateSnapshot, ApplicationError> {
+        let value = parse_subject_state(request.snapshot.as_ref())?;
+        let idempotency_key = IdempotencyKey::new(request.idempotency_key.clone())?;
+        let change = parse_change(request.change.as_ref())?;
+        let resource = FoundationResourceRef::unversioned(
+            FoundationResourceKind::SubjectState,
+            value.id().clone(),
+        );
+        let occurred_at = server_market_time();
+        let record_id = deterministic_change_record_id(
+            &occurred_at,
+            principal.actor_id(),
+            &resource,
+            idempotency_key.as_str(),
+        )
+        .map_err(map_domain_error)?;
+        let context =
+            FoundationChangeContext::administrator(principal, change, record_id, occurred_at)?;
+        self.repository
+            .publish_governed_subject_state(GovernedPublishSubjectState::new(
+                context,
+                value,
+                idempotency_key,
+            )?)
+            .await
+    }
 }
 
 #[tonic::async_trait]
@@ -81,12 +151,13 @@ impl RegistryService for SubjectRegistryGrpcService {
         request: Request<pb::RegisterSubjectRequest>,
     ) -> Result<Response<pb::RegisterSubjectResponse>, Status> {
         const OPERATION: &str = "registry.register-subject";
-        let result = match self.authorize(&request, WRITE_SCOPE) {
+        let result = match self.authorize(&request, WRITE_SCOPE, Some(PlatformRole::PlatformAdmin))
+        {
             Err(error) => Err(error),
-            Ok(()) => match parse_subject_record(request.get_ref()) {
-                Err(error) => Err(error),
-                Ok(value) => self.repository.register_subject(value).await,
-            },
+            Ok(principal) => {
+                self.register_subject_command(principal, request.get_ref())
+                    .await
+            }
         };
         Ok(Response::new(pb::RegisterSubjectResponse {
             result: Some(match result {
@@ -103,13 +174,13 @@ impl RegistryService for SubjectRegistryGrpcService {
         request: Request<pb::GetSubjectRequest>,
     ) -> Result<Response<pb::GetSubjectResponse>, Status> {
         const OPERATION: &str = "registry.get-subject";
-        let result = match self.authorize(&request, READ_SCOPE) {
+        let result = match self.authorize(&request, READ_SCOPE, None) {
             Err(error) => Err(error),
-            Ok(()) => match parse_version_ref(request.get_ref().subject_ref.as_ref()) {
+            Ok(principal) => match parse_version_ref(request.get_ref().subject_ref.as_ref()) {
                 Err(error) => Err(error),
                 Ok(reference) => self
                     .repository
-                    .get_subject(reference)
+                    .get_subject_scoped(principal.access_scope(), reference)
                     .await
                     .and_then(|value| value.ok_or_else(not_found)),
             },
@@ -129,12 +200,13 @@ impl RegistryService for SubjectRegistryGrpcService {
         request: Request<pb::RegisterSubjectStateRequest>,
     ) -> Result<Response<pb::RegisterSubjectStateResponse>, Status> {
         const OPERATION: &str = "registry.register-subject-state";
-        let result = match self.authorize(&request, WRITE_SCOPE) {
+        let result = match self.authorize(&request, WRITE_SCOPE, Some(PlatformRole::PlatformAdmin))
+        {
             Err(error) => Err(error),
-            Ok(()) => match parse_subject_state(request.get_ref().snapshot.as_ref()) {
-                Err(error) => Err(error),
-                Ok(value) => self.repository.register_subject_state(value).await,
-            },
+            Ok(principal) => {
+                self.publish_subject_state_command(principal, request.get_ref())
+                    .await
+            }
         };
         Ok(Response::new(pb::RegisterSubjectStateResponse {
             result: Some(match result {
@@ -153,18 +225,23 @@ impl RegistryService for SubjectRegistryGrpcService {
         request: Request<pb::GetSubjectStateRequest>,
     ) -> Result<Response<pb::GetSubjectStateResponse>, Status> {
         const OPERATION: &str = "registry.get-subject-state";
-        let result = if let Err(error) = self.authorize(&request, READ_SCOPE) {
-            Err(error)
-        } else {
-            let snapshot_id = parse_ulid(request.get_ref().snapshot_id.as_ref());
-            let knowledge_at = parse_timestamp(request.get_ref().knowledge_at.as_ref());
-            match (snapshot_id, knowledge_at) {
-                (Ok(snapshot_id), Ok(knowledge_at)) => self
-                    .repository
-                    .get_subject_state(snapshot_id, knowledge_at)
-                    .await
-                    .and_then(|value| value.ok_or_else(not_found)),
-                (Err(error), _) | (_, Err(error)) => Err(error),
+        let result = match self.authorize(&request, READ_SCOPE, None) {
+            Err(error) => Err(error),
+            Ok(principal) => {
+                let snapshot_id = parse_ulid(request.get_ref().snapshot_id.as_ref());
+                let knowledge_at = parse_timestamp(request.get_ref().knowledge_at.as_ref());
+                match (snapshot_id, knowledge_at) {
+                    (Ok(snapshot_id), Ok(knowledge_at)) => self
+                        .repository
+                        .get_subject_state_scoped(
+                            principal.access_scope(),
+                            snapshot_id,
+                            knowledge_at,
+                        )
+                        .await
+                        .and_then(|value| value.ok_or_else(not_found)),
+                    (Err(error), _) | (_, Err(error)) => Err(error),
+                }
             }
         };
         Ok(Response::new(pb::GetSubjectStateResponse {
@@ -190,8 +267,9 @@ fn parse_subject_record(
 }
 
 fn parse_subject(value: &pb::Subject) -> Result<Subject, ApplicationError> {
-    Subject::new(
+    Subject::new_owned(
         parse_ulid(value.subject_id.as_ref())?,
+        parse_owner(value.owner.as_ref())?,
         value.display_name.clone(),
     )
     .map_err(map_domain_error)
@@ -246,7 +324,7 @@ fn parse_subject_state(
             .map_err(map_domain_error)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    SubjectStateSnapshot::new(
+    SubjectStateSnapshot::new_owned(
         parse_ulid(value.snapshot_id.as_ref())?,
         parse_version_ref(value.subject_ref.as_ref())?,
         net_capital,
@@ -254,6 +332,7 @@ fn parse_subject_state(
         observed_at,
         visible_at,
         value.market_timezone.clone(),
+        parse_owner(value.owner.as_ref())?,
     )
     .map_err(map_domain_error)
 }
@@ -299,6 +378,7 @@ fn subject_record(value: &SubjectRecord) -> pb::SubjectRecord {
                 value: value.subject().id().as_str().to_owned(),
             }),
             display_name: value.subject().display_name().to_owned(),
+            owner: value.subject().owner().map(owner),
         }),
         subject_version: Some(subject_version(value.version())),
     }
@@ -347,6 +427,7 @@ fn state_snapshot(value: &SubjectStateSnapshot) -> pb::SubjectStateSnapshot {
         observed_at: Some(timestamp(value.observed_at())),
         visible_at: Some(timestamp(value.visible_at())),
         market_timezone: value.market_timezone().to_owned(),
+        owner: value.owner().map(owner),
     }
 }
 
@@ -398,6 +479,10 @@ fn invalid() -> ApplicationError {
     ApplicationError::new(ApplicationErrorCategory::ValidationFailed, false)
 }
 
+fn forbidden() -> ApplicationError {
+    ApplicationError::new(ApplicationErrorCategory::Forbidden, false)
+}
+
 fn not_found() -> ApplicationError {
     ApplicationError::new(ApplicationErrorCategory::NotFound, false)
 }
@@ -409,8 +494,10 @@ mod tests {
     use chrono::{DateTime, Utc};
     use ficant_application::ports::SubjectRepository;
     use ficant_contracts::ficant::core::v1::registry_service_server::RegistryService;
+    use ficant_domain::governance::PlatformRole;
     use std::collections::BTreeMap;
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     const KEY: &[u8] = b"0123456789abcdef0123456789abcdef";
 
@@ -418,14 +505,81 @@ mod tests {
     struct MemoryRepository {
         subjects: Mutex<BTreeMap<(String, u64), SubjectRecord>>,
         states: Mutex<BTreeMap<String, SubjectStateSnapshot>>,
+        governed_writes: AtomicUsize,
+        legacy_writes: AtomicUsize,
     }
 
     #[tonic::async_trait]
     impl SubjectRepository for MemoryRepository {
+        async fn register_governed_subject(
+            &self,
+            command: GovernedRegisterSubject,
+        ) -> Result<SubjectRecord, ApplicationError> {
+            self.governed_writes.fetch_add(1, Ordering::SeqCst);
+            let value = command.value().clone();
+            let key = (
+                value.subject().id().as_str().to_owned(),
+                value.version().reference().version().get(),
+            );
+            let mut values = self.subjects.lock().unwrap();
+            if let Some(existing) = values.get(&key) {
+                return if existing == &value {
+                    Ok(existing.clone())
+                } else {
+                    Err(ApplicationError::new(
+                        ApplicationErrorCategory::ImmutableViolation,
+                        false,
+                    ))
+                };
+            }
+            values.insert(key, value.clone());
+            Ok(value)
+        }
+
+        async fn publish_governed_subject_state(
+            &self,
+            command: GovernedPublishSubjectState,
+        ) -> Result<SubjectStateSnapshot, ApplicationError> {
+            self.governed_writes.fetch_add(1, Ordering::SeqCst);
+            let value = command.value().clone();
+            let subject = self
+                .subjects
+                .lock()
+                .unwrap()
+                .get(&(
+                    value.subject_ref().id().as_str().to_owned(),
+                    value.subject_ref().version().get(),
+                ))
+                .cloned()
+                .ok_or_else(|| {
+                    ApplicationError::new(ApplicationErrorCategory::LineageIncomplete, false)
+                })?;
+            if subject.subject().owner() != value.owner() {
+                return Err(ApplicationError::new(
+                    ApplicationErrorCategory::ImmutableViolation,
+                    false,
+                ));
+            }
+            let mut values = self.states.lock().unwrap();
+            if let Some(existing) = values.get(value.id().as_str()) {
+                return if existing == &value {
+                    Ok(existing.clone())
+                } else {
+                    Err(ApplicationError::new(
+                        ApplicationErrorCategory::ImmutableViolation,
+                        false,
+                    ))
+                };
+            }
+            values.insert(value.id().as_str().to_owned(), value.clone());
+            Ok(value)
+        }
+
         async fn register_subject(
             &self,
             value: SubjectRecord,
         ) -> Result<SubjectRecord, ApplicationError> {
+            self.legacy_writes.fetch_add(1, Ordering::SeqCst);
             let key = (
                 value.subject().id().as_str().to_owned(),
                 value.version().reference().version().get(),
@@ -464,6 +618,7 @@ mod tests {
             &self,
             value: SubjectStateSnapshot,
         ) -> Result<SubjectStateSnapshot, ApplicationError> {
+            self.legacy_writes.fetch_add(1, Ordering::SeqCst);
             let mut values = self.states.lock().unwrap();
             if let Some(existing) = values.get(value.id().as_str()) {
                 return if existing == &value {
@@ -494,9 +649,15 @@ mod tests {
         }
     }
 
-    fn service() -> SubjectRegistryGrpcService {
+    fn service_with_role(
+        role: PlatformRole,
+    ) -> (SubjectRegistryGrpcService, Arc<MemoryRepository>) {
         let identity = TrustedIdentity::implicit(
             "registry-test",
+            Ulid::new("01J00000000000000000000021").unwrap(),
+            Ulid::new("01J00000000000000000000022").unwrap(),
+            vec![Ulid::new("01J00000000000000000000023").unwrap()],
+            role,
             [READ_SCOPE.to_owned(), WRITE_SCOPE.to_owned()],
         )
         .unwrap();
@@ -511,8 +672,11 @@ mod tests {
             )
             .unwrap(),
         );
-        SubjectRegistryGrpcService::new(application, Arc::new(MemoryRepository::default()), KEY)
-            .unwrap()
+        let repository = Arc::new(MemoryRepository::default());
+        (
+            SubjectRegistryGrpcService::new(application, repository.clone(), KEY).unwrap(),
+            repository,
+        )
     }
 
     fn id(value: &str) -> pb::Ulid {
@@ -528,9 +692,72 @@ mod tests {
         }
     }
 
+    fn request_owner() -> pb::OwnerRef {
+        pb::OwnerRef {
+            tenant_id: Some(id("01J00000000000000000000022")),
+            owner_id: Some(id("01J00000000000000000000023")),
+        }
+    }
+
+    fn change(reason: &str) -> pb::ChangeJustification {
+        pb::ChangeJustification {
+            reason: reason.to_owned(),
+            sources: vec![pb::SourceDocumentRef {
+                uri: "fixture://subject-registry".to_owned(),
+                sha256: Some(pb::Sha256 { value: vec![7; 32] }),
+            }],
+        }
+    }
+
+    fn subject_state_request(
+        subject_id: &str,
+        timestamp: Timestamp,
+    ) -> pb::RegisterSubjectStateRequest {
+        let decimal = pb::DecimalValue {
+            coefficient: "1000".to_owned(),
+            scale: 0,
+            unit: Some(pb::UnitRef {
+                unit_id: Some(id("01J00000000000000000000012")),
+                version: 1,
+            }),
+        };
+        pb::RegisterSubjectStateRequest {
+            snapshot: Some(pb::SubjectStateSnapshot {
+                snapshot_id: Some(id("01J00000000000000000000013")),
+                subject_ref: Some(version_ref(subject_id, 1)),
+                net_capital: Some(decimal.clone()),
+                limit_ceilings: vec![pb::LimitCeiling {
+                    limit_code: "credit".to_owned(),
+                    ceiling: Some(decimal),
+                }],
+                observed_at: Some(timestamp),
+                visible_at: Some(timestamp),
+                market_timezone: "Asia/Shanghai".to_owned(),
+                owner: Some(request_owner()),
+            }),
+            change: Some(change("register test subject state")),
+            idempotency_key: "subject-state-test-v1".to_owned(),
+        }
+    }
+
+    #[tokio::test]
+    async fn researcher_cannot_mutate_subjects_even_with_the_write_scope() {
+        let (service, repository) = service_with_role(PlatformRole::Researcher);
+        let response = service
+            .register_subject(Request::new(pb::RegisterSubjectRequest::default()))
+            .await
+            .unwrap()
+            .into_inner();
+        let Some(pb::register_subject_response::Result::Error(error)) = response.result else {
+            panic!("researcher mutation must fail closed");
+        };
+        assert_eq!(error.code, pb::ErrorCode::Forbidden as i32);
+        assert!(repository.subjects.lock().unwrap().is_empty());
+    }
+
     #[tokio::test]
     async fn registry_round_trip_preserves_subject_and_state_fields() {
-        let service = service();
+        let (service, repository) = service_with_role(PlatformRole::PlatformAdmin);
         let subject_id = "01J00000000000000000000011";
         let subject_ref = version_ref(subject_id, 1);
         let register = service
@@ -538,6 +765,7 @@ mod tests {
                 subject: Some(pb::Subject {
                     subject_id: Some(id(subject_id)),
                     display_name: "Registry test".to_owned(),
+                    owner: Some(request_owner()),
                 }),
                 subject_version: Some(pb::SubjectVersion {
                     subject_ref: Some(subject_ref.clone()),
@@ -554,6 +782,8 @@ mod tests {
                     liability_profile: "liability".to_owned(),
                     constraint_set_ref: None,
                 }),
+                change: Some(change("register test subject")),
+                idempotency_key: "subject-test-v1".to_owned(),
             }))
             .await
             .unwrap()
@@ -580,29 +810,8 @@ mod tests {
             seconds: 1_783_152_000,
             nanos: 0,
         };
-        let decimal = pb::DecimalValue {
-            coefficient: "1000".to_owned(),
-            scale: 0,
-            unit: Some(pb::UnitRef {
-                unit_id: Some(id("01J00000000000000000000012")),
-                version: 1,
-            }),
-        };
         let state = service
-            .register_subject_state(Request::new(pb::RegisterSubjectStateRequest {
-                snapshot: Some(pb::SubjectStateSnapshot {
-                    snapshot_id: Some(id("01J00000000000000000000013")),
-                    subject_ref: Some(version_ref(subject_id, 1)),
-                    net_capital: Some(decimal.clone()),
-                    limit_ceilings: vec![pb::LimitCeiling {
-                        limit_code: "credit".to_owned(),
-                        ceiling: Some(decimal),
-                    }],
-                    observed_at: Some(timestamp),
-                    visible_at: Some(timestamp),
-                    market_timezone: "Asia/Shanghai".to_owned(),
-                }),
-            }))
+            .register_subject_state(Request::new(subject_state_request(subject_id, timestamp)))
             .await
             .unwrap()
             .into_inner();
@@ -625,5 +834,7 @@ mod tests {
             panic!("a not-yet-visible state must be hidden")
         };
         assert_eq!(error.code, pb::ErrorCode::NotFound as i32);
+        assert_eq!(repository.governed_writes.load(Ordering::SeqCst), 2);
+        assert_eq!(repository.legacy_writes.load(Ordering::SeqCst), 0);
     }
 }

@@ -50,7 +50,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 .\scripts\check-fast.ps1
 ```
 
-它运行 `cargo fmt`、离线 workspace check、R5D 精确 crate 邻接表与 L1→L2 语法依赖门禁、非环境 Rust 测试和 Storage library 测试；不会连接 PostgreSQL、Ceph RGW、GitHub 或目标服务器。未知 workspace package/依赖边，以及 `research/**` 对 analytics/curves/futures 模块的直接或 façade 引用，都会默认失败。
+它运行 `cargo fmt`、离线 workspace check、R5D 精确 crate 邻接表与 L1→L2 语法依赖门禁、非环境 Rust 测试和 Storage library 测试；不会连接 PostgreSQL、Ceph RGW、GitHub 或目标服务器。R6A 真实输入平面 SIT 被显式标记为 integration-only，普通 workspace test 只报告 ignored；未知 workspace package/依赖边，以及 `research/**` 对 analytics/curves/futures 模块的直接或 façade 引用，都会默认失败。
 
 完整本地回归：
 
@@ -77,7 +77,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 - `FICANT_TEST_S3_SECRET_KEY`
 - `FICANT_TEST_RUNTIME_IMAGE_DIGEST`
 
-脚本不会创建、部署或清理服务器，也不会打印这些值。数据库必须可以安全地被测试 migration 重置；不得指向共享、测试发布或生产数据库。集成计划依次覆盖 migration、Phase 1 正向业务闭环、13 项负向不变量，以及 Phase 2B Carry/Roll-down、Phase 2C 国债期货交割价值链的真实发布重放与篡改检测。
+脚本不会创建、部署或清理服务器，也不会打印这些值。数据库必须可以安全地被测试 migration 重置；不得指向共享、测试发布或生产数据库。集成计划依次覆盖 migration、Phase 1 正向业务闭环、13 项负向不变量、Phase 2B Carry/Roll-down、Phase 2C 国债期货交割、Phase 2D 套保、Phase 3A/3B 数据与快照，以及 R6A 生产 Definition/Fact/Snapshot 输入平面的授权导入、零副作用拒绝、重启重读和治理证据。
 
 仓库内 `deploy/dev/docker-compose.yml` 是当前唯一的本地 Compose 拓扑，提供锁定基础镜像摘要的 PostgreSQL、单节点 Ceph RGW、migration、三个 Rust 服务和 React Platform Shell；它不是生产 Ceph 部署模板。日常开发只调用下面的包装脚本：
 

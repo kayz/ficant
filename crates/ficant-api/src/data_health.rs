@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use ficant_application::ports::{
-    AccessScope, BlobStore, CanonicalSnapshotDecoder, DataHealthThresholdProfileRepository,
-    DataSourceRepository, IdempotencyKey, IntegrityEventSink, PositionSnapshotRepository,
-    SnapshotRepository, SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader,
+    AccessScope, AuthorizedPrincipal, BlobStore, CanonicalSnapshotDecoder,
+    DataHealthThresholdProfileRepository, DataSourceRepository, FoundationChangeContext,
+    IdempotencyKey, IntegrityEventSink, PositionSnapshotRepository, SnapshotRepository,
+    SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader,
 };
 use ficant_application::{
     ApplicationError, ApplicationErrorCategory, DataHealthQuery, DataHealthThresholdProfilePayload,
@@ -14,6 +15,9 @@ use ficant_contracts::ficant::core::v1 as core;
 use ficant_contracts::ficant::market::v1 as market;
 use ficant_contracts::ficant::research::v1 as pb;
 use ficant_contracts::ficant::research::v1::data_health_service_server::DataHealthService;
+use ficant_domain::governance::{
+    FoundationResourceKind, FoundationResourceRef, PlatformRole, deterministic_change_record_id,
+};
 use ficant_domain::market::PriceSourceType;
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, LineageRef, MarketTime, OwnerRef, Ulid, Version, VersionRef,
@@ -38,7 +42,6 @@ const CONFIGURE_SCOPE: &str = "data-health:configure";
 #[derive(Clone)]
 pub struct DataHealthGrpcService {
     identity: Arc<dyn PlatformPort>,
-    access_scope: AccessScope,
     positions: Arc<dyn PositionSnapshotRepository>,
     snapshot_metadata: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
     blob_reader: Arc<dyn VerifiedBlobReader>,
@@ -61,7 +64,7 @@ impl DataHealthGrpcService {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         identity: Arc<dyn PlatformPort>,
-        access_scope: AccessScope,
+        _access_scope: AccessScope,
         positions: Arc<dyn PositionSnapshotRepository>,
         snapshot_metadata: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
         blob_reader: Arc<dyn VerifiedBlobReader>,
@@ -75,7 +78,6 @@ impl DataHealthGrpcService {
     ) -> Result<Self, &'static str> {
         Ok(Self {
             identity,
-            access_scope,
             positions,
             snapshot_metadata,
             blob_reader,
@@ -93,17 +95,21 @@ impl DataHealthGrpcService {
         &self,
         request: &Request<impl Sized>,
         required_scope: &str,
-    ) -> Result<(), ApplicationError> {
+        required_role: Option<PlatformRole>,
+    ) -> Result<AuthorizedPrincipal, ApplicationError> {
         let credential = request_credential(request.metadata());
         let session = self
             .identity
             .current_session(&credential)
             .map_err(|failure| platform_application_error(&failure))?;
-        if session.has_scope(required_scope) {
-            Ok(())
-        } else {
-            Err(forbidden())
+        let principal = session.authorized_principal()?;
+        if !principal.has_scope(required_scope) {
+            return Err(forbidden());
         }
+        if let Some(role) = required_role {
+            principal.require_role(role)?;
+        }
+        Ok(principal)
     }
 
     fn error(&self, operation: &str, error: &ApplicationError) -> core::ErrorDetail {
@@ -118,25 +124,50 @@ impl DataHealthService for DataHealthGrpcService {
         request: Request<pb::PublishDataHealthThresholdProfileRequest>,
     ) -> Result<Response<pb::PublishDataHealthThresholdProfileResponse>, Status> {
         const OPERATION: &str = "data-health.configure";
-        let result = match self.authorize(&request, CONFIGURE_SCOPE) {
-            Err(error) => Err(error),
-            Ok(()) => match parse_threshold_profile(request.get_ref().threshold_profile.as_ref())
-                .and_then(|profile| {
-                    let key = IdempotencyKey::new(request.get_ref().idempotency_key.clone())?;
-                    DataHealthThresholdProfilePayload::new(profile, key)
-                }) {
-                Ok(payload) if self.access_scope.allows(payload.profile().owner()) => {
-                    PublishDataHealthThresholdProfile::new(
-                        self.blobs.as_ref(),
-                        self.snapshots.as_ref(),
-                    )
-                    .execute(&self.access_scope, payload)
-                    .await
-                }
-                Ok(_) => Err(forbidden()),
+        let result =
+            match self.authorize(&request, CONFIGURE_SCOPE, Some(PlatformRole::PlatformAdmin)) {
                 Err(error) => Err(error),
-            },
-        };
+                Ok(principal) => match (|| {
+                    let profile =
+                        parse_threshold_profile(request.get_ref().threshold_profile.as_ref())?;
+                    let key = IdempotencyKey::new(request.get_ref().idempotency_key.clone())?;
+                    let payload = DataHealthThresholdProfilePayload::new(profile, key)?;
+                    principal.authorize_mutation(
+                        PlatformRole::PlatformAdmin,
+                        CONFIGURE_SCOPE,
+                        payload.profile().owner(),
+                    )?;
+                    let occurred_at = server_market_time();
+                    let resource = FoundationResourceRef::versioned(
+                        FoundationResourceKind::DataHealthThresholdProfile,
+                        payload.profile().profile_ref().clone(),
+                    );
+                    let record_id = deterministic_change_record_id(
+                        &occurred_at,
+                        principal.actor_id(),
+                        &resource,
+                        &request.get_ref().idempotency_key,
+                    )
+                    .map_err(map_domain_error)?;
+                    let context = FoundationChangeContext::administrator(
+                        principal,
+                        crate::market_definition::parse_change(request.get_ref().change.as_ref())?,
+                        record_id,
+                        occurred_at,
+                    )?;
+                    Ok((context, payload))
+                })() {
+                    Ok((context, payload)) => {
+                        PublishDataHealthThresholdProfile::new(
+                            self.blobs.as_ref(),
+                            self.snapshots.as_ref(),
+                        )
+                        .execute(context, payload)
+                        .await
+                    }
+                    Err(error) => Err(error),
+                },
+            };
         Ok(Response::new(
             pb::PublishDataHealthThresholdProfileResponse {
                 result: Some(match result {
@@ -160,12 +191,12 @@ impl DataHealthService for DataHealthGrpcService {
         request: Request<pb::GetDataHealthReportRequest>,
     ) -> Result<Response<pb::GetDataHealthReportResponse>, Status> {
         const OPERATION: &str = "data-health.get";
-        let result = match self.authorize(&request, READ_SCOPE) {
+        let result = match self.authorize(&request, READ_SCOPE, None) {
             Err(error) => Err(error),
-            Ok(()) => parse_query(request.get_ref()),
+            Ok(principal) => parse_query(request.get_ref()).map(|query| (principal, query)),
         };
         let result = match result {
-            Ok(query) => {
+            Ok((principal, query)) => {
                 GetDataHealthReport::new(
                     self.positions.as_ref(),
                     self.snapshot_metadata.as_ref(),
@@ -175,7 +206,7 @@ impl DataHealthService for DataHealthGrpcService {
                     self.data_sources.as_ref(),
                     self.threshold_profiles.as_ref(),
                 )
-                .execute(&self.access_scope, query)
+                .execute(principal.access_scope(), query)
                 .await
             }
             Err(error) => Err(error),
@@ -466,6 +497,12 @@ fn platform_application_error(failure: &PlatformFailure) -> ApplicationError {
         }
     };
     ApplicationError::new(category, retryable)
+}
+
+fn server_market_time() -> MarketTime {
+    let instant = Utc::now();
+    MarketTime::new(instant, "UTC", instant.date_naive())
+        .expect("UTC system time is one valid MarketTime")
 }
 
 fn invalid() -> ApplicationError {

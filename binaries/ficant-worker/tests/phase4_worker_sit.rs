@@ -912,8 +912,36 @@ fn server_values(
             "phase5a-observer".to_owned(),
         ),
         (
+            "FICANT_LOOPBACK_ACTOR_ID".to_owned(),
+            id('2').as_str().to_owned(),
+        ),
+        (
+            "FICANT_LOOPBACK_TENANT_ID".to_owned(),
+            id('0').as_str().to_owned(),
+        ),
+        (
+            "FICANT_LOOPBACK_ALLOWED_OWNER_IDS".to_owned(),
+            id('1').as_str().to_owned(),
+        ),
+        (
+            "FICANT_LOOPBACK_ACTIVE_ROLE".to_owned(),
+            "RESEARCHER".to_owned(),
+        ),
+        (
             "FICANT_LOOPBACK_SCOPES".to_owned(),
             "experiment:read".to_owned(),
+        ),
+        (
+            "FICANT_INPUT_FILE_NDJSON_ROOT".to_owned(),
+            env!("CARGO_MANIFEST_DIR").to_owned(),
+        ),
+        (
+            "FICANT_INPUT_FILE_CONNECTION_BINDING".to_owned(),
+            "phase4-file-fixture".to_owned(),
+        ),
+        (
+            "FICANT_INPUT_POSTGRES_CONNECTION_BINDING".to_owned(),
+            "phase4-postgres-fixture".to_owned(),
         ),
     ])
 }

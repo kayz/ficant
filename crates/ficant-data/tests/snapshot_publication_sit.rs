@@ -6,25 +6,31 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use ficant_application::ports::{
-    AccessScope, AeadCursorCodec, AppendDefinitionVersion, CursorKey, DataSourceRepository,
-    DefinitionIdentity, DefinitionRepository, DefinitionValue, IdempotencyKey,
-    InstrumentDefinition, IntegrityEvent, IntegrityEventSink, RegisterDataSource, SafeTraceContext,
+    AccessScope, AeadCursorCodec, AppendDefinitionVersion, AuthorizedPrincipal,
+    CanonicalImportManifestEvidence, CanonicalImportReplayRequest, CursorKey,
+    DataSourceAuthorizationRepository, DataSourceRepository, DefinitionIdentity,
+    DefinitionRepository, DefinitionValue, FoundationChangeContext, IdempotencyKey,
+    InstrumentDefinition, IntegrityEvent, IntegrityEventSink, PublishDataSourceAuthorization,
+    RegisterDataSource, SafeTraceContext, data_source_content_hash,
 };
 use ficant_application::{
     DataSnapshotPayloads, PublishDataSnapshot, VerifiedReadFacade, VerifiedSnapshotRead,
 };
 use ficant_data::{
-    CANONICAL_QUOTE_SCHEMA_ID, CanonicalIngestRequest, CanonicalQuoteIngestor,
-    CanonicalSnapshotCodec, DataResult, InstrumentMapping, InstrumentMappingEntry,
-    PointInTimeWindow, RawDecimal, RawQuoteRow, RawQuoteSource, canonical_quote_schema_hash,
+    CANONICAL_QUOTE_SCHEMA_ID, CanonicalImportEvidence, CanonicalIngestRequest,
+    CanonicalQuoteIngestor, CanonicalSnapshotCodec, DataResult, InstrumentMapping,
+    InstrumentMappingEntry, PointInTimeWindow, RawDecimal, RawQuoteRow, RawQuoteSource,
+    canonical_quote_schema_hash,
 };
 use ficant_domain::VersionedDefinition;
+use ficant_domain::governance::{ChangeJustification, PlatformRole, SourceDocumentRef};
 use ficant_domain::market::{
-    Calendar, CalendarInput, CalendarSession, DataSource, DataSourceInput, DataSourceKind,
-    Instrument, InstrumentInput, InstrumentKind, Unit, UnitInput,
+    Calendar, CalendarInput, CalendarSession, DataSource, DataSourceAuthorization,
+    DataSourceAuthorizationInput, DataSourceAuthorizationState, DataSourceInput, DataSourceKind,
+    ImportInterface, Instrument, InstrumentInput, InstrumentKind, Unit, UnitInput,
 };
 use ficant_domain::primitives::{
-    EffectivePeriod, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
+    ContentHash, EffectivePeriod, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
 };
 use ficant_storage::postgres::PostgresRepository;
 use ficant_storage::s3::S3BlobStore;
@@ -136,21 +142,64 @@ async fn published_snapshot_restarts_and_never_reopens_the_external_source() {
     .unwrap();
     repository
         .register(
-            RegisterDataSource::new(scope.clone(), None, data_source.clone(), key("source"))
-                .unwrap(),
+            RegisterDataSource::new(
+                admin_change(&owner),
+                None,
+                data_source.clone(),
+                key("source"),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let mapping = InstrumentMapping::new(
+        Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F60").unwrap(),
+        owner.clone(),
+        VersionRef::new(data_source.id().clone(), version),
+        vec![InstrumentMappingEntry::new("260011.IB", effective, instrument_ref).unwrap()],
+    )
+    .unwrap();
+    let authorization = DataSourceAuthorization::new(DataSourceAuthorizationInput {
+        authorization_id: Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F70").unwrap(),
+        version,
+        owner: owner.clone(),
+        data_source: VersionRef::new(data_source.id().clone(), version),
+        data_source_hash: data_source_content_hash(&data_source),
+        import_interface: ImportInterface::CanonicalQuoteSnapshot,
+        canonical_schema_id: data_source.canonical_schema_id().to_owned(),
+        canonical_schema_hash: data_source.canonical_schema_hash().clone(),
+        effective: EffectivePeriod::new(
+            market_time("2026-01-01T00:00:00Z"),
+            market_time("2027-01-01T00:00:00Z"),
+        )
+        .unwrap(),
+        state: DataSourceAuthorizationState::Active,
+        supersedes: None,
+        mapping_id: mapping.id().clone(),
+        mapping_hash: mapping.content_hash().clone(),
+    })
+    .unwrap();
+    repository
+        .publish_authorization(
+            PublishDataSourceAuthorization::new(
+                admin_change_for(
+                    &owner,
+                    "01ARZ3NDEKTSV4RRFFQ69G5F81",
+                    "authorize Phase 3B deterministic import",
+                ),
+                None,
+                authorization.clone(),
+                key("authorization"),
+            )
+            .unwrap(),
         )
         .await
         .unwrap();
     let request = CanonicalIngestRequest::new(
         data_source.clone(),
-        InstrumentMapping::new(
-            owner.clone(),
-            VersionRef::new(data_source.id().clone(), version),
-            vec![InstrumentMappingEntry::new("260011.IB", effective, instrument_ref).unwrap()],
-        )
-        .unwrap(),
-        calendar,
-        price,
+        mapping.clone(),
+        calendar.clone(),
+        price.clone(),
         PointInTimeWindow::new(
             market_time("2026-07-20T02:00:00Z"),
             market_time("2026-07-20T02:05:00Z"),
@@ -170,39 +219,70 @@ async fn published_snapshot_restarts_and_never_reopens_the_external_source() {
             .unwrap()
     };
     assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let actor_id = Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F00").unwrap();
+    let import_evidence = CanonicalImportEvidence::new(
+        authorization.version_ref(),
+        authorization.content_hash().clone(),
+        actor_id.clone(),
+    );
     let package = CanonicalSnapshotCodec
-        .build(
+        .build_authorized(
             Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F50").unwrap(),
             &request,
             &canonical,
+            &import_evidence,
         )
         .unwrap();
     let expected_parquet = package.parquet().to_vec();
     let expected_manifest = package.manifest().to_vec();
-    let payloads = DataSnapshotPayloads::new(
+    let base_key = key("snapshot");
+    let replay_request = CanonicalImportReplayRequest::new(
+        authorized_import_change(&owner),
+        owner.clone(),
+        package.snapshot().id().clone(),
+        authorization.version_ref(),
+        authorization.content_hash().clone(),
+        mapping.id().clone(),
+        mapping.content_hash().clone(),
+        VersionRef::new(
+            Ulid::new(calendar.identity()).unwrap(),
+            Version::new(calendar.version()).unwrap(),
+        ),
+        VersionRef::new(
+            Ulid::new(price.identity()).unwrap(),
+            Version::new(price.version()).unwrap(),
+        ),
+        request.window().as_of().clone(),
+        request.window().visible_at_cutoff().clone(),
+        base_key.clone(),
+    )
+    .unwrap();
+    let payloads = DataSnapshotPayloads::new_authorized(
         package.snapshot().clone(),
         expected_parquet.clone(),
         expected_manifest.clone(),
-        key("snapshot"),
+        base_key,
+        CanonicalImportManifestEvidence::new(
+            actor_id,
+            authorization.version_ref(),
+            authorization.content_hash().clone(),
+        ),
     )
     .unwrap();
     let store = make_store(pool.clone());
     let (published_snapshot, retry) = {
         let publication = PublishDataSnapshot::new(&store, &repository);
-        let published_snapshot = publication.execute(&scope, payloads).await.unwrap();
-        let retry = publication
-            .execute(
-                &scope,
-                DataSnapshotPayloads::new(
-                    package.snapshot().clone(),
-                    expected_parquet.clone(),
-                    expected_manifest.clone(),
-                    key("snapshot"),
-                )
-                .unwrap(),
-            )
+        let published_snapshot = publication
+            .execute_governed_import(replay_request.clone(), payloads)
             .await
             .unwrap();
+        let retry = publication
+            .probe_replay(&replay_request)
+            .await
+            .unwrap()
+            .unwrap()
+            .snapshot()
+            .clone();
         (published_snapshot, retry)
     };
     assert_eq!(published_snapshot, retry);
@@ -256,7 +336,7 @@ async fn published_snapshot_restarts_and_never_reopens_the_external_source() {
     .fetch_one(&restarted_pool)
     .await
     .unwrap();
-    assert_eq!(counts, (1, 4, 2, 0, 0));
+    assert_eq!(counts, (1, 6, 2, 0, 0));
 }
 
 struct CountingSource {
@@ -372,6 +452,63 @@ fn scope(owner: &OwnerRef) -> AccessScope {
         owner.tenant_id().clone(),
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F00").unwrap(),
         vec![owner.owner_id().clone()],
+    )
+    .unwrap()
+}
+
+fn admin_change(owner: &OwnerRef) -> FoundationChangeContext {
+    admin_change_for(
+        owner,
+        "01ARZ3NDEKTSV4RRFFQ69G5F80",
+        "Phase 3B deterministic source fixture",
+    )
+}
+
+fn admin_change_for(owner: &OwnerRef, record_id: &str, reason: &str) -> FoundationChangeContext {
+    let principal = AuthorizedPrincipal::new(
+        "phase3b-admin".to_owned(),
+        Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F00").unwrap(),
+        owner.tenant_id().clone(),
+        vec![owner.owner_id().clone()],
+        PlatformRole::PlatformAdmin,
+        vec!["data-sources:write".to_owned()],
+        ContentHash::digest(b"phase3b-admin-credential"),
+    )
+    .unwrap();
+    FoundationChangeContext::administrator(
+        principal,
+        ChangeJustification::new(
+            reason,
+            vec![
+                SourceDocumentRef::new(
+                    "fixture://phase3b/source",
+                    ContentHash::digest(b"phase3b-source-fixture"),
+                )
+                .unwrap(),
+            ],
+        )
+        .unwrap(),
+        Ulid::new(record_id).unwrap(),
+        market_time("2026-07-20T03:00:00Z"),
+    )
+    .unwrap()
+}
+
+fn authorized_import_change(owner: &OwnerRef) -> FoundationChangeContext {
+    FoundationChangeContext::authorized_import(
+        AuthorizedPrincipal::new(
+            "phase3b-researcher".to_owned(),
+            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F00").unwrap(),
+            owner.tenant_id().clone(),
+            vec![owner.owner_id().clone()],
+            PlatformRole::Researcher,
+            vec!["data-sources:import".to_owned()],
+            ContentHash::digest(b"phase3b-researcher-credential"),
+        )
+        .unwrap(),
+        ChangeJustification::for_authorized_import("publish Phase 3B canonical import").unwrap(),
+        Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F82").unwrap(),
+        market_time("2026-07-20T03:00:00Z"),
     )
     .unwrap()
 }

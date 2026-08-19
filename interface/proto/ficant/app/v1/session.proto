@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package ficant.app.v1;
 
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/governance.proto";
 import "google/protobuf/timestamp.proto";
 
 message Session {
@@ -10,6 +12,10 @@ message Session {
   repeated string scopes = 3;
   google.protobuf.Timestamp issued_at = 4;
   google.protobuf.Timestamp expires_at = 5;
+  ficant.core.v1.Ulid actor_id = 6;
+  ficant.core.v1.PlatformRole active_role = 7;
+  ficant.core.v1.Ulid tenant_id = 8;
+  repeated ficant.core.v1.Ulid allowed_owner_ids = 9;
 }
 
 message SessionRevocation {

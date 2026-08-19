@@ -1204,6 +1204,8 @@ PostgreSQL 16 schema
 
 **当前状态（2026-07-20）：** Phase 3A 已交付版本化 DataSource、文件 NDJSON 与 PostgreSQL 双源接入、精确版本映射、双时间点时过滤、失败关闭的数据质量规则和固定 16 列 Canonical Quote Arrow Schema。Phase 3B 已把该 RecordBatch 编码为参数冻结的确定性 Parquet 与 canonical Manifest，并复用 Phase 1 双 blob proof 发布为真实 `DataSnapshot`。正式重读先完成 PostgreSQL metadata、Ceph RGW 两个 required payload 和内容摘要校验，再校验 Snapshot/Manifest/Parquet 三方绑定后解码；真实验收在销毁外部 source adapter、重建存储 adapter 后仍只按 Snapshot ID 得到相同 RecordBatch，外源调用次数保持一次。因此 Phase 3 已正式退出；最终证据与残余风险见 [Phase 3B iteration brief](docs/history/iterations/2026-07-phase3b-immutable-parquet-snapshot.md)。
 
+**R6A 当前候选（2026-08-13）：** 输入面新增 Platform Admin / Researcher 单 active-role principal、精确 DataSource authorization 与 FoundationChange 证据；完整 Definition、Fact、Snapshot 已进入同一生产 native gRPC / gRPC-Web composition。研究用户只可经管理员批准的 exact source version、mapping、schema、接口与有效期执行 server-side canonical import；未授权漂移在 adapter、blob 和 repository 前失败关闭，成功结果可在外源移除及 server 重启后从 PostgreSQL/Ceph 验证读回。R6A 不包含 Portfolio360、PMS、业务 UI 或 R6B Artifact service；完成状态以 [R6A iteration brief](docs/iterations/2026-08-r6a-governed-input-plane.md) 的最终真实证据为准。
+
 优先实现：
 
 - DataSource 注册；

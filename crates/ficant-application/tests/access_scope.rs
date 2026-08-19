@@ -1,8 +1,9 @@
 use ficant_application::ports::{BeginBlobStage, StagedBlobRef, VerifyBlobStage};
 use ficant_application::{
-    AccessScope, AeadCursorCodec, ApplicationError, ApplicationErrorCategory, Cursor, CursorKey,
-    IdempotencyKey, PageRequest,
+    AccessScope, AeadCursorCodec, ApplicationError, ApplicationErrorCategory, AuthorizedPrincipal,
+    Cursor, CursorKey, IdempotencyKey, PageRequest,
 };
+use ficant_domain::governance::PlatformRole;
 use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid};
 
 #[test]
@@ -25,6 +26,64 @@ fn allowed_owners_are_canonical_sorted_unique_and_fail_closed_by_tenant() {
     assert_category(
         &AccessScope::new(id('T'), id('X'), Vec::new()).unwrap_err(),
         ApplicationErrorCategory::ValidationFailed,
+    );
+}
+
+#[test]
+fn principal_requires_role_scope_and_owner_independently() {
+    let owner = OwnerRef::new(id('T'), id('A'));
+    let principal = AuthorizedPrincipal::new(
+        "admin@example.test".to_owned(),
+        id('X'),
+        id('T'),
+        vec![id('A'), id('A')],
+        PlatformRole::PlatformAdmin,
+        vec![
+            "data-sources:write".to_owned(),
+            "data-sources:read".to_owned(),
+        ],
+        ContentHash::digest(b"credential"),
+    )
+    .unwrap();
+    principal
+        .authorize_mutation(PlatformRole::PlatformAdmin, "data-sources:write", &owner)
+        .unwrap();
+    assert_eq!(principal.allowed_owner_ids(), &[id('A')]);
+    for error in [
+        principal.authorize_mutation(PlatformRole::Researcher, "data-sources:write", &owner),
+        principal.authorize_mutation(PlatformRole::PlatformAdmin, "data-sources:import", &owner),
+        principal.authorize_mutation(
+            PlatformRole::PlatformAdmin,
+            "data-sources:write",
+            &OwnerRef::new(id('T'), id('B')),
+        ),
+    ] {
+        assert_category(&error.unwrap_err(), ApplicationErrorCategory::Forbidden);
+    }
+}
+
+#[test]
+fn principal_fingerprint_binds_active_role_and_credential_fingerprint() {
+    let build = |role, credential: &[u8]| {
+        AuthorizedPrincipal::new(
+            "same-human".to_owned(),
+            id('X'),
+            id('T'),
+            vec![id('A')],
+            role,
+            vec!["data-sources:write".to_owned()],
+            ContentHash::digest(credential),
+        )
+        .unwrap()
+    };
+    let admin = build(PlatformRole::PlatformAdmin, b"credential-a");
+    let researcher = build(PlatformRole::Researcher, b"credential-a");
+    let rotated = build(PlatformRole::PlatformAdmin, b"credential-b");
+    assert_ne!(admin.fingerprint(), researcher.fingerprint());
+    assert_ne!(admin.fingerprint(), rotated.fingerprint());
+    assert_eq!(
+        admin.credential_fingerprint(),
+        &ContentHash::digest(b"credential-a")
     );
 }
 

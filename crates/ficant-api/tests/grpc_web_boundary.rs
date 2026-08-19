@@ -2,6 +2,8 @@ use ficant_api::{
     GrpcWebServerConfig, PlatformApplication, PlatformGrpcService, SessionPolicy, SystemClock,
     TrustedIdentity, serve_grpc_web,
 };
+use ficant_domain::governance::PlatformRole;
+use ficant_domain::primitives::Ulid;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
@@ -20,8 +22,15 @@ async fn grpc_web_endpoint_serves_real_session_with_exact_cors_boundary() {
         SIGNING_KEY,
         vec![],
         Some(
-            TrustedIdentity::implicit("browser-user", ["rates:read"])
-                .expect("valid implicit identity"),
+            TrustedIdentity::implicit(
+                "browser-user",
+                id('A'),
+                id('T'),
+                vec![id('B')],
+                PlatformRole::Researcher,
+                ["rates:read"],
+            )
+            .expect("valid implicit identity"),
         ),
         vec![],
     )
@@ -75,6 +84,10 @@ async fn grpc_web_endpoint_serves_real_session_with_exact_cors_boundary() {
     )));
 
     server.abort();
+}
+
+fn id(suffix: char) -> Ulid {
+    Ulid::new(format!("01ARZ3NDEKTSV4RRFFQ69G5F0{suffix}")).unwrap()
 }
 
 fn free_address() -> SocketAddr {

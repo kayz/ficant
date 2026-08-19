@@ -35,6 +35,7 @@ use ficant_domain::analytics::{
 use ficant_domain::futures_delivery::{
     CgbFuturesProduct, FuturesDeliverableInput, FuturesDeliveryBasketResult,
 };
+use ficant_domain::governance::PlatformRole;
 use ficant_domain::market::{
     ArtifactInputKind, Bond, BondBusinessDayConvention, BondCouponFrequency,
     BondDayCountConvention, BondPricingTerms, BondTaxAttributes as DomainBondTaxAttributes,
@@ -581,8 +582,16 @@ async fn python_sdk_matches_phase2_reference_slices_through_live_rule_pack_compo
 }
 
 fn application() -> Arc<dyn PlatformPort> {
-    let identity = TrustedIdentity::bearer("phase2e-sdk-test", TOKEN.as_bytes(), ["rates:analyze"])
-        .expect("fixture bearer identity is valid");
+    let identity = TrustedIdentity::bearer(
+        "phase2e-sdk-test",
+        TOKEN.as_bytes(),
+        id('A'),
+        id('0'),
+        vec![id('1')],
+        PlatformRole::Researcher,
+        ["rates:analyze"],
+    )
+    .expect("fixture bearer identity is valid");
     Arc::new(
         PlatformApplication::try_new(
             Arc::new(SystemClock),

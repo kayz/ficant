@@ -12,13 +12,15 @@ use prost_types::{
 
 use ficant_contracts::ficant::app::v1::AppRegistry;
 use ficant_contracts::ficant::core::v1::{
-    DecimalValue, Subject, SubjectStateSnapshot, SubjectVersion,
+    ChangeJustification, DecimalValue, FoundationChangeRecord, PlatformRole, Subject,
+    SubjectStateSnapshot, SubjectVersion,
 };
 use ficant_contracts::ficant::market::v1::{
     BondCouponTaxRule, BondCouponTaxTreatmentRule, BondTaxAttributes, CgbFuturesDeliveryRulePack,
-    CgbFuturesProductRule, CouponTaxClaimScope, FundingRulePack, FundingTierRate,
-    GrossCouponTaxBasis, Instrument, InstrumentKind, MarketRulePack, SubjectCouponTaxRate,
-    SubjectCouponTaxTreatment, TaxRoundingMode, TaxRulePack, TaxRulePackV2,
+    CgbFuturesProductRule, CompleteInstrumentDefinition, CouponTaxClaimScope,
+    DataSourceAuthorization, FundingRulePack, FundingTierRate, GrossCouponTaxBasis, Instrument,
+    InstrumentKind, InstrumentMapping, MarketDefinition, MarketFact, MarketRulePack,
+    SubjectCouponTaxRate, SubjectCouponTaxTreatment, TaxRoundingMode, TaxRulePack, TaxRulePackV2,
 };
 use ficant_contracts::ficant::rates::v1::{
     AnalysisInputBinding, AnalysisInputRole, AnalyzeBondRequest, AnalyzeFuturesDeliveryRequest,
@@ -27,7 +29,8 @@ use ficant_contracts::ficant::rates::v1::{
     TaxAdjustedBondAnalytics,
 };
 use ficant_contracts::ficant::research::v1::{
-    ExecutionInstanceIdentity, ExperimentRun, ReproducibilityIdentity, ResearchGraph, RunState,
+    DataSnapshot, ExecutionInstanceIdentity, ExperimentRun, ReproducibilityIdentity, ResearchGraph,
+    RunState,
 };
 
 const DEFAULT_BUF: &str = "buf";
@@ -90,6 +93,14 @@ fn generated_rust_consumer_exports_representative_contracts() {
     let delivery_candidate = FuturesDeliveryCandidateResult::default();
     let delivery_result = AnalyzeFuturesDeliveryResult::default();
     let after_tax = TaxAdjustedBondAnalytics::default();
+    let change = ChangeJustification::default();
+    let change_record = FoundationChangeRecord::default();
+    let complete_instrument = CompleteInstrumentDefinition::default();
+    let definition = MarketDefinition::default();
+    let fact = MarketFact::default();
+    let authorization = DataSourceAuthorization::default();
+    let data_snapshot = DataSnapshot::default();
+    let mapping = InstrumentMapping::default();
 
     assert!(instrument.instrument_id.is_none());
     assert_eq!(instrument.kind, InstrumentKind::Unspecified as i32);
@@ -140,6 +151,14 @@ fn generated_rust_consumer_exports_representative_contracts() {
         after_tax.claim_scope,
         CouponTaxClaimScope::Unspecified as i32
     );
+    assert!(change.sources.is_empty());
+    assert_eq!(change_record.active_role, PlatformRole::Unspecified as i32);
+    assert!(complete_instrument.instrument.is_none());
+    assert!(definition.definition.is_none());
+    assert!(fact.fact.is_none());
+    assert!(authorization.r#ref.is_none());
+    assert!(data_snapshot.authorization_ref.is_none());
+    assert!(mapping.mapping_id.is_none());
 }
 
 #[derive(Clone, Copy)]
@@ -369,6 +388,7 @@ fn r5a_price_source_contracts_are_exact() {
             ExpectedField::scalar("idempotency_key", Type::String),
             ExpectedField::scalar("expected_latest_version", Type::Uint64),
             ExpectedField::message("definition", ".ficant.market.v1.DataSourceDefinition"),
+            ExpectedField::message("change", ".ficant.core.v1.ChangeJustification"),
         ],
     );
     assert_fields(
@@ -398,6 +418,112 @@ fn r5a_price_source_contracts_are_exact() {
             ExpectedField::oneof_message(
                 "definition",
                 ".ficant.market.v1.DataSourceDefinition",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.market.v1.ImportInterface",
+        &[
+            ("IMPORT_INTERFACE_UNSPECIFIED", 0),
+            ("IMPORT_INTERFACE_CANONICAL_QUOTE_SNAPSHOT", 1),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.market.v1.DataSourceAuthorizationState",
+        &[
+            ("DATA_SOURCE_AUTHORIZATION_STATE_UNSPECIFIED", 0),
+            ("DATA_SOURCE_AUTHORIZATION_STATE_ACTIVE", 1),
+            ("DATA_SOURCE_AUTHORIZATION_STATE_REVOKED", 2),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.market.v1.DataSourceAuthorization",
+        &[
+            ExpectedField::message("ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::message("source", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("source_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::enumeration("interface", ".ficant.market.v1.ImportInterface"),
+            ExpectedField::scalar("schema_id", Type::String),
+            ExpectedField::message("schema_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("effective_from", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("effective_to", ".ficant.core.v1.MarketTime"),
+            ExpectedField::enumeration("state", ".ficant.market.v1.DataSourceAuthorizationState"),
+            ExpectedField::message("supersedes", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("mapping_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("mapping_hash", ".ficant.core.v1.Sha256"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.market.v1.PublishDataSourceAuthorizationRequest",
+        &[
+            ExpectedField::scalar("idempotency_key", Type::String),
+            ExpectedField::scalar("expected_latest_version", Type::Uint64),
+            ExpectedField::message("authorization", ".ficant.market.v1.DataSourceAuthorization"),
+            ExpectedField::message("change", ".ficant.core.v1.ChangeJustification"),
+            ExpectedField::message("mapping", ".ficant.market.v1.InstrumentMapping"),
+        ],
+    );
+    for response in [
+        "ficant.market.v1.PublishDataSourceAuthorizationResponse",
+        "ficant.market.v1.GetDataSourceAuthorizationResponse",
+    ] {
+        assert_fields(
+            &messages,
+            response,
+            &[
+                ExpectedField::oneof_message(
+                    "authorization",
+                    ".ficant.market.v1.DataSourceAuthorization",
+                    "result",
+                ),
+                ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+            ],
+        );
+    }
+    assert_fields(
+        &messages,
+        "ficant.market.v1.GetDataSourceAuthorizationRequest",
+        &[ExpectedField::message(
+            "authorization_ref",
+            ".ficant.core.v1.VersionRef",
+        )],
+    );
+    assert_fields(
+        &messages,
+        "ficant.market.v1.ListDataSourceAuthorizationsRequest",
+        &[
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::message("data_source", ".ficant.core.v1.VersionRef"),
+            ExpectedField::enumeration("import_interface", ".ficant.market.v1.ImportInterface"),
+            ExpectedField::message("page", ".ficant.core.v1.PageRequest"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.market.v1.DataSourceAuthorizations",
+        &[
+            ExpectedField::repeated_message(
+                "authorizations",
+                ".ficant.market.v1.DataSourceAuthorization",
+            ),
+            ExpectedField::message("page", ".ficant.core.v1.PageResponse"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.market.v1.ListDataSourceAuthorizationsResponse",
+        &[
+            ExpectedField::oneof_message(
+                "authorizations",
+                ".ficant.market.v1.DataSourceAuthorizations",
                 "result",
             ),
             ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
@@ -454,6 +580,21 @@ fn r5a_price_source_contracts_are_exact() {
                 "GetDataSource",
                 ".ficant.market.v1.GetDataSourceRequest",
                 ".ficant.market.v1.GetDataSourceResponse",
+            ),
+            ExpectedMethod::new(
+                "PublishDataSourceAuthorization",
+                ".ficant.market.v1.PublishDataSourceAuthorizationRequest",
+                ".ficant.market.v1.PublishDataSourceAuthorizationResponse",
+            ),
+            ExpectedMethod::new(
+                "GetDataSourceAuthorization",
+                ".ficant.market.v1.GetDataSourceAuthorizationRequest",
+                ".ficant.market.v1.GetDataSourceAuthorizationResponse",
+            ),
+            ExpectedMethod::new(
+                "ListDataSourceAuthorizations",
+                ".ficant.market.v1.ListDataSourceAuthorizationsRequest",
+                ".ficant.market.v1.ListDataSourceAuthorizationsResponse",
             ),
         ],
     );
@@ -553,6 +694,7 @@ fn r5c_data_health_contracts_are_exact() {
                 "threshold_profile",
                 ".ficant.research.v1.DataHealthThresholdProfile",
             ),
+            ExpectedField::message("change", ".ficant.core.v1.ChangeJustification"),
         ],
     );
     assert_fields(
@@ -826,8 +968,10 @@ fn rates_analytics_service_has_exact_r5d_signatures() {
 fn platform_messages_fields_enums_and_oneofs_are_exact() {
     let descriptor_set = descriptor_set();
     let messages = top_level_messages(descriptor_set);
+    let enums = top_level_enums(descriptor_set);
 
     assert_platform_contracts(&messages);
+    assert_governance_contracts(descriptor_set, &messages, &enums);
 }
 
 #[test]
@@ -861,6 +1005,7 @@ fn shared_and_domain_enums_and_unaffected_services_are_exact() {
         "ficant.research.v1.SnapshotService",
         &snapshot_methods(),
     );
+    assert_r6a_snapshot_contracts(&top_level_messages(descriptor_set));
     assert_exact_service(
         descriptor_set,
         "ficant.research.v1.ExperimentService",
@@ -936,7 +1081,7 @@ fn composition_level_outputs_have_coverage() {
         })
         .sum::<usize>();
     assert_eq!(
-        classified_non_composition_count, 64,
+        classified_non_composition_count, 62,
         "every non-composition success arm must select one of the three closed reasons"
     );
     let expected_keys = expected.keys().cloned().collect::<BTreeSet<_>>();
@@ -1083,24 +1228,22 @@ fn expected_success_arms() -> BTreeMap<String, SuccessArmClass> {
         ("ficant.core.v1.RegistryService/GetSubjectState:snapshot->ficant.core.v1.SubjectStateSnapshot", NonComposition(RegistryMetadata)),
         ("ficant.core.v1.RegistryService/RegisterSubject:subject->ficant.core.v1.SubjectRecord", NonComposition(AckOrEcho)),
         ("ficant.core.v1.RegistryService/RegisterSubjectState:snapshot->ficant.core.v1.SubjectStateSnapshot", NonComposition(AckOrEcho)),
+        ("ficant.core.v1.FoundationChangeService/GetFoundationChange:change->ficant.core.v1.FoundationChangeRecord", NonComposition(RegistryMetadata)),
+        ("ficant.core.v1.FoundationChangeService/ListFoundationChanges:changes->ficant.core.v1.FoundationChangeRecords", NonComposition(RegistryMetadata)),
         ("ficant.market.v1.DataSourceRegistryService/GetDataSource:definition->ficant.market.v1.DataSourceDefinition", NonComposition(RegistryMetadata)),
+        ("ficant.market.v1.DataSourceRegistryService/GetDataSourceAuthorization:authorization->ficant.market.v1.DataSourceAuthorization", NonComposition(RegistryMetadata)),
+        ("ficant.market.v1.DataSourceRegistryService/ListDataSourceAuthorizations:authorizations->ficant.market.v1.DataSourceAuthorizations", NonComposition(RegistryMetadata)),
+        ("ficant.market.v1.DataSourceRegistryService/PublishDataSourceAuthorization:authorization->ficant.market.v1.DataSourceAuthorization", NonComposition(AckOrEcho)),
         ("ficant.market.v1.DataSourceRegistryService/RegisterDataSource:definition->ficant.market.v1.DataSourceDefinition", NonComposition(AckOrEcho)),
-        ("ficant.market.v1.MarketDefinitionService/AppendBond:response->ficant.market.v1.AppendBondResponse", NonComposition(AckOrEcho)),
-        ("ficant.market.v1.MarketDefinitionService/AppendCalendar:response->ficant.market.v1.AppendCalendarResponse", NonComposition(AckOrEcho)),
-        ("ficant.market.v1.MarketDefinitionService/AppendFuturesContract:response->ficant.market.v1.AppendFuturesContractResponse", NonComposition(AckOrEcho)),
-        ("ficant.market.v1.MarketDefinitionService/AppendInstrument:response->ficant.market.v1.AppendInstrumentResponse", NonComposition(AckOrEcho)),
-        ("ficant.market.v1.MarketDefinitionService/AppendMarketRulePack:response->ficant.market.v1.AppendMarketRulePackResponse", NonComposition(AckOrEcho)),
-        ("ficant.market.v1.MarketDefinitionService/AppendUnit:response->ficant.market.v1.AppendUnitResponse", NonComposition(AckOrEcho)),
-        ("ficant.market.v1.MarketDefinitionService/GetDefinitionVersion:response->ficant.market.v1.GetDefinitionVersionResponse", NonComposition(RegistryMetadata)),
-        ("ficant.market.v1.MarketDefinitionService/ListDefinitionVersions:response->ficant.market.v1.ListDefinitionVersionsResponse", NonComposition(RegistryMetadata)),
-        ("ficant.market.v1.MarketDefinitionService/ResolveDefinitionAsOf:response->ficant.market.v1.ResolveDefinitionAsOfResponse", NonComposition(RegistryMetadata)),
-        ("ficant.market.v1.MarketFactService/AppendCashflow:response->ficant.market.v1.AppendCashflowResponse", NonComposition(AckOrEcho)),
-        ("ficant.market.v1.MarketFactService/AppendQuote:response->ficant.market.v1.AppendQuoteResponse", NonComposition(AckOrEcho)),
-        ("ficant.market.v1.MarketFactService/AppendTrade:response->ficant.market.v1.AppendTradeResponse", NonComposition(AckOrEcho)),
-        ("ficant.market.v1.MarketFactService/AppendValuation:response->ficant.market.v1.AppendValuationResponse", NonComposition(AckOrEcho)),
-        ("ficant.market.v1.MarketFactService/GetCurveSnapshot:response->ficant.market.v1.GetCurveSnapshotResponse", NonComposition(NoNumericAggregate)),
-        ("ficant.market.v1.MarketFactService/PublishCurveSnapshot:response->ficant.market.v1.PublishCurveSnapshotResponse", NonComposition(AckOrEcho)),
-        ("ficant.market.v1.MarketFactService/QueryInstrumentFacts:response->ficant.market.v1.QueryInstrumentFactsResponse", NonComposition(NoNumericAggregate)),
+        ("ficant.market.v1.MarketDefinitionService/AppendDefinition:definition->ficant.market.v1.MarketDefinition", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketDefinitionService/GetDefinitionVersion:definition->ficant.market.v1.MarketDefinition", NonComposition(RegistryMetadata)),
+        ("ficant.market.v1.MarketDefinitionService/ListDefinitionVersions:versions->ficant.market.v1.DefinitionVersions", NonComposition(RegistryMetadata)),
+        ("ficant.market.v1.MarketDefinitionService/ResolveDefinitionAsOf:definition->ficant.market.v1.MarketDefinition", NonComposition(RegistryMetadata)),
+        ("ficant.market.v1.MarketFactService/AppendMarketFact:fact->ficant.market.v1.MarketFact", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketFactService/CorrectMarketFact:fact->ficant.market.v1.MarketFact", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketFactService/GetCurveSnapshot:curve->ficant.market.v1.CurveSnapshotPayload", NonComposition(NoNumericAggregate)),
+        ("ficant.market.v1.MarketFactService/PublishCurveSnapshot:curve_snapshot->ficant.market.v1.CurveSnapshot", NonComposition(AckOrEcho)),
+        ("ficant.market.v1.MarketFactService/QueryInstrumentFacts:instrument_facts->ficant.market.v1.InstrumentFacts", NonComposition(NoNumericAggregate)),
         ("ficant.rates.v1.RatesAnalyticsService/AnalyzeBond:analysis->ficant.rates.v1.AnalyzeBondResult", NonComposition(NoNumericAggregate)),
         ("ficant.rates.v1.RatesAnalyticsService/AnalyzeCarryRoll:analysis->ficant.rates.v1.AnalyzeCarryRollResult", NonComposition(NoNumericAggregate)),
         ("ficant.rates.v1.RatesAnalyticsService/AnalyzeFuturesDelivery:analysis->ficant.rates.v1.AnalyzeFuturesDeliveryResult", NonComposition(NoNumericAggregate)),
@@ -1138,8 +1281,8 @@ fn expected_success_arms() -> BTreeMap<String, SuccessArmClass> {
         ("ficant.research.v1.PositionSnapshotService/ResolvePositionSnapshot:snapshot->ficant.research.v1.PositionSnapshot", NonComposition(NoNumericAggregate)),
         ("ficant.research.v1.SnapshotService/GetSnapshot:data_snapshot->ficant.research.v1.DataSnapshot", NonComposition(NoNumericAggregate)),
         ("ficant.research.v1.SnapshotService/GetSnapshot:universe_snapshot->ficant.research.v1.UniverseSnapshot", NonComposition(NoNumericAggregate)),
-        ("ficant.research.v1.SnapshotService/PublishDataSnapshot:response->ficant.research.v1.PublishDataSnapshotResponse", NonComposition(AckOrEcho)),
-        ("ficant.research.v1.SnapshotService/PublishUniverseSnapshot:response->ficant.research.v1.PublishUniverseSnapshotResponse", NonComposition(AckOrEcho)),
+        ("ficant.research.v1.SnapshotService/ImportCanonicalQuoteSnapshot:data_snapshot->ficant.research.v1.DataSnapshot", NonComposition(AckOrEcho)),
+        ("ficant.research.v1.SnapshotService/PublishUniverseSnapshot:universe_snapshot->ficant.research.v1.UniverseSnapshot", NonComposition(AckOrEcho)),
     ]
     .into_iter()
     .map(|(arm, class)| (arm.to_owned(), class))
@@ -1440,6 +1583,7 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
         &[
             ExpectedField::message("subject_id", id),
             ExpectedField::scalar("display_name", Type::String),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
         ],
     );
     assert_fields(
@@ -1495,6 +1639,7 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
             ExpectedField::message("observed_at", timestamp),
             ExpectedField::message("visible_at", timestamp),
             ExpectedField::scalar("market_timezone", Type::String),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
         ],
     );
     assert_fields(
@@ -1511,6 +1656,8 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
         &[
             ExpectedField::message("subject", ".ficant.core.v1.Subject"),
             ExpectedField::message("subject_version", ".ficant.core.v1.SubjectVersion"),
+            ExpectedField::message("change", ".ficant.core.v1.ChangeJustification"),
+            ExpectedField::scalar("idempotency_key", Type::String),
         ],
     );
     assert_fields(
@@ -1537,10 +1684,11 @@ fn assert_subject_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     assert_fields(
         messages,
         "ficant.core.v1.RegisterSubjectStateRequest",
-        &[ExpectedField::message(
-            "snapshot",
-            ".ficant.core.v1.SubjectStateSnapshot",
-        )],
+        &[
+            ExpectedField::message("snapshot", ".ficant.core.v1.SubjectStateSnapshot"),
+            ExpectedField::message("change", ".ficant.core.v1.ChangeJustification"),
+            ExpectedField::scalar("idempotency_key", Type::String),
+        ],
     );
     assert_fields(
         messages,
@@ -2071,6 +2219,7 @@ fn assert_phase1_objects(messages: &BTreeMap<String, &DescriptorProto>) {
                 ExpectedField::message("supersedes_id", id),
                 ExpectedField::scalar("schedule_id", Type::String),
                 ExpectedField::scalar("sequence", Type::Uint64),
+                ExpectedField::enumeration("cashflow_type", ".ficant.market.v1.CashflowType"),
             ],
         ),
         (
@@ -2186,6 +2335,8 @@ fn assert_phase1_objects(messages: &BTreeMap<String, &DescriptorProto>) {
                 ExpectedField::message("manifest_hash", hash),
                 ExpectedField::message("blob_content_hash", hash),
                 ExpectedField::repeated_message("lineage", lineage),
+                ExpectedField::message("authorization_ref", version),
+                ExpectedField::message("actor_id", id),
             ],
         ),
         (
@@ -2197,6 +2348,7 @@ fn assert_phase1_objects(messages: &BTreeMap<String, &DescriptorProto>) {
                 ExpectedField::message("filter_digest", hash),
                 ExpectedField::message("content_hash", hash),
                 ExpectedField::repeated_message("lineage", lineage),
+                ExpectedField::message("actor_id", id),
             ],
         ),
         (
@@ -2816,6 +2968,10 @@ fn assert_platform_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
             ExpectedField::repeated_scalar("scopes", Type::String),
             ExpectedField::message("issued_at", ".google.protobuf.Timestamp"),
             ExpectedField::message("expires_at", ".google.protobuf.Timestamp"),
+            ExpectedField::message("actor_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::enumeration("active_role", ".ficant.core.v1.PlatformRole"),
+            ExpectedField::message("tenant_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::repeated_message("allowed_owner_ids", ".ficant.core.v1.Ulid"),
         ],
     );
     assert_fields(
@@ -2921,6 +3077,119 @@ fn assert_platform_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
                 "result",
             ),
             ExpectedField::oneof_message("error", ".ficant.app.v1.SafeError", "result"),
+        ],
+    );
+}
+
+fn assert_governance_contracts(
+    descriptor_set: &FileDescriptorSet,
+    messages: &BTreeMap<String, &DescriptorProto>,
+    enums: &BTreeMap<String, &EnumDescriptorProto>,
+) {
+    assert_enum(
+        enums,
+        "ficant.core.v1.PlatformRole",
+        &[
+            ("PLATFORM_ROLE_UNSPECIFIED", 0),
+            ("PLATFORM_ROLE_PLATFORM_ADMIN", 1),
+            ("PLATFORM_ROLE_RESEARCHER", 2),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.core.v1.SourceDocumentRef",
+        &[
+            ExpectedField::scalar("uri", Type::String),
+            ExpectedField::message("sha256", ".ficant.core.v1.Sha256"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.core.v1.ChangeJustification",
+        &[
+            ExpectedField::scalar("reason", Type::String),
+            ExpectedField::repeated_message("sources", ".ficant.core.v1.SourceDocumentRef"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.core.v1.FoundationChangeRecord",
+        &[
+            ExpectedField::message("record_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("actor_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::enumeration("active_role", ".ficant.core.v1.PlatformRole"),
+            ExpectedField::scalar("operation", Type::String),
+            ExpectedField::scalar("resource_ref", Type::String),
+            ExpectedField::message("before_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("after_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("change", ".ficant.core.v1.ChangeJustification"),
+            ExpectedField::message("request_fingerprint", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("occurred_at", ".google.protobuf.Timestamp"),
+            ExpectedField::message("authorization_ref", ".ficant.core.v1.VersionRef"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.core.v1.GetFoundationChangeRequest",
+        &[ExpectedField::message("record_id", ".ficant.core.v1.Ulid")],
+    );
+    assert_fields(
+        messages,
+        "ficant.core.v1.GetFoundationChangeResponse",
+        &[
+            ExpectedField::oneof_message(
+                "change",
+                ".ficant.core.v1.FoundationChangeRecord",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.core.v1.ListFoundationChangesRequest",
+        &[
+            ExpectedField::scalar("resource_ref", Type::String),
+            ExpectedField::message("actor_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("occurred_from", ".google.protobuf.Timestamp"),
+            ExpectedField::message("occurred_to", ".google.protobuf.Timestamp"),
+            ExpectedField::message("page", ".ficant.core.v1.PageRequest"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.core.v1.FoundationChangeRecords",
+        &[
+            ExpectedField::repeated_message("changes", ".ficant.core.v1.FoundationChangeRecord"),
+            ExpectedField::message("page", ".ficant.core.v1.PageResponse"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.core.v1.ListFoundationChangesResponse",
+        &[
+            ExpectedField::oneof_message(
+                "changes",
+                ".ficant.core.v1.FoundationChangeRecords",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+        ],
+    );
+    assert_exact_service(
+        descriptor_set,
+        "ficant.core.v1.FoundationChangeService",
+        &[
+            ExpectedMethod::new(
+                "GetFoundationChange",
+                ".ficant.core.v1.GetFoundationChangeRequest",
+                ".ficant.core.v1.GetFoundationChangeResponse",
+            ),
+            ExpectedMethod::new(
+                "ListFoundationChanges",
+                ".ficant.core.v1.ListFoundationChangesRequest",
+                ".ficant.core.v1.ListFoundationChangesResponse",
+            ),
         ],
     );
 }
@@ -3201,28 +3470,114 @@ fn assert_query_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     let page_request = ".ficant.core.v1.PageRequest";
     let page_response = ".ficant.core.v1.PageResponse";
 
+    for removed in [
+        "ficant.market.v1.AppendInstrumentRequest",
+        "ficant.market.v1.AppendInstrumentResponse",
+        "ficant.market.v1.AppendBondRequest",
+        "ficant.market.v1.AppendBondResponse",
+        "ficant.market.v1.AppendFuturesContractRequest",
+        "ficant.market.v1.AppendFuturesContractResponse",
+        "ficant.market.v1.AppendCalendarRequest",
+        "ficant.market.v1.AppendCalendarResponse",
+        "ficant.market.v1.AppendUnitRequest",
+        "ficant.market.v1.AppendUnitResponse",
+        "ficant.market.v1.AppendMarketRulePackRequest",
+        "ficant.market.v1.AppendMarketRulePackResponse",
+        "ficant.market.v1.AppendCashflowRequest",
+        "ficant.market.v1.AppendCashflowResponse",
+        "ficant.market.v1.AppendQuoteRequest",
+        "ficant.market.v1.AppendQuoteResponse",
+        "ficant.market.v1.AppendTradeRequest",
+        "ficant.market.v1.AppendTradeResponse",
+        "ficant.market.v1.AppendValuationRequest",
+        "ficant.market.v1.AppendValuationResponse",
+        "ficant.research.v1.PublishDataSnapshotRequest",
+        "ficant.research.v1.PublishDataSnapshotResponse",
+    ] {
+        assert!(
+            !messages.contains_key(removed),
+            "removed pre-production write contract {removed} must not survive as a compatibility shim"
+        );
+    }
+
     assert_fields(
         messages,
-        "ficant.market.v1.MarketDefinition",
+        "ficant.market.v1.CompleteInstrumentDefinition",
         &[
-            ExpectedField::oneof_message(
-                "instrument",
-                ".ficant.market.v1.Instrument",
-                "definition",
-            ),
-            ExpectedField::oneof_message("bond", ".ficant.market.v1.Bond", "definition"),
+            ExpectedField::message("instrument", ".ficant.market.v1.Instrument"),
+            ExpectedField::oneof_message("bond", ".ficant.market.v1.Bond", "subtype"),
             ExpectedField::oneof_message(
                 "futures_contract",
                 ".ficant.market.v1.FuturesContract",
-                "definition",
+                "subtype",
             ),
-            ExpectedField::oneof_message("calendar", ".ficant.market.v1.Calendar", "definition"),
-            ExpectedField::oneof_message("unit", ".ficant.market.v1.Unit", "definition"),
-            ExpectedField::oneof_message(
+        ],
+    );
+    assert_reserved_tags(messages, "ficant.market.v1.MarketDefinition", &[2, 3]);
+    assert_reserved_names(
+        messages,
+        "ficant.market.v1.MarketDefinition",
+        &["bond", "futures_contract"],
+    );
+    let market_definition = messages
+        .get("ficant.market.v1.MarketDefinition")
+        .expect("MarketDefinition exists");
+    assert_exact_tagged_fields(
+        market_definition,
+        &[
+            (
+                "instrument",
+                1,
+                Type::Message,
+                Some(".ficant.market.v1.CompleteInstrumentDefinition"),
+                false,
+            ),
+            (
+                "calendar",
+                4,
+                Type::Message,
+                Some(".ficant.market.v1.Calendar"),
+                false,
+            ),
+            (
+                "unit",
+                5,
+                Type::Message,
+                Some(".ficant.market.v1.Unit"),
+                false,
+            ),
+            (
                 "market_rule_pack",
-                ".ficant.market.v1.MarketRulePack",
-                "definition",
+                6,
+                Type::Message,
+                Some(".ficant.market.v1.MarketRulePack"),
+                false,
             ),
+        ],
+    );
+    for field in ["instrument", "calendar", "unit", "market_rule_pack"] {
+        assert_field_oneof(market_definition, field, "definition");
+    }
+    assert_fields(
+        messages,
+        "ficant.market.v1.AppendDefinitionRequest",
+        &[
+            ExpectedField::scalar("idempotency_key", Type::String),
+            ExpectedField::scalar("expected_latest_version", Type::Uint64),
+            ExpectedField::message("definition", ".ficant.market.v1.MarketDefinition"),
+            ExpectedField::message("change", ".ficant.core.v1.ChangeJustification"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.market.v1.AppendDefinitionResponse",
+        &[
+            ExpectedField::oneof_message(
+                "definition",
+                ".ficant.market.v1.MarketDefinition",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
         ],
     );
     assert_fields(
@@ -3236,10 +3591,14 @@ fn assert_query_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     assert_fields(
         messages,
         "ficant.market.v1.GetDefinitionVersionResponse",
-        &[ExpectedField::message(
-            "definition",
-            ".ficant.market.v1.MarketDefinition",
-        )],
+        &[
+            ExpectedField::oneof_message(
+                "definition",
+                ".ficant.market.v1.MarketDefinition",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+        ],
     );
     assert_fields(
         messages,
@@ -3252,10 +3611,14 @@ fn assert_query_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     assert_fields(
         messages,
         "ficant.market.v1.ResolveDefinitionAsOfResponse",
-        &[ExpectedField::message(
-            "definition",
-            ".ficant.market.v1.MarketDefinition",
-        )],
+        &[
+            ExpectedField::oneof_message(
+                "definition",
+                ".ficant.market.v1.MarketDefinition",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+        ],
     );
     assert_fields(
         messages,
@@ -3267,12 +3630,46 @@ fn assert_query_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     );
     assert_fields(
         messages,
-        "ficant.market.v1.ListDefinitionVersionsResponse",
+        "ficant.market.v1.DefinitionVersions",
         &[
             ExpectedField::repeated_message("definitions", ".ficant.market.v1.MarketDefinition"),
             ExpectedField::message("page", page_response),
         ],
     );
+    let list_definition_response = messages
+        .get("ficant.market.v1.ListDefinitionVersionsResponse")
+        .expect("ListDefinitionVersionsResponse exists");
+    assert_reserved_tags(
+        messages,
+        "ficant.market.v1.ListDefinitionVersionsResponse",
+        &[1, 2],
+    );
+    assert_reserved_names(
+        messages,
+        "ficant.market.v1.ListDefinitionVersionsResponse",
+        &["definitions", "page"],
+    );
+    assert_exact_tagged_fields(
+        list_definition_response,
+        &[
+            (
+                "versions",
+                3,
+                Type::Message,
+                Some(".ficant.market.v1.DefinitionVersions"),
+                false,
+            ),
+            (
+                "error",
+                4,
+                Type::Message,
+                Some(".ficant.core.v1.ErrorDetail"),
+                false,
+            ),
+        ],
+    );
+    assert_field_oneof(list_definition_response, "versions", "result");
+    assert_field_oneof(list_definition_response, "error", "result");
 
     assert_fields(
         messages,
@@ -3282,6 +3679,103 @@ fn assert_query_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
             ExpectedField::oneof_message("quote", ".ficant.market.v1.Quote", "fact"),
             ExpectedField::oneof_message("trade", ".ficant.market.v1.Trade", "fact"),
             ExpectedField::oneof_message("valuation", ".ficant.market.v1.Valuation", "fact"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.market.v1.AppendMarketFactRequest",
+        &[
+            ExpectedField::scalar("idempotency_key", Type::String),
+            ExpectedField::message("fact", ".ficant.market.v1.MarketFact"),
+            ExpectedField::message("change", ".ficant.core.v1.ChangeJustification"),
+        ],
+    );
+    for response in [
+        "ficant.market.v1.AppendMarketFactResponse",
+        "ficant.market.v1.CorrectMarketFactResponse",
+    ] {
+        assert_fields(
+            messages,
+            response,
+            &[
+                ExpectedField::oneof_message("fact", ".ficant.market.v1.MarketFact", "result"),
+                ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+            ],
+        );
+    }
+    assert_fields(
+        messages,
+        "ficant.market.v1.CorrectMarketFactRequest",
+        &[
+            ExpectedField::scalar("idempotency_key", Type::String),
+            ExpectedField::message("original_fact_id", id),
+            ExpectedField::message("fact", ".ficant.market.v1.MarketFact"),
+            ExpectedField::message("change", ".ficant.core.v1.ChangeJustification"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.market.v1.CurveSnapshotInput",
+        &[
+            ExpectedField::message("curve_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::message("as_of", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("currency", ".ficant.core.v1.UnitRef"),
+            ExpectedField::scalar("curve_kind", Type::String),
+            ExpectedField::message("calendar", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("rule_pack", ".ficant.core.v1.VersionRef"),
+            ExpectedField::scalar("point_schema", Type::String),
+            ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
+            ExpectedField::message("visible_at", ".ficant.core.v1.MarketTime"),
+            ExpectedField::scalar("curve_family_id", Type::String),
+        ],
+    );
+    let publish_curve_request = messages
+        .get("ficant.market.v1.PublishCurveSnapshotRequest")
+        .expect("PublishCurveSnapshotRequest exists");
+    assert_reserved_tag(messages, "ficant.market.v1.PublishCurveSnapshotRequest", 2);
+    assert_reserved_names(
+        messages,
+        "ficant.market.v1.PublishCurveSnapshotRequest",
+        &["curve_snapshot"],
+    );
+    assert_exact_tagged_fields(
+        publish_curve_request,
+        &[
+            ("idempotency_key", 1, Type::String, None, false),
+            (
+                "points",
+                3,
+                Type::Message,
+                Some(".ficant.market.v1.CurvePointSet"),
+                false,
+            ),
+            (
+                "change",
+                4,
+                Type::Message,
+                Some(".ficant.core.v1.ChangeJustification"),
+                false,
+            ),
+            (
+                "curve",
+                5,
+                Type::Message,
+                Some(".ficant.market.v1.CurveSnapshotInput"),
+                false,
+            ),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.market.v1.PublishCurveSnapshotResponse",
+        &[
+            ExpectedField::oneof_message(
+                "curve_snapshot",
+                ".ficant.market.v1.CurveSnapshot",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
         ],
     );
     assert_fields(
@@ -3296,12 +3790,46 @@ fn assert_query_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     );
     assert_fields(
         messages,
-        "ficant.market.v1.QueryInstrumentFactsResponse",
+        "ficant.market.v1.InstrumentFacts",
         &[
             ExpectedField::repeated_message("facts", ".ficant.market.v1.MarketFact"),
             ExpectedField::message("page", page_response),
         ],
     );
+    let query_facts_response = messages
+        .get("ficant.market.v1.QueryInstrumentFactsResponse")
+        .expect("QueryInstrumentFactsResponse exists");
+    assert_reserved_tags(
+        messages,
+        "ficant.market.v1.QueryInstrumentFactsResponse",
+        &[1, 2],
+    );
+    assert_reserved_names(
+        messages,
+        "ficant.market.v1.QueryInstrumentFactsResponse",
+        &["facts", "page"],
+    );
+    assert_exact_tagged_fields(
+        query_facts_response,
+        &[
+            (
+                "instrument_facts",
+                3,
+                Type::Message,
+                Some(".ficant.market.v1.InstrumentFacts"),
+                false,
+            ),
+            (
+                "error",
+                4,
+                Type::Message,
+                Some(".ficant.core.v1.ErrorDetail"),
+                false,
+            ),
+        ],
+    );
+    assert_field_oneof(query_facts_response, "instrument_facts", "result");
+    assert_field_oneof(query_facts_response, "error", "result");
     assert_fields(
         messages,
         "ficant.market.v1.GetCurveSnapshotRequest",
@@ -3309,12 +3837,42 @@ fn assert_query_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     );
     assert_fields(
         messages,
-        "ficant.market.v1.GetCurveSnapshotResponse",
-        &[ExpectedField::message(
-            "curve_snapshot",
-            ".ficant.market.v1.CurveSnapshot",
-        )],
+        "ficant.market.v1.CurveSnapshotPayload",
+        &[
+            ExpectedField::message("curve_snapshot", ".ficant.market.v1.CurveSnapshot"),
+            ExpectedField::message("points", ".ficant.market.v1.CurvePointSet"),
+        ],
     );
+    let get_curve_response = messages
+        .get("ficant.market.v1.GetCurveSnapshotResponse")
+        .expect("GetCurveSnapshotResponse exists");
+    assert_reserved_tag(messages, "ficant.market.v1.GetCurveSnapshotResponse", 1);
+    assert_reserved_names(
+        messages,
+        "ficant.market.v1.GetCurveSnapshotResponse",
+        &["curve_snapshot"],
+    );
+    assert_exact_tagged_fields(
+        get_curve_response,
+        &[
+            (
+                "curve",
+                2,
+                Type::Message,
+                Some(".ficant.market.v1.CurveSnapshotPayload"),
+                false,
+            ),
+            (
+                "error",
+                3,
+                Type::Message,
+                Some(".ficant.core.v1.ErrorDetail"),
+                false,
+            ),
+        ],
+    );
+    assert_field_oneof(get_curve_response, "curve", "result");
+    assert_field_oneof(get_curve_response, "error", "result");
 
     assert_fields(
         messages,
@@ -3420,6 +3978,17 @@ fn assert_domain_enums(enums: &BTreeMap<String, &EnumDescriptorProto>) {
             ("INSTRUMENT_KIND_BOND", 1),
             ("INSTRUMENT_KIND_FUTURES", 2),
             ("INSTRUMENT_KIND_OTHER", 3),
+        ],
+    );
+    assert_enum(
+        enums,
+        "ficant.market.v1.CashflowType",
+        &[
+            ("CASHFLOW_TYPE_UNSPECIFIED", 0),
+            ("CASHFLOW_TYPE_COUPON", 1),
+            ("CASHFLOW_TYPE_PRINCIPAL", 2),
+            ("CASHFLOW_TYPE_FEE", 3),
+            ("CASHFLOW_TYPE_OTHER", 4),
         ],
     );
     assert_enum(
@@ -3591,34 +4160,9 @@ fn factor_registry_methods() -> Vec<ExpectedMethod> {
 fn market_definition_methods() -> Vec<ExpectedMethod> {
     vec![
         ExpectedMethod::new(
-            "AppendInstrument",
-            ".ficant.market.v1.AppendInstrumentRequest",
-            ".ficant.market.v1.AppendInstrumentResponse",
-        ),
-        ExpectedMethod::new(
-            "AppendBond",
-            ".ficant.market.v1.AppendBondRequest",
-            ".ficant.market.v1.AppendBondResponse",
-        ),
-        ExpectedMethod::new(
-            "AppendFuturesContract",
-            ".ficant.market.v1.AppendFuturesContractRequest",
-            ".ficant.market.v1.AppendFuturesContractResponse",
-        ),
-        ExpectedMethod::new(
-            "AppendCalendar",
-            ".ficant.market.v1.AppendCalendarRequest",
-            ".ficant.market.v1.AppendCalendarResponse",
-        ),
-        ExpectedMethod::new(
-            "AppendUnit",
-            ".ficant.market.v1.AppendUnitRequest",
-            ".ficant.market.v1.AppendUnitResponse",
-        ),
-        ExpectedMethod::new(
-            "AppendMarketRulePack",
-            ".ficant.market.v1.AppendMarketRulePackRequest",
-            ".ficant.market.v1.AppendMarketRulePackResponse",
+            "AppendDefinition",
+            ".ficant.market.v1.AppendDefinitionRequest",
+            ".ficant.market.v1.AppendDefinitionResponse",
         ),
         ExpectedMethod::new(
             "GetDefinitionVersion",
@@ -3641,24 +4185,14 @@ fn market_definition_methods() -> Vec<ExpectedMethod> {
 fn market_fact_methods() -> Vec<ExpectedMethod> {
     vec![
         ExpectedMethod::new(
-            "AppendCashflow",
-            ".ficant.market.v1.AppendCashflowRequest",
-            ".ficant.market.v1.AppendCashflowResponse",
+            "AppendMarketFact",
+            ".ficant.market.v1.AppendMarketFactRequest",
+            ".ficant.market.v1.AppendMarketFactResponse",
         ),
         ExpectedMethod::new(
-            "AppendQuote",
-            ".ficant.market.v1.AppendQuoteRequest",
-            ".ficant.market.v1.AppendQuoteResponse",
-        ),
-        ExpectedMethod::new(
-            "AppendTrade",
-            ".ficant.market.v1.AppendTradeRequest",
-            ".ficant.market.v1.AppendTradeResponse",
-        ),
-        ExpectedMethod::new(
-            "AppendValuation",
-            ".ficant.market.v1.AppendValuationRequest",
-            ".ficant.market.v1.AppendValuationResponse",
+            "CorrectMarketFact",
+            ".ficant.market.v1.CorrectMarketFactRequest",
+            ".ficant.market.v1.CorrectMarketFactResponse",
         ),
         ExpectedMethod::new(
             "PublishCurveSnapshot",
@@ -3716,9 +4250,9 @@ fn artifact_methods() -> Vec<ExpectedMethod> {
 fn snapshot_methods() -> Vec<ExpectedMethod> {
     vec![
         ExpectedMethod::new(
-            "PublishDataSnapshot",
-            ".ficant.research.v1.PublishDataSnapshotRequest",
-            ".ficant.research.v1.PublishDataSnapshotResponse",
+            "ImportCanonicalQuoteSnapshot",
+            ".ficant.research.v1.ImportCanonicalQuoteSnapshotRequest",
+            ".ficant.research.v1.ImportCanonicalQuoteSnapshotResponse",
         ),
         ExpectedMethod::new(
             "PublishUniverseSnapshot",
@@ -3731,6 +4265,184 @@ fn snapshot_methods() -> Vec<ExpectedMethod> {
             ".ficant.research.v1.GetSnapshotResponse",
         ),
     ]
+}
+
+fn assert_r6a_snapshot_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
+    assert_fields(
+        messages,
+        "ficant.research.v1.DataSnapshot",
+        &[
+            ExpectedField::message("data_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::message("visible_at", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("as_of", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("schema_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("manifest_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("blob_content_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
+            ExpectedField::message("authorization_ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("actor_id", ".ficant.core.v1.Ulid"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.research.v1.UniverseSnapshot",
+        &[
+            ExpectedField::message("universe_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::repeated_message("instrument_versions", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("filter_digest", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
+            ExpectedField::message("actor_id", ".ficant.core.v1.Ulid"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.market.v1.InstrumentMappingEntry",
+        &[
+            ExpectedField::scalar("source_instrument_key", Type::String),
+            ExpectedField::message("effective_from", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("effective_to", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("instrument", ".ficant.core.v1.VersionRef"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.market.v1.InstrumentMapping",
+        &[
+            ExpectedField::message("mapping_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::message("source", ".ficant.core.v1.VersionRef"),
+            ExpectedField::repeated_message("entries", ".ficant.market.v1.InstrumentMappingEntry"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.research.v1.ImportCanonicalQuoteSnapshotRequest",
+        &[
+            ExpectedField::scalar("idempotency_key", Type::String),
+            ExpectedField::message("target_snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("authorization_ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("mapping", ".ficant.market.v1.InstrumentMapping"),
+            ExpectedField::message("calendar", ".ficant.market.v1.Calendar"),
+            ExpectedField::message("unit", ".ficant.market.v1.Unit"),
+            ExpectedField::message("as_of", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("visible_at", ".ficant.core.v1.MarketTime"),
+            ExpectedField::scalar("import_reason", Type::String),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.research.v1.ImportCanonicalQuoteSnapshotResponse",
+        &[
+            ExpectedField::oneof_message(
+                "data_snapshot",
+                ".ficant.research.v1.DataSnapshot",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+        ],
+    );
+    let publish_universe_request = messages
+        .get("ficant.research.v1.PublishUniverseSnapshotRequest")
+        .expect("PublishUniverseSnapshotRequest exists");
+    assert_reserved_tag(
+        messages,
+        "ficant.research.v1.PublishUniverseSnapshotRequest",
+        2,
+    );
+    assert_reserved_names(
+        messages,
+        "ficant.research.v1.PublishUniverseSnapshotRequest",
+        &["universe_snapshot"],
+    );
+    assert_exact_tagged_fields(
+        publish_universe_request,
+        &[
+            ("idempotency_key", 1, Type::String, None, false),
+            (
+                "universe_snapshot_id",
+                3,
+                Type::Message,
+                Some(".ficant.core.v1.Ulid"),
+                false,
+            ),
+            (
+                "owner",
+                4,
+                Type::Message,
+                Some(".ficant.core.v1.OwnerRef"),
+                false,
+            ),
+            (
+                "instrument_versions",
+                5,
+                Type::Message,
+                Some(".ficant.core.v1.VersionRef"),
+                true,
+            ),
+            (
+                "filter_digest",
+                6,
+                Type::Message,
+                Some(".ficant.core.v1.Sha256"),
+                false,
+            ),
+            (
+                "lineage",
+                7,
+                Type::Message,
+                Some(".ficant.core.v1.LineageRef"),
+                true,
+            ),
+            (
+                "change",
+                8,
+                Type::Message,
+                Some(".ficant.core.v1.ChangeJustification"),
+                false,
+            ),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.research.v1.PublishUniverseSnapshotResponse",
+        &[
+            ExpectedField::oneof_message(
+                "universe_snapshot",
+                ".ficant.research.v1.UniverseSnapshot",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+        ],
+    );
+    assert_fields(
+        messages,
+        "ficant.research.v1.GetSnapshotRequest",
+        &[ExpectedField::message(
+            "snapshot_id",
+            ".ficant.core.v1.Ulid",
+        )],
+    );
+    assert_fields(
+        messages,
+        "ficant.research.v1.GetSnapshotResponse",
+        &[
+            ExpectedField::oneof_message(
+                "data_snapshot",
+                ".ficant.research.v1.DataSnapshot",
+                "result",
+            ),
+            ExpectedField::oneof_message(
+                "universe_snapshot",
+                ".ficant.research.v1.UniverseSnapshot",
+                "result",
+            ),
+            ExpectedField::oneof_message("error", ".ficant.core.v1.ErrorDetail", "result"),
+        ],
+    );
 }
 
 fn position_snapshot_methods() -> Vec<ExpectedMethod> {
@@ -3832,6 +4544,7 @@ fn assert_position_snapshot_contract(messages: &BTreeMap<String, &DescriptorProt
         &[
             ExpectedField::scalar("idempotency_key", Type::String),
             ExpectedField::message("snapshot", ".ficant.research.v1.PositionSnapshot"),
+            ExpectedField::message("change", ".ficant.core.v1.ChangeJustification"),
         ],
     );
     assert_fields(
@@ -4137,6 +4850,7 @@ fn assert_service_inventory(descriptor_set: &FileDescriptorSet) {
 fn expected_service_fqns() -> BTreeSet<String> {
     BTreeSet::from([
         "ficant.core.v1.RegistryService".to_owned(),
+        "ficant.core.v1.FoundationChangeService".to_owned(),
         "ficant.market.v1.MarketDefinitionService".to_owned(),
         "ficant.market.v1.MarketFactService".to_owned(),
         "ficant.market.v1.DataSourceRegistryService".to_owned(),

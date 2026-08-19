@@ -1,17 +1,24 @@
 mod support;
 
 use ficant_application::ports::{
-    AppendDefinitionVersion, AppendJournalEvent, AppendMarketFact, ArtifactRepository,
-    BeginBlobStage, BlobStore, CreateExperimentRun, DataSourceRepository, DefinitionIdentity,
-    DefinitionKind, DefinitionRepository, DefinitionValue, ExperimentRepository, IdempotencyKey,
-    InstrumentDefinition, MarketFact, MarketFactFieldRole, MarketFactRepository,
-    MarketFactRulePackResolver, MarketFactUnitResolver, MarketFactWindow,
-    MarketRunRulePackResolver, PageRequest, PublishArtifact, PublishCurveSnapshot,
-    PublishSignalSet, PublishSnapshot, RegisterDataSource, RunJournalRepository, SignalRepository,
-    SnapshotBlobRole, SnapshotValue, TransitionExperimentRun, VerifiedBlobRef,
-    VerifiedSnapshotBlob, VerifiedSnapshotProof, VerifyBlobStage,
+    AccessScope, AppendDefinitionVersion, AppendJournalEvent, AppendMarketFact, ArtifactRepository,
+    AuthorizedPrincipal, BeginBlobStage, BlobStore, CreateExperimentRun,
+    CurveSnapshotMetadataRepository, DataSourceRepository, DefinitionIdentity, DefinitionKind,
+    DefinitionRepository, DefinitionValue, ExperimentRepository, FoundationChangeContext,
+    FullyValidatedMarketFact, GovernedAppendDefinitionVersion, GovernedAppendMarketFact,
+    GovernedCorrectMarketFact, GovernedPublishCurveSnapshot, IdempotencyKey, InstrumentDefinition,
+    MarketFact, MarketFactFieldRole, MarketFactRepository, MarketFactRulePackResolver,
+    MarketFactUnitResolver, MarketFactWindow, MarketRunRulePackResolver, PageRequest,
+    PublishArtifact, PublishCurveSnapshot, PublishSignalSet, PublishSnapshot, RegisterDataSource,
+    RunJournalRepository, SignalRepository, SnapshotBlobRole, SnapshotRepository, SnapshotValue,
+    SnapshotVerifiedReadMetadataRepository, TransitionExperimentRun, VerifiedBlobRef,
+    VerifiedSnapshotBlob, VerifiedSnapshotProof, VerifyBlobStage, stored_definition_content_hash,
+};
+use ficant_application::use_cases::data_snapshot::{
+    PublishUniverseSnapshot, UniverseSnapshotIntent,
 };
 use ficant_domain::ContentAddressed;
+use ficant_domain::governance::{ChangeJustification, PlatformRole, SourceDocumentRef};
 use ficant_domain::market::{
     ArtifactInputKind, Calendar, CalendarInput, CurveSnapshot, CurveSnapshotInput, DataSource,
     DataSourceInput, DataSourceKind, FactSource, Instrument, InstrumentInput, InstrumentKind,
@@ -26,6 +33,7 @@ use ficant_domain::research::{
     Artifact, ArtifactKind, DataSnapshot, DataSnapshotInput, ExperimentRun, ExperimentRunInput,
     JournalEventType, RunJournal, RunJournalInput, RunState, SignalSet, SignalSetInput,
 };
+use ficant_storage::postgres::PostgresRepository;
 use ficant_storage::s3::S3BlobStore;
 use sqlx::PgPool;
 use sqlx::types::chrono::{NaiveDate, TimeZone, Utc};
@@ -99,6 +107,106 @@ async fn definition_repository_preserves_versions_and_scoped_reads() {
 }
 
 #[tokio::test]
+async fn governed_definition_append_is_atomic_replay_verified_and_binds_previous_hash() {
+    let pool = support::postgres_pool().await;
+    support::reset_postgres(&pool).await;
+    support::migrate(&pool).await;
+    let repository = support::repository(pool.clone());
+    let owner = test_owner();
+    let first = r6a_definition_value(&owner, 1, 18);
+    let first_command = r6a_definition_command(&owner, None, first.clone(), "definition-v1", '1');
+    assert_eq!(
+        repository
+            .append_complete(first_command.clone())
+            .await
+            .unwrap(),
+        first
+    );
+    assert_eq!(
+        repository.append_complete(first_command).await.unwrap(),
+        first
+    );
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.foundation_change_records
+         WHERE operation='market-definition.append'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 1, "replay must not duplicate its change record");
+
+    let second = r6a_definition_value(&owner, 2, 20);
+    let collision = r6a_definition_command(
+        &owner,
+        Some(Version::new(1).unwrap()),
+        second.clone(),
+        "definition-v2-collision",
+        '1',
+    );
+    assert!(repository.append_complete(collision).await.is_err());
+    assert_eq!(
+        repository
+            .get_version(
+                &support::access_scope(&owner),
+                r6a_definition_id(),
+                Version::new(2).unwrap(),
+            )
+            .await
+            .unwrap(),
+        None,
+        "an audit collision must roll back the business append"
+    );
+
+    let second_command = r6a_definition_command(
+        &owner,
+        Some(Version::new(1).unwrap()),
+        second.clone(),
+        "definition-v2",
+        '2',
+    );
+    assert_eq!(
+        repository
+            .append_complete(second_command.clone())
+            .await
+            .unwrap(),
+        second
+    );
+    let before_hash: Option<String> = sqlx::query_scalar(
+        "SELECT before_hash::text FROM core.foundation_change_records
+         WHERE tenant_id=$1 AND operation='market-definition.append' AND resource_ref=$2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(format!("market-definition:{}@2", r6a_definition_id()))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let expected_before_hash = hash_hex(&stored_definition_content_hash(&first));
+    assert_eq!(before_hash.as_deref(), Some(expected_before_hash.as_str()));
+
+    sqlx::query("DELETE FROM core.foundation_change_sources WHERE tenant_id=$1 AND record_id=$2")
+        .bind(owner.tenant_id().as_str())
+        .bind(r6a_definition_record_id('2').as_str())
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM core.foundation_change_records WHERE tenant_id=$1 AND record_id=$2")
+        .bind(owner.tenant_id().as_str())
+        .bind(r6a_definition_record_id('2').as_str())
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        repository
+            .append_complete(second_command)
+            .await
+            .unwrap_err()
+            .category(),
+        ficant_application::ApplicationErrorCategory::ImmutableViolation,
+        "an idempotency row without exact change evidence must fail closed"
+    );
+}
+
+#[tokio::test]
 #[allow(clippy::too_many_lines)]
 async fn snapshot_publication_is_idempotent_and_commits_blob_with_lineage() {
     let pool = support::postgres_pool().await;
@@ -109,6 +217,7 @@ async fn snapshot_publication_is_idempotent_and_commits_blob_with_lineage() {
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F01").unwrap(),
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F02").unwrap(),
     );
+    let scope = support::access_scope(&owner);
     seed_unit(
         &repository,
         &owner,
@@ -206,6 +315,45 @@ async fn snapshot_publication_is_idempotent_and_commits_blob_with_lineage() {
             .await
             .unwrap();
     assert_eq!((metadata_count, blob_count, lineage_count), (1, 2, 1));
+    assert_eq!(
+        SnapshotRepository::get_by_id(&repository, &scope, snapshot.id().clone())
+            .await
+            .unwrap(),
+        Some(snapshot.clone())
+    );
+    let verified_metadata = repository
+        .get_verified_read_metadata(&scope, snapshot.id().clone())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(verified_metadata.snapshot(), snapshot);
+
+    sqlx::query(
+        "UPDATE research.data_snapshots SET manifest_hash = content_hash
+         WHERE tenant_id = $1 AND data_snapshot_id = $2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(snapshot.id().as_str())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let metadata_drift = SnapshotRepository::get_by_id(&repository, &scope, snapshot.id().clone())
+        .await
+        .expect_err("SQL manifest identity drift must fail before returning decoded metadata");
+    assert_eq!(
+        metadata_drift.category(),
+        ficant_application::ApplicationErrorCategory::StorageUnavailable
+    );
+    sqlx::query(
+        "UPDATE research.data_snapshots SET manifest_hash = $3
+         WHERE tenant_id = $1 AND data_snapshot_id = $2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(snapshot.id().as_str())
+    .bind(S3BlobStore::hash_hex(&manifest_hash))
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let retry = PublishSnapshot::new(
         snapshot.clone(),
@@ -258,6 +406,83 @@ async fn snapshot_publication_is_idempotent_and_commits_blob_with_lineage() {
         replay_error.category(),
         ficant_application::ApplicationErrorCategory::StorageUnavailable
     );
+}
+
+#[tokio::test]
+async fn universe_publication_derives_canonical_member_hash_server_side() {
+    let pool = support::postgres_pool().await;
+    support::reset_postgres(&pool).await;
+    support::migrate(&pool).await;
+    let repository = support::repository(pool.clone());
+    let owner = test_owner();
+    let scope = support::access_scope(&owner);
+    let definitions = seed_market_definitions(&repository, &owner).await;
+    let snapshot_id = Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F78").unwrap();
+    let actor_id = Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F79").unwrap();
+    let filter_digest = ContentHash::digest(b"r6a-universe-filter");
+    let lineage = vec![LineageRef::versioned(
+        definitions.instrument.id().clone(),
+        definitions.instrument.version(),
+    )];
+    let members = vec![
+        definitions.instrument.clone(),
+        definitions.instrument.clone(),
+    ];
+    let expected_manifest = universe_manifest_oracle(
+        &snapshot_id,
+        &owner,
+        &filter_digest,
+        &actor_id,
+        std::slice::from_ref(&definitions.instrument),
+        &lineage,
+    );
+    let intent = UniverseSnapshotIntent::new(
+        snapshot_id.clone(),
+        owner.clone(),
+        members,
+        filter_digest,
+        lineage,
+        actor_id.clone(),
+        IdempotencyKey::new("r6a:universe:server-hash").unwrap(),
+    )
+    .unwrap();
+    let (endpoint, bucket, access_key, secret_key) = support::s3_environment();
+    let store =
+        S3BlobStore::new(&endpoint, bucket, &access_key, &secret_key, pool.clone()).unwrap();
+    let snapshot = PublishUniverseSnapshot::new(&store, &repository)
+        .execute_governed_admin(
+            admin_change_context(
+                &owner,
+                actor_id,
+                "01ARZ3NDEKTSV4RRFFQ69G5F90",
+                "publish canonical universe",
+            ),
+            intent,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        snapshot.instrument_versions(),
+        std::slice::from_ref(&definitions.instrument)
+    );
+    assert_eq!(
+        snapshot.content_hash(),
+        &ContentHash::digest(&expected_manifest)
+    );
+    assert_eq!(
+        SnapshotRepository::get_by_id(&repository, &scope, snapshot_id)
+            .await
+            .unwrap(),
+        Some(SnapshotValue::Universe(snapshot))
+    );
+    let audit_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM core.foundation_change_records
+         WHERE operation='universe-snapshot.publish'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audit_count, 1);
 }
 
 #[tokio::test]
@@ -391,62 +616,26 @@ async fn market_fact_query_uses_scoped_aead_cursor_across_pages() {
     let pool = support::postgres_pool().await;
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
-    let repository = support::repository(pool);
+    let repository = support::repository(pool.clone());
     let owner = test_owner();
     let scope = support::access_scope(&owner);
     let definitions = seed_market_definitions(&repository, &owner).await;
     let first = quote_fact(
         "01ARZ3NDEKTSV4RRFFQ69G5F70",
         "quote-page-1",
-        market_time(8),
+        submicro_market_time(123_456_000),
         &owner,
         &definitions,
     );
     let second = quote_fact(
         "01ARZ3NDEKTSV4RRFFQ69G5F71",
         "quote-page-2",
-        market_time(9),
+        submicro_market_time(123_457_000),
         &owner,
         &definitions,
     );
-    repository
-        .append_fact(
-            AppendMarketFact::new(
-                MarketFactRulePackResolver::new(&repository)
-                    .resolve(
-                        &scope,
-                        MarketFactUnitResolver::new(&repository)
-                            .resolve(&scope, first.clone())
-                            .await
-                            .unwrap(),
-                    )
-                    .await
-                    .unwrap(),
-                IdempotencyKey::new("repo:quote:first").unwrap(),
-            )
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-    repository
-        .append_fact(
-            AppendMarketFact::new(
-                MarketFactRulePackResolver::new(&repository)
-                    .resolve(
-                        &scope,
-                        MarketFactUnitResolver::new(&repository)
-                            .resolve(&scope, second.clone())
-                            .await
-                            .unwrap(),
-                    )
-                    .await
-                    .unwrap(),
-                IdempotencyKey::new("repo:quote:second").unwrap(),
-            )
-            .unwrap(),
-        )
-        .await
-        .unwrap();
+    append_legacy_market_fact(&repository, &scope, first.clone(), "repo:quote:first").await;
+    append_legacy_market_fact(&repository, &scope, second.clone(), "repo:quote:second").await;
 
     let window = |page| {
         MarketFactWindow::new(
@@ -464,7 +653,7 @@ async fn market_fact_query_uses_scoped_aead_cursor_across_pages() {
         )
         .await
         .unwrap();
-    assert_eq!(first_page.items(), &[first]);
+    assert_eq!(first_page.items(), std::slice::from_ref(&first));
     let cursor = first_page.next_cursor().cloned().unwrap();
     assert!(!cursor.as_str().contains("01ARZ3NDEKTSV4RRFFQ69G5F70"));
     let second_page = repository
@@ -482,6 +671,126 @@ async fn market_fact_query_uses_scoped_aead_cursor_across_pages() {
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F09").unwrap(),
     );
     assert!(PageRequest::new(support::access_scope(&denied), Some(cursor), 1).is_err());
+
+    sqlx::query(
+        "UPDATE market.quotes SET fact_time=fact_time-INTERVAL '1 second'
+         WHERE tenant_id=$1 AND quote_id=$2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(first.id().as_str())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let projection_drift = repository
+        .query_instrument_window(
+            &scope,
+            window(PageRequest::new(scope.clone(), None, 10).unwrap()),
+        )
+        .await
+        .expect_err("fact SQL projection drift must not return a decoded payload");
+    assert_eq!(
+        projection_drift.category(),
+        ficant_application::ApplicationErrorCategory::StorageUnavailable
+    );
+}
+
+#[tokio::test]
+async fn market_fact_correction_requires_the_explicit_same_fact_stream() {
+    let pool = support::postgres_pool().await;
+    support::reset_postgres(&pool).await;
+    support::migrate(&pool).await;
+    let repository = support::repository(pool.clone());
+    let owner = test_owner();
+    let scope = support::access_scope(&owner);
+    let definitions = seed_market_definitions(&repository, &owner).await;
+    let original = correction_quote(
+        &definitions,
+        &owner,
+        "01ARZ3NDEKTSV4RRFFQ69G5F75",
+        "correction-stream",
+        1,
+        None,
+    );
+    let original_id = original.id().clone();
+    let validated_original = validate_market_fact(&repository, &scope, original.clone()).await;
+    let actor = Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F00").unwrap();
+    let append = GovernedAppendMarketFact::new(
+        admin_change_context(
+            &owner,
+            actor.clone(),
+            "01ARZ3NDEKTSV4RRFFQ69G5F91",
+            "append original quote",
+        ),
+        validated_original,
+        IdempotencyKey::new("repo:quote:correction-original").unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        repository
+            .append_governed_fact(append.clone())
+            .await
+            .unwrap(),
+        original
+    );
+    assert_eq!(
+        repository
+            .append_governed_fact(append.clone())
+            .await
+            .unwrap(),
+        original
+    );
+
+    let correction = correction_quote(
+        &definitions,
+        &owner,
+        "01ARZ3NDEKTSV4RRFFQ69G5F76",
+        "correction-stream",
+        2,
+        Some(original_id.clone()),
+    );
+    let validated_correction = validate_market_fact(&repository, &scope, correction.clone()).await;
+    assert_eq!(
+        AppendMarketFact::new(
+            validated_correction.clone(),
+            IdempotencyKey::new("repo:quote:correction-append-bypass").unwrap(),
+        )
+        .unwrap_err()
+        .category(),
+        ficant_application::ApplicationErrorCategory::LineageIncomplete
+    );
+    assert_eq!(
+        repository
+            .append_governed_correction(
+                GovernedCorrectMarketFact::new(
+                    admin_change_context(
+                        &owner,
+                        actor.clone(),
+                        "01ARZ3NDEKTSV4RRFFQ69G5F92",
+                        "correct original quote",
+                    ),
+                    original_id.clone(),
+                    validated_correction,
+                    IdempotencyKey::new("repo:quote:correction-valid").unwrap(),
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap(),
+        correction
+    );
+
+    assert_unrelated_fact_stream_is_rejected(
+        &repository,
+        &scope,
+        &definitions,
+        &owner,
+        actor,
+        &original_id,
+    )
+    .await;
+    assert_fact_mutation_counts(&pool).await;
+    assert_fact_replay_detects_payload_tamper(&repository, &pool, &owner, &original_id, append)
+        .await;
 }
 
 #[tokio::test]
@@ -493,32 +802,8 @@ async fn typed_quote_source_round_trips_the_exact_registered_data_source_ref() {
     let owner = test_owner();
     let scope = support::access_scope(&owner);
     let definitions = seed_market_definitions(&repository, &owner).await;
-    let source = DataSource::new(DataSourceInput {
-        data_source_id: Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F72").unwrap(),
-        version: Version::new(1).unwrap(),
-        owner: owner.clone(),
-        kind: DataSourceKind::FileNdjson,
-        name: "R5a typed quote source".to_owned(),
-        connection_binding: "r5a-typed-quotes".to_owned(),
-        dataset: "r5a_typed_quotes".to_owned(),
-        canonical_schema_id: "ficant.market.quote.canonical.v1".to_owned(),
-        canonical_schema_hash: ContentHash::digest(b"r5a-typed-quote-schema"),
-    })
-    .unwrap()
-    .with_price_source_type(PriceSourceType::ActiveQuote)
-    .unwrap();
-    repository
-        .register(
-            RegisterDataSource::new(
-                scope.clone(),
-                None,
-                source.clone(),
-                IdempotencyKey::new("repo:r5a-source:v1").unwrap(),
-            )
-            .unwrap(),
-        )
-        .await
-        .unwrap();
+    let source = typed_quote_source(owner.clone());
+    register_typed_quote_source(&repository, &owner, source.clone()).await;
     let source_ref = VersionRef::new(source.id().clone(), Version::new(1).unwrap());
     let fact = MarketFact::Quote(
         Quote::new(QuoteInput {
@@ -537,25 +822,7 @@ async fn typed_quote_source_round_trips_the_exact_registered_data_source_ref() {
         })
         .unwrap(),
     );
-    repository
-        .append_fact(
-            AppendMarketFact::new(
-                MarketFactRulePackResolver::new(&repository)
-                    .resolve(
-                        &scope,
-                        MarketFactUnitResolver::new(&repository)
-                            .resolve(&scope, fact.clone())
-                            .await
-                            .unwrap(),
-                    )
-                    .await
-                    .unwrap(),
-                IdempotencyKey::new("repo:r5a-typed-quote").unwrap(),
-            )
-            .unwrap(),
-        )
-        .await
-        .unwrap();
+    append_legacy_market_fact(&repository, &scope, fact.clone(), "repo:r5a-typed-quote").await;
     let page = repository
         .query_instrument_window(
             &scope,
@@ -851,8 +1118,14 @@ async fn curve_snapshot_publication_consumes_verified_blob_and_is_scoped() {
     })
     .unwrap();
     let verified = stage_verified_blob(&pool, owner.clone(), "curve:blob:fixture:v1", bytes).await;
-    let command = PublishCurveSnapshot::new(
-        scope.clone(),
+    let actor = Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F89").unwrap();
+    let command = GovernedPublishCurveSnapshot::new(
+        admin_change_context(
+            &owner,
+            actor.clone(),
+            "01ARZ3NDEKTSV4RRFFQ69G5F94",
+            "publish verified curve",
+        ),
         curve.clone(),
         u64::try_from(bytes.len()).unwrap(),
         verified,
@@ -861,13 +1134,16 @@ async fn curve_snapshot_publication_consumes_verified_blob_and_is_scoped() {
     .unwrap();
     assert_eq!(
         repository
-            .publish_curve_snapshot(command.clone())
+            .publish_governed_curve_snapshot(command.clone())
             .await
             .unwrap(),
         curve
     );
     assert_eq!(
-        repository.publish_curve_snapshot(command).await.unwrap(),
+        repository
+            .publish_governed_curve_snapshot(command)
+            .await
+            .unwrap(),
         curve
     );
     assert_eq!(
@@ -877,6 +1153,62 @@ async fn curve_snapshot_publication_consumes_verified_blob_and_is_scoped() {
             .unwrap(),
         Some(curve.clone())
     );
+    let curve_metadata = repository
+        .get_curve_snapshot_metadata(&scope, curve.id().clone())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(curve_metadata.snapshot(), &curve);
+    assert_eq!(
+        curve_metadata.blob_size(),
+        u64::try_from(bytes.len()).unwrap()
+    );
+
+    sqlx::query(
+        "UPDATE market.curve_snapshots SET point_schema='tampered-schema'
+         WHERE tenant_id=$1 AND curve_snapshot_id=$2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(curve.id().as_str())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let metadata_drift = repository
+        .get_curve_snapshot_metadata(&scope, curve.id().clone())
+        .await
+        .expect_err("curve SQL metadata drift must fail before payload materialization");
+    assert_eq!(
+        metadata_drift.category(),
+        ficant_application::ApplicationErrorCategory::StorageUnavailable
+    );
+    sqlx::query(
+        "UPDATE market.curve_snapshots
+         SET point_schema='tenor:string,rate:decimal', blob_size=blob_size+1
+         WHERE tenant_id=$1 AND curve_snapshot_id=$2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(curve.id().as_str())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let blob_size_drift = repository
+        .get_curve_snapshot_metadata(&scope, curve.id().clone())
+        .await
+        .expect_err("curve metadata size must match the durable blob registry");
+    assert_eq!(
+        blob_size_drift.category(),
+        ficant_application::ApplicationErrorCategory::StorageUnavailable
+    );
+    sqlx::query(
+        "UPDATE market.curve_snapshots SET blob_size=$3
+         WHERE tenant_id=$1 AND curve_snapshot_id=$2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(curve.id().as_str())
+    .bind(i64::try_from(bytes.len()).unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
     let committed: (i64, i64, i64) = sqlx::query_as(
         "SELECT
              (SELECT COUNT(*) FROM market.curve_snapshots),
@@ -915,9 +1247,14 @@ async fn curve_snapshot_publication_consumes_verified_blob_and_is_scoped() {
     )
     .await;
     let conflict = repository
-        .publish_curve_snapshot(
-            PublishCurveSnapshot::new(
-                scope.clone(),
+        .publish_governed_curve_snapshot(
+            GovernedPublishCurveSnapshot::new(
+                admin_change_context(
+                    &owner,
+                    actor,
+                    "01ARZ3NDEKTSV4RRFFQ69G5F95",
+                    "reject immutable curve replacement",
+                ),
                 conflicting_curve,
                 u64::try_from(conflicting_bytes.len()).unwrap(),
                 conflicting_verified,
@@ -941,6 +1278,14 @@ async fn curve_snapshot_publication_consumes_verified_blob_and_is_scoped() {
     .await
     .unwrap();
     assert_eq!(after_conflict, committed);
+    let audit_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM core.foundation_change_records
+         WHERE operation='curve-snapshot.publish'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audit_count, 1);
     let denied = OwnerRef::new(
         owner.tenant_id().clone(),
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F09").unwrap(),
@@ -1521,6 +1866,217 @@ struct MarketDefinitions {
     instrument: VersionRef,
 }
 
+fn submicro_market_time(nanos: u32) -> MarketTime {
+    MarketTime::new(
+        Utc.timestamp_opt(market_time(8).instant().timestamp(), nanos)
+            .unwrap(),
+        "UTC",
+        NaiveDate::from_ymd_opt(2025, 1, 15).unwrap(),
+    )
+    .unwrap()
+}
+
+async fn validate_market_fact(
+    repository: &PostgresRepository,
+    scope: &AccessScope,
+    fact: MarketFact,
+) -> FullyValidatedMarketFact {
+    let unit_validated = MarketFactUnitResolver::new(repository)
+        .resolve(scope, fact)
+        .await
+        .unwrap();
+    MarketFactRulePackResolver::new(repository)
+        .resolve(scope, unit_validated)
+        .await
+        .unwrap()
+}
+
+async fn append_legacy_market_fact(
+    repository: &PostgresRepository,
+    scope: &AccessScope,
+    fact: MarketFact,
+    key: &str,
+) {
+    repository
+        .append_fact(
+            AppendMarketFact::new(
+                validate_market_fact(repository, scope, fact).await,
+                IdempotencyKey::new(key).unwrap(),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+}
+
+fn correction_quote(
+    definitions: &MarketDefinitions,
+    owner: &OwnerRef,
+    id: &str,
+    external_id: &str,
+    revision: u64,
+    supersedes_id: Option<Ulid>,
+) -> MarketFact {
+    MarketFact::Quote(
+        Quote::new(QuoteInput {
+            quote_id: Ulid::new(id).unwrap(),
+            instrument: definitions.instrument.clone(),
+            owner: owner.clone(),
+            source: FactSource::new("fixture-feed", external_id, revision).unwrap(),
+            received_at: market_time(8),
+            observed_at: market_time(8),
+            bid: Some(DecimalValue::new("210", 4, definitions.price.clone()).unwrap()),
+            ask: Some(DecimalValue::new("220", 4, definitions.price.clone()).unwrap()),
+            supersedes_id,
+        })
+        .unwrap(),
+    )
+}
+
+async fn assert_fact_mutation_counts(pool: &PgPool) {
+    let counts: (i64, i64, i64) = sqlx::query_as(
+        "SELECT
+             (SELECT COUNT(*) FROM market.quotes),
+             (SELECT COUNT(*) FROM core.idempotency_records
+              WHERE scope='market-fact:write:v1'),
+             (SELECT COUNT(*) FROM core.foundation_change_records
+              WHERE operation IN ('market-fact.append','market-fact.correct'))",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(counts, (2, 2, 2));
+}
+
+async fn assert_fact_replay_detects_payload_tamper(
+    repository: &PostgresRepository,
+    pool: &PgPool,
+    owner: &OwnerRef,
+    original_id: &Ulid,
+    append: GovernedAppendMarketFact,
+) {
+    sqlx::query(
+        "UPDATE market.quotes SET payload=decode('00','hex')
+         WHERE tenant_id=$1 AND quote_id=$2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(original_id.as_str())
+    .execute(pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        repository
+            .append_governed_fact(append)
+            .await
+            .expect_err("fact replay must decode the persisted business payload")
+            .category(),
+        ficant_application::ApplicationErrorCategory::StorageUnavailable
+    );
+}
+
+async fn assert_unrelated_fact_stream_is_rejected(
+    repository: &PostgresRepository,
+    scope: &AccessScope,
+    definitions: &MarketDefinitions,
+    owner: &OwnerRef,
+    actor: Ulid,
+    original_id: &Ulid,
+) {
+    let wrong_stream = correction_quote(
+        definitions,
+        owner,
+        "01ARZ3NDEKTSV4RRFFQ69G5F77",
+        "different-external-record",
+        3,
+        Some(original_id.clone()),
+    );
+    let validated = validate_market_fact(repository, scope, wrong_stream).await;
+    let command = GovernedCorrectMarketFact::new(
+        admin_change_context(
+            owner,
+            actor,
+            "01ARZ3NDEKTSV4RRFFQ69G5F93",
+            "reject unrelated correction",
+        ),
+        original_id.clone(),
+        validated,
+        IdempotencyKey::new("repo:quote:correction-wrong-stream").unwrap(),
+    )
+    .unwrap();
+    let error = repository
+        .append_governed_correction(command)
+        .await
+        .expect_err("a correction cannot point at an unrelated source record");
+    assert_eq!(
+        error.category(),
+        ficant_application::ApplicationErrorCategory::LineageIncomplete
+    );
+}
+
+fn typed_quote_source(owner: OwnerRef) -> DataSource {
+    DataSource::new(DataSourceInput {
+        data_source_id: Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F72").unwrap(),
+        version: Version::new(1).unwrap(),
+        owner,
+        kind: DataSourceKind::FileNdjson,
+        name: "R5a typed quote source".to_owned(),
+        connection_binding: "r5a-typed-quotes".to_owned(),
+        dataset: "r5a_typed_quotes".to_owned(),
+        canonical_schema_id: "ficant.market.quote.canonical.v1".to_owned(),
+        canonical_schema_hash: ContentHash::digest(b"r5a-typed-quote-schema"),
+    })
+    .unwrap()
+    .with_price_source_type(PriceSourceType::ActiveQuote)
+    .unwrap()
+}
+
+async fn register_typed_quote_source(
+    repository: &PostgresRepository,
+    owner: &OwnerRef,
+    source: DataSource,
+) {
+    let principal = AuthorizedPrincipal::new(
+        "repository-admin".to_owned(),
+        Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F00").unwrap(),
+        owner.tenant_id().clone(),
+        vec![owner.owner_id().clone()],
+        PlatformRole::PlatformAdmin,
+        vec!["data-sources:write".to_owned()],
+        ContentHash::digest(b"repository-credential"),
+    )
+    .unwrap();
+    let change = ChangeJustification::new(
+        "register typed quote source",
+        vec![
+            SourceDocumentRef::new(
+                "urn:test:r5a-typed-source",
+                ContentHash::digest(b"typed-source-evidence"),
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap();
+    let context = FoundationChangeContext::administrator(
+        principal,
+        change,
+        Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F74").unwrap(),
+        market_time(8),
+    )
+    .unwrap();
+    repository
+        .register(
+            RegisterDataSource::new(
+                context,
+                None,
+                source,
+                IdempotencyKey::new("repo:r5a-source:v1").unwrap(),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+}
+
 // This fixture intentionally creates the complete public definition chain used by both adapters.
 #[allow(clippy::too_many_lines)]
 async fn seed_market_definitions(
@@ -1788,6 +2344,40 @@ fn test_owner() -> OwnerRef {
     )
 }
 
+fn admin_change_context(
+    owner: &OwnerRef,
+    actor_id: Ulid,
+    record_id: &str,
+    reason: &str,
+) -> FoundationChangeContext {
+    FoundationChangeContext::administrator(
+        AuthorizedPrincipal::new(
+            "repository-governed-admin".to_owned(),
+            actor_id,
+            owner.tenant_id().clone(),
+            vec![owner.owner_id().clone()],
+            PlatformRole::PlatformAdmin,
+            vec!["facts:write".to_owned(), "snapshots:write".to_owned()],
+            ContentHash::digest(b"repository-governed-credential"),
+        )
+        .unwrap(),
+        ChangeJustification::new(
+            reason,
+            vec![
+                SourceDocumentRef::new(
+                    format!("urn:test:governed:{record_id}"),
+                    ContentHash::digest(reason.as_bytes()),
+                )
+                .unwrap(),
+            ],
+        )
+        .unwrap(),
+        Ulid::new(record_id).unwrap(),
+        market_time(8),
+    )
+    .unwrap()
+}
+
 fn market_time(hour: u32) -> MarketTime {
     MarketTime::new(
         Utc.with_ymd_and_hms(2025, 1, 15, hour, 0, 0).unwrap(),
@@ -1795,6 +2385,135 @@ fn market_time(hour: u32) -> MarketTime {
         NaiveDate::from_ymd_opt(2025, 1, 15).unwrap(),
     )
     .unwrap()
+}
+
+fn r6a_definition_command(
+    owner: &OwnerRef,
+    expected: Option<Version>,
+    value: DefinitionValue,
+    key: &str,
+    record_suffix: char,
+) -> GovernedAppendDefinitionVersion {
+    GovernedAppendDefinitionVersion::new(
+        r6a_definition_change_context(owner, key, record_suffix),
+        expected,
+        value,
+        IdempotencyKey::new(key).unwrap(),
+    )
+    .unwrap()
+}
+
+fn r6a_definition_change_context(
+    owner: &OwnerRef,
+    reason: &str,
+    record_suffix: char,
+) -> FoundationChangeContext {
+    FoundationChangeContext::administrator(
+        AuthorizedPrincipal::new(
+            "definition-storage-admin".to_owned(),
+            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F04").unwrap(),
+            owner.tenant_id().clone(),
+            vec![owner.owner_id().clone()],
+            PlatformRole::PlatformAdmin,
+            vec!["definitions:write".to_owned()],
+            ContentHash::digest(b"definition-storage-credential"),
+        )
+        .unwrap(),
+        ChangeJustification::new(
+            reason,
+            vec![
+                SourceDocumentRef::new(
+                    "urn:test:definition-evidence",
+                    ContentHash::digest(b"definition-evidence"),
+                )
+                .unwrap(),
+            ],
+        )
+        .unwrap(),
+        r6a_definition_record_id(record_suffix),
+        MarketTime::new(
+            Utc.with_ymd_and_hms(2026, 8, 13, 0, 0, 0).unwrap(),
+            "Asia/Shanghai",
+            NaiveDate::from_ymd_opt(2026, 8, 13).unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap()
+}
+
+fn r6a_definition_value(owner: &OwnerRef, version: u64, precision: u32) -> DefinitionValue {
+    DefinitionValue::Unit(
+        Unit::new(UnitInput {
+            unit_id: r6a_definition_id(),
+            version: Version::new(version).unwrap(),
+            owner: owner.clone(),
+            code: "CNY".to_owned(),
+            dimension: "currency".to_owned(),
+            scale: 2,
+            precision,
+        })
+        .unwrap(),
+    )
+}
+
+fn r6a_definition_id() -> Ulid {
+    Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F03").unwrap()
+}
+
+fn r6a_definition_record_id(suffix: char) -> Ulid {
+    Ulid::new(format!("01ARZ3NDEKTSV4RRFFQ69G5FA{suffix}")).unwrap()
+}
+
+fn hash_hex(value: &ContentHash) -> String {
+    value
+        .as_bytes()
+        .iter()
+        .fold(String::with_capacity(64), |mut encoded, byte| {
+            use std::fmt::Write as _;
+            write!(encoded, "{byte:02x}").unwrap();
+            encoded
+        })
+}
+
+fn universe_manifest_oracle(
+    snapshot_id: &Ulid,
+    owner: &OwnerRef,
+    filter_digest: &ContentHash,
+    actor_id: &Ulid,
+    members: &[VersionRef],
+    lineage: &[LineageRef],
+) -> Vec<u8> {
+    let mut bytes = b"ficant-universe-members-manifest/v1\0".to_vec();
+    let append = |target: &mut Vec<u8>, value: &[u8]| {
+        target.extend_from_slice(&u64::try_from(value.len()).unwrap().to_be_bytes());
+        target.extend_from_slice(value);
+    };
+    append(&mut bytes, snapshot_id.as_str().as_bytes());
+    append(&mut bytes, owner.tenant_id().as_str().as_bytes());
+    append(&mut bytes, owner.owner_id().as_str().as_bytes());
+    append(&mut bytes, filter_digest.as_bytes());
+    append(&mut bytes, actor_id.as_str().as_bytes());
+    for member in members {
+        append(&mut bytes, member.id().as_str().as_bytes());
+        append(&mut bytes, &member.version().get().to_be_bytes());
+    }
+    for reference in lineage {
+        append(&mut bytes, reference.object_id().as_str().as_bytes());
+        append(
+            &mut bytes,
+            &reference
+                .version()
+                .map_or(0_u64, Version::get)
+                .to_be_bytes(),
+        );
+        append(
+            &mut bytes,
+            reference
+                .content_hash()
+                .map_or(&[][..], |hash| hash.as_bytes().as_slice()),
+        );
+    }
+    bytes
 }
 
 #[allow(clippy::too_many_lines)]

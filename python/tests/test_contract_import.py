@@ -14,7 +14,21 @@ GENERATED_ROOT = (
 sys.path.insert(0, str(GENERATED_ROOT))
 
 from ficant.app.v1.registry_pb2 import AppRegistry  # noqa: E402
-from ficant.core.v1.common_pb2 import DecimalValue, Sha256, Ulid, UnitRef  # noqa: E402
+from ficant.app.v1.session_pb2 import Session  # noqa: E402
+from ficant.core.v1.common_pb2 import DecimalValue, OwnerRef, Sha256, Ulid, UnitRef  # noqa: E402
+from ficant.core.v1.governance_pb2 import (  # noqa: E402
+    PLATFORM_ROLE_RESEARCHER,
+    ChangeJustification,
+    FoundationChangeRecord,
+)
+from ficant.core.v1.governance_pb2_grpc import (  # noqa: E402
+    FoundationChangeServiceStub,
+)
+from ficant.core.v1.subject_pb2 import RegisterSubjectRequest, Subject  # noqa: E402
+from ficant.core.v1.subject_state_pb2 import (  # noqa: E402
+    RegisterSubjectStateRequest,
+    SubjectStateSnapshot,
+)
 from ficant.market.v1.cgb_futures_rule_pb2 import (  # noqa: E402
     CgbFuturesDeliveryRulePack,
     CgbFuturesProductRule,
@@ -31,7 +45,30 @@ from ficant.market.v1.tax_rule_pb2 import (  # noqa: E402
     TaxRulePack,
     TaxRulePackV2,
 )
-from ficant.market.v1.definition_pb2 import BondTaxAttributes  # noqa: E402
+from ficant.market.v1.data_source_pb2 import (  # noqa: E402
+    DataSourceAuthorization,
+    InstrumentMapping,
+)
+from ficant.market.v1.data_source_pb2_grpc import (  # noqa: E402
+    DataSourceRegistryServiceStub,
+)
+from ficant.market.v1.definition_pb2 import (  # noqa: E402
+    BondTaxAttributes,
+    CompleteInstrumentDefinition,
+    MarketDefinition,
+)
+from ficant.market.v1.definition_pb2_grpc import (  # noqa: E402
+    MarketDefinitionServiceStub,
+)
+from ficant.market.v1.fact_pb2 import (  # noqa: E402
+    CASHFLOW_TYPE_COUPON,
+    Cashflow,
+    CurvePointSet,
+    CurveSnapshotInput,
+    MarketFact,
+    PublishCurveSnapshotRequest,
+)
+from ficant.market.v1.fact_pb2_grpc import MarketFactServiceStub  # noqa: E402
 from ficant.market.v1.instrument_pb2 import Instrument  # noqa: E402
 from ficant.market.v1.rule_pb2 import MarketRulePack  # noqa: E402
 from ficant.rates.v1.analytics_pb2 import (  # noqa: E402
@@ -71,13 +108,45 @@ from ficant.research.v1.health_pb2 import (  # noqa: E402
 )
 from ficant.research.v1.health_pb2_grpc import DataHealthServiceStub  # noqa: E402
 from ficant.research.v1.position_pb2 import CapitalUse, PositionViews  # noqa: E402
+from ficant.research.v1.snapshot_pb2 import DataSnapshot  # noqa: E402
+from ficant.research.v1.snapshot_pb2_grpc import SnapshotServiceStub  # noqa: E402
 
 
 def test_representative_generated_messages_import_from_one_descriptor() -> None:
+    owner = OwnerRef(tenant_id=Ulid(value="01ARZ3NDEKTSV4RRFFQ69G5FAT"), owner_id=Ulid(value="01ARZ3NDEKTSV4RRFFQ69G5FAP"))
+    subject_request = RegisterSubjectRequest(
+        subject=Subject(
+            subject_id=Ulid(value="01ARZ3NDEKTSV4RRFFQ69G5FAS"),
+            display_name="consumer Subject",
+            owner=owner,
+        ),
+        idempotency_key="subject-consumer-v1",
+    )
+    state_request = RegisterSubjectStateRequest(
+        snapshot=SubjectStateSnapshot(owner=owner),
+        idempotency_key="subject-state-consumer-v1",
+    )
     instrument = Instrument(instrument_id=Ulid(value="01ARZ3NDEKTSV4RRFFQ69G5FAV"))
     decimal = DecimalValue(coefficient="10025", scale=2)
     run = ExperimentRun(seed=7)
     registry = AppRegistry()
+    session = Session(active_role=PLATFORM_ROLE_RESEARCHER)
+    change = ChangeJustification(reason="human-approved")
+    change_record = FoundationChangeRecord(
+        active_role=PLATFORM_ROLE_RESEARCHER,
+        change=change,
+    )
+    complete_instrument = CompleteInstrumentDefinition(instrument=instrument)
+    definition = MarketDefinition(instrument=complete_instrument)
+    fact = MarketFact()
+    curve_input = CurveSnapshotInput()
+    curve_publish = PublishCurveSnapshotRequest(
+        points=CurvePointSet(),
+        curve=curve_input,
+    )
+    authorization = DataSourceAuthorization()
+    data_snapshot = DataSnapshot()
+    mapping = InstrumentMapping()
     snapshot_binding = SnapshotBinding(
         snapshot_id=Ulid(value="01ARZ3NDEKTSV4RRFFQ69G5FAA"),
         content_hash=Sha256(value=b"s" * 32),
@@ -189,6 +258,22 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert decimal.DESCRIPTOR.full_name == "ficant.core.v1.DecimalValue"
     assert run.DESCRIPTOR.full_name == "ficant.research.v1.ExperimentRun"
     assert registry.DESCRIPTOR.full_name == "ficant.app.v1.AppRegistry"
+    assert session.active_role == PLATFORM_ROLE_RESEARCHER
+    assert Session.DESCRIPTOR.fields_by_name["actor_id"].number == 6
+    assert Session.DESCRIPTOR.fields_by_name["allowed_owner_ids"].number == 9
+    assert change_record.DESCRIPTOR.full_name == "ficant.core.v1.FoundationChangeRecord"
+    assert change_record.change.reason == "human-approved"
+    assert definition.WhichOneof("definition") == "instrument"
+    assert definition.instrument.instrument == instrument
+    assert fact.DESCRIPTOR.full_name == "ficant.market.v1.MarketFact"
+    assert Cashflow.DESCRIPTOR.fields_by_name["cashflow_type"].number == 10
+    assert CASHFLOW_TYPE_COUPON == 1
+    assert "content_hash" not in CurveSnapshotInput.DESCRIPTOR.fields_by_name
+    assert "curve_snapshot" not in PublishCurveSnapshotRequest.DESCRIPTOR.fields_by_name
+    assert curve_publish.curve.DESCRIPTOR.full_name == "ficant.market.v1.CurveSnapshotInput"
+    assert authorization.DESCRIPTOR.fields_by_name["mapping_hash"].number == 14
+    assert data_snapshot.DESCRIPTOR.fields_by_name["authorization_ref"].number == 9
+    assert mapping.DESCRIPTOR.fields_by_name["content_hash"].number == 5
     assert rates_request.DESCRIPTOR.full_name == "ficant.rates.v1.AnalyzeBondRequest"
     assert AnalysisContext.DESCRIPTOR.fields_by_name["knowledge_at"].number == 9
     assert "rule_pack" not in AnalysisContext.DESCRIPTOR.fields_by_name
@@ -220,6 +305,15 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     )
     assert "target_dv01" not in AnalyzeFuturesHedgeRequest.DESCRIPTOR.fields_by_name
     assert RatesAnalyticsServiceStub.__name__ == "RatesAnalyticsServiceStub"
+    assert FoundationChangeServiceStub.__name__ == "FoundationChangeServiceStub"
+    assert subject_request.subject.owner == owner
+    assert subject_request.idempotency_key == "subject-consumer-v1"
+    assert state_request.snapshot.owner == owner
+    assert state_request.idempotency_key == "subject-state-consumer-v1"
+    assert DataSourceRegistryServiceStub.__name__ == "DataSourceRegistryServiceStub"
+    assert MarketDefinitionServiceStub.__name__ == "MarketDefinitionServiceStub"
+    assert MarketFactServiceStub.__name__ == "MarketFactServiceStub"
+    assert SnapshotServiceStub.__name__ == "SnapshotServiceStub"
     assert rule_pack.DESCRIPTOR.fields_by_name["content"].message_type.full_name == "google.protobuf.Any"
     assert cgb_pack.DESCRIPTOR.full_name == "ficant.market.v1.CgbFuturesDeliveryRulePack"
     assert cgb_product.HasField("product_code")

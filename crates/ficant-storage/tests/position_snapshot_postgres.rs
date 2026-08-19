@@ -23,14 +23,7 @@ async fn position_snapshot_reads_are_scoped_and_resolve_the_latest_visible_revis
     let repository = support::repository(pool.clone());
     let owner = OwnerRef::new(id('T'), id('N'));
     let subject = VersionRef::new(id('S'), Version::new(1).unwrap());
-    sqlx::query(
-        "INSERT INTO core.subject_versions (subject_id, version, display_name, market_codes, tool_codes, funding_tier, value_added_tax_profile, income_tax_profile, assessment_mechanism, liability_profile) VALUES ($1, $2, 'Position test', ARRAY['CN'], ARRAY['positions'], 'DR_AVAILABLE', '', '', 'test', 'test')",
-    )
-    .bind(subject.id().as_str())
-    .bind(1_i64)
-    .execute(&pool)
-    .await
-    .unwrap();
+    insert_subject(&pool, &owner, &subject, "Position test").await;
     sqlx::query(
         "INSERT INTO market.units (tenant_id, unit_id, version, owner_id, code, dimension, scale, precision, payload) VALUES ($1, $2, 1, $3, 'LINEAGE', 'test', 0, 1, '\\x01')",
     )
@@ -90,14 +83,7 @@ async fn verified_empty_position_snapshot_publishes_and_round_trips_exactly() {
     let repository = support::repository(pool.clone());
     let owner = OwnerRef::new(id('T'), id('N'));
     let subject = VersionRef::new(id('S'), Version::new(1).unwrap());
-    sqlx::query(
-        "INSERT INTO core.subject_versions (subject_id, version, display_name, market_codes, tool_codes, funding_tier, value_added_tax_profile, income_tax_profile, assessment_mechanism, liability_profile) VALUES ($1, $2, 'Empty position test', ARRAY['CN'], ARRAY['positions'], 'DR_AVAILABLE', '', '', 'test', 'test')",
-    )
-    .bind(subject.id().as_str())
-    .bind(1_i64)
-    .execute(&pool)
-    .await
-    .unwrap();
+    insert_subject(&pool, &owner, &subject, "Empty position test").await;
     sqlx::query(
         "INSERT INTO market.units (tenant_id, unit_id, version, owner_id, code, dimension, scale, precision, payload) VALUES ($1, $2, 1, $3, 'LINEAGE', 'test', 0, 1, '\\x01')",
     )
@@ -126,6 +112,41 @@ async fn verified_empty_position_snapshot_publishes_and_round_trips_exactly() {
             .unwrap(),
         Some(empty)
     );
+}
+
+async fn insert_subject(
+    pool: &sqlx::PgPool,
+    owner: &OwnerRef,
+    subject: &VersionRef,
+    display_name: &str,
+) {
+    let version = i64::try_from(subject.version().get()).unwrap();
+    sqlx::query(
+        "INSERT INTO core.subject_identities
+         (tenant_id, subject_id, owner_id, latest_version) VALUES ($1,$2,$3,$4)",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(subject.id().as_str())
+    .bind(owner.owner_id().as_str())
+    .bind(version)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO core.subject_versions
+         (tenant_id, subject_id, version, owner_id, display_name, market_codes, tool_codes,
+          funding_tier, value_added_tax_profile, income_tax_profile, assessment_mechanism,
+          liability_profile)
+         VALUES ($1,$2,$3,$4,$5,ARRAY['CN'],ARRAY['positions'],'DR_AVAILABLE','','','test','test')",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(subject.id().as_str())
+    .bind(version)
+    .bind(owner.owner_id().as_str())
+    .bind(display_name)
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 async fn publish(

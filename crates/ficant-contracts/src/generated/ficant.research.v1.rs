@@ -1325,6 +1325,8 @@ pub struct PublishDataHealthThresholdProfileRequest {
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(message, optional, tag="2")]
     pub threshold_profile: ::core::option::Option<DataHealthThresholdProfile>,
+    #[prost(message, optional, tag="3")]
+    pub change: ::core::option::Option<super::super::core::v1::ChangeJustification>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PublishDataHealthThresholdProfileResponse {
@@ -1545,6 +1547,8 @@ pub struct PublishPositionSnapshotRequest {
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(message, optional, tag="2")]
     pub snapshot: ::core::option::Option<PositionSnapshot>,
+    #[prost(message, optional, tag="3")]
+    pub change: ::core::option::Option<super::super::core::v1::ChangeJustification>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PublishPositionSnapshotResponse {
@@ -1808,6 +1812,10 @@ pub struct DataSnapshot {
     pub blob_content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
     #[prost(message, repeated, tag="8")]
     pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="9")]
+    pub authorization_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="10")]
+    pub actor_id: ::core::option::Option<super::super::core::v1::Ulid>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UniverseSnapshot {
@@ -1823,30 +1831,76 @@ pub struct UniverseSnapshot {
     pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
     #[prost(message, repeated, tag="6")]
     pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="7")]
+    pub actor_id: ::core::option::Option<super::super::core::v1::Ulid>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishDataSnapshotRequest {
+pub struct ImportCanonicalQuoteSnapshotRequest {
     #[prost(string, tag="1")]
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(message, optional, tag="2")]
-    pub data_snapshot: ::core::option::Option<DataSnapshot>,
+    pub target_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="3")]
+    pub authorization_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="4")]
+    pub mapping: ::core::option::Option<super::super::market::v1::InstrumentMapping>,
+    #[prost(message, optional, tag="5")]
+    pub calendar: ::core::option::Option<super::super::market::v1::Calendar>,
+    #[prost(message, optional, tag="6")]
+    pub unit: ::core::option::Option<super::super::market::v1::Unit>,
+    #[prost(message, optional, tag="7")]
+    pub as_of: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="8")]
+    pub visible_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(string, tag="9")]
+    pub import_reason: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishDataSnapshotResponse {
-    #[prost(message, optional, tag="1")]
-    pub data_snapshot: ::core::option::Option<DataSnapshot>,
+pub struct ImportCanonicalQuoteSnapshotResponse {
+    #[prost(oneof="import_canonical_quote_snapshot_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<import_canonical_quote_snapshot_response::Result>,
+}
+/// Nested message and enum types in `ImportCanonicalQuoteSnapshotResponse`.
+pub mod import_canonical_quote_snapshot_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        DataSnapshot(super::DataSnapshot),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PublishUniverseSnapshotRequest {
     #[prost(string, tag="1")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub universe_snapshot: ::core::option::Option<UniverseSnapshot>,
+    #[prost(message, optional, tag="3")]
+    pub universe_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="4")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, repeated, tag="5")]
+    pub instrument_versions: ::prost::alloc::vec::Vec<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="6")]
+    pub filter_digest: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, repeated, tag="7")]
+    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="8")]
+    pub change: ::core::option::Option<super::super::core::v1::ChangeJustification>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PublishUniverseSnapshotResponse {
-    #[prost(message, optional, tag="1")]
-    pub universe_snapshot: ::core::option::Option<UniverseSnapshot>,
+    #[prost(oneof="publish_universe_snapshot_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<publish_universe_snapshot_response::Result>,
+}
+/// Nested message and enum types in `PublishUniverseSnapshotResponse`.
+pub mod publish_universe_snapshot_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        UniverseSnapshot(super::UniverseSnapshot),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetSnapshotRequest {
@@ -1855,17 +1909,19 @@ pub struct GetSnapshotRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSnapshotResponse {
-    #[prost(oneof="get_snapshot_response::Snapshot", tags="1, 2")]
-    pub snapshot: ::core::option::Option<get_snapshot_response::Snapshot>,
+    #[prost(oneof="get_snapshot_response::Result", tags="1, 2, 3")]
+    pub result: ::core::option::Option<get_snapshot_response::Result>,
 }
 /// Nested message and enum types in `GetSnapshotResponse`.
 pub mod get_snapshot_response {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Snapshot {
+    pub enum Result {
         #[prost(message, tag="1")]
         DataSnapshot(super::DataSnapshot),
         #[prost(message, tag="2")]
         UniverseSnapshot(super::UniverseSnapshot),
+        #[prost(message, tag="3")]
+        Error(super::super::super::core::v1::ErrorDetail),
     }
 }
 // @@protoc_insertion_point(module)

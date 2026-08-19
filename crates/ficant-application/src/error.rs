@@ -1,4 +1,6 @@
 use ficant_domain::DomainErrorCode;
+use ficant_domain::market::ImportInterface;
+use ficant_domain::primitives::VersionRef;
 use ficant_runtime::RuntimeError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -19,9 +21,18 @@ pub enum ApplicationErrorCategory {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ApplicationErrorDetail {
-    RulePackItemMissing { path: String },
+    RulePackItemMissing {
+        path: String,
+    },
     SubjectBindingInvalid,
-    UnknownAccountingPositions { position_ids: Vec<String> },
+    UnknownAccountingPositions {
+        position_ids: Vec<String>,
+    },
+    DataSourceNotAuthorized {
+        authorization_ref: VersionRef,
+        data_source_ref: Option<VersionRef>,
+        import_interface: ImportInterface,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -71,6 +82,23 @@ impl ApplicationError {
             category: ApplicationErrorCategory::ValidationFailed,
             retryable: false,
             detail: Some(ApplicationErrorDetail::UnknownAccountingPositions { position_ids }),
+        }
+    }
+
+    #[must_use]
+    pub fn data_source_not_authorized(
+        authorization_ref: VersionRef,
+        data_source_ref: Option<VersionRef>,
+        import_interface: ImportInterface,
+    ) -> Self {
+        Self {
+            category: ApplicationErrorCategory::Forbidden,
+            retryable: false,
+            detail: Some(ApplicationErrorDetail::DataSourceNotAuthorized {
+                authorization_ref,
+                data_source_ref,
+                import_interface,
+            }),
         }
     }
 

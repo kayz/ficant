@@ -7,10 +7,25 @@ import { SessionSchema } from "../../packages/contracts-generated/src/ficant/app
 import {
   DecimalValueSchema,
   MarketTimeSchema,
+  OwnerRefSchema,
   Sha256Schema,
   UlidSchema,
   UnitRefSchema,
 } from "../../packages/contracts-generated/src/ficant/core/v1/common_pb";
+import {
+  RegisterSubjectRequestSchema,
+  SubjectSchema,
+} from "../../packages/contracts-generated/src/ficant/core/v1/subject_pb";
+import {
+  RegisterSubjectStateRequestSchema,
+  SubjectStateSnapshotSchema,
+} from "../../packages/contracts-generated/src/ficant/core/v1/subject_state_pb";
+import {
+  ChangeJustificationSchema,
+  FoundationChangeRecordSchema,
+  FoundationChangeService,
+  PlatformRole,
+} from "../../packages/contracts-generated/src/ficant/core/v1/governance_pb";
 import {
   CgbFuturesDeliveryRulePackSchema,
   CgbFuturesProductRuleSchema,
@@ -21,9 +36,26 @@ import {
 } from "../../packages/contracts-generated/src/ficant/market/v1/funding_rule_pb";
 import {
   BondTaxAttributesSchema,
+  CompleteInstrumentDefinitionSchema,
   IncomeTaxStatus,
+  MarketDefinitionSchema,
+  MarketDefinitionService,
   ValueAddedTaxStatus,
 } from "../../packages/contracts-generated/src/ficant/market/v1/definition_pb";
+import {
+  DataSourceAuthorizationSchema,
+  DataSourceRegistryService,
+  InstrumentMappingSchema,
+} from "../../packages/contracts-generated/src/ficant/market/v1/data_source_pb";
+import {
+  CashflowSchema,
+  CashflowType,
+  CurvePointSetSchema,
+  CurveSnapshotInputSchema,
+  MarketFactSchema,
+  MarketFactService,
+  PublishCurveSnapshotRequestSchema,
+} from "../../packages/contracts-generated/src/ficant/market/v1/fact_pb";
 import { MarketRulePackSchema } from "../../packages/contracts-generated/src/ficant/market/v1/rule_pb";
 import {
   BondCouponTaxTreatmentRuleSchema,
@@ -57,6 +89,10 @@ import {
   SnapshotBindingSchema,
   TaxAdjustedBondAnalyticsSchema,
 } from "../../packages/contracts-generated/src/ficant/rates/v1/analytics_pb";
+import {
+  DataSnapshotSchema,
+  SnapshotService,
+} from "../../packages/contracts-generated/src/ficant/research/v1/snapshot_pb";
 import { describe, expect, it } from "vitest";
 
 describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
@@ -67,7 +103,49 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
       entrypoint: "/consumer-proof",
       allowedOrigin: "https://apps.example.invalid",
     });
-    const session = create(SessionSchema, { sessionId: "session-proof" });
+    const session = create(SessionSchema, {
+      sessionId: "session-proof",
+      activeRole: PlatformRole.RESEARCHER,
+    });
+    const change = create(ChangeJustificationSchema, {
+      reason: "human-approved",
+    });
+    const changeRecord = create(FoundationChangeRecordSchema, {
+      activeRole: PlatformRole.RESEARCHER,
+      change,
+    });
+    const subjectOwner = create(OwnerRefSchema, {
+      tenantId: { value: "01ARZ3NDEKTSV4RRFFQ69G5FAT" },
+      ownerId: { value: "01ARZ3NDEKTSV4RRFFQ69G5FAP" },
+    });
+    const subjectRequest = create(RegisterSubjectRequestSchema, {
+      subject: create(SubjectSchema, {
+        subjectId: { value: "01ARZ3NDEKTSV4RRFFQ69G5FAS" },
+        displayName: "consumer Subject",
+        owner: subjectOwner,
+      }),
+      idempotencyKey: "subject-consumer-v1",
+    });
+    const subjectStateRequest = create(RegisterSubjectStateRequestSchema, {
+      snapshot: create(SubjectStateSnapshotSchema, { owner: subjectOwner }),
+      idempotencyKey: "subject-state-consumer-v1",
+    });
+    const completeInstrument = create(CompleteInstrumentDefinitionSchema, {});
+    const marketDefinition = create(MarketDefinitionSchema, {
+      definition: { case: "instrument", value: completeInstrument },
+    });
+    const marketFact = create(MarketFactSchema, {});
+    const cashflow = create(CashflowSchema, {
+      cashflowType: CashflowType.COUPON,
+    });
+    const curveInput = create(CurveSnapshotInputSchema, {});
+    const curvePublish = create(PublishCurveSnapshotRequestSchema, {
+      points: create(CurvePointSetSchema, {}),
+      curve: curveInput,
+    });
+    const authorization = create(DataSourceAuthorizationSchema, {});
+    const dataSnapshot = create(DataSnapshotSchema, {});
+    const mapping = create(InstrumentMappingSchema, {});
     const cgbRule = create(CgbFuturesProductRuleSchema, {
       productCode: "T",
       originalTermMaxMonths: 120,
@@ -235,7 +313,43 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
 
     expect(app.$typeName).toBe("ficant.app.v1.AppDescriptor");
     expect(session.$typeName).toBe("ficant.app.v1.Session");
+    expect(session.activeRole).toBe(PlatformRole.RESEARCHER);
+    expect(changeRecord.change?.reason).toBe("human-approved");
+    expect(marketDefinition.definition.case).toBe("instrument");
+    expect(marketFact.$typeName).toBe("ficant.market.v1.MarketFact");
+    expect(cashflow.cashflowType).toBe(CashflowType.COUPON);
+    expect("contentHash" in curveInput).toBe(false);
+    expect("curveSnapshot" in curvePublish).toBe(false);
+    expect(curvePublish.curve?.$typeName).toBe(
+      "ficant.market.v1.CurveSnapshotInput",
+    );
+    expect(authorization.$typeName).toBe(
+      "ficant.market.v1.DataSourceAuthorization",
+    );
+    expect(dataSnapshot.$typeName).toBe("ficant.research.v1.DataSnapshot");
+    expect(mapping.$typeName).toBe("ficant.market.v1.InstrumentMapping");
+    expect(FoundationChangeService.typeName).toBe(
+      "ficant.core.v1.FoundationChangeService",
+    );
+    expect(DataSourceRegistryService.typeName).toBe(
+      "ficant.market.v1.DataSourceRegistryService",
+    );
+    expect(MarketDefinitionService.typeName).toBe(
+      "ficant.market.v1.MarketDefinitionService",
+    );
+    expect(MarketFactService.typeName).toBe(
+      "ficant.market.v1.MarketFactService",
+    );
+    expect(SnapshotService.typeName).toBe(
+      "ficant.research.v1.SnapshotService",
+    );
     expect(PlatformService.typeName).toBe("ficant.app.v1.PlatformService");
+    expect(subjectRequest.subject?.owner).toEqual(subjectOwner);
+    expect(subjectRequest.idempotencyKey).toBe("subject-consumer-v1");
+    expect(subjectStateRequest.snapshot?.owner).toEqual(subjectOwner);
+    expect(subjectStateRequest.idempotencyKey).toBe(
+      "subject-state-consumer-v1",
+    );
     expect(cgbPack.$typeName).toBe("ficant.market.v1.CgbFuturesDeliveryRulePack");
     expect(cgbRule.residualUpperBound.case).toBe("residualMaxMonthsUnbounded");
     expect(fundingPack.$typeName).toBe("ficant.market.v1.FundingRulePack");

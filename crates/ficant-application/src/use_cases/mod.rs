@@ -7,6 +7,7 @@ pub mod factor_topology;
 pub mod funding_rule;
 pub mod futures_delivery;
 pub mod futures_hedge;
+pub mod governed_inputs;
 pub mod phase1_business_loop;
 pub mod phase4_submission;
 pub mod portfolio_risk;

@@ -6,6 +6,10 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { DecimalValue, MarketTime, OwnerRef, PageRequest, PageResponse, Ulid, UnitRef, VersionRef } from "../../core/v1/common_pb";
 import { file_ficant_core_v1_common } from "../../core/v1/common_pb";
+import type { ErrorDetail } from "../../core/v1/error_pb";
+import { file_ficant_core_v1_error } from "../../core/v1/error_pb";
+import type { ChangeJustification } from "../../core/v1/governance_pb";
+import { file_ficant_core_v1_governance } from "../../core/v1/governance_pb";
 import type { Instrument } from "./instrument_pb";
 import { file_ficant_market_v1_instrument } from "./instrument_pb";
 import type { MarketRulePack } from "./rule_pb";
@@ -18,7 +22,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ficant/market/v1/definition.proto.
  */
 export const file_ficant_market_v1_definition: GenFile = /*@__PURE__*/
-  fileDesc("CiFmaWNhbnQvbWFya2V0L3YxL2RlZmluaXRpb24ucHJvdG8SEGZpY2FudC5tYXJrZXQudjEimAEKEUJvbmRUYXhBdHRyaWJ1dGVzEkUKFnZhbHVlX2FkZGVkX3RheF9zdGF0dXMYASABKA4yJS5maWNhbnQubWFya2V0LnYxLlZhbHVlQWRkZWRUYXhTdGF0dXMSPAoRaW5jb21lX3RheF9zdGF0dXMYAiABKA4yIS5maWNhbnQubWFya2V0LnYxLkluY29tZVRheFN0YXR1cyKsBAoEQm9uZBIuCgppbnN0cnVtZW50GAEgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIVCg1tYXR1cml0eV9kYXRlGAMgASgJEjAKCmZhY2VfdmFsdWUYBCABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUSGAoQZmlyc3RfaXNzdWVfZGF0ZRgFIAEoCRIaChJjdXJyZW50X2lzc3VlX2RhdGUYBiABKAkSPgoYY3VtdWxhdGl2ZV9pc3N1ZWRfYW1vdW50GAcgASgLMhwuZmljYW50LmNvcmUudjEuRGVjaW1hbFZhbHVlEjsKDnRheF9hdHRyaWJ1dGVzGAggASgLMiMuZmljYW50Lm1hcmtldC52MS5Cb25kVGF4QXR0cmlidXRlcxIxCgtjb3Vwb25fcmF0ZRgJIAEoCzIcLmZpY2FudC5jb3JlLnYxLkRlY2ltYWxWYWx1ZRI/ChBjb3Vwb25fZnJlcXVlbmN5GAogASgOMiUuZmljYW50Lm1hcmtldC52MS5Cb25kQ291cG9uRnJlcXVlbmN5EjsKCWRheV9jb3VudBgLIAEoDjIoLmZpY2FudC5tYXJrZXQudjEuQm9uZERheUNvdW50Q29udmVudGlvbhJBCgxidXNpbmVzc19kYXkYDCABKA4yKy5maWNhbnQubWFya2V0LnYxLkJvbmRCdXNpbmVzc0RheUNvbnZlbnRpb25KBAgCEAMigAMKD0Z1dHVyZXNDb250cmFjdBIuCgppbnN0cnVtZW50GAEgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIzCg9sYXN0X3RyYWRlX3RpbWUYAiABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEi8KC2V4cGlyeV90aW1lGAMgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRIzCg9zZXR0bGVtZW50X3RpbWUYBCABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEjAKCm11bHRpcGxpZXIYBSABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUSLQoJcnVsZV9wYWNrGAYgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIUCgxwcm9kdWN0X2NvZGUYByABKAkSKwoKcHJpY2VfdW5pdBgIIAEoCzIXLmZpY2FudC5jb3JlLnYxLlVuaXRSZWYiaAoPQ2FsZW5kYXJTZXNzaW9uEhIKCmxvY2FsX2RhdGUYASABKAkSFwoPb3Blbl9sb2NhbF90aW1lGAIgASgJEhgKEGNsb3NlX2xvY2FsX3RpbWUYAyABKAkSDgoGY2xvc2VkGAQgASgIIrMCCghDYWxlbmRhchIpCgtjYWxlbmRhcl9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSDwoHdmVyc2lvbhgCIAEoBBInCgVvd25lchgDIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEg4KBm1hcmtldBgEIAEoCRIXCg9tYXJrZXRfdGltZXpvbmUYBSABKAkSMgoOZWZmZWN0aXZlX2Zyb20YBiABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEjAKDGVmZmVjdGl2ZV90bxgHIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSMwoIc2Vzc2lvbnMYCCADKAsyIS5maWNhbnQubWFya2V0LnYxLkNhbGVuZGFyU2Vzc2lvbiKqAQoEVW5pdBIlCgd1bml0X2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIPCgd2ZXJzaW9uGAIgASgEEicKBW93bmVyGAMgASgLMhguZmljYW50LmNvcmUudjEuT3duZXJSZWYSDAoEY29kZRgEIAEoCRIRCglkaW1lbnNpb24YBSABKAkSDQoFc2NhbGUYBiABKA0SEQoJcHJlY2lzaW9uGAcgASgNIoUBChdBcHBlbmRJbnN0cnVtZW50UmVxdWVzdBIXCg9pZGVtcG90ZW5jeV9rZXkYASABKAkSHwoXZXhwZWN0ZWRfbGF0ZXN0X3ZlcnNpb24YAiABKAQSMAoKaW5zdHJ1bWVudBgDIAEoCzIcLmZpY2FudC5tYXJrZXQudjEuSW5zdHJ1bWVudCJMChhBcHBlbmRJbnN0cnVtZW50UmVzcG9uc2USMAoKaW5zdHJ1bWVudBgBIAEoCzIcLmZpY2FudC5tYXJrZXQudjEuSW5zdHJ1bWVudCJzChFBcHBlbmRCb25kUmVxdWVzdBIXCg9pZGVtcG90ZW5jeV9rZXkYASABKAkSHwoXZXhwZWN0ZWRfbGF0ZXN0X3ZlcnNpb24YAiABKAQSJAoEYm9uZBgDIAEoCzIWLmZpY2FudC5tYXJrZXQudjEuQm9uZCI6ChJBcHBlbmRCb25kUmVzcG9uc2USJAoEYm9uZBgBIAEoCzIWLmZpY2FudC5tYXJrZXQudjEuQm9uZCKVAQocQXBwZW5kRnV0dXJlc0NvbnRyYWN0UmVxdWVzdBIXCg9pZGVtcG90ZW5jeV9rZXkYASABKAkSHwoXZXhwZWN0ZWRfbGF0ZXN0X3ZlcnNpb24YAiABKAQSOwoQZnV0dXJlc19jb250cmFjdBgDIAEoCzIhLmZpY2FudC5tYXJrZXQudjEuRnV0dXJlc0NvbnRyYWN0IlwKHUFwcGVuZEZ1dHVyZXNDb250cmFjdFJlc3BvbnNlEjsKEGZ1dHVyZXNfY29udHJhY3QYASABKAsyIS5maWNhbnQubWFya2V0LnYxLkZ1dHVyZXNDb250cmFjdCJ/ChVBcHBlbmRDYWxlbmRhclJlcXVlc3QSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgJEh8KF2V4cGVjdGVkX2xhdGVzdF92ZXJzaW9uGAIgASgEEiwKCGNhbGVuZGFyGAMgASgLMhouZmljYW50Lm1hcmtldC52MS5DYWxlbmRhciJGChZBcHBlbmRDYWxlbmRhclJlc3BvbnNlEiwKCGNhbGVuZGFyGAEgASgLMhouZmljYW50Lm1hcmtldC52MS5DYWxlbmRhciJzChFBcHBlbmRVbml0UmVxdWVzdBIXCg9pZGVtcG90ZW5jeV9rZXkYASABKAkSHwoXZXhwZWN0ZWRfbGF0ZXN0X3ZlcnNpb24YAiABKAQSJAoEdW5pdBgDIAEoCzIWLmZpY2FudC5tYXJrZXQudjEuVW5pdCI6ChJBcHBlbmRVbml0UmVzcG9uc2USJAoEdW5pdBgBIAEoCzIWLmZpY2FudC5tYXJrZXQudjEuVW5pdCKTAQobQXBwZW5kTWFya2V0UnVsZVBhY2tSZXF1ZXN0EhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoCRIfChdleHBlY3RlZF9sYXRlc3RfdmVyc2lvbhgCIAEoBBI6ChBtYXJrZXRfcnVsZV9wYWNrGAMgASgLMiAuZmljYW50Lm1hcmtldC52MS5NYXJrZXRSdWxlUGFjayJaChxBcHBlbmRNYXJrZXRSdWxlUGFja1Jlc3BvbnNlEjoKEG1hcmtldF9ydWxlX3BhY2sYASABKAsyIC5maWNhbnQubWFya2V0LnYxLk1hcmtldFJ1bGVQYWNrItECChBNYXJrZXREZWZpbml0aW9uEjIKCmluc3RydW1lbnQYASABKAsyHC5maWNhbnQubWFya2V0LnYxLkluc3RydW1lbnRIABImCgRib25kGAIgASgLMhYuZmljYW50Lm1hcmtldC52MS5Cb25kSAASPQoQZnV0dXJlc19jb250cmFjdBgDIAEoCzIhLmZpY2FudC5tYXJrZXQudjEuRnV0dXJlc0NvbnRyYWN0SAASLgoIY2FsZW5kYXIYBCABKAsyGi5maWNhbnQubWFya2V0LnYxLkNhbGVuZGFySAASJgoEdW5pdBgFIAEoCzIWLmZpY2FudC5tYXJrZXQudjEuVW5pdEgAEjwKEG1hcmtldF9ydWxlX3BhY2sYBiABKAsyIC5maWNhbnQubWFya2V0LnYxLk1hcmtldFJ1bGVQYWNrSABCDAoKZGVmaW5pdGlvbiJbChtHZXREZWZpbml0aW9uVmVyc2lvblJlcXVlc3QSKwoNZGVmaW5pdGlvbl9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSDwoHdmVyc2lvbhgCIAEoBCJWChxHZXREZWZpbml0aW9uVmVyc2lvblJlc3BvbnNlEjYKCmRlZmluaXRpb24YASABKAsyIi5maWNhbnQubWFya2V0LnYxLk1hcmtldERlZmluaXRpb24idgocUmVzb2x2ZURlZmluaXRpb25Bc09mUmVxdWVzdBIrCg1kZWZpbml0aW9uX2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIpCgVhc19vZhgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiVwodUmVzb2x2ZURlZmluaXRpb25Bc09mUmVzcG9uc2USNgoKZGVmaW5pdGlvbhgBIAEoCzIiLmZpY2FudC5tYXJrZXQudjEuTWFya2V0RGVmaW5pdGlvbiJ3Ch1MaXN0RGVmaW5pdGlvblZlcnNpb25zUmVxdWVzdBIrCg1kZWZpbml0aW9uX2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIpCgRwYWdlGAIgASgLMhsuZmljYW50LmNvcmUudjEuUGFnZVJlcXVlc3QihQEKHkxpc3REZWZpbml0aW9uVmVyc2lvbnNSZXNwb25zZRI3CgtkZWZpbml0aW9ucxgBIAMoCzIiLmZpY2FudC5tYXJrZXQudjEuTWFya2V0RGVmaW5pdGlvbhIqCgRwYWdlGAIgASgLMhwuZmljYW50LmNvcmUudjEuUGFnZVJlc3BvbnNlKoQBChNWYWx1ZUFkZGVkVGF4U3RhdHVzEiYKIlZBTFVFX0FEREVEX1RBWF9TVEFUVVNfVU5TUEVDSUZJRUQQABIhCh1WQUxVRV9BRERFRF9UQVhfU1RBVFVTX0VYRU1QVBABEiIKHlZBTFVFX0FEREVEX1RBWF9TVEFUVVNfVEFYQUJMRRACKnEKD0luY29tZVRheFN0YXR1cxIhCh1JTkNPTUVfVEFYX1NUQVRVU19VTlNQRUNJRklFRBAAEhwKGElOQ09NRV9UQVhfU1RBVFVTX0VYRU1QVBABEh0KGUlOQ09NRV9UQVhfU1RBVFVTX1RBWEFCTEUQAiqEAQoTQm9uZENvdXBvbkZyZXF1ZW5jeRIlCiFCT05EX0NPVVBPTl9GUkVRVUVOQ1lfVU5TUEVDSUZJRUQQABIgChxCT05EX0NPVVBPTl9GUkVRVUVOQ1lfQU5OVUFMEAESJAogQk9ORF9DT1VQT05fRlJFUVVFTkNZX1NFTUlBTk5VQUwQAip0ChZCb25kRGF5Q291bnRDb252ZW50aW9uEikKJUJPTkRfREFZX0NPVU5UX0NPTlZFTlRJT05fVU5TUEVDSUZJRUQQABIvCitCT05EX0RBWV9DT1VOVF9DT05WRU5USU9OX0FDVF9BQ1RfQk9ORF9JU01BEAEqdQoZQm9uZEJ1c2luZXNzRGF5Q29udmVudGlvbhIsCihCT05EX0JVU0lORVNTX0RBWV9DT05WRU5USU9OX1VOU1BFQ0lGSUVEEAASKgomQk9ORF9CVVNJTkVTU19EQVlfQ09OVkVOVElPTl9GT0xMT1dJTkcQATL6BwoXTWFya2V0RGVmaW5pdGlvblNlcnZpY2USaQoQQXBwZW5kSW5zdHJ1bWVudBIpLmZpY2FudC5tYXJrZXQudjEuQXBwZW5kSW5zdHJ1bWVudFJlcXVlc3QaKi5maWNhbnQubWFya2V0LnYxLkFwcGVuZEluc3RydW1lbnRSZXNwb25zZRJXCgpBcHBlbmRCb25kEiMuZmljYW50Lm1hcmtldC52MS5BcHBlbmRCb25kUmVxdWVzdBokLmZpY2FudC5tYXJrZXQudjEuQXBwZW5kQm9uZFJlc3BvbnNlEngKFUFwcGVuZEZ1dHVyZXNDb250cmFjdBIuLmZpY2FudC5tYXJrZXQudjEuQXBwZW5kRnV0dXJlc0NvbnRyYWN0UmVxdWVzdBovLmZpY2FudC5tYXJrZXQudjEuQXBwZW5kRnV0dXJlc0NvbnRyYWN0UmVzcG9uc2USYwoOQXBwZW5kQ2FsZW5kYXISJy5maWNhbnQubWFya2V0LnYxLkFwcGVuZENhbGVuZGFyUmVxdWVzdBooLmZpY2FudC5tYXJrZXQudjEuQXBwZW5kQ2FsZW5kYXJSZXNwb25zZRJXCgpBcHBlbmRVbml0EiMuZmljYW50Lm1hcmtldC52MS5BcHBlbmRVbml0UmVxdWVzdBokLmZpY2FudC5tYXJrZXQudjEuQXBwZW5kVW5pdFJlc3BvbnNlEnUKFEFwcGVuZE1hcmtldFJ1bGVQYWNrEi0uZmljYW50Lm1hcmtldC52MS5BcHBlbmRNYXJrZXRSdWxlUGFja1JlcXVlc3QaLi5maWNhbnQubWFya2V0LnYxLkFwcGVuZE1hcmtldFJ1bGVQYWNrUmVzcG9uc2USdQoUR2V0RGVmaW5pdGlvblZlcnNpb24SLS5maWNhbnQubWFya2V0LnYxLkdldERlZmluaXRpb25WZXJzaW9uUmVxdWVzdBouLmZpY2FudC5tYXJrZXQudjEuR2V0RGVmaW5pdGlvblZlcnNpb25SZXNwb25zZRJ4ChVSZXNvbHZlRGVmaW5pdGlvbkFzT2YSLi5maWNhbnQubWFya2V0LnYxLlJlc29sdmVEZWZpbml0aW9uQXNPZlJlcXVlc3QaLy5maWNhbnQubWFya2V0LnYxLlJlc29sdmVEZWZpbml0aW9uQXNPZlJlc3BvbnNlEnsKFkxpc3REZWZpbml0aW9uVmVyc2lvbnMSLy5maWNhbnQubWFya2V0LnYxLkxpc3REZWZpbml0aW9uVmVyc2lvbnNSZXF1ZXN0GjAuZmljYW50Lm1hcmtldC52MS5MaXN0RGVmaW5pdGlvblZlcnNpb25zUmVzcG9uc2ViBnByb3RvMw", [file_ficant_core_v1_common, file_ficant_market_v1_instrument, file_ficant_market_v1_rule, file_google_protobuf_timestamp]);
+  fileDesc("CiFmaWNhbnQvbWFya2V0L3YxL2RlZmluaXRpb24ucHJvdG8SEGZpY2FudC5tYXJrZXQudjEimAEKEUJvbmRUYXhBdHRyaWJ1dGVzEkUKFnZhbHVlX2FkZGVkX3RheF9zdGF0dXMYASABKA4yJS5maWNhbnQubWFya2V0LnYxLlZhbHVlQWRkZWRUYXhTdGF0dXMSPAoRaW5jb21lX3RheF9zdGF0dXMYAiABKA4yIS5maWNhbnQubWFya2V0LnYxLkluY29tZVRheFN0YXR1cyKsBAoEQm9uZBIuCgppbnN0cnVtZW50GAEgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIVCg1tYXR1cml0eV9kYXRlGAMgASgJEjAKCmZhY2VfdmFsdWUYBCABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUSGAoQZmlyc3RfaXNzdWVfZGF0ZRgFIAEoCRIaChJjdXJyZW50X2lzc3VlX2RhdGUYBiABKAkSPgoYY3VtdWxhdGl2ZV9pc3N1ZWRfYW1vdW50GAcgASgLMhwuZmljYW50LmNvcmUudjEuRGVjaW1hbFZhbHVlEjsKDnRheF9hdHRyaWJ1dGVzGAggASgLMiMuZmljYW50Lm1hcmtldC52MS5Cb25kVGF4QXR0cmlidXRlcxIxCgtjb3Vwb25fcmF0ZRgJIAEoCzIcLmZpY2FudC5jb3JlLnYxLkRlY2ltYWxWYWx1ZRI/ChBjb3Vwb25fZnJlcXVlbmN5GAogASgOMiUuZmljYW50Lm1hcmtldC52MS5Cb25kQ291cG9uRnJlcXVlbmN5EjsKCWRheV9jb3VudBgLIAEoDjIoLmZpY2FudC5tYXJrZXQudjEuQm9uZERheUNvdW50Q29udmVudGlvbhJBCgxidXNpbmVzc19kYXkYDCABKA4yKy5maWNhbnQubWFya2V0LnYxLkJvbmRCdXNpbmVzc0RheUNvbnZlbnRpb25KBAgCEAMigAMKD0Z1dHVyZXNDb250cmFjdBIuCgppbnN0cnVtZW50GAEgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIzCg9sYXN0X3RyYWRlX3RpbWUYAiABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEi8KC2V4cGlyeV90aW1lGAMgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRIzCg9zZXR0bGVtZW50X3RpbWUYBCABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEjAKCm11bHRpcGxpZXIYBSABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUSLQoJcnVsZV9wYWNrGAYgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIUCgxwcm9kdWN0X2NvZGUYByABKAkSKwoKcHJpY2VfdW5pdBgIIAEoCzIXLmZpY2FudC5jb3JlLnYxLlVuaXRSZWYiaAoPQ2FsZW5kYXJTZXNzaW9uEhIKCmxvY2FsX2RhdGUYASABKAkSFwoPb3Blbl9sb2NhbF90aW1lGAIgASgJEhgKEGNsb3NlX2xvY2FsX3RpbWUYAyABKAkSDgoGY2xvc2VkGAQgASgIIrMCCghDYWxlbmRhchIpCgtjYWxlbmRhcl9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSDwoHdmVyc2lvbhgCIAEoBBInCgVvd25lchgDIAEoCzIYLmZpY2FudC5jb3JlLnYxLk93bmVyUmVmEg4KBm1hcmtldBgEIAEoCRIXCg9tYXJrZXRfdGltZXpvbmUYBSABKAkSMgoOZWZmZWN0aXZlX2Zyb20YBiABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEjAKDGVmZmVjdGl2ZV90bxgHIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSMwoIc2Vzc2lvbnMYCCADKAsyIS5maWNhbnQubWFya2V0LnYxLkNhbGVuZGFyU2Vzc2lvbiKqAQoEVW5pdBIlCgd1bml0X2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIPCgd2ZXJzaW9uGAIgASgEEicKBW93bmVyGAMgASgLMhguZmljYW50LmNvcmUudjEuT3duZXJSZWYSDAoEY29kZRgEIAEoCRIRCglkaW1lbnNpb24YBSABKAkSDQoFc2NhbGUYBiABKA0SEQoJcHJlY2lzaW9uGAcgASgNIsIBChxDb21wbGV0ZUluc3RydW1lbnREZWZpbml0aW9uEjAKCmluc3RydW1lbnQYASABKAsyHC5maWNhbnQubWFya2V0LnYxLkluc3RydW1lbnQSJgoEYm9uZBgCIAEoCzIWLmZpY2FudC5tYXJrZXQudjEuQm9uZEgAEj0KEGZ1dHVyZXNfY29udHJhY3QYAyABKAsyIS5maWNhbnQubWFya2V0LnYxLkZ1dHVyZXNDb250cmFjdEgAQgkKB3N1YnR5cGUioAIKEE1hcmtldERlZmluaXRpb24SRAoKaW5zdHJ1bWVudBgBIAEoCzIuLmZpY2FudC5tYXJrZXQudjEuQ29tcGxldGVJbnN0cnVtZW50RGVmaW5pdGlvbkgAEi4KCGNhbGVuZGFyGAQgASgLMhouZmljYW50Lm1hcmtldC52MS5DYWxlbmRhckgAEiYKBHVuaXQYBSABKAsyFi5maWNhbnQubWFya2V0LnYxLlVuaXRIABI8ChBtYXJrZXRfcnVsZV9wYWNrGAYgASgLMiAuZmljYW50Lm1hcmtldC52MS5NYXJrZXRSdWxlUGFja0gAQgwKCmRlZmluaXRpb25KBAgCEANKBAgDEARSBGJvbmRSEGZ1dHVyZXNfY29udHJhY3QiwAEKF0FwcGVuZERlZmluaXRpb25SZXF1ZXN0EhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoCRIfChdleHBlY3RlZF9sYXRlc3RfdmVyc2lvbhgCIAEoBBI2CgpkZWZpbml0aW9uGAMgASgLMiIuZmljYW50Lm1hcmtldC52MS5NYXJrZXREZWZpbml0aW9uEjMKBmNoYW5nZRgEIAEoCzIjLmZpY2FudC5jb3JlLnYxLkNoYW5nZUp1c3RpZmljYXRpb24ijAEKGEFwcGVuZERlZmluaXRpb25SZXNwb25zZRI4CgpkZWZpbml0aW9uGAEgASgLMiIuZmljYW50Lm1hcmtldC52MS5NYXJrZXREZWZpbml0aW9uSAASLAoFZXJyb3IYAiABKAsyGy5maWNhbnQuY29yZS52MS5FcnJvckRldGFpbEgAQggKBnJlc3VsdCJbChtHZXREZWZpbml0aW9uVmVyc2lvblJlcXVlc3QSKwoNZGVmaW5pdGlvbl9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSDwoHdmVyc2lvbhgCIAEoBCKQAQocR2V0RGVmaW5pdGlvblZlcnNpb25SZXNwb25zZRI4CgpkZWZpbml0aW9uGAEgASgLMiIuZmljYW50Lm1hcmtldC52MS5NYXJrZXREZWZpbml0aW9uSAASLAoFZXJyb3IYAiABKAsyGy5maWNhbnQuY29yZS52MS5FcnJvckRldGFpbEgAQggKBnJlc3VsdCJ2ChxSZXNvbHZlRGVmaW5pdGlvbkFzT2ZSZXF1ZXN0EisKDWRlZmluaXRpb25faWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEikKBWFzX29mGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKRAQodUmVzb2x2ZURlZmluaXRpb25Bc09mUmVzcG9uc2USOAoKZGVmaW5pdGlvbhgBIAEoCzIiLmZpY2FudC5tYXJrZXQudjEuTWFya2V0RGVmaW5pdGlvbkgAEiwKBWVycm9yGAIgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHQidwodTGlzdERlZmluaXRpb25WZXJzaW9uc1JlcXVlc3QSKwoNZGVmaW5pdGlvbl9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSKQoEcGFnZRgCIAEoCzIbLmZpY2FudC5jb3JlLnYxLlBhZ2VSZXF1ZXN0InkKEkRlZmluaXRpb25WZXJzaW9ucxI3CgtkZWZpbml0aW9ucxgBIAMoCzIiLmZpY2FudC5tYXJrZXQudjEuTWFya2V0RGVmaW5pdGlvbhIqCgRwYWdlGAIgASgLMhwuZmljYW50LmNvcmUudjEuUGFnZVJlc3BvbnNlIrEBCh5MaXN0RGVmaW5pdGlvblZlcnNpb25zUmVzcG9uc2USOAoIdmVyc2lvbnMYAyABKAsyJC5maWNhbnQubWFya2V0LnYxLkRlZmluaXRpb25WZXJzaW9uc0gAEiwKBWVycm9yGAQgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHRKBAgBEAJKBAgCEANSC2RlZmluaXRpb25zUgRwYWdlKoQBChNWYWx1ZUFkZGVkVGF4U3RhdHVzEiYKIlZBTFVFX0FEREVEX1RBWF9TVEFUVVNfVU5TUEVDSUZJRUQQABIhCh1WQUxVRV9BRERFRF9UQVhfU1RBVFVTX0VYRU1QVBABEiIKHlZBTFVFX0FEREVEX1RBWF9TVEFUVVNfVEFYQUJMRRACKnEKD0luY29tZVRheFN0YXR1cxIhCh1JTkNPTUVfVEFYX1NUQVRVU19VTlNQRUNJRklFRBAAEhwKGElOQ09NRV9UQVhfU1RBVFVTX0VYRU1QVBABEh0KGUlOQ09NRV9UQVhfU1RBVFVTX1RBWEFCTEUQAiqEAQoTQm9uZENvdXBvbkZyZXF1ZW5jeRIlCiFCT05EX0NPVVBPTl9GUkVRVUVOQ1lfVU5TUEVDSUZJRUQQABIgChxCT05EX0NPVVBPTl9GUkVRVUVOQ1lfQU5OVUFMEAESJAogQk9ORF9DT1VQT05fRlJFUVVFTkNZX1NFTUlBTk5VQUwQAip0ChZCb25kRGF5Q291bnRDb252ZW50aW9uEikKJUJPTkRfREFZX0NPVU5UX0NPTlZFTlRJT05fVU5TUEVDSUZJRUQQABIvCitCT05EX0RBWV9DT1VOVF9DT05WRU5USU9OX0FDVF9BQ1RfQk9ORF9JU01BEAEqdQoZQm9uZEJ1c2luZXNzRGF5Q29udmVudGlvbhIsCihCT05EX0JVU0lORVNTX0RBWV9DT05WRU5USU9OX1VOU1BFQ0lGSUVEEAASKgomQk9ORF9CVVNJTkVTU19EQVlfQ09OVkVOVElPTl9GT0xMT1dJTkcQATLyAwoXTWFya2V0RGVmaW5pdGlvblNlcnZpY2USaQoQQXBwZW5kRGVmaW5pdGlvbhIpLmZpY2FudC5tYXJrZXQudjEuQXBwZW5kRGVmaW5pdGlvblJlcXVlc3QaKi5maWNhbnQubWFya2V0LnYxLkFwcGVuZERlZmluaXRpb25SZXNwb25zZRJ1ChRHZXREZWZpbml0aW9uVmVyc2lvbhItLmZpY2FudC5tYXJrZXQudjEuR2V0RGVmaW5pdGlvblZlcnNpb25SZXF1ZXN0Gi4uZmljYW50Lm1hcmtldC52MS5HZXREZWZpbml0aW9uVmVyc2lvblJlc3BvbnNlEngKFVJlc29sdmVEZWZpbml0aW9uQXNPZhIuLmZpY2FudC5tYXJrZXQudjEuUmVzb2x2ZURlZmluaXRpb25Bc09mUmVxdWVzdBovLmZpY2FudC5tYXJrZXQudjEuUmVzb2x2ZURlZmluaXRpb25Bc09mUmVzcG9uc2USewoWTGlzdERlZmluaXRpb25WZXJzaW9ucxIvLmZpY2FudC5tYXJrZXQudjEuTGlzdERlZmluaXRpb25WZXJzaW9uc1JlcXVlc3QaMC5maWNhbnQubWFya2V0LnYxLkxpc3REZWZpbml0aW9uVmVyc2lvbnNSZXNwb25zZWIGcHJvdG8z", [file_ficant_core_v1_common, file_ficant_core_v1_error, file_ficant_core_v1_governance, file_ficant_market_v1_instrument, file_ficant_market_v1_rule, file_google_protobuf_timestamp]);
 
 /**
  * BondTaxAttributes are L2 asset facts. They carry no tax rate or cutoff:
@@ -296,283 +300,18 @@ export const UnitSchema: GenMessage<Unit> = /*@__PURE__*/
   messageDesc(file_ficant_market_v1_definition, 5);
 
 /**
- * @generated from message ficant.market.v1.AppendInstrumentRequest
+ * @generated from message ficant.market.v1.CompleteInstrumentDefinition
  */
-export type AppendInstrumentRequest = Message<"ficant.market.v1.AppendInstrumentRequest"> & {
-  /**
-   * @generated from field: string idempotency_key = 1;
-   */
-  idempotencyKey: string;
-
-  /**
-   * @generated from field: uint64 expected_latest_version = 2;
-   */
-  expectedLatestVersion: bigint;
-
-  /**
-   * @generated from field: ficant.market.v1.Instrument instrument = 3;
-   */
-  instrument?: Instrument;
-};
-
-/**
- * Describes the message ficant.market.v1.AppendInstrumentRequest.
- * Use `create(AppendInstrumentRequestSchema)` to create a new message.
- */
-export const AppendInstrumentRequestSchema: GenMessage<AppendInstrumentRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 6);
-
-/**
- * @generated from message ficant.market.v1.AppendInstrumentResponse
- */
-export type AppendInstrumentResponse = Message<"ficant.market.v1.AppendInstrumentResponse"> & {
+export type CompleteInstrumentDefinition = Message<"ficant.market.v1.CompleteInstrumentDefinition"> & {
   /**
    * @generated from field: ficant.market.v1.Instrument instrument = 1;
    */
   instrument?: Instrument;
-};
-
-/**
- * Describes the message ficant.market.v1.AppendInstrumentResponse.
- * Use `create(AppendInstrumentResponseSchema)` to create a new message.
- */
-export const AppendInstrumentResponseSchema: GenMessage<AppendInstrumentResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 7);
-
-/**
- * @generated from message ficant.market.v1.AppendBondRequest
- */
-export type AppendBondRequest = Message<"ficant.market.v1.AppendBondRequest"> & {
-  /**
-   * @generated from field: string idempotency_key = 1;
-   */
-  idempotencyKey: string;
 
   /**
-   * @generated from field: uint64 expected_latest_version = 2;
+   * @generated from oneof ficant.market.v1.CompleteInstrumentDefinition.subtype
    */
-  expectedLatestVersion: bigint;
-
-  /**
-   * @generated from field: ficant.market.v1.Bond bond = 3;
-   */
-  bond?: Bond;
-};
-
-/**
- * Describes the message ficant.market.v1.AppendBondRequest.
- * Use `create(AppendBondRequestSchema)` to create a new message.
- */
-export const AppendBondRequestSchema: GenMessage<AppendBondRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 8);
-
-/**
- * @generated from message ficant.market.v1.AppendBondResponse
- */
-export type AppendBondResponse = Message<"ficant.market.v1.AppendBondResponse"> & {
-  /**
-   * @generated from field: ficant.market.v1.Bond bond = 1;
-   */
-  bond?: Bond;
-};
-
-/**
- * Describes the message ficant.market.v1.AppendBondResponse.
- * Use `create(AppendBondResponseSchema)` to create a new message.
- */
-export const AppendBondResponseSchema: GenMessage<AppendBondResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 9);
-
-/**
- * @generated from message ficant.market.v1.AppendFuturesContractRequest
- */
-export type AppendFuturesContractRequest = Message<"ficant.market.v1.AppendFuturesContractRequest"> & {
-  /**
-   * @generated from field: string idempotency_key = 1;
-   */
-  idempotencyKey: string;
-
-  /**
-   * @generated from field: uint64 expected_latest_version = 2;
-   */
-  expectedLatestVersion: bigint;
-
-  /**
-   * @generated from field: ficant.market.v1.FuturesContract futures_contract = 3;
-   */
-  futuresContract?: FuturesContract;
-};
-
-/**
- * Describes the message ficant.market.v1.AppendFuturesContractRequest.
- * Use `create(AppendFuturesContractRequestSchema)` to create a new message.
- */
-export const AppendFuturesContractRequestSchema: GenMessage<AppendFuturesContractRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 10);
-
-/**
- * @generated from message ficant.market.v1.AppendFuturesContractResponse
- */
-export type AppendFuturesContractResponse = Message<"ficant.market.v1.AppendFuturesContractResponse"> & {
-  /**
-   * @generated from field: ficant.market.v1.FuturesContract futures_contract = 1;
-   */
-  futuresContract?: FuturesContract;
-};
-
-/**
- * Describes the message ficant.market.v1.AppendFuturesContractResponse.
- * Use `create(AppendFuturesContractResponseSchema)` to create a new message.
- */
-export const AppendFuturesContractResponseSchema: GenMessage<AppendFuturesContractResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 11);
-
-/**
- * @generated from message ficant.market.v1.AppendCalendarRequest
- */
-export type AppendCalendarRequest = Message<"ficant.market.v1.AppendCalendarRequest"> & {
-  /**
-   * @generated from field: string idempotency_key = 1;
-   */
-  idempotencyKey: string;
-
-  /**
-   * @generated from field: uint64 expected_latest_version = 2;
-   */
-  expectedLatestVersion: bigint;
-
-  /**
-   * @generated from field: ficant.market.v1.Calendar calendar = 3;
-   */
-  calendar?: Calendar;
-};
-
-/**
- * Describes the message ficant.market.v1.AppendCalendarRequest.
- * Use `create(AppendCalendarRequestSchema)` to create a new message.
- */
-export const AppendCalendarRequestSchema: GenMessage<AppendCalendarRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 12);
-
-/**
- * @generated from message ficant.market.v1.AppendCalendarResponse
- */
-export type AppendCalendarResponse = Message<"ficant.market.v1.AppendCalendarResponse"> & {
-  /**
-   * @generated from field: ficant.market.v1.Calendar calendar = 1;
-   */
-  calendar?: Calendar;
-};
-
-/**
- * Describes the message ficant.market.v1.AppendCalendarResponse.
- * Use `create(AppendCalendarResponseSchema)` to create a new message.
- */
-export const AppendCalendarResponseSchema: GenMessage<AppendCalendarResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 13);
-
-/**
- * @generated from message ficant.market.v1.AppendUnitRequest
- */
-export type AppendUnitRequest = Message<"ficant.market.v1.AppendUnitRequest"> & {
-  /**
-   * @generated from field: string idempotency_key = 1;
-   */
-  idempotencyKey: string;
-
-  /**
-   * @generated from field: uint64 expected_latest_version = 2;
-   */
-  expectedLatestVersion: bigint;
-
-  /**
-   * @generated from field: ficant.market.v1.Unit unit = 3;
-   */
-  unit?: Unit;
-};
-
-/**
- * Describes the message ficant.market.v1.AppendUnitRequest.
- * Use `create(AppendUnitRequestSchema)` to create a new message.
- */
-export const AppendUnitRequestSchema: GenMessage<AppendUnitRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 14);
-
-/**
- * @generated from message ficant.market.v1.AppendUnitResponse
- */
-export type AppendUnitResponse = Message<"ficant.market.v1.AppendUnitResponse"> & {
-  /**
-   * @generated from field: ficant.market.v1.Unit unit = 1;
-   */
-  unit?: Unit;
-};
-
-/**
- * Describes the message ficant.market.v1.AppendUnitResponse.
- * Use `create(AppendUnitResponseSchema)` to create a new message.
- */
-export const AppendUnitResponseSchema: GenMessage<AppendUnitResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 15);
-
-/**
- * @generated from message ficant.market.v1.AppendMarketRulePackRequest
- */
-export type AppendMarketRulePackRequest = Message<"ficant.market.v1.AppendMarketRulePackRequest"> & {
-  /**
-   * @generated from field: string idempotency_key = 1;
-   */
-  idempotencyKey: string;
-
-  /**
-   * @generated from field: uint64 expected_latest_version = 2;
-   */
-  expectedLatestVersion: bigint;
-
-  /**
-   * @generated from field: ficant.market.v1.MarketRulePack market_rule_pack = 3;
-   */
-  marketRulePack?: MarketRulePack;
-};
-
-/**
- * Describes the message ficant.market.v1.AppendMarketRulePackRequest.
- * Use `create(AppendMarketRulePackRequestSchema)` to create a new message.
- */
-export const AppendMarketRulePackRequestSchema: GenMessage<AppendMarketRulePackRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 16);
-
-/**
- * @generated from message ficant.market.v1.AppendMarketRulePackResponse
- */
-export type AppendMarketRulePackResponse = Message<"ficant.market.v1.AppendMarketRulePackResponse"> & {
-  /**
-   * @generated from field: ficant.market.v1.MarketRulePack market_rule_pack = 1;
-   */
-  marketRulePack?: MarketRulePack;
-};
-
-/**
- * Describes the message ficant.market.v1.AppendMarketRulePackResponse.
- * Use `create(AppendMarketRulePackResponseSchema)` to create a new message.
- */
-export const AppendMarketRulePackResponseSchema: GenMessage<AppendMarketRulePackResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 17);
-
-/**
- * @generated from message ficant.market.v1.MarketDefinition
- */
-export type MarketDefinition = Message<"ficant.market.v1.MarketDefinition"> & {
-  /**
-   * @generated from oneof ficant.market.v1.MarketDefinition.definition
-   */
-  definition: {
-    /**
-     * @generated from field: ficant.market.v1.Instrument instrument = 1;
-     */
-    value: Instrument;
-    case: "instrument";
-  } | {
+  subtype: {
     /**
      * @generated from field: ficant.market.v1.Bond bond = 2;
      */
@@ -584,6 +323,29 @@ export type MarketDefinition = Message<"ficant.market.v1.MarketDefinition"> & {
      */
     value: FuturesContract;
     case: "futuresContract";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message ficant.market.v1.CompleteInstrumentDefinition.
+ * Use `create(CompleteInstrumentDefinitionSchema)` to create a new message.
+ */
+export const CompleteInstrumentDefinitionSchema: GenMessage<CompleteInstrumentDefinition> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_definition, 6);
+
+/**
+ * @generated from message ficant.market.v1.MarketDefinition
+ */
+export type MarketDefinition = Message<"ficant.market.v1.MarketDefinition"> & {
+  /**
+   * @generated from oneof ficant.market.v1.MarketDefinition.definition
+   */
+  definition: {
+    /**
+     * @generated from field: ficant.market.v1.CompleteInstrumentDefinition instrument = 1;
+     */
+    value: CompleteInstrumentDefinition;
+    case: "instrument";
   } | {
     /**
      * @generated from field: ficant.market.v1.Calendar calendar = 4;
@@ -610,7 +372,68 @@ export type MarketDefinition = Message<"ficant.market.v1.MarketDefinition"> & {
  * Use `create(MarketDefinitionSchema)` to create a new message.
  */
 export const MarketDefinitionSchema: GenMessage<MarketDefinition> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 18);
+  messageDesc(file_ficant_market_v1_definition, 7);
+
+/**
+ * @generated from message ficant.market.v1.AppendDefinitionRequest
+ */
+export type AppendDefinitionRequest = Message<"ficant.market.v1.AppendDefinitionRequest"> & {
+  /**
+   * @generated from field: string idempotency_key = 1;
+   */
+  idempotencyKey: string;
+
+  /**
+   * @generated from field: uint64 expected_latest_version = 2;
+   */
+  expectedLatestVersion: bigint;
+
+  /**
+   * @generated from field: ficant.market.v1.MarketDefinition definition = 3;
+   */
+  definition?: MarketDefinition;
+
+  /**
+   * @generated from field: ficant.core.v1.ChangeJustification change = 4;
+   */
+  change?: ChangeJustification;
+};
+
+/**
+ * Describes the message ficant.market.v1.AppendDefinitionRequest.
+ * Use `create(AppendDefinitionRequestSchema)` to create a new message.
+ */
+export const AppendDefinitionRequestSchema: GenMessage<AppendDefinitionRequest> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_definition, 8);
+
+/**
+ * @generated from message ficant.market.v1.AppendDefinitionResponse
+ */
+export type AppendDefinitionResponse = Message<"ficant.market.v1.AppendDefinitionResponse"> & {
+  /**
+   * @generated from oneof ficant.market.v1.AppendDefinitionResponse.result
+   */
+  result: {
+    /**
+     * @generated from field: ficant.market.v1.MarketDefinition definition = 1;
+     */
+    value: MarketDefinition;
+    case: "definition";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 2;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message ficant.market.v1.AppendDefinitionResponse.
+ * Use `create(AppendDefinitionResponseSchema)` to create a new message.
+ */
+export const AppendDefinitionResponseSchema: GenMessage<AppendDefinitionResponse> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_definition, 9);
 
 /**
  * @generated from message ficant.market.v1.GetDefinitionVersionRequest
@@ -632,16 +455,28 @@ export type GetDefinitionVersionRequest = Message<"ficant.market.v1.GetDefinitio
  * Use `create(GetDefinitionVersionRequestSchema)` to create a new message.
  */
 export const GetDefinitionVersionRequestSchema: GenMessage<GetDefinitionVersionRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 19);
+  messageDesc(file_ficant_market_v1_definition, 10);
 
 /**
  * @generated from message ficant.market.v1.GetDefinitionVersionResponse
  */
 export type GetDefinitionVersionResponse = Message<"ficant.market.v1.GetDefinitionVersionResponse"> & {
   /**
-   * @generated from field: ficant.market.v1.MarketDefinition definition = 1;
+   * @generated from oneof ficant.market.v1.GetDefinitionVersionResponse.result
    */
-  definition?: MarketDefinition;
+  result: {
+    /**
+     * @generated from field: ficant.market.v1.MarketDefinition definition = 1;
+     */
+    value: MarketDefinition;
+    case: "definition";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 2;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
 };
 
 /**
@@ -649,7 +484,7 @@ export type GetDefinitionVersionResponse = Message<"ficant.market.v1.GetDefiniti
  * Use `create(GetDefinitionVersionResponseSchema)` to create a new message.
  */
 export const GetDefinitionVersionResponseSchema: GenMessage<GetDefinitionVersionResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 20);
+  messageDesc(file_ficant_market_v1_definition, 11);
 
 /**
  * @generated from message ficant.market.v1.ResolveDefinitionAsOfRequest
@@ -671,16 +506,28 @@ export type ResolveDefinitionAsOfRequest = Message<"ficant.market.v1.ResolveDefi
  * Use `create(ResolveDefinitionAsOfRequestSchema)` to create a new message.
  */
 export const ResolveDefinitionAsOfRequestSchema: GenMessage<ResolveDefinitionAsOfRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 21);
+  messageDesc(file_ficant_market_v1_definition, 12);
 
 /**
  * @generated from message ficant.market.v1.ResolveDefinitionAsOfResponse
  */
 export type ResolveDefinitionAsOfResponse = Message<"ficant.market.v1.ResolveDefinitionAsOfResponse"> & {
   /**
-   * @generated from field: ficant.market.v1.MarketDefinition definition = 1;
+   * @generated from oneof ficant.market.v1.ResolveDefinitionAsOfResponse.result
    */
-  definition?: MarketDefinition;
+  result: {
+    /**
+     * @generated from field: ficant.market.v1.MarketDefinition definition = 1;
+     */
+    value: MarketDefinition;
+    case: "definition";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 2;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
 };
 
 /**
@@ -688,7 +535,7 @@ export type ResolveDefinitionAsOfResponse = Message<"ficant.market.v1.ResolveDef
  * Use `create(ResolveDefinitionAsOfResponseSchema)` to create a new message.
  */
 export const ResolveDefinitionAsOfResponseSchema: GenMessage<ResolveDefinitionAsOfResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 22);
+  messageDesc(file_ficant_market_v1_definition, 13);
 
 /**
  * @generated from message ficant.market.v1.ListDefinitionVersionsRequest
@@ -710,12 +557,12 @@ export type ListDefinitionVersionsRequest = Message<"ficant.market.v1.ListDefini
  * Use `create(ListDefinitionVersionsRequestSchema)` to create a new message.
  */
 export const ListDefinitionVersionsRequestSchema: GenMessage<ListDefinitionVersionsRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 23);
+  messageDesc(file_ficant_market_v1_definition, 14);
 
 /**
- * @generated from message ficant.market.v1.ListDefinitionVersionsResponse
+ * @generated from message ficant.market.v1.DefinitionVersions
  */
-export type ListDefinitionVersionsResponse = Message<"ficant.market.v1.ListDefinitionVersionsResponse"> & {
+export type DefinitionVersions = Message<"ficant.market.v1.DefinitionVersions"> & {
   /**
    * @generated from field: repeated ficant.market.v1.MarketDefinition definitions = 1;
    */
@@ -728,11 +575,40 @@ export type ListDefinitionVersionsResponse = Message<"ficant.market.v1.ListDefin
 };
 
 /**
+ * Describes the message ficant.market.v1.DefinitionVersions.
+ * Use `create(DefinitionVersionsSchema)` to create a new message.
+ */
+export const DefinitionVersionsSchema: GenMessage<DefinitionVersions> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_definition, 15);
+
+/**
+ * @generated from message ficant.market.v1.ListDefinitionVersionsResponse
+ */
+export type ListDefinitionVersionsResponse = Message<"ficant.market.v1.ListDefinitionVersionsResponse"> & {
+  /**
+   * @generated from oneof ficant.market.v1.ListDefinitionVersionsResponse.result
+   */
+  result: {
+    /**
+     * @generated from field: ficant.market.v1.DefinitionVersions versions = 3;
+     */
+    value: DefinitionVersions;
+    case: "versions";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 4;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
  * Describes the message ficant.market.v1.ListDefinitionVersionsResponse.
  * Use `create(ListDefinitionVersionsResponseSchema)` to create a new message.
  */
 export const ListDefinitionVersionsResponseSchema: GenMessage<ListDefinitionVersionsResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_market_v1_definition, 24);
+  messageDesc(file_ficant_market_v1_definition, 16);
 
 /**
  * @generated from enum ficant.market.v1.ValueAddedTaxStatus
@@ -859,52 +735,12 @@ export const BondBusinessDayConventionSchema: GenEnum<BondBusinessDayConvention>
  */
 export const MarketDefinitionService: GenService<{
   /**
-   * @generated from rpc ficant.market.v1.MarketDefinitionService.AppendInstrument
+   * @generated from rpc ficant.market.v1.MarketDefinitionService.AppendDefinition
    */
-  appendInstrument: {
+  appendDefinition: {
     methodKind: "unary";
-    input: typeof AppendInstrumentRequestSchema;
-    output: typeof AppendInstrumentResponseSchema;
-  },
-  /**
-   * @generated from rpc ficant.market.v1.MarketDefinitionService.AppendBond
-   */
-  appendBond: {
-    methodKind: "unary";
-    input: typeof AppendBondRequestSchema;
-    output: typeof AppendBondResponseSchema;
-  },
-  /**
-   * @generated from rpc ficant.market.v1.MarketDefinitionService.AppendFuturesContract
-   */
-  appendFuturesContract: {
-    methodKind: "unary";
-    input: typeof AppendFuturesContractRequestSchema;
-    output: typeof AppendFuturesContractResponseSchema;
-  },
-  /**
-   * @generated from rpc ficant.market.v1.MarketDefinitionService.AppendCalendar
-   */
-  appendCalendar: {
-    methodKind: "unary";
-    input: typeof AppendCalendarRequestSchema;
-    output: typeof AppendCalendarResponseSchema;
-  },
-  /**
-   * @generated from rpc ficant.market.v1.MarketDefinitionService.AppendUnit
-   */
-  appendUnit: {
-    methodKind: "unary";
-    input: typeof AppendUnitRequestSchema;
-    output: typeof AppendUnitResponseSchema;
-  },
-  /**
-   * @generated from rpc ficant.market.v1.MarketDefinitionService.AppendMarketRulePack
-   */
-  appendMarketRulePack: {
-    methodKind: "unary";
-    input: typeof AppendMarketRulePackRequestSchema;
-    output: typeof AppendMarketRulePackResponseSchema;
+    input: typeof AppendDefinitionRequestSchema;
+    output: typeof AppendDefinitionResponseSchema;
   },
   /**
    * @generated from rpc ficant.market.v1.MarketDefinitionService.GetDefinitionVersion

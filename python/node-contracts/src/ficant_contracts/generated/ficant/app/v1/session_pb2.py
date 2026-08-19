@@ -22,18 +22,20 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from ficant.core.v1 import common_pb2 as ficant_dot_core_dot_v1_dot_common__pb2
+from ficant.core.v1 import governance_pb2 as ficant_dot_core_dot_v1_dot_governance__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1b\x66icant/app/v1/session.proto\x12\rficant.app.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd3\x01\n\x07Session\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n\nsubject_id\x18\x02 \x01(\tR\tsubjectId\x12\x16\n\x06scopes\x18\x03 \x03(\tR\x06scopes\x12\x37\n\tissued_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\x08issuedAt\x12\x39\n\nexpires_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\texpiresAt\"N\n\x11SessionRevocation\x12\x39\n\nrevoked_at\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\trevokedAtb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1b\x66icant/app/v1/session.proto\x12\rficant.app.v1\x1a\x1b\x66icant/core/v1/common.proto\x1a\x1f\x66icant/core/v1/governance.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb8\x03\n\x07Session\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n\nsubject_id\x18\x02 \x01(\tR\tsubjectId\x12\x16\n\x06scopes\x18\x03 \x03(\tR\x06scopes\x12\x37\n\tissued_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\x08issuedAt\x12\x39\n\nexpires_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\texpiresAt\x12/\n\x08\x61\x63tor_id\x18\x06 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x07\x61\x63torId\x12=\n\x0b\x61\x63tive_role\x18\x07 \x01(\x0e\x32\x1c.ficant.core.v1.PlatformRoleR\nactiveRole\x12\x31\n\ttenant_id\x18\x08 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x08tenantId\x12@\n\x11\x61llowed_owner_ids\x18\t \x03(\x0b\x32\x14.ficant.core.v1.UlidR\x0f\x61llowedOwnerIds\"N\n\x11SessionRevocation\x12\x39\n\nrevoked_at\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\trevokedAtb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'ficant.app.v1.session_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_SESSION']._serialized_start=80
-  _globals['_SESSION']._serialized_end=291
-  _globals['_SESSIONREVOCATION']._serialized_start=293
-  _globals['_SESSIONREVOCATION']._serialized_end=371
+  _globals['_SESSION']._serialized_start=142
+  _globals['_SESSION']._serialized_end=582
+  _globals['_SESSIONREVOCATION']._serialized_start=584
+  _globals['_SESSIONREVOCATION']._serialized_end=662
 # @@protoc_insertion_point(module_scope)

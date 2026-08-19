@@ -164,6 +164,129 @@ impl ErrorCode {
         }
     }
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SourceDocumentRef {
+    #[prost(string, tag="1")]
+    pub uri: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub sha256: ::core::option::Option<Sha256>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChangeJustification {
+    #[prost(string, tag="1")]
+    pub reason: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag="2")]
+    pub sources: ::prost::alloc::vec::Vec<SourceDocumentRef>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FoundationChangeRecord {
+    #[prost(message, optional, tag="1")]
+    pub record_id: ::core::option::Option<Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub actor_id: ::core::option::Option<Ulid>,
+    #[prost(enumeration="PlatformRole", tag="3")]
+    pub active_role: i32,
+    #[prost(string, tag="4")]
+    pub operation: ::prost::alloc::string::String,
+    #[prost(string, tag="5")]
+    pub resource_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="6")]
+    pub before_hash: ::core::option::Option<Sha256>,
+    #[prost(message, optional, tag="7")]
+    pub after_hash: ::core::option::Option<Sha256>,
+    #[prost(message, optional, tag="8")]
+    pub change: ::core::option::Option<ChangeJustification>,
+    #[prost(message, optional, tag="9")]
+    pub request_fingerprint: ::core::option::Option<Sha256>,
+    #[prost(message, optional, tag="10")]
+    pub occurred_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag="11")]
+    pub authorization_ref: ::core::option::Option<VersionRef>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetFoundationChangeRequest {
+    #[prost(message, optional, tag="1")]
+    pub record_id: ::core::option::Option<Ulid>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetFoundationChangeResponse {
+    #[prost(oneof="get_foundation_change_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_foundation_change_response::Result>,
+}
+/// Nested message and enum types in `GetFoundationChangeResponse`.
+pub mod get_foundation_change_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Change(super::FoundationChangeRecord),
+        #[prost(message, tag="2")]
+        Error(super::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListFoundationChangesRequest {
+    #[prost(string, tag="1")]
+    pub resource_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub actor_id: ::core::option::Option<Ulid>,
+    #[prost(message, optional, tag="3")]
+    pub occurred_from: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag="4")]
+    pub occurred_to: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag="5")]
+    pub page: ::core::option::Option<PageRequest>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FoundationChangeRecords {
+    #[prost(message, repeated, tag="1")]
+    pub changes: ::prost::alloc::vec::Vec<FoundationChangeRecord>,
+    #[prost(message, optional, tag="2")]
+    pub page: ::core::option::Option<PageResponse>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListFoundationChangesResponse {
+    #[prost(oneof="list_foundation_changes_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<list_foundation_changes_response::Result>,
+}
+/// Nested message and enum types in `ListFoundationChangesResponse`.
+pub mod list_foundation_changes_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Changes(super::FoundationChangeRecords),
+        #[prost(message, tag="2")]
+        Error(super::ErrorDetail),
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PlatformRole {
+    Unspecified = 0,
+    PlatformAdmin = 1,
+    Researcher = 2,
+}
+impl PlatformRole {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PLATFORM_ROLE_UNSPECIFIED",
+            Self::PlatformAdmin => "PLATFORM_ROLE_PLATFORM_ADMIN",
+            Self::Researcher => "PLATFORM_ROLE_RESEARCHER",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PLATFORM_ROLE_UNSPECIFIED" => Some(Self::Unspecified),
+            "PLATFORM_ROLE_PLATFORM_ADMIN" => Some(Self::PlatformAdmin),
+            "PLATFORM_ROLE_RESEARCHER" => Some(Self::Researcher),
+            _ => None,
+        }
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubjectStateSnapshot {
     #[prost(message, optional, tag="1")]
@@ -180,6 +303,8 @@ pub struct SubjectStateSnapshot {
     pub visible_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(string, tag="7")]
     pub market_timezone: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="8")]
+    pub owner: ::core::option::Option<OwnerRef>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct LimitCeiling {
@@ -192,6 +317,10 @@ pub struct LimitCeiling {
 pub struct RegisterSubjectStateRequest {
     #[prost(message, optional, tag="1")]
     pub snapshot: ::core::option::Option<SubjectStateSnapshot>,
+    #[prost(message, optional, tag="2")]
+    pub change: ::core::option::Option<ChangeJustification>,
+    #[prost(string, tag="3")]
+    pub idempotency_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegisterSubjectStateResponse {
@@ -236,6 +365,8 @@ pub struct Subject {
     pub subject_id: ::core::option::Option<Ulid>,
     #[prost(string, tag="2")]
     pub display_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="3")]
+    pub owner: ::core::option::Option<OwnerRef>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SubjectVersion {
@@ -280,12 +411,16 @@ pub struct ConstraintSetRef {
     #[prost(message, optional, tag="1")]
     pub r#ref: ::core::option::Option<VersionRef>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegisterSubjectRequest {
     #[prost(message, optional, tag="1")]
     pub subject: ::core::option::Option<Subject>,
     #[prost(message, optional, tag="2")]
     pub subject_version: ::core::option::Option<SubjectVersion>,
+    #[prost(message, optional, tag="3")]
+    pub change: ::core::option::Option<ChangeJustification>,
+    #[prost(string, tag="4")]
+    pub idempotency_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegisterSubjectResponse {

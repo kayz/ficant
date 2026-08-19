@@ -1,9 +1,13 @@
 use async_trait::async_trait;
 use ficant_application::ports::{
     AccessScope, AppendDefinitionVersion, ApplicationResult, DefinitionIdentity, DefinitionKind,
-    DefinitionRepository, DefinitionValue, InstrumentDefinition, InstrumentSubtype,
+    DefinitionRepository, DefinitionUseCase, DefinitionValue, FoundationChangeContext,
+    GovernedAppendDefinitionVersion, InstrumentDefinition, InstrumentSubtype,
 };
-use ficant_application::{ApplicationError, ApplicationErrorCategory, IdempotencyKey};
+use ficant_application::{
+    ApplicationError, ApplicationErrorCategory, AuthorizedPrincipal, IdempotencyKey,
+};
+use ficant_domain::governance::{ChangeJustification, PlatformRole, SourceDocumentRef};
 use ficant_domain::market::{Bond, FuturesContract, Instrument, InstrumentInput, InstrumentKind};
 use ficant_domain::primitives::{
     DecimalValue, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
@@ -213,6 +217,43 @@ fn repository_port_can_be_implemented_with_the_aggregate_value() {
     assert_repository::<ContractDefinitionRepository>();
 }
 
+#[tokio::test]
+async fn complete_definition_use_case_fails_closed_when_repository_is_not_atomic() {
+    let instrument = instrument('B', 1, InstrumentKind::Bond);
+    let definition = InstrumentDefinition::new(
+        instrument.clone(),
+        Some(InstrumentSubtype::Bond(bond(
+            &instrument,
+            "2036-01-01",
+            "100000",
+        ))),
+    )
+    .unwrap();
+    let command = GovernedAppendDefinitionVersion::new(
+        change_context(),
+        None,
+        DefinitionValue::Instrument(definition),
+        key("complete-only"),
+    )
+    .unwrap();
+    let error = DefinitionUseCase::new(&ContractDefinitionRepository)
+        .append(command)
+        .await
+        .unwrap_err();
+    assert_category(&error, ApplicationErrorCategory::StateConflict);
+}
+
+#[tokio::test]
+async fn definition_list_binds_the_exact_access_scope() {
+    let other_scope = AccessScope::new(id('T'), id('Z'), vec![id('Y')]).unwrap();
+    let page = ficant_application::PageRequest::new(scope(), None, 20).unwrap();
+    let error = DefinitionUseCase::new(&ContractDefinitionRepository)
+        .list_versions(&other_scope, id('B'), page)
+        .await
+        .unwrap_err();
+    assert_category(&error, ApplicationErrorCategory::Forbidden);
+}
+
 struct ContractDefinitionRepository;
 
 #[async_trait]
@@ -307,6 +348,35 @@ fn time(hour: u32) -> MarketTime {
 
 fn owner() -> OwnerRef {
     OwnerRef::new(id('T'), id('Y'))
+}
+
+fn scope() -> AccessScope {
+    AccessScope::new(id('T'), id('A'), vec![id('Y')]).unwrap()
+}
+
+fn change_context() -> FoundationChangeContext {
+    let principal = AuthorizedPrincipal::new(
+        "definition-test".to_owned(),
+        id('A'),
+        id('T'),
+        vec![id('Y')],
+        PlatformRole::PlatformAdmin,
+        vec!["definitions:write".to_owned()],
+        ficant_domain::primitives::ContentHash::digest(b"definition-test-credential"),
+    )
+    .unwrap();
+    let change = ChangeJustification::new(
+        "append complete definition",
+        vec![
+            SourceDocumentRef::new(
+                "urn:test:definition",
+                ficant_domain::primitives::ContentHash::digest(b"definition-evidence"),
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap();
+    FoundationChangeContext::administrator(principal, change, id('R'), time(4)).unwrap()
 }
 
 fn version(value: u64) -> Version {

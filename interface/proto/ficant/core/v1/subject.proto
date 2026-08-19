@@ -4,11 +4,13 @@ package ficant.core.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
+import "ficant/core/v1/governance.proto";
 import "ficant/core/v1/subject_state.proto";
 
 message Subject {
   Ulid subject_id = 1;
   string display_name = 2;
+  OwnerRef owner = 3;
 }
 
 message SubjectVersion {
@@ -49,6 +51,8 @@ message ConstraintSetRef {
 message RegisterSubjectRequest {
   Subject subject = 1;
   SubjectVersion subject_version = 2;
+  ChangeJustification change = 3;
+  string idempotency_key = 4;
 }
 
 message RegisterSubjectResponse {

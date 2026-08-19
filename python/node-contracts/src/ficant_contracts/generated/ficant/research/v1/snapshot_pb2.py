@@ -23,31 +23,35 @@ _sym_db = _symbol_database.Default()
 
 
 from ficant.core.v1 import common_pb2 as ficant_dot_core_dot_v1_dot_common__pb2
+from ficant.core.v1 import error_pb2 as ficant_dot_core_dot_v1_dot_error__pb2
+from ficant.core.v1 import governance_pb2 as ficant_dot_core_dot_v1_dot_governance__pb2
+from ficant.market.v1 import data_source_pb2 as ficant_dot_market_dot_v1_dot_data__source__pb2
+from ficant.market.v1 import definition_pb2 as ficant_dot_market_dot_v1_dot_definition__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!ficant/research/v1/snapshot.proto\x12\x12\x66icant.research.v1\x1a\x1b\x66icant/core/v1/common.proto\"\xda\x03\n\x0c\x44\x61taSnapshot\x12>\n\x10\x64\x61ta_snapshot_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0e\x64\x61taSnapshotId\x12.\n\x05owner\x18\x02 \x01(\x0b\x32\x18.ficant.core.v1.OwnerRefR\x05owner\x12\x39\n\nvisible_at\x18\x03 \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\tvisibleAt\x12/\n\x05\x61s_of\x18\x04 \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\x04\x61sOf\x12\x37\n\x0bschema_hash\x18\x05 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\nschemaHash\x12;\n\rmanifest_hash\x18\x06 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0cmanifestHash\x12\x42\n\x11\x62lob_content_hash\x18\x07 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0f\x62lobContentHash\x12\x34\n\x07lineage\x18\x08 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x07lineage\"\x85\x03\n\x10UniverseSnapshot\x12\x46\n\x14universe_snapshot_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x12universeSnapshotId\x12.\n\x05owner\x18\x02 \x01(\x0b\x32\x18.ficant.core.v1.OwnerRefR\x05owner\x12K\n\x13instrument_versions\x18\x03 \x03(\x0b\x32\x1a.ficant.core.v1.VersionRefR\x12instrumentVersions\x12;\n\rfilter_digest\x18\x04 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0c\x66ilterDigest\x12\x39\n\x0c\x63ontent_hash\x18\x05 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0b\x63ontentHash\x12\x34\n\x07lineage\x18\x06 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x07lineage\"\x8c\x01\n\x1aPublishDataSnapshotRequest\x12\'\n\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12\x45\n\rdata_snapshot\x18\x02 \x01(\x0b\x32 .ficant.research.v1.DataSnapshotR\x0c\x64\x61taSnapshot\"d\n\x1bPublishDataSnapshotResponse\x12\x45\n\rdata_snapshot\x18\x01 \x01(\x0b\x32 .ficant.research.v1.DataSnapshotR\x0c\x64\x61taSnapshot\"\x9c\x01\n\x1ePublishUniverseSnapshotRequest\x12\'\n\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12Q\n\x11universe_snapshot\x18\x02 \x01(\x0b\x32$.ficant.research.v1.UniverseSnapshotR\x10universeSnapshot\"t\n\x1fPublishUniverseSnapshotResponse\x12Q\n\x11universe_snapshot\x18\x01 \x01(\x0b\x32$.ficant.research.v1.UniverseSnapshotR\x10universeSnapshot\"K\n\x12GetSnapshotRequest\x12\x35\n\x0bsnapshot_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\nsnapshotId\"\xbf\x01\n\x13GetSnapshotResponse\x12G\n\rdata_snapshot\x18\x01 \x01(\x0b\x32 .ficant.research.v1.DataSnapshotH\x00R\x0c\x64\x61taSnapshot\x12S\n\x11universe_snapshot\x18\x02 \x01(\x0b\x32$.ficant.research.v1.UniverseSnapshotH\x00R\x10universeSnapshotB\n\n\x08snapshot2\xee\x02\n\x0fSnapshotService\x12v\n\x13PublishDataSnapshot\x12..ficant.research.v1.PublishDataSnapshotRequest\x1a/.ficant.research.v1.PublishDataSnapshotResponse\x12\x82\x01\n\x17PublishUniverseSnapshot\x12\x32.ficant.research.v1.PublishUniverseSnapshotRequest\x1a\x33.ficant.research.v1.PublishUniverseSnapshotResponse\x12^\n\x0bGetSnapshot\x12&.ficant.research.v1.GetSnapshotRequest\x1a\'.ficant.research.v1.GetSnapshotResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!ficant/research/v1/snapshot.proto\x12\x12\x66icant.research.v1\x1a\x1b\x66icant/core/v1/common.proto\x1a\x1a\x66icant/core/v1/error.proto\x1a\x1f\x66icant/core/v1/governance.proto\x1a\"ficant/market/v1/data_source.proto\x1a!ficant/market/v1/definition.proto\"\xd4\x04\n\x0c\x44\x61taSnapshot\x12>\n\x10\x64\x61ta_snapshot_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0e\x64\x61taSnapshotId\x12.\n\x05owner\x18\x02 \x01(\x0b\x32\x18.ficant.core.v1.OwnerRefR\x05owner\x12\x39\n\nvisible_at\x18\x03 \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\tvisibleAt\x12/\n\x05\x61s_of\x18\x04 \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\x04\x61sOf\x12\x37\n\x0bschema_hash\x18\x05 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\nschemaHash\x12;\n\rmanifest_hash\x18\x06 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0cmanifestHash\x12\x42\n\x11\x62lob_content_hash\x18\x07 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0f\x62lobContentHash\x12\x34\n\x07lineage\x18\x08 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x07lineage\x12G\n\x11\x61uthorization_ref\x18\t \x01(\x0b\x32\x1a.ficant.core.v1.VersionRefR\x10\x61uthorizationRef\x12/\n\x08\x61\x63tor_id\x18\n \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x07\x61\x63torId\"\xb6\x03\n\x10UniverseSnapshot\x12\x46\n\x14universe_snapshot_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x12universeSnapshotId\x12.\n\x05owner\x18\x02 \x01(\x0b\x32\x18.ficant.core.v1.OwnerRefR\x05owner\x12K\n\x13instrument_versions\x18\x03 \x03(\x0b\x32\x1a.ficant.core.v1.VersionRefR\x12instrumentVersions\x12;\n\rfilter_digest\x18\x04 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0c\x66ilterDigest\x12\x39\n\x0c\x63ontent_hash\x18\x05 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0b\x63ontentHash\x12\x34\n\x07lineage\x18\x06 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x07lineage\x12/\n\x08\x61\x63tor_id\x18\x07 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x07\x61\x63torId\"\x8f\x04\n#ImportCanonicalQuoteSnapshotRequest\x12\'\n\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12\x42\n\x12target_snapshot_id\x18\x02 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x10targetSnapshotId\x12G\n\x11\x61uthorization_ref\x18\x03 \x01(\x0b\x32\x1a.ficant.core.v1.VersionRefR\x10\x61uthorizationRef\x12=\n\x07mapping\x18\x04 \x01(\x0b\x32#.ficant.market.v1.InstrumentMappingR\x07mapping\x12\x36\n\x08\x63\x61lendar\x18\x05 \x01(\x0b\x32\x1a.ficant.market.v1.CalendarR\x08\x63\x61lendar\x12*\n\x04unit\x18\x06 \x01(\x0b\x32\x16.ficant.market.v1.UnitR\x04unit\x12/\n\x05\x61s_of\x18\x07 \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\x04\x61sOf\x12\x39\n\nvisible_at\x18\x08 \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\tvisibleAt\x12#\n\rimport_reason\x18\t \x01(\tR\x0cimportReason\"\xae\x01\n$ImportCanonicalQuoteSnapshotResponse\x12G\n\rdata_snapshot\x18\x01 \x01(\x0b\x32 .ficant.research.v1.DataSnapshotH\x00R\x0c\x64\x61taSnapshot\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result\"\xd7\x03\n\x1ePublishUniverseSnapshotRequest\x12\'\n\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12\x46\n\x14universe_snapshot_id\x18\x03 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x12universeSnapshotId\x12.\n\x05owner\x18\x04 \x01(\x0b\x32\x18.ficant.core.v1.OwnerRefR\x05owner\x12K\n\x13instrument_versions\x18\x05 \x03(\x0b\x32\x1a.ficant.core.v1.VersionRefR\x12instrumentVersions\x12;\n\rfilter_digest\x18\x06 \x01(\x0b\x32\x16.ficant.core.v1.Sha256R\x0c\x66ilterDigest\x12\x34\n\x07lineage\x18\x07 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x07lineage\x12;\n\x06\x63hange\x18\x08 \x01(\x0b\x32#.ficant.core.v1.ChangeJustificationR\x06\x63hangeJ\x04\x08\x02\x10\x03R\x11universe_snapshot\"\xb5\x01\n\x1fPublishUniverseSnapshotResponse\x12S\n\x11universe_snapshot\x18\x01 \x01(\x0b\x32$.ficant.research.v1.UniverseSnapshotH\x00R\x10universeSnapshot\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result\"K\n\x12GetSnapshotRequest\x12\x35\n\x0bsnapshot_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\nsnapshotId\"\xf2\x01\n\x13GetSnapshotResponse\x12G\n\rdata_snapshot\x18\x01 \x01(\x0b\x32 .ficant.research.v1.DataSnapshotH\x00R\x0c\x64\x61taSnapshot\x12S\n\x11universe_snapshot\x18\x02 \x01(\x0b\x32$.ficant.research.v1.UniverseSnapshotH\x00R\x10universeSnapshot\x12\x33\n\x05\x65rror\x18\x03 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result2\x8a\x03\n\x0fSnapshotService\x12\x91\x01\n\x1cImportCanonicalQuoteSnapshot\x12\x37.ficant.research.v1.ImportCanonicalQuoteSnapshotRequest\x1a\x38.ficant.research.v1.ImportCanonicalQuoteSnapshotResponse\x12\x82\x01\n\x17PublishUniverseSnapshot\x12\x32.ficant.research.v1.PublishUniverseSnapshotRequest\x1a\x33.ficant.research.v1.PublishUniverseSnapshotResponse\x12^\n\x0bGetSnapshot\x12&.ficant.research.v1.GetSnapshotRequest\x1a\'.ficant.research.v1.GetSnapshotResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'ficant.research.v1.snapshot_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_DATASNAPSHOT']._serialized_start=87
-  _globals['_DATASNAPSHOT']._serialized_end=561
-  _globals['_UNIVERSESNAPSHOT']._serialized_start=564
-  _globals['_UNIVERSESNAPSHOT']._serialized_end=953
-  _globals['_PUBLISHDATASNAPSHOTREQUEST']._serialized_start=956
-  _globals['_PUBLISHDATASNAPSHOTREQUEST']._serialized_end=1096
-  _globals['_PUBLISHDATASNAPSHOTRESPONSE']._serialized_start=1098
-  _globals['_PUBLISHDATASNAPSHOTRESPONSE']._serialized_end=1198
-  _globals['_PUBLISHUNIVERSESNAPSHOTREQUEST']._serialized_start=1201
-  _globals['_PUBLISHUNIVERSESNAPSHOTREQUEST']._serialized_end=1357
-  _globals['_PUBLISHUNIVERSESNAPSHOTRESPONSE']._serialized_start=1359
-  _globals['_PUBLISHUNIVERSESNAPSHOTRESPONSE']._serialized_end=1475
-  _globals['_GETSNAPSHOTREQUEST']._serialized_start=1477
-  _globals['_GETSNAPSHOTREQUEST']._serialized_end=1552
-  _globals['_GETSNAPSHOTRESPONSE']._serialized_start=1555
-  _globals['_GETSNAPSHOTRESPONSE']._serialized_end=1746
-  _globals['_SNAPSHOTSERVICE']._serialized_start=1749
-  _globals['_SNAPSHOTSERVICE']._serialized_end=2115
+  _globals['_DATASNAPSHOT']._serialized_start=219
+  _globals['_DATASNAPSHOT']._serialized_end=815
+  _globals['_UNIVERSESNAPSHOT']._serialized_start=818
+  _globals['_UNIVERSESNAPSHOT']._serialized_end=1256
+  _globals['_IMPORTCANONICALQUOTESNAPSHOTREQUEST']._serialized_start=1259
+  _globals['_IMPORTCANONICALQUOTESNAPSHOTREQUEST']._serialized_end=1786
+  _globals['_IMPORTCANONICALQUOTESNAPSHOTRESPONSE']._serialized_start=1789
+  _globals['_IMPORTCANONICALQUOTESNAPSHOTRESPONSE']._serialized_end=1963
+  _globals['_PUBLISHUNIVERSESNAPSHOTREQUEST']._serialized_start=1966
+  _globals['_PUBLISHUNIVERSESNAPSHOTREQUEST']._serialized_end=2437
+  _globals['_PUBLISHUNIVERSESNAPSHOTRESPONSE']._serialized_start=2440
+  _globals['_PUBLISHUNIVERSESNAPSHOTRESPONSE']._serialized_end=2621
+  _globals['_GETSNAPSHOTREQUEST']._serialized_start=2623
+  _globals['_GETSNAPSHOTREQUEST']._serialized_end=2698
+  _globals['_GETSNAPSHOTRESPONSE']._serialized_start=2701
+  _globals['_GETSNAPSHOTRESPONSE']._serialized_end=2943
+  _globals['_SNAPSHOTSERVICE']._serialized_start=2946
+  _globals['_SNAPSHOTSERVICE']._serialized_end=3340
 # @@protoc_insertion_point(module_scope)

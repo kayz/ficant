@@ -2,12 +2,13 @@ use std::sync::Arc;
 
 use chrono::{NaiveDate, Utc};
 use ficant_application::ports::{
-    ArtifactRepository, BondAnalyticsArtifactCodec, BondAnalyticsEngine, CanonicalSnapshotDecoder,
-    CarryRollEngine, CouponTaxClaimScope, CurvePointSetDecoder, CurveSnapshotMetadataRepository,
-    DataSourceRepository, DefinitionRepository, FactorTopologyRepository, FundingRulePackParser,
-    FuturesDeliveryArtifactCodec, FuturesDeliveryEngine, FuturesDeliveryRuleParser,
-    FuturesHedgeEngine, IntegrityEventSink, SnapshotVerifiedReadMetadataRepository,
-    SubjectRepository, TaxRulePackParser, VerifiedBlobReader, YieldCurveEngine,
+    ArtifactRepository, AuthorizedPrincipal, BondAnalyticsArtifactCodec, BondAnalyticsEngine,
+    CanonicalSnapshotDecoder, CarryRollEngine, CouponTaxClaimScope, CurvePointSetDecoder,
+    CurveSnapshotMetadataRepository, DataSourceRepository, DefinitionRepository,
+    FactorTopologyRepository, FundingRulePackParser, FuturesDeliveryArtifactCodec,
+    FuturesDeliveryEngine, FuturesDeliveryRuleParser, FuturesHedgeEngine, IntegrityEventSink,
+    SnapshotVerifiedReadMetadataRepository, SubjectRepository, TaxRulePackParser,
+    VerifiedBlobReader, YieldCurveEngine,
 };
 use ficant_application::{
     AccessScope, ApplicationError, ApplicationErrorCategory, BondRatesCommand,
@@ -44,6 +45,7 @@ use ficant_domain::futures_hedge::{
     FUTURES_HEDGE_ALGORITHM_ID, FUTURES_HEDGE_ALGORITHM_VERSION, FUTURES_HEDGE_CONVENTION_PROFILE,
     FuturesHedgeResult,
 };
+use ficant_domain::governance::PlatformRole;
 use ficant_domain::market::{IncomeTaxStatus, ValueAddedTaxStatus};
 use ficant_domain::primitives::{
     ContentHash, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
@@ -272,19 +274,21 @@ impl RatesGrpcService {
         })
     }
 
-    fn authorize(&self, request: &Request<impl Sized>) -> Result<(), ApplicationError> {
+    fn authorize(
+        &self,
+        request: &Request<impl Sized>,
+    ) -> Result<AuthorizedPrincipal, ApplicationError> {
         let credential = request_credential(request.metadata());
         let session = self
             .identity
             .current_session(&credential)
             .map_err(|failure| platform_application_error(&failure))?;
-        if !session.has_scope(REQUIRED_SCOPE) {
-            return Err(ApplicationError::new(
-                ApplicationErrorCategory::Forbidden,
-                false,
-            ));
-        }
-        Ok(())
+        let principal = session.authorized_principal()?;
+        principal.require_role(PlatformRole::Researcher)?;
+        principal
+            .has_scope(REQUIRED_SCOPE)
+            .then_some(principal)
+            .ok_or_else(forbidden)
     }
 
     fn error(
@@ -298,8 +302,10 @@ impl RatesGrpcService {
     async fn analyze_bond_value(
         &self,
         request: &pb::AnalyzeBondRequest,
+        scope: &AccessScope,
     ) -> Result<pb::AnalyzeBondResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::bond())?;
+        scope.authorize(&context.owner)?;
         let (mode, input_value) = match request.input.as_ref() {
             Some(pb::analyze_bond_request::Input::YieldToMaturity(value)) => (
                 AnalyticsMode::YieldIn,
@@ -320,7 +326,7 @@ impl RatesGrpcService {
             self.tax_parser.as_ref(),
         )
         .execute(
-            &context.scope()?,
+            scope,
             BondRatesCommand {
                 owner: context.owner.clone(),
                 subject_ref: context.subject_ref.clone(),
@@ -372,8 +378,10 @@ impl RatesGrpcService {
     async fn interpolate_curve_value(
         &self,
         request: &pb::InterpolateYieldCurveRequest,
+        scope: &AccessScope,
     ) -> Result<pb::InterpolateYieldCurveResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::curve())?;
+        scope.authorize(&context.owner)?;
         let materialized = MaterializeCurveRatesInput::new(
             self.definitions.as_ref(),
             self.subjects.as_ref(),
@@ -386,7 +394,7 @@ impl RatesGrpcService {
             self.factors.as_ref(),
         )
         .execute(
-            &context.scope()?,
+            scope,
             CurveRatesCommand {
                 owner: context.owner.clone(),
                 subject_ref: context.subject_ref.clone(),
@@ -413,8 +421,10 @@ impl RatesGrpcService {
     async fn analyze_carry_roll_value(
         &self,
         request: &pb::AnalyzeCarryRollRequest,
+        scope: &AccessScope,
     ) -> Result<pb::AnalyzeCarryRollResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::carry_roll())?;
+        scope.authorize(&context.owner)?;
         let materialized = MaterializeCarryRatesInput::new(
             self.definitions.as_ref(),
             self.subjects.as_ref(),
@@ -427,7 +437,7 @@ impl RatesGrpcService {
             self.factors.as_ref(),
         )
         .execute(
-            &context.scope()?,
+            scope,
             CarryRatesCommand {
                 owner: context.owner.clone(),
                 subject_ref: context.subject_ref.clone(),
@@ -457,11 +467,13 @@ impl RatesGrpcService {
     async fn analyze_futures_delivery_value(
         &self,
         request: &pb::AnalyzeFuturesDeliveryRequest,
+        scope: &AccessScope,
     ) -> Result<pb::AnalyzeFuturesDeliveryResult, ApplicationError> {
         let context = parse_context(
             request.context.as_ref(),
             ExpectedAlgorithm::futures_delivery(),
         )?;
+        scope.authorize(&context.owner)?;
         let materialized = MaterializeDeliveryRatesInput::new(
             self.definitions.as_ref(),
             self.subjects.as_ref(),
@@ -475,7 +487,7 @@ impl RatesGrpcService {
             self.tax_parser.as_ref(),
         )
         .execute(
-            &context.scope()?,
+            scope,
             DeliveryRatesCommand {
                 owner: context.owner.clone(),
                 subject_ref: context.subject_ref.clone(),
@@ -511,8 +523,10 @@ impl RatesGrpcService {
     async fn analyze_futures_hedge_value(
         &self,
         request: &pb::AnalyzeFuturesHedgeRequest,
+        scope: &AccessScope,
     ) -> Result<pb::AnalyzeFuturesHedgeResult, ApplicationError> {
         let context = parse_context(request.context.as_ref(), ExpectedAlgorithm::futures_hedge())?;
+        scope.authorize(&context.owner)?;
         let materialized = MaterializeHedgeRatesInput::new(
             self.definitions.as_ref(),
             self.subjects.as_ref(),
@@ -524,7 +538,7 @@ impl RatesGrpcService {
             self.delivery_parser.as_ref(),
         )
         .execute(
-            &context.scope()?,
+            scope,
             HedgeRatesCommand {
                 owner: context.owner.clone(),
                 subject_ref: context.subject_ref.clone(),
@@ -839,10 +853,12 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::AnalyzeBondRequest>,
     ) -> Result<Response<pb::AnalyzeBondResponse>, Status> {
         const OPERATION: &str = "rates.analyze-bond";
-        let result = if let Err(error) = self.authorize(&request) {
-            Err(error)
-        } else {
-            self.analyze_bond_value(request.get_ref()).await
+        let result = match self.authorize(&request) {
+            Err(error) => Err(error),
+            Ok(principal) => {
+                self.analyze_bond_value(request.get_ref(), principal.access_scope())
+                    .await
+            }
         };
         Ok(Response::new(pb::AnalyzeBondResponse {
             result: Some(match result {
@@ -859,10 +875,12 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::InterpolateYieldCurveRequest>,
     ) -> Result<Response<pb::InterpolateYieldCurveResponse>, Status> {
         const OPERATION: &str = "rates.interpolate-yield-curve";
-        let result = if let Err(error) = self.authorize(&request) {
-            Err(error)
-        } else {
-            self.interpolate_curve_value(request.get_ref()).await
+        let result = match self.authorize(&request) {
+            Err(error) => Err(error),
+            Ok(principal) => {
+                self.interpolate_curve_value(request.get_ref(), principal.access_scope())
+                    .await
+            }
         };
         Ok(Response::new(pb::InterpolateYieldCurveResponse {
             result: Some(match result {
@@ -879,10 +897,12 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::AnalyzeCarryRollRequest>,
     ) -> Result<Response<pb::AnalyzeCarryRollResponse>, Status> {
         const OPERATION: &str = "rates.analyze-carry-roll";
-        let result = if let Err(error) = self.authorize(&request) {
-            Err(error)
-        } else {
-            self.analyze_carry_roll_value(request.get_ref()).await
+        let result = match self.authorize(&request) {
+            Err(error) => Err(error),
+            Ok(principal) => {
+                self.analyze_carry_roll_value(request.get_ref(), principal.access_scope())
+                    .await
+            }
         };
         Ok(Response::new(pb::AnalyzeCarryRollResponse {
             result: Some(match result {
@@ -899,10 +919,12 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::AnalyzeFuturesDeliveryRequest>,
     ) -> Result<Response<pb::AnalyzeFuturesDeliveryResponse>, Status> {
         const OPERATION: &str = "rates.analyze-futures-delivery";
-        let result = if let Err(error) = self.authorize(&request) {
-            Err(error)
-        } else {
-            self.analyze_futures_delivery_value(request.get_ref()).await
+        let result = match self.authorize(&request) {
+            Err(error) => Err(error),
+            Ok(principal) => {
+                self.analyze_futures_delivery_value(request.get_ref(), principal.access_scope())
+                    .await
+            }
         };
         Ok(Response::new(pb::AnalyzeFuturesDeliveryResponse {
             result: Some(match result {
@@ -919,10 +941,12 @@ impl RatesAnalyticsService for RatesGrpcService {
         request: Request<pb::AnalyzeFuturesHedgeRequest>,
     ) -> Result<Response<pb::AnalyzeFuturesHedgeResponse>, Status> {
         const OPERATION: &str = "rates.analyze-futures-hedge";
-        let result = if let Err(error) = self.authorize(&request) {
-            Err(error)
-        } else {
-            self.analyze_futures_hedge_value(request.get_ref()).await
+        let result = match self.authorize(&request) {
+            Err(error) => Err(error),
+            Ok(principal) => {
+                self.analyze_futures_hedge_value(request.get_ref(), principal.access_scope())
+                    .await
+            }
         };
         Ok(Response::new(pb::AnalyzeFuturesHedgeResponse {
             result: Some(match result {
@@ -942,16 +966,6 @@ struct ParsedContext {
     units: UnitBindings,
     subject_ref: VersionRef,
     knowledge_at: MarketTime,
-}
-
-impl ParsedContext {
-    fn scope(&self) -> Result<AccessScope, ApplicationError> {
-        AccessScope::new(
-            self.owner.tenant_id().clone(),
-            self.owner.owner_id().clone(),
-            vec![self.owner.owner_id().clone()],
-        )
-    }
 }
 
 #[derive(Clone)]
@@ -1940,6 +1954,10 @@ fn platform_application_error(failure: &PlatformFailure) -> ApplicationError {
 
 fn invalid() -> ApplicationError {
     map_domain_error(DomainErrorCode::InvalidValue)
+}
+
+fn forbidden() -> ApplicationError {
+    ApplicationError::new(ApplicationErrorCategory::Forbidden, false)
 }
 
 #[cfg(test)]

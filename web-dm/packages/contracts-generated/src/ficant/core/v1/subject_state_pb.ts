@@ -4,10 +4,12 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import type { DecimalValue, Ulid, VersionRef } from "./common_pb";
+import type { DecimalValue, OwnerRef, Ulid, VersionRef } from "./common_pb";
 import { file_ficant_core_v1_common } from "./common_pb";
 import type { ErrorDetail } from "./error_pb";
 import { file_ficant_core_v1_error } from "./error_pb";
+import type { ChangeJustification } from "./governance_pb";
+import { file_ficant_core_v1_governance } from "./governance_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
@@ -16,7 +18,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ficant/core/v1/subject_state.proto.
  */
 export const file_ficant_core_v1_subject_state: GenFile = /*@__PURE__*/
-  fileDesc("CiJmaWNhbnQvY29yZS92MS9zdWJqZWN0X3N0YXRlLnByb3RvEg5maWNhbnQuY29yZS52MSLVAgoUU3ViamVjdFN0YXRlU25hcHNob3QSKQoLc25hcHNob3RfaWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEi8KC3N1YmplY3RfcmVmGAIgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIxCgtuZXRfY2FwaXRhbBgDIAEoCzIcLmZpY2FudC5jb3JlLnYxLkRlY2ltYWxWYWx1ZRI0Cg5saW1pdF9jZWlsaW5ncxgEIAMoCzIcLmZpY2FudC5jb3JlLnYxLkxpbWl0Q2VpbGluZxIvCgtvYnNlcnZlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdmlzaWJsZV9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFwoPbWFya2V0X3RpbWV6b25lGAcgASgJIlEKDExpbWl0Q2VpbGluZxISCgpsaW1pdF9jb2RlGAEgASgJEi0KB2NlaWxpbmcYAiABKAsyHC5maWNhbnQuY29yZS52MS5EZWNpbWFsVmFsdWUiVQobUmVnaXN0ZXJTdWJqZWN0U3RhdGVSZXF1ZXN0EjYKCHNuYXBzaG90GAEgASgLMiQuZmljYW50LmNvcmUudjEuU3ViamVjdFN0YXRlU25hcHNob3QikAEKHFJlZ2lzdGVyU3ViamVjdFN0YXRlUmVzcG9uc2USOAoIc25hcHNob3QYASABKAsyJC5maWNhbnQuY29yZS52MS5TdWJqZWN0U3RhdGVTbmFwc2hvdEgAEiwKBWVycm9yGAIgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHQidQoWR2V0U3ViamVjdFN0YXRlUmVxdWVzdBIpCgtzbmFwc2hvdF9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSMAoMa25vd2xlZGdlX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKLAQoXR2V0U3ViamVjdFN0YXRlUmVzcG9uc2USOAoIc25hcHNob3QYASABKAsyJC5maWNhbnQuY29yZS52MS5TdWJqZWN0U3RhdGVTbmFwc2hvdEgAEiwKBWVycm9yGAIgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHRiBnByb3RvMw", [file_ficant_core_v1_common, file_ficant_core_v1_error, file_google_protobuf_timestamp]);
+  fileDesc("CiJmaWNhbnQvY29yZS92MS9zdWJqZWN0X3N0YXRlLnByb3RvEg5maWNhbnQuY29yZS52MSL+AgoUU3ViamVjdFN0YXRlU25hcHNob3QSKQoLc25hcHNob3RfaWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEi8KC3N1YmplY3RfcmVmGAIgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIxCgtuZXRfY2FwaXRhbBgDIAEoCzIcLmZpY2FudC5jb3JlLnYxLkRlY2ltYWxWYWx1ZRI0Cg5saW1pdF9jZWlsaW5ncxgEIAMoCzIcLmZpY2FudC5jb3JlLnYxLkxpbWl0Q2VpbGluZxIvCgtvYnNlcnZlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdmlzaWJsZV9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFwoPbWFya2V0X3RpbWV6b25lGAcgASgJEicKBW93bmVyGAggASgLMhguZmljYW50LmNvcmUudjEuT3duZXJSZWYiUQoMTGltaXRDZWlsaW5nEhIKCmxpbWl0X2NvZGUYASABKAkSLQoHY2VpbGluZxgCIAEoCzIcLmZpY2FudC5jb3JlLnYxLkRlY2ltYWxWYWx1ZSKjAQobUmVnaXN0ZXJTdWJqZWN0U3RhdGVSZXF1ZXN0EjYKCHNuYXBzaG90GAEgASgLMiQuZmljYW50LmNvcmUudjEuU3ViamVjdFN0YXRlU25hcHNob3QSMwoGY2hhbmdlGAIgASgLMiMuZmljYW50LmNvcmUudjEuQ2hhbmdlSnVzdGlmaWNhdGlvbhIXCg9pZGVtcG90ZW5jeV9rZXkYAyABKAkikAEKHFJlZ2lzdGVyU3ViamVjdFN0YXRlUmVzcG9uc2USOAoIc25hcHNob3QYASABKAsyJC5maWNhbnQuY29yZS52MS5TdWJqZWN0U3RhdGVTbmFwc2hvdEgAEiwKBWVycm9yGAIgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHQidQoWR2V0U3ViamVjdFN0YXRlUmVxdWVzdBIpCgtzbmFwc2hvdF9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSMAoMa25vd2xlZGdlX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKLAQoXR2V0U3ViamVjdFN0YXRlUmVzcG9uc2USOAoIc25hcHNob3QYASABKAsyJC5maWNhbnQuY29yZS52MS5TdWJqZWN0U3RhdGVTbmFwc2hvdEgAEiwKBWVycm9yGAIgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHRiBnByb3RvMw", [file_ficant_core_v1_common, file_ficant_core_v1_error, file_ficant_core_v1_governance, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message ficant.core.v1.SubjectStateSnapshot
@@ -56,6 +58,11 @@ export type SubjectStateSnapshot = Message<"ficant.core.v1.SubjectStateSnapshot"
    * @generated from field: string market_timezone = 7;
    */
   marketTimezone: string;
+
+  /**
+   * @generated from field: ficant.core.v1.OwnerRef owner = 8;
+   */
+  owner?: OwnerRef;
 };
 
 /**
@@ -95,6 +102,16 @@ export type RegisterSubjectStateRequest = Message<"ficant.core.v1.RegisterSubjec
    * @generated from field: ficant.core.v1.SubjectStateSnapshot snapshot = 1;
    */
   snapshot?: SubjectStateSnapshot;
+
+  /**
+   * @generated from field: ficant.core.v1.ChangeJustification change = 2;
+   */
+  change?: ChangeJustification;
+
+  /**
+   * @generated from field: string idempotency_key = 3;
+   */
+  idempotencyKey: string;
 };
 
 /**

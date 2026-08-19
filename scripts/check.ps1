@@ -61,6 +61,7 @@ if ($IncludeIntegration) {
         New-FicantCheckStep -Name 'Phase 2D futures-hedge integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'futures_hedge_sit', '--', '--test-threads=1')
         New-FicantCheckStep -Name 'Phase 3A data-source integration' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-File', 'scripts/check-phase3a.ps1')
         New-FicantCheckStep -Name 'Phase 3B immutable snapshot integration' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-File', 'scripts/check-phase3b.ps1')
+        New-FicantCheckStep -Name 'R6A governed input-plane production integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-server', '--test', 'r6a_governed_input_sit', '--', '--ignored', '--test-threads=1')
     )
 }
 

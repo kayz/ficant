@@ -1,6 +1,12 @@
 use async_trait::async_trait;
+use ficant_domain::governance::{
+    ChangeJustification, FoundationChangeOperation, FoundationChangeRecord,
+    FoundationChangeRecordInput, FoundationResourceKind, FoundationResourceRef, PlatformRole,
+};
 use ficant_domain::market::{Cashflow, CurveSnapshot, Quote, Trade, Valuation};
-use ficant_domain::primitives::{LineageRef, MarketTime, OwnerRef, Ulid, Version, VersionRef};
+use ficant_domain::primitives::{
+    ContentHash, LineageRef, MarketTime, OwnerRef, Ulid, Version, VersionRef,
+};
 use ficant_domain::{ContentAddressed, DomainErrorCode, Lineaged};
 
 use super::blob_store::VerifiedBlobRef;
@@ -9,10 +15,13 @@ use super::fingerprint::{
     version_ref_bytes,
 };
 use super::{
-    AccessScope, ApplicationResult, CursorPage, FullyValidatedMarketFact, IdempotencyKey,
-    MarketFactRuleProof, OperationFingerprint, PageRequest, ResolvedMarketFactProof,
+    AccessScope, ApplicationResult, CursorPage, FoundationChangeContext, FullyValidatedMarketFact,
+    IdempotencyKey, MarketFactRuleProof, OperationFingerprint, PageRequest,
+    ResolvedMarketFactProof,
 };
 use crate::{ApplicationError, ApplicationErrorCategory, map_domain_error};
+
+pub const MARKET_FACT_WRITE_SCOPE: &str = "facts:write";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MarketFact {
@@ -73,6 +82,12 @@ impl MarketFact {
     }
 }
 
+/// Returns the immutable canonical identity of one stored `MarketFact` payload.
+#[must_use]
+pub fn market_fact_content_hash(fact: &MarketFact) -> ContentHash {
+    ContentHash::digest(&fact_bytes(fact))
+}
+
 /// Raw facts cannot construct append commands without resolved-unit evidence.
 ///
 /// ```compile_fail
@@ -111,6 +126,9 @@ impl AppendMarketFact {
     ) -> ApplicationResult<Self> {
         validated.validate()?;
         let (fact, proof, rule_proof) = validated.into_parts();
+        if fact.supersedes_id().is_some() {
+            return Err(map_domain_error(DomainErrorCode::BrokenLineage));
+        }
         let mut canonical = FingerprintBuilder::new("append-market-fact/v1");
         canonical.field(2, &fact_bytes(&fact));
         let fingerprint = canonical.finish();
@@ -410,8 +428,313 @@ impl PublishCurveSnapshot {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GovernedAppendMarketFact {
+    change_context: FoundationChangeContext,
+    append: AppendMarketFact,
+    fingerprint: OperationFingerprint,
+}
+
+impl GovernedAppendMarketFact {
+    /// Creates the only administrator command accepted by the R6A direct Fact append path.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, validation, or idempotency failure.
+    pub fn new(
+        change_context: FoundationChangeContext,
+        validated: FullyValidatedMarketFact,
+        idempotency_key: IdempotencyKey,
+    ) -> ApplicationResult<Self> {
+        change_context.principal().authorize_mutation(
+            PlatformRole::PlatformAdmin,
+            MARKET_FACT_WRITE_SCOPE,
+            validated.fact().owner(),
+        )?;
+        validated.authorize_scope(change_context.principal().access_scope())?;
+        let append = AppendMarketFact::new(validated, idempotency_key)?;
+        let fingerprint = governed_fingerprint(
+            "governed-append-market-fact/v1",
+            &change_context,
+            append.fingerprint(),
+            None,
+        );
+        Ok(Self {
+            change_context,
+            append,
+            fingerprint,
+        })
+    }
+
+    #[must_use]
+    pub fn change_context(&self) -> &FoundationChangeContext {
+        &self.change_context
+    }
+    #[must_use]
+    pub fn command(&self) -> &AppendMarketFact {
+        &self.append
+    }
+    #[must_use]
+    pub fn fingerprint(&self) -> &OperationFingerprint {
+        &self.fingerprint
+    }
+    /// Builds the immutable audit record.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation failure when the audit record cannot be materialized.
+    pub fn change_record(&self) -> ApplicationResult<FoundationChangeRecord> {
+        fact_change_record(
+            &self.change_context,
+            FoundationChangeOperation::AppendMarketFact,
+            self.append.fact(),
+            None,
+            &self.fingerprint,
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GovernedCorrectMarketFact {
+    change_context: FoundationChangeContext,
+    correction: CorrectMarketFact,
+    fingerprint: OperationFingerprint,
+}
+
+impl GovernedCorrectMarketFact {
+    /// Creates the only administrator command accepted by the R6A Fact correction path.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, validation, lineage, or idempotency failure.
+    pub fn new(
+        change_context: FoundationChangeContext,
+        original_fact_id: Ulid,
+        validated: FullyValidatedMarketFact,
+        idempotency_key: IdempotencyKey,
+    ) -> ApplicationResult<Self> {
+        change_context.principal().authorize_mutation(
+            PlatformRole::PlatformAdmin,
+            MARKET_FACT_WRITE_SCOPE,
+            validated.fact().owner(),
+        )?;
+        validated.authorize_scope(change_context.principal().access_scope())?;
+        let correction = CorrectMarketFact::new(original_fact_id, validated, idempotency_key)?;
+        let fingerprint = governed_fingerprint(
+            "governed-correct-market-fact/v1",
+            &change_context,
+            correction.fingerprint(),
+            None,
+        );
+        Ok(Self {
+            change_context,
+            correction,
+            fingerprint,
+        })
+    }
+
+    #[must_use]
+    pub fn change_context(&self) -> &FoundationChangeContext {
+        &self.change_context
+    }
+    #[must_use]
+    pub fn command(&self) -> &CorrectMarketFact {
+        &self.correction
+    }
+    #[must_use]
+    pub fn fingerprint(&self) -> &OperationFingerprint {
+        &self.fingerprint
+    }
+    /// Builds the immutable correction audit record.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation failure when the audit record cannot be materialized.
+    pub fn change_record(
+        &self,
+        before_hash: ContentHash,
+    ) -> ApplicationResult<FoundationChangeRecord> {
+        fact_change_record(
+            &self.change_context,
+            FoundationChangeOperation::CorrectMarketFact,
+            self.correction.correction(),
+            Some(before_hash),
+            &self.fingerprint,
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GovernedPublishCurveSnapshot {
+    change_context: FoundationChangeContext,
+    publish: PublishCurveSnapshot,
+    fingerprint: OperationFingerprint,
+}
+
+impl GovernedPublishCurveSnapshot {
+    /// Creates the only administrator command accepted by the R6A Curve publication path.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, blob, validation, or idempotency failure.
+    pub fn new(
+        change_context: FoundationChangeContext,
+        curve: CurveSnapshot,
+        declared_blob_size: u64,
+        verified_blob: VerifiedBlobRef,
+        idempotency_key: IdempotencyKey,
+    ) -> ApplicationResult<Self> {
+        change_context.principal().authorize_mutation(
+            PlatformRole::PlatformAdmin,
+            MARKET_FACT_WRITE_SCOPE,
+            curve.owner(),
+        )?;
+        let publish = PublishCurveSnapshot::new(
+            change_context.principal().access_scope().clone(),
+            curve,
+            declared_blob_size,
+            verified_blob,
+            idempotency_key,
+        )?;
+        let fingerprint = governed_fingerprint(
+            "governed-publish-curve-snapshot/v1",
+            &change_context,
+            publish.fingerprint(),
+            None,
+        );
+        Ok(Self {
+            change_context,
+            publish,
+            fingerprint,
+        })
+    }
+
+    #[must_use]
+    pub fn change_context(&self) -> &FoundationChangeContext {
+        &self.change_context
+    }
+    #[must_use]
+    pub fn command(&self) -> &PublishCurveSnapshot {
+        &self.publish
+    }
+    #[must_use]
+    pub fn fingerprint(&self) -> &OperationFingerprint {
+        &self.fingerprint
+    }
+    /// Builds the immutable curve publication audit record.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation failure when the audit record cannot be materialized.
+    pub fn change_record(&self) -> ApplicationResult<FoundationChangeRecord> {
+        FoundationChangeRecord::new(FoundationChangeRecordInput {
+            record_id: self.change_context.record_id().clone(),
+            actor_id: self.change_context.principal().actor_id().clone(),
+            owner: self.publish.curve().owner().clone(),
+            active_role: PlatformRole::PlatformAdmin,
+            operation: FoundationChangeOperation::PublishCurveSnapshot,
+            resource: FoundationResourceRef::unversioned(
+                FoundationResourceKind::CurveSnapshot,
+                self.publish.curve().id().clone(),
+            ),
+            before_hash: None,
+            after_hash: self.publish.curve().content_hash().clone(),
+            change: self.change_context.change().clone(),
+            request_fingerprint: self.fingerprint.content_hash().clone(),
+            occurred_at: self.change_context.occurred_at().clone(),
+            authorization_ref: None,
+        })
+        .map_err(map_domain_error)
+    }
+}
+
+fn fact_change_record(
+    context: &FoundationChangeContext,
+    operation: FoundationChangeOperation,
+    fact: &MarketFact,
+    before_hash: Option<ContentHash>,
+    fingerprint: &OperationFingerprint,
+) -> ApplicationResult<FoundationChangeRecord> {
+    FoundationChangeRecord::new(FoundationChangeRecordInput {
+        record_id: context.record_id().clone(),
+        actor_id: context.principal().actor_id().clone(),
+        owner: fact.owner().clone(),
+        active_role: PlatformRole::PlatformAdmin,
+        operation,
+        resource: FoundationResourceRef::unversioned(
+            FoundationResourceKind::MarketFact,
+            fact.id().clone(),
+        ),
+        before_hash,
+        after_hash: market_fact_content_hash(fact),
+        change: context.change().clone(),
+        request_fingerprint: fingerprint.content_hash().clone(),
+        occurred_at: context.occurred_at().clone(),
+        authorization_ref: None,
+    })
+    .map_err(map_domain_error)
+}
+
+fn governed_fingerprint(
+    namespace: &'static str,
+    context: &FoundationChangeContext,
+    command: &OperationFingerprint,
+    authorization: Option<&VersionRef>,
+) -> OperationFingerprint {
+    let mut canonical = FingerprintBuilder::new(namespace);
+    canonical.field(
+        2,
+        context.principal().fingerprint().content_hash().as_bytes(),
+    );
+    canonical.field(3, command.content_hash().as_bytes());
+    canonical.field(4, &change_bytes(context.change()));
+    if let Some(reference) = authorization {
+        canonical.field(5, &version_ref_bytes(reference));
+    }
+    canonical.finish()
+}
+
+fn change_bytes(change: &ChangeJustification) -> Vec<u8> {
+    let mut bytes = change.reason().as_bytes().to_vec();
+    for source in change.sources() {
+        bytes.extend_from_slice(source.uri().as_bytes());
+        bytes.extend_from_slice(source.sha256().as_bytes());
+    }
+    bytes
+}
+
 #[async_trait]
 pub trait MarketFactRepository: Send + Sync {
+    async fn append_governed_fact(
+        &self,
+        _command: GovernedAppendMarketFact,
+    ) -> ApplicationResult<MarketFact> {
+        Err(ApplicationError::new(
+            ApplicationErrorCategory::StateConflict,
+            false,
+        ))
+    }
+
+    async fn append_governed_correction(
+        &self,
+        _command: GovernedCorrectMarketFact,
+    ) -> ApplicationResult<MarketFact> {
+        Err(ApplicationError::new(
+            ApplicationErrorCategory::StateConflict,
+            false,
+        ))
+    }
+
+    async fn publish_governed_curve_snapshot(
+        &self,
+        _command: GovernedPublishCurveSnapshot,
+    ) -> ApplicationResult<CurveSnapshot> {
+        Err(ApplicationError::new(
+            ApplicationErrorCategory::StateConflict,
+            false,
+        ))
+    }
+
     /// Appends an immutable market fact.
     ///
     /// # Errors
@@ -459,4 +782,123 @@ pub trait MarketFactRepository: Send + Sync {
         scope: &AccessScope,
         curve_snapshot_id: Ulid,
     ) -> ApplicationResult<Option<CurveSnapshot>>;
+}
+
+/// Application boundary for validated immutable facts, corrections, queries, and curve metadata.
+pub struct MarketFactUseCase<'a> {
+    repository: &'a dyn MarketFactRepository,
+}
+
+impl<'a> MarketFactUseCase<'a> {
+    #[must_use]
+    pub const fn new(repository: &'a dyn MarketFactRepository) -> Self {
+        Self { repository }
+    }
+
+    /// Appends one governed immutable fact.
+    ///
+    /// # Errors
+    ///
+    /// Returns a classified authorization, validation, lineage, or repository error.
+    pub async fn append_governed(
+        &self,
+        command: GovernedAppendMarketFact,
+    ) -> ApplicationResult<MarketFact> {
+        self.repository.append_governed_fact(command).await
+    }
+
+    /// Appends one governed immutable correction.
+    ///
+    /// # Errors
+    ///
+    /// Returns a classified authorization, validation, lineage, or repository error.
+    pub async fn correct_governed(
+        &self,
+        command: GovernedCorrectMarketFact,
+    ) -> ApplicationResult<MarketFact> {
+        self.repository.append_governed_correction(command).await
+    }
+
+    /// Publishes one governed immutable curve snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns a classified authorization, blob, lineage, or repository error.
+    pub async fn publish_curve_governed(
+        &self,
+        command: GovernedPublishCurveSnapshot,
+    ) -> ApplicationResult<CurveSnapshot> {
+        self.repository
+            .publish_governed_curve_snapshot(command)
+            .await
+    }
+
+    /// Appends one legacy internally validated fact under an exact scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns a classified scope, validation, lineage, or repository error.
+    pub async fn append(
+        &self,
+        scope: &AccessScope,
+        command: AppendMarketFact,
+    ) -> ApplicationResult<MarketFact> {
+        scope.authorize(command.fact().owner())?;
+        self.repository.append_fact(command).await
+    }
+
+    /// Appends one legacy internally validated correction under an exact scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns a classified scope, validation, lineage, or repository error.
+    pub async fn correct(
+        &self,
+        scope: &AccessScope,
+        command: CorrectMarketFact,
+    ) -> ApplicationResult<MarketFact> {
+        scope.authorize(command.correction().owner())?;
+        self.repository.append_correction(command).await
+    }
+
+    /// Queries one exact instrument fact window.
+    ///
+    /// # Errors
+    ///
+    /// Returns a classified scope, cursor, validation, or repository error.
+    pub async fn query(
+        &self,
+        scope: &AccessScope,
+        query: MarketFactWindow,
+    ) -> ApplicationResult<CursorPage<MarketFact>> {
+        query.authorize_scope(scope)?;
+        self.repository.query_instrument_window(scope, query).await
+    }
+
+    /// Publishes one legacy internally validated curve snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns a classified blob, lineage, validation, or repository error.
+    pub async fn publish_curve(
+        &self,
+        command: PublishCurveSnapshot,
+    ) -> ApplicationResult<CurveSnapshot> {
+        self.repository.publish_curve_snapshot(command).await
+    }
+
+    /// Reads one exact immutable curve snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns a classified scope, integrity, or repository error.
+    pub async fn get_curve(
+        &self,
+        scope: &AccessScope,
+        curve_snapshot_id: Ulid,
+    ) -> ApplicationResult<Option<CurveSnapshot>> {
+        self.repository
+            .get_curve_snapshot(scope, curve_snapshot_id)
+            .await
+    }
 }

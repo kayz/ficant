@@ -4,7 +4,8 @@ use crate::grpc_web::request_credential;
 use crate::registry::PlatformPort;
 use chrono::{DateTime, NaiveDate, Utc};
 use ficant_application::ports::{
-    AccessScope, BlobStore, IdempotencyKey, PositionSnapshotRepository, SnapshotRepository,
+    AccessScope, AuthorizedPrincipal, BlobStore, FoundationChangeContext, IdempotencyKey,
+    PositionSnapshotRepository, SnapshotRepository,
 };
 use ficant_application::{
     ApplicationError, ApplicationErrorCategory, PositionSnapshotPayload, PositionViewsUseCase,
@@ -14,6 +15,9 @@ use ficant_contracts::ficant::core::v1 as core;
 use ficant_contracts::ficant::market::v1 as market;
 use ficant_contracts::ficant::research::v1 as pb;
 use ficant_contracts::ficant::research::v1::position_snapshot_service_server::PositionSnapshotService;
+use ficant_domain::governance::{
+    FoundationResourceKind, FoundationResourceRef, PlatformRole, deterministic_change_record_id,
+};
 use ficant_domain::market::PriceSourceType;
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, LineageRef, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
@@ -34,7 +38,6 @@ const WRITE_SCOPE: &str = "positions:write";
 #[derive(Clone)]
 pub struct PositionSnapshotGrpcService {
     identity: Arc<dyn PlatformPort>,
-    access_scope: AccessScope,
     positions: Arc<dyn PositionSnapshotRepository>,
     snapshots: Arc<dyn SnapshotRepository>,
     blobs: Arc<dyn BlobStore>,
@@ -49,7 +52,7 @@ impl PositionSnapshotGrpcService {
     /// Returns an error when the trace-signing key is shorter than the frozen minimum.
     pub fn new(
         identity: Arc<dyn PlatformPort>,
-        access_scope: AccessScope,
+        _access_scope: AccessScope,
         positions: Arc<dyn PositionSnapshotRepository>,
         snapshots: Arc<dyn SnapshotRepository>,
         blobs: Arc<dyn BlobStore>,
@@ -57,7 +60,6 @@ impl PositionSnapshotGrpcService {
     ) -> Result<Self, &'static str> {
         Ok(Self {
             identity,
-            access_scope,
             positions,
             snapshots,
             blobs,
@@ -69,17 +71,21 @@ impl PositionSnapshotGrpcService {
         &self,
         request: &Request<impl Sized>,
         required_scope: &str,
-    ) -> Result<(), ApplicationError> {
+        required_role: Option<PlatformRole>,
+    ) -> Result<AuthorizedPrincipal, ApplicationError> {
         let credential = request_credential(request.metadata());
         let session = self
             .identity
             .current_session(&credential)
             .map_err(|failure| platform_application_error(&failure))?;
-        if session.has_scope(required_scope) {
-            Ok(())
-        } else {
-            Err(forbidden())
+        let principal = session.authorized_principal()?;
+        if !principal.has_scope(required_scope) {
+            return Err(forbidden());
         }
+        if let Some(role) = required_role {
+            principal.require_role(role)?;
+        }
+        Ok(principal)
     }
 
     fn error(&self, operation: &str, error: &ApplicationError) -> core::ErrorDetail {
@@ -95,21 +101,37 @@ impl PositionSnapshotService for PositionSnapshotGrpcService {
         request: Request<pb::PublishPositionSnapshotRequest>,
     ) -> Result<Response<pb::PublishPositionSnapshotResponse>, Status> {
         const OPERATION: &str = "positions.publish";
-        let result = match self.authorize(&request, WRITE_SCOPE) {
+        let result = match self.authorize(&request, WRITE_SCOPE, Some(PlatformRole::PlatformAdmin))
+        {
             Err(error) => Err(error),
-            Ok(()) => match (|| {
+            Ok(principal) => match (|| {
                 let snapshot = parse_snapshot(request.get_ref().snapshot.as_ref())?;
                 let key = IdempotencyKey::new(request.get_ref().idempotency_key.clone())?;
                 let payload = PositionSnapshotPayload::new(snapshot, key)?;
-                if self.access_scope.allows(payload.snapshot().owner()) {
-                    Ok(payload)
-                } else {
-                    Err(forbidden())
-                }
+                authorize_position_publish(&principal, payload.snapshot().owner())?;
+                let occurred_at = server_market_time();
+                let resource = FoundationResourceRef::unversioned(
+                    FoundationResourceKind::PositionSnapshot,
+                    payload.snapshot().id().clone(),
+                );
+                let record_id = deterministic_change_record_id(
+                    &occurred_at,
+                    principal.actor_id(),
+                    &resource,
+                    &request.get_ref().idempotency_key,
+                )
+                .map_err(map_domain_error)?;
+                let context = FoundationChangeContext::administrator(
+                    principal,
+                    crate::market_definition::parse_change(request.get_ref().change.as_ref())?,
+                    record_id,
+                    occurred_at,
+                )?;
+                Ok((context, payload))
             })() {
-                Ok(payload) => {
+                Ok((context, payload)) => {
                     PublishPositionSnapshot::new(self.blobs.as_ref(), self.snapshots.as_ref())
-                        .execute(&self.access_scope, payload)
+                        .execute(context, payload)
                         .await
                 }
                 Err(error) => Err(error),
@@ -132,15 +154,15 @@ impl PositionSnapshotService for PositionSnapshotGrpcService {
         request: Request<pb::GetPositionSnapshotRequest>,
     ) -> Result<Response<pb::GetPositionSnapshotResponse>, Status> {
         const OPERATION: &str = "positions.get";
-        let result = match self.authorize(&request, READ_SCOPE) {
+        let result = match self.authorize(&request, READ_SCOPE, None) {
             Err(error) => Err(error),
-            Ok(()) => match (
+            Ok(principal) => match (
                 parse_ulid(request.get_ref().snapshot_id.as_ref()),
                 parse_market_time(request.get_ref().knowledge_at.as_ref()),
             ) {
                 (Ok(snapshot_id), Ok(knowledge_at)) => self
                     .positions
-                    .get_position_snapshot(&self.access_scope, snapshot_id, knowledge_at)
+                    .get_position_snapshot(principal.access_scope(), snapshot_id, knowledge_at)
                     .await
                     .and_then(|value| value.ok_or_else(not_found)),
                 (Err(error), _) | (_, Err(error)) => Err(error),
@@ -161,16 +183,21 @@ impl PositionSnapshotService for PositionSnapshotGrpcService {
         request: Request<pb::ResolvePositionSnapshotRequest>,
     ) -> Result<Response<pb::ResolvePositionSnapshotResponse>, Status> {
         const OPERATION: &str = "positions.resolve";
-        let result = match self.authorize(&request, READ_SCOPE) {
+        let result = match self.authorize(&request, READ_SCOPE, None) {
             Err(error) => Err(error),
-            Ok(()) => match (
+            Ok(principal) => match (
                 parse_version_ref(request.get_ref().subject_ref.as_ref()),
                 parse_market_time(request.get_ref().observed_at.as_ref()),
                 parse_market_time(request.get_ref().knowledge_at.as_ref()),
             ) {
                 (Ok(subject_ref), Ok(observed_at), Ok(knowledge_at)) => {
                     PositionViewsUseCase::new(self.positions.as_ref())
-                        .resolve(&self.access_scope, subject_ref, observed_at, knowledge_at)
+                        .resolve(
+                            principal.access_scope(),
+                            subject_ref,
+                            observed_at,
+                            knowledge_at,
+                        )
                         .await
                 }
                 (Err(error), _, _) | (_, Err(error), _) | (_, _, Err(error)) => Err(error),
@@ -193,15 +220,15 @@ impl PositionSnapshotService for PositionSnapshotGrpcService {
         request: Request<pb::GetPositionViewsRequest>,
     ) -> Result<Response<pb::GetPositionViewsResponse>, Status> {
         const OPERATION: &str = "positions.views";
-        let result = match self.authorize(&request, READ_SCOPE) {
+        let result = match self.authorize(&request, READ_SCOPE, None) {
             Err(error) => Err(error),
-            Ok(()) => match (
+            Ok(principal) => match (
                 parse_ulid(request.get_ref().snapshot_id.as_ref()),
                 parse_market_time(request.get_ref().knowledge_at.as_ref()),
             ) {
                 (Ok(snapshot_id), Ok(knowledge_at)) => {
                     PositionViewsUseCase::new(self.positions.as_ref())
-                        .views(&self.access_scope, snapshot_id, knowledge_at)
+                        .views(principal.access_scope(), snapshot_id, knowledge_at)
                         .await
                 }
                 (Err(error), _) | (_, Err(error)) => Err(error),
@@ -222,15 +249,15 @@ impl PositionSnapshotService for PositionSnapshotGrpcService {
         request: Request<pb::CalculateCapitalUseRequest>,
     ) -> Result<Response<pb::CalculateCapitalUseResponse>, Status> {
         const OPERATION: &str = "positions.capital-use";
-        let result = match self.authorize(&request, READ_SCOPE) {
+        let result = match self.authorize(&request, READ_SCOPE, None) {
             Err(error) => Err(error),
-            Ok(()) => match (
+            Ok(principal) => match (
                 parse_ulid(request.get_ref().snapshot_id.as_ref()),
                 parse_market_time(request.get_ref().knowledge_at.as_ref()),
             ) {
                 (Ok(snapshot_id), Ok(knowledge_at)) => {
                     PositionViewsUseCase::new(self.positions.as_ref())
-                        .capital_use(&self.access_scope, snapshot_id, knowledge_at)
+                        .capital_use(principal.access_scope(), snapshot_id, knowledge_at)
                         .await
                 }
                 (Err(error), _) | (_, Err(error)) => Err(error),
@@ -247,6 +274,19 @@ impl PositionSnapshotService for PositionSnapshotGrpcService {
             }),
         }))
     }
+}
+
+fn authorize_position_publish(
+    principal: &AuthorizedPrincipal,
+    owner: &OwnerRef,
+) -> Result<(), ApplicationError> {
+    principal.authorize_mutation(PlatformRole::PlatformAdmin, WRITE_SCOPE, owner)
+}
+
+fn server_market_time() -> MarketTime {
+    let instant = Utc::now();
+    MarketTime::new(instant, "UTC", instant.date_naive())
+        .expect("UTC system time is one valid MarketTime")
 }
 
 fn parse_snapshot(
@@ -594,6 +634,28 @@ fn not_found() -> ApplicationError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn researcher_cannot_publish_positions_even_with_the_write_scope() {
+        let owner = OwnerRef::new(
+            Ulid::new("01J00000000000000000000002").unwrap(),
+            Ulid::new("01J00000000000000000000003").unwrap(),
+        );
+        let principal = AuthorizedPrincipal::new(
+            "position-researcher".to_owned(),
+            Ulid::new("01J00000000000000000000001").unwrap(),
+            owner.tenant_id().clone(),
+            vec![owner.owner_id().clone()],
+            PlatformRole::Researcher,
+            vec![WRITE_SCOPE.to_owned()],
+            ContentHash::digest(b"credential-fingerprint"),
+        )
+        .unwrap();
+
+        let error = authorize_position_publish(&principal, &owner)
+            .expect_err("researcher mutation must fail before blob staging");
+        assert_eq!(error.category(), ApplicationErrorCategory::Forbidden);
+    }
 
     #[test]
     fn position_parser_rejects_proto_unspecified_values_and_keeps_explicit_unknown() {

@@ -65,7 +65,7 @@ pub struct DataSourceDefinition {
     #[prost(enumeration="PriceSourceType", tag="9")]
     pub price_source_type: i32,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegisterDataSourceRequest {
     #[prost(string, tag="1")]
     pub idempotency_key: ::prost::alloc::string::String,
@@ -73,6 +73,8 @@ pub struct RegisterDataSourceRequest {
     pub expected_latest_version: u64,
     #[prost(message, optional, tag="3")]
     pub definition: ::core::option::Option<DataSourceDefinition>,
+    #[prost(message, optional, tag="4")]
+    pub change: ::core::option::Option<super::super::core::v1::ChangeJustification>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegisterDataSourceResponse {
@@ -105,6 +107,142 @@ pub mod get_data_source_response {
     pub enum Result {
         #[prost(message, tag="1")]
         Definition(super::DataSourceDefinition),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DataSourceAuthorization {
+    #[prost(message, optional, tag="1")]
+    pub r#ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="2")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, optional, tag="3")]
+    pub source: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="4")]
+    pub source_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(enumeration="ImportInterface", tag="5")]
+    pub interface: i32,
+    #[prost(string, tag="6")]
+    pub schema_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="7")]
+    pub schema_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="8")]
+    pub effective_from: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="9")]
+    pub effective_to: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(enumeration="DataSourceAuthorizationState", tag="10")]
+    pub state: i32,
+    #[prost(message, optional, tag="11")]
+    pub supersedes: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="12")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="13")]
+    pub mapping_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="14")]
+    pub mapping_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct InstrumentMappingEntry {
+    #[prost(string, tag="1")]
+    pub source_instrument_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub effective_from: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="3")]
+    pub effective_to: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="4")]
+    pub instrument: ::core::option::Option<super::super::core::v1::VersionRef>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InstrumentMapping {
+    #[prost(message, optional, tag="1")]
+    pub mapping_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, optional, tag="3")]
+    pub source: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, repeated, tag="4")]
+    pub entries: ::prost::alloc::vec::Vec<InstrumentMappingEntry>,
+    #[prost(message, optional, tag="5")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PublishDataSourceAuthorizationRequest {
+    #[prost(string, tag="1")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(uint64, tag="2")]
+    pub expected_latest_version: u64,
+    #[prost(message, optional, tag="3")]
+    pub authorization: ::core::option::Option<DataSourceAuthorization>,
+    #[prost(message, optional, tag="4")]
+    pub change: ::core::option::Option<super::super::core::v1::ChangeJustification>,
+    #[prost(message, optional, tag="5")]
+    pub mapping: ::core::option::Option<InstrumentMapping>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PublishDataSourceAuthorizationResponse {
+    #[prost(oneof="publish_data_source_authorization_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<publish_data_source_authorization_response::Result>,
+}
+/// Nested message and enum types in `PublishDataSourceAuthorizationResponse`.
+pub mod publish_data_source_authorization_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Authorization(super::DataSourceAuthorization),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetDataSourceAuthorizationRequest {
+    #[prost(message, optional, tag="1")]
+    pub authorization_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetDataSourceAuthorizationResponse {
+    #[prost(oneof="get_data_source_authorization_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_data_source_authorization_response::Result>,
+}
+/// Nested message and enum types in `GetDataSourceAuthorizationResponse`.
+pub mod get_data_source_authorization_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Authorization(super::DataSourceAuthorization),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListDataSourceAuthorizationsRequest {
+    #[prost(message, optional, tag="1")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, optional, tag="2")]
+    pub data_source: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(enumeration="ImportInterface", tag="3")]
+    pub import_interface: i32,
+    #[prost(message, optional, tag="4")]
+    pub page: ::core::option::Option<super::super::core::v1::PageRequest>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DataSourceAuthorizations {
+    #[prost(message, repeated, tag="1")]
+    pub authorizations: ::prost::alloc::vec::Vec<DataSourceAuthorization>,
+    #[prost(message, optional, tag="2")]
+    pub page: ::core::option::Option<super::super::core::v1::PageResponse>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListDataSourceAuthorizationsResponse {
+    #[prost(oneof="list_data_source_authorizations_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<list_data_source_authorizations_response::Result>,
+}
+/// Nested message and enum types in `ListDataSourceAuthorizationsResponse`.
+pub mod list_data_source_authorizations_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Authorizations(super::DataSourceAuthorizations),
         #[prost(message, tag="2")]
         Error(super::super::super::core::v1::ErrorDetail),
     }
@@ -169,6 +307,61 @@ impl PriceSourceType {
             "PRICE_SOURCE_TYPE_ACTIVE_QUOTE" => Some(Self::ActiveQuote),
             "PRICE_SOURCE_TYPE_MODEL_VALUATION" => Some(Self::ModelValuation),
             "PRICE_SOURCE_TYPE_CURVE_INTERPOLATION" => Some(Self::CurveInterpolation),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ImportInterface {
+    Unspecified = 0,
+    CanonicalQuoteSnapshot = 1,
+}
+impl ImportInterface {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "IMPORT_INTERFACE_UNSPECIFIED",
+            Self::CanonicalQuoteSnapshot => "IMPORT_INTERFACE_CANONICAL_QUOTE_SNAPSHOT",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "IMPORT_INTERFACE_UNSPECIFIED" => Some(Self::Unspecified),
+            "IMPORT_INTERFACE_CANONICAL_QUOTE_SNAPSHOT" => Some(Self::CanonicalQuoteSnapshot),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum DataSourceAuthorizationState {
+    Unspecified = 0,
+    Active = 1,
+    Revoked = 2,
+}
+impl DataSourceAuthorizationState {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "DATA_SOURCE_AUTHORIZATION_STATE_UNSPECIFIED",
+            Self::Active => "DATA_SOURCE_AUTHORIZATION_STATE_ACTIVE",
+            Self::Revoked => "DATA_SOURCE_AUTHORIZATION_STATE_REVOKED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "DATA_SOURCE_AUTHORIZATION_STATE_UNSPECIFIED" => Some(Self::Unspecified),
+            "DATA_SOURCE_AUTHORIZATION_STATE_ACTIVE" => Some(Self::Active),
+            "DATA_SOURCE_AUTHORIZATION_STATE_REVOKED" => Some(Self::Revoked),
             _ => None,
         }
     }
@@ -385,92 +578,25 @@ pub struct Unit {
     pub precision: u32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendInstrumentRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(uint64, tag="2")]
-    pub expected_latest_version: u64,
-    #[prost(message, optional, tag="3")]
-    pub instrument: ::core::option::Option<Instrument>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendInstrumentResponse {
+pub struct CompleteInstrumentDefinition {
     #[prost(message, optional, tag="1")]
     pub instrument: ::core::option::Option<Instrument>,
+    #[prost(oneof="complete_instrument_definition::Subtype", tags="2, 3")]
+    pub subtype: ::core::option::Option<complete_instrument_definition::Subtype>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendBondRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(uint64, tag="2")]
-    pub expected_latest_version: u64,
-    #[prost(message, optional, tag="3")]
-    pub bond: ::core::option::Option<Bond>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendBondResponse {
-    #[prost(message, optional, tag="1")]
-    pub bond: ::core::option::Option<Bond>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendFuturesContractRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(uint64, tag="2")]
-    pub expected_latest_version: u64,
-    #[prost(message, optional, tag="3")]
-    pub futures_contract: ::core::option::Option<FuturesContract>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendFuturesContractResponse {
-    #[prost(message, optional, tag="1")]
-    pub futures_contract: ::core::option::Option<FuturesContract>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AppendCalendarRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(uint64, tag="2")]
-    pub expected_latest_version: u64,
-    #[prost(message, optional, tag="3")]
-    pub calendar: ::core::option::Option<Calendar>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AppendCalendarResponse {
-    #[prost(message, optional, tag="1")]
-    pub calendar: ::core::option::Option<Calendar>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendUnitRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(uint64, tag="2")]
-    pub expected_latest_version: u64,
-    #[prost(message, optional, tag="3")]
-    pub unit: ::core::option::Option<Unit>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendUnitResponse {
-    #[prost(message, optional, tag="1")]
-    pub unit: ::core::option::Option<Unit>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendMarketRulePackRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(uint64, tag="2")]
-    pub expected_latest_version: u64,
-    #[prost(message, optional, tag="3")]
-    pub market_rule_pack: ::core::option::Option<MarketRulePack>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendMarketRulePackResponse {
-    #[prost(message, optional, tag="1")]
-    pub market_rule_pack: ::core::option::Option<MarketRulePack>,
+/// Nested message and enum types in `CompleteInstrumentDefinition`.
+pub mod complete_instrument_definition {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Subtype {
+        #[prost(message, tag="2")]
+        Bond(super::Bond),
+        #[prost(message, tag="3")]
+        FuturesContract(super::FuturesContract),
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MarketDefinition {
-    #[prost(oneof="market_definition::Definition", tags="1, 2, 3, 4, 5, 6")]
+    #[prost(oneof="market_definition::Definition", tags="1, 4, 5, 6")]
     pub definition: ::core::option::Option<market_definition::Definition>,
 }
 /// Nested message and enum types in `MarketDefinition`.
@@ -478,17 +604,39 @@ pub mod market_definition {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Definition {
         #[prost(message, tag="1")]
-        Instrument(super::Instrument),
-        #[prost(message, tag="2")]
-        Bond(super::Bond),
-        #[prost(message, tag="3")]
-        FuturesContract(super::FuturesContract),
+        Instrument(super::CompleteInstrumentDefinition),
         #[prost(message, tag="4")]
         Calendar(super::Calendar),
         #[prost(message, tag="5")]
         Unit(super::Unit),
         #[prost(message, tag="6")]
         MarketRulePack(super::MarketRulePack),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AppendDefinitionRequest {
+    #[prost(string, tag="1")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(uint64, tag="2")]
+    pub expected_latest_version: u64,
+    #[prost(message, optional, tag="3")]
+    pub definition: ::core::option::Option<MarketDefinition>,
+    #[prost(message, optional, tag="4")]
+    pub change: ::core::option::Option<super::super::core::v1::ChangeJustification>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AppendDefinitionResponse {
+    #[prost(oneof="append_definition_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<append_definition_response::Result>,
+}
+/// Nested message and enum types in `AppendDefinitionResponse`.
+pub mod append_definition_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Definition(super::MarketDefinition),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -500,8 +648,18 @@ pub struct GetDefinitionVersionRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetDefinitionVersionResponse {
-    #[prost(message, optional, tag="1")]
-    pub definition: ::core::option::Option<MarketDefinition>,
+    #[prost(oneof="get_definition_version_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_definition_version_response::Result>,
+}
+/// Nested message and enum types in `GetDefinitionVersionResponse`.
+pub mod get_definition_version_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Definition(super::MarketDefinition),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResolveDefinitionAsOfRequest {
@@ -512,8 +670,18 @@ pub struct ResolveDefinitionAsOfRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolveDefinitionAsOfResponse {
-    #[prost(message, optional, tag="1")]
-    pub definition: ::core::option::Option<MarketDefinition>,
+    #[prost(oneof="resolve_definition_as_of_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<resolve_definition_as_of_response::Result>,
+}
+/// Nested message and enum types in `ResolveDefinitionAsOfResponse`.
+pub mod resolve_definition_as_of_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Definition(super::MarketDefinition),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListDefinitionVersionsRequest {
@@ -523,11 +691,26 @@ pub struct ListDefinitionVersionsRequest {
     pub page: ::core::option::Option<super::super::core::v1::PageRequest>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListDefinitionVersionsResponse {
+pub struct DefinitionVersions {
     #[prost(message, repeated, tag="1")]
     pub definitions: ::prost::alloc::vec::Vec<MarketDefinition>,
     #[prost(message, optional, tag="2")]
     pub page: ::core::option::Option<super::super::core::v1::PageResponse>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListDefinitionVersionsResponse {
+    #[prost(oneof="list_definition_versions_response::Result", tags="3, 4")]
+    pub result: ::core::option::Option<list_definition_versions_response::Result>,
+}
+/// Nested message and enum types in `ListDefinitionVersionsResponse`.
+pub mod list_definition_versions_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="3")]
+        Versions(super::DefinitionVersions),
+        #[prost(message, tag="4")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -700,6 +883,8 @@ pub struct Cashflow {
     pub schedule_id: ::prost::alloc::string::String,
     #[prost(uint64, tag="9")]
     pub sequence: u64,
+    #[prost(enumeration="CashflowType", tag="10")]
+    pub cashflow_type: i32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Quote {
@@ -791,6 +976,31 @@ pub struct CurveSnapshot {
     #[prost(string, tag="12")]
     pub curve_family_id: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CurveSnapshotInput {
+    #[prost(message, optional, tag="1")]
+    pub curve_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, optional, tag="3")]
+    pub as_of: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="4")]
+    pub currency: ::core::option::Option<super::super::core::v1::UnitRef>,
+    #[prost(string, tag="5")]
+    pub curve_kind: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="6")]
+    pub calendar: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="7")]
+    pub rule_pack: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(string, tag="8")]
+    pub point_schema: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag="9")]
+    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="10")]
+    pub visible_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(string, tag="11")]
+    pub curve_family_id: ::prost::alloc::string::String,
+}
 /// CurvePointSet is the canonical payload for point_schema
 /// ficant.yield-curve-points.protobuf.v1.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -808,66 +1018,6 @@ pub struct CurvePointSet {
     pub curve_family_id: ::prost::alloc::string::String,
     #[prost(message, repeated, tag="2")]
     pub points: ::prost::alloc::vec::Vec<CurvePoint>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendCashflowRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub cashflow: ::core::option::Option<Cashflow>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendCashflowResponse {
-    #[prost(message, optional, tag="1")]
-    pub cashflow: ::core::option::Option<Cashflow>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendQuoteRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub quote: ::core::option::Option<Quote>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendQuoteResponse {
-    #[prost(message, optional, tag="1")]
-    pub quote: ::core::option::Option<Quote>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendTradeRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub trade: ::core::option::Option<Trade>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendTradeResponse {
-    #[prost(message, optional, tag="1")]
-    pub trade: ::core::option::Option<Trade>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AppendValuationRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub valuation: ::core::option::Option<Valuation>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AppendValuationResponse {
-    #[prost(message, optional, tag="1")]
-    pub valuation: ::core::option::Option<Valuation>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishCurveSnapshotRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub curve_snapshot: ::core::option::Option<CurveSnapshot>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishCurveSnapshotResponse {
-    #[prost(message, optional, tag="1")]
-    pub curve_snapshot: ::core::option::Option<CurveSnapshot>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MarketFact {
@@ -888,6 +1038,82 @@ pub mod market_fact {
         Valuation(super::Valuation),
     }
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AppendMarketFactRequest {
+    #[prost(string, tag="1")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub fact: ::core::option::Option<MarketFact>,
+    #[prost(message, optional, tag="3")]
+    pub change: ::core::option::Option<super::super::core::v1::ChangeJustification>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AppendMarketFactResponse {
+    #[prost(oneof="append_market_fact_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<append_market_fact_response::Result>,
+}
+/// Nested message and enum types in `AppendMarketFactResponse`.
+pub mod append_market_fact_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Fact(super::MarketFact),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CorrectMarketFactRequest {
+    #[prost(string, tag="1")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub original_fact_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="3")]
+    pub fact: ::core::option::Option<MarketFact>,
+    #[prost(message, optional, tag="4")]
+    pub change: ::core::option::Option<super::super::core::v1::ChangeJustification>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CorrectMarketFactResponse {
+    #[prost(oneof="correct_market_fact_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<correct_market_fact_response::Result>,
+}
+/// Nested message and enum types in `CorrectMarketFactResponse`.
+pub mod correct_market_fact_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Fact(super::MarketFact),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PublishCurveSnapshotRequest {
+    #[prost(string, tag="1")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="3")]
+    pub points: ::core::option::Option<CurvePointSet>,
+    #[prost(message, optional, tag="4")]
+    pub change: ::core::option::Option<super::super::core::v1::ChangeJustification>,
+    #[prost(message, optional, tag="5")]
+    pub curve: ::core::option::Option<CurveSnapshotInput>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PublishCurveSnapshotResponse {
+    #[prost(oneof="publish_curve_snapshot_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<publish_curve_snapshot_response::Result>,
+}
+/// Nested message and enum types in `PublishCurveSnapshotResponse`.
+pub mod publish_curve_snapshot_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        CurveSnapshot(super::CurveSnapshot),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct QueryInstrumentFactsRequest {
     #[prost(message, optional, tag="1")]
@@ -900,11 +1126,26 @@ pub struct QueryInstrumentFactsRequest {
     pub page: ::core::option::Option<super::super::core::v1::PageRequest>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QueryInstrumentFactsResponse {
+pub struct InstrumentFacts {
     #[prost(message, repeated, tag="1")]
     pub facts: ::prost::alloc::vec::Vec<MarketFact>,
     #[prost(message, optional, tag="2")]
     pub page: ::core::option::Option<super::super::core::v1::PageResponse>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct QueryInstrumentFactsResponse {
+    #[prost(oneof="query_instrument_facts_response::Result", tags="3, 4")]
+    pub result: ::core::option::Option<query_instrument_facts_response::Result>,
+}
+/// Nested message and enum types in `QueryInstrumentFactsResponse`.
+pub mod query_instrument_facts_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="3")]
+        InstrumentFacts(super::InstrumentFacts),
+        #[prost(message, tag="4")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetCurveSnapshotRequest {
@@ -912,9 +1153,61 @@ pub struct GetCurveSnapshotRequest {
     pub curve_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetCurveSnapshotResponse {
+pub struct CurveSnapshotPayload {
     #[prost(message, optional, tag="1")]
     pub curve_snapshot: ::core::option::Option<CurveSnapshot>,
+    #[prost(message, optional, tag="2")]
+    pub points: ::core::option::Option<CurvePointSet>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetCurveSnapshotResponse {
+    #[prost(oneof="get_curve_snapshot_response::Result", tags="2, 3")]
+    pub result: ::core::option::Option<get_curve_snapshot_response::Result>,
+}
+/// Nested message and enum types in `GetCurveSnapshotResponse`.
+pub mod get_curve_snapshot_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="2")]
+        Curve(super::CurveSnapshotPayload),
+        #[prost(message, tag="3")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum CashflowType {
+    Unspecified = 0,
+    Coupon = 1,
+    Principal = 2,
+    Fee = 3,
+    Other = 4,
+}
+impl CashflowType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "CASHFLOW_TYPE_UNSPECIFIED",
+            Self::Coupon => "CASHFLOW_TYPE_COUPON",
+            Self::Principal => "CASHFLOW_TYPE_PRINCIPAL",
+            Self::Fee => "CASHFLOW_TYPE_FEE",
+            Self::Other => "CASHFLOW_TYPE_OTHER",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CASHFLOW_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CASHFLOW_TYPE_COUPON" => Some(Self::Coupon),
+            "CASHFLOW_TYPE_PRINCIPAL" => Some(Self::Principal),
+            "CASHFLOW_TYPE_FEE" => Some(Self::Fee),
+            "CASHFLOW_TYPE_OTHER" => Some(Self::Other),
+            _ => None,
+        }
+    }
 }
 /// FundingRulePack is L3 content selected by an exact Subject FundingTier.
 /// It contains no Subject identity and must be parsed before a delivery calculation.

@@ -6,13 +6,21 @@ import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegen
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { LineageRef, MarketTime, OwnerRef, Sha256, Ulid, VersionRef } from "../../core/v1/common_pb";
 import { file_ficant_core_v1_common } from "../../core/v1/common_pb";
+import type { ErrorDetail } from "../../core/v1/error_pb";
+import { file_ficant_core_v1_error } from "../../core/v1/error_pb";
+import type { ChangeJustification } from "../../core/v1/governance_pb";
+import { file_ficant_core_v1_governance } from "../../core/v1/governance_pb";
+import type { InstrumentMapping } from "../../market/v1/data_source_pb";
+import { file_ficant_market_v1_data_source } from "../../market/v1/data_source_pb";
+import type { Calendar, Unit } from "../../market/v1/definition_pb";
+import { file_ficant_market_v1_definition } from "../../market/v1/definition_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file ficant/research/v1/snapshot.proto.
  */
 export const file_ficant_research_v1_snapshot: GenFile = /*@__PURE__*/
-  fileDesc("CiFmaWNhbnQvcmVzZWFyY2gvdjEvc25hcHNob3QucHJvdG8SEmZpY2FudC5yZXNlYXJjaC52MSL+AgoMRGF0YVNuYXBzaG90Ei4KEGRhdGFfc25hcHNob3RfaWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEicKBW93bmVyGAIgASgLMhguZmljYW50LmNvcmUudjEuT3duZXJSZWYSLgoKdmlzaWJsZV9hdBgDIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSKQoFYXNfb2YYBCABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEisKC3NjaGVtYV9oYXNoGAUgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2Ei0KDW1hbmlmZXN0X2hhc2gYBiABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSMQoRYmxvYl9jb250ZW50X2hhc2gYByABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSKwoHbGluZWFnZRgIIAMoCzIaLmZpY2FudC5jb3JlLnYxLkxpbmVhZ2VSZWYisgIKEFVuaXZlcnNlU25hcHNob3QSMgoUdW5pdmVyc2Vfc25hcHNob3RfaWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEicKBW93bmVyGAIgASgLMhguZmljYW50LmNvcmUudjEuT3duZXJSZWYSNwoTaW5zdHJ1bWVudF92ZXJzaW9ucxgDIAMoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYSLQoNZmlsdGVyX2RpZ2VzdBgEIAEoCzIWLmZpY2FudC5jb3JlLnYxLlNoYTI1NhIsCgxjb250ZW50X2hhc2gYBSABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSKwoHbGluZWFnZRgGIAMoCzIaLmZpY2FudC5jb3JlLnYxLkxpbmVhZ2VSZWYibgoaUHVibGlzaERhdGFTbmFwc2hvdFJlcXVlc3QSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgJEjcKDWRhdGFfc25hcHNob3QYAiABKAsyIC5maWNhbnQucmVzZWFyY2gudjEuRGF0YVNuYXBzaG90IlYKG1B1Ymxpc2hEYXRhU25hcHNob3RSZXNwb25zZRI3Cg1kYXRhX3NuYXBzaG90GAEgASgLMiAuZmljYW50LnJlc2VhcmNoLnYxLkRhdGFTbmFwc2hvdCJ6Ch5QdWJsaXNoVW5pdmVyc2VTbmFwc2hvdFJlcXVlc3QSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgJEj8KEXVuaXZlcnNlX3NuYXBzaG90GAIgASgLMiQuZmljYW50LnJlc2VhcmNoLnYxLlVuaXZlcnNlU25hcHNob3QiYgofUHVibGlzaFVuaXZlcnNlU25hcHNob3RSZXNwb25zZRI/ChF1bml2ZXJzZV9zbmFwc2hvdBgBIAEoCzIkLmZpY2FudC5yZXNlYXJjaC52MS5Vbml2ZXJzZVNuYXBzaG90Ij8KEkdldFNuYXBzaG90UmVxdWVzdBIpCgtzbmFwc2hvdF9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQinwEKE0dldFNuYXBzaG90UmVzcG9uc2USOQoNZGF0YV9zbmFwc2hvdBgBIAEoCzIgLmZpY2FudC5yZXNlYXJjaC52MS5EYXRhU25hcHNob3RIABJBChF1bml2ZXJzZV9zbmFwc2hvdBgCIAEoCzIkLmZpY2FudC5yZXNlYXJjaC52MS5Vbml2ZXJzZVNuYXBzaG90SABCCgoIc25hcHNob3Qy7gIKD1NuYXBzaG90U2VydmljZRJ2ChNQdWJsaXNoRGF0YVNuYXBzaG90Ei4uZmljYW50LnJlc2VhcmNoLnYxLlB1Ymxpc2hEYXRhU25hcHNob3RSZXF1ZXN0Gi8uZmljYW50LnJlc2VhcmNoLnYxLlB1Ymxpc2hEYXRhU25hcHNob3RSZXNwb25zZRKCAQoXUHVibGlzaFVuaXZlcnNlU25hcHNob3QSMi5maWNhbnQucmVzZWFyY2gudjEuUHVibGlzaFVuaXZlcnNlU25hcHNob3RSZXF1ZXN0GjMuZmljYW50LnJlc2VhcmNoLnYxLlB1Ymxpc2hVbml2ZXJzZVNuYXBzaG90UmVzcG9uc2USXgoLR2V0U25hcHNob3QSJi5maWNhbnQucmVzZWFyY2gudjEuR2V0U25hcHNob3RSZXF1ZXN0GicuZmljYW50LnJlc2VhcmNoLnYxLkdldFNuYXBzaG90UmVzcG9uc2ViBnByb3RvMw", [file_ficant_core_v1_common]);
+  fileDesc("CiFmaWNhbnQvcmVzZWFyY2gvdjEvc25hcHNob3QucHJvdG8SEmZpY2FudC5yZXNlYXJjaC52MSLdAwoMRGF0YVNuYXBzaG90Ei4KEGRhdGFfc25hcHNob3RfaWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEicKBW93bmVyGAIgASgLMhguZmljYW50LmNvcmUudjEuT3duZXJSZWYSLgoKdmlzaWJsZV9hdBgDIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSKQoFYXNfb2YYBCABKAsyGi5maWNhbnQuY29yZS52MS5NYXJrZXRUaW1lEisKC3NjaGVtYV9oYXNoGAUgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2Ei0KDW1hbmlmZXN0X2hhc2gYBiABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSMQoRYmxvYl9jb250ZW50X2hhc2gYByABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSKwoHbGluZWFnZRgIIAMoCzIaLmZpY2FudC5jb3JlLnYxLkxpbmVhZ2VSZWYSNQoRYXV0aG9yaXphdGlvbl9yZWYYCSABKAsyGi5maWNhbnQuY29yZS52MS5WZXJzaW9uUmVmEiYKCGFjdG9yX2lkGAogASgLMhQuZmljYW50LmNvcmUudjEuVWxpZCLaAgoQVW5pdmVyc2VTbmFwc2hvdBIyChR1bml2ZXJzZV9zbmFwc2hvdF9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSJwoFb3duZXIYAiABKAsyGC5maWNhbnQuY29yZS52MS5Pd25lclJlZhI3ChNpbnN0cnVtZW50X3ZlcnNpb25zGAMgAygLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhItCg1maWx0ZXJfZGlnZXN0GAQgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EiwKDGNvbnRlbnRfaGFzaBgFIAEoCzIWLmZpY2FudC5jb3JlLnYxLlNoYTI1NhIrCgdsaW5lYWdlGAYgAygLMhouZmljYW50LmNvcmUudjEuTGluZWFnZVJlZhImCghhY3Rvcl9pZBgHIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQiowMKI0ltcG9ydENhbm9uaWNhbFF1b3RlU25hcHNob3RSZXF1ZXN0EhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoCRIwChJ0YXJnZXRfc25hcHNob3RfaWQYAiABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEjUKEWF1dGhvcml6YXRpb25fcmVmGAMgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhI0CgdtYXBwaW5nGAQgASgLMiMuZmljYW50Lm1hcmtldC52MS5JbnN0cnVtZW50TWFwcGluZxIsCghjYWxlbmRhchgFIAEoCzIaLmZpY2FudC5tYXJrZXQudjEuQ2FsZW5kYXISJAoEdW5pdBgGIAEoCzIWLmZpY2FudC5tYXJrZXQudjEuVW5pdBIpCgVhc19vZhgHIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSLgoKdmlzaWJsZV9hdBgIIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSFQoNaW1wb3J0X3JlYXNvbhgJIAEoCSKZAQokSW1wb3J0Q2Fub25pY2FsUXVvdGVTbmFwc2hvdFJlc3BvbnNlEjkKDWRhdGFfc25hcHNob3QYASABKAsyIC5maWNhbnQucmVzZWFyY2gudjEuRGF0YVNuYXBzaG90SAASLAoFZXJyb3IYAiABKAsyGy5maWNhbnQuY29yZS52MS5FcnJvckRldGFpbEgAQggKBnJlc3VsdCL5AgoeUHVibGlzaFVuaXZlcnNlU25hcHNob3RSZXF1ZXN0EhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoCRIyChR1bml2ZXJzZV9zbmFwc2hvdF9pZBgDIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSJwoFb3duZXIYBCABKAsyGC5maWNhbnQuY29yZS52MS5Pd25lclJlZhI3ChNpbnN0cnVtZW50X3ZlcnNpb25zGAUgAygLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhItCg1maWx0ZXJfZGlnZXN0GAYgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EisKB2xpbmVhZ2UYByADKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmEjMKBmNoYW5nZRgIIAEoCzIjLmZpY2FudC5jb3JlLnYxLkNoYW5nZUp1c3RpZmljYXRpb25KBAgCEANSEXVuaXZlcnNlX3NuYXBzaG90IpwBCh9QdWJsaXNoVW5pdmVyc2VTbmFwc2hvdFJlc3BvbnNlEkEKEXVuaXZlcnNlX3NuYXBzaG90GAEgASgLMiQuZmljYW50LnJlc2VhcmNoLnYxLlVuaXZlcnNlU25hcHNob3RIABIsCgVlcnJvchgCIAEoCzIbLmZpY2FudC5jb3JlLnYxLkVycm9yRGV0YWlsSABCCAoGcmVzdWx0Ij8KEkdldFNuYXBzaG90UmVxdWVzdBIpCgtzbmFwc2hvdF9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQiywEKE0dldFNuYXBzaG90UmVzcG9uc2USOQoNZGF0YV9zbmFwc2hvdBgBIAEoCzIgLmZpY2FudC5yZXNlYXJjaC52MS5EYXRhU25hcHNob3RIABJBChF1bml2ZXJzZV9zbmFwc2hvdBgCIAEoCzIkLmZpY2FudC5yZXNlYXJjaC52MS5Vbml2ZXJzZVNuYXBzaG90SAASLAoFZXJyb3IYAyABKAsyGy5maWNhbnQuY29yZS52MS5FcnJvckRldGFpbEgAQggKBnJlc3VsdDKKAwoPU25hcHNob3RTZXJ2aWNlEpEBChxJbXBvcnRDYW5vbmljYWxRdW90ZVNuYXBzaG90EjcuZmljYW50LnJlc2VhcmNoLnYxLkltcG9ydENhbm9uaWNhbFF1b3RlU25hcHNob3RSZXF1ZXN0GjguZmljYW50LnJlc2VhcmNoLnYxLkltcG9ydENhbm9uaWNhbFF1b3RlU25hcHNob3RSZXNwb25zZRKCAQoXUHVibGlzaFVuaXZlcnNlU25hcHNob3QSMi5maWNhbnQucmVzZWFyY2gudjEuUHVibGlzaFVuaXZlcnNlU25hcHNob3RSZXF1ZXN0GjMuZmljYW50LnJlc2VhcmNoLnYxLlB1Ymxpc2hVbml2ZXJzZVNuYXBzaG90UmVzcG9uc2USXgoLR2V0U25hcHNob3QSJi5maWNhbnQucmVzZWFyY2gudjEuR2V0U25hcHNob3RSZXF1ZXN0GicuZmljYW50LnJlc2VhcmNoLnYxLkdldFNuYXBzaG90UmVzcG9uc2ViBnByb3RvMw", [file_ficant_core_v1_common, file_ficant_core_v1_error, file_ficant_core_v1_governance, file_ficant_market_v1_data_source, file_ficant_market_v1_definition]);
 
 /**
  * @generated from message ficant.research.v1.DataSnapshot
@@ -57,6 +65,16 @@ export type DataSnapshot = Message<"ficant.research.v1.DataSnapshot"> & {
    * @generated from field: repeated ficant.core.v1.LineageRef lineage = 8;
    */
   lineage: LineageRef[];
+
+  /**
+   * @generated from field: ficant.core.v1.VersionRef authorization_ref = 9;
+   */
+  authorizationRef?: VersionRef;
+
+  /**
+   * @generated from field: ficant.core.v1.Ulid actor_id = 10;
+   */
+  actorId?: Ulid;
 };
 
 /**
@@ -99,6 +117,11 @@ export type UniverseSnapshot = Message<"ficant.research.v1.UniverseSnapshot"> & 
    * @generated from field: repeated ficant.core.v1.LineageRef lineage = 6;
    */
   lineage: LineageRef[];
+
+  /**
+   * @generated from field: ficant.core.v1.Ulid actor_id = 7;
+   */
+  actorId?: Ulid;
 };
 
 /**
@@ -109,42 +132,89 @@ export const UniverseSnapshotSchema: GenMessage<UniverseSnapshot> = /*@__PURE__*
   messageDesc(file_ficant_research_v1_snapshot, 1);
 
 /**
- * @generated from message ficant.research.v1.PublishDataSnapshotRequest
+ * @generated from message ficant.research.v1.ImportCanonicalQuoteSnapshotRequest
  */
-export type PublishDataSnapshotRequest = Message<"ficant.research.v1.PublishDataSnapshotRequest"> & {
+export type ImportCanonicalQuoteSnapshotRequest = Message<"ficant.research.v1.ImportCanonicalQuoteSnapshotRequest"> & {
   /**
    * @generated from field: string idempotency_key = 1;
    */
   idempotencyKey: string;
 
   /**
-   * @generated from field: ficant.research.v1.DataSnapshot data_snapshot = 2;
+   * @generated from field: ficant.core.v1.Ulid target_snapshot_id = 2;
    */
-  dataSnapshot?: DataSnapshot;
+  targetSnapshotId?: Ulid;
+
+  /**
+   * @generated from field: ficant.core.v1.VersionRef authorization_ref = 3;
+   */
+  authorizationRef?: VersionRef;
+
+  /**
+   * @generated from field: ficant.market.v1.InstrumentMapping mapping = 4;
+   */
+  mapping?: InstrumentMapping;
+
+  /**
+   * @generated from field: ficant.market.v1.Calendar calendar = 5;
+   */
+  calendar?: Calendar;
+
+  /**
+   * @generated from field: ficant.market.v1.Unit unit = 6;
+   */
+  unit?: Unit;
+
+  /**
+   * @generated from field: ficant.core.v1.MarketTime as_of = 7;
+   */
+  asOf?: MarketTime;
+
+  /**
+   * @generated from field: ficant.core.v1.MarketTime visible_at = 8;
+   */
+  visibleAt?: MarketTime;
+
+  /**
+   * @generated from field: string import_reason = 9;
+   */
+  importReason: string;
 };
 
 /**
- * Describes the message ficant.research.v1.PublishDataSnapshotRequest.
- * Use `create(PublishDataSnapshotRequestSchema)` to create a new message.
+ * Describes the message ficant.research.v1.ImportCanonicalQuoteSnapshotRequest.
+ * Use `create(ImportCanonicalQuoteSnapshotRequestSchema)` to create a new message.
  */
-export const PublishDataSnapshotRequestSchema: GenMessage<PublishDataSnapshotRequest> = /*@__PURE__*/
+export const ImportCanonicalQuoteSnapshotRequestSchema: GenMessage<ImportCanonicalQuoteSnapshotRequest> = /*@__PURE__*/
   messageDesc(file_ficant_research_v1_snapshot, 2);
 
 /**
- * @generated from message ficant.research.v1.PublishDataSnapshotResponse
+ * @generated from message ficant.research.v1.ImportCanonicalQuoteSnapshotResponse
  */
-export type PublishDataSnapshotResponse = Message<"ficant.research.v1.PublishDataSnapshotResponse"> & {
+export type ImportCanonicalQuoteSnapshotResponse = Message<"ficant.research.v1.ImportCanonicalQuoteSnapshotResponse"> & {
   /**
-   * @generated from field: ficant.research.v1.DataSnapshot data_snapshot = 1;
+   * @generated from oneof ficant.research.v1.ImportCanonicalQuoteSnapshotResponse.result
    */
-  dataSnapshot?: DataSnapshot;
+  result: {
+    /**
+     * @generated from field: ficant.research.v1.DataSnapshot data_snapshot = 1;
+     */
+    value: DataSnapshot;
+    case: "dataSnapshot";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 2;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
 };
 
 /**
- * Describes the message ficant.research.v1.PublishDataSnapshotResponse.
- * Use `create(PublishDataSnapshotResponseSchema)` to create a new message.
+ * Describes the message ficant.research.v1.ImportCanonicalQuoteSnapshotResponse.
+ * Use `create(ImportCanonicalQuoteSnapshotResponseSchema)` to create a new message.
  */
-export const PublishDataSnapshotResponseSchema: GenMessage<PublishDataSnapshotResponse> = /*@__PURE__*/
+export const ImportCanonicalQuoteSnapshotResponseSchema: GenMessage<ImportCanonicalQuoteSnapshotResponse> = /*@__PURE__*/
   messageDesc(file_ficant_research_v1_snapshot, 3);
 
 /**
@@ -157,9 +227,34 @@ export type PublishUniverseSnapshotRequest = Message<"ficant.research.v1.Publish
   idempotencyKey: string;
 
   /**
-   * @generated from field: ficant.research.v1.UniverseSnapshot universe_snapshot = 2;
+   * @generated from field: ficant.core.v1.Ulid universe_snapshot_id = 3;
    */
-  universeSnapshot?: UniverseSnapshot;
+  universeSnapshotId?: Ulid;
+
+  /**
+   * @generated from field: ficant.core.v1.OwnerRef owner = 4;
+   */
+  owner?: OwnerRef;
+
+  /**
+   * @generated from field: repeated ficant.core.v1.VersionRef instrument_versions = 5;
+   */
+  instrumentVersions: VersionRef[];
+
+  /**
+   * @generated from field: ficant.core.v1.Sha256 filter_digest = 6;
+   */
+  filterDigest?: Sha256;
+
+  /**
+   * @generated from field: repeated ficant.core.v1.LineageRef lineage = 7;
+   */
+  lineage: LineageRef[];
+
+  /**
+   * @generated from field: ficant.core.v1.ChangeJustification change = 8;
+   */
+  change?: ChangeJustification;
 };
 
 /**
@@ -174,9 +269,21 @@ export const PublishUniverseSnapshotRequestSchema: GenMessage<PublishUniverseSna
  */
 export type PublishUniverseSnapshotResponse = Message<"ficant.research.v1.PublishUniverseSnapshotResponse"> & {
   /**
-   * @generated from field: ficant.research.v1.UniverseSnapshot universe_snapshot = 1;
+   * @generated from oneof ficant.research.v1.PublishUniverseSnapshotResponse.result
    */
-  universeSnapshot?: UniverseSnapshot;
+  result: {
+    /**
+     * @generated from field: ficant.research.v1.UniverseSnapshot universe_snapshot = 1;
+     */
+    value: UniverseSnapshot;
+    case: "universeSnapshot";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 2;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
 };
 
 /**
@@ -208,9 +315,9 @@ export const GetSnapshotRequestSchema: GenMessage<GetSnapshotRequest> = /*@__PUR
  */
 export type GetSnapshotResponse = Message<"ficant.research.v1.GetSnapshotResponse"> & {
   /**
-   * @generated from oneof ficant.research.v1.GetSnapshotResponse.snapshot
+   * @generated from oneof ficant.research.v1.GetSnapshotResponse.result
    */
-  snapshot: {
+  result: {
     /**
      * @generated from field: ficant.research.v1.DataSnapshot data_snapshot = 1;
      */
@@ -222,6 +329,12 @@ export type GetSnapshotResponse = Message<"ficant.research.v1.GetSnapshotRespons
      */
     value: UniverseSnapshot;
     case: "universeSnapshot";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 3;
+     */
+    value: ErrorDetail;
+    case: "error";
   } | { case: undefined; value?: undefined };
 };
 
@@ -237,12 +350,12 @@ export const GetSnapshotResponseSchema: GenMessage<GetSnapshotResponse> = /*@__P
  */
 export const SnapshotService: GenService<{
   /**
-   * @generated from rpc ficant.research.v1.SnapshotService.PublishDataSnapshot
+   * @generated from rpc ficant.research.v1.SnapshotService.ImportCanonicalQuoteSnapshot
    */
-  publishDataSnapshot: {
+  importCanonicalQuoteSnapshot: {
     methodKind: "unary";
-    input: typeof PublishDataSnapshotRequestSchema;
-    output: typeof PublishDataSnapshotResponseSchema;
+    input: typeof ImportCanonicalQuoteSnapshotRequestSchema;
+    output: typeof ImportCanonicalQuoteSnapshotResponseSchema;
   },
   /**
    * @generated from rpc ficant.research.v1.SnapshotService.PublishUniverseSnapshot

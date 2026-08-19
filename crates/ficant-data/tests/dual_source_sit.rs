@@ -3,19 +3,22 @@ use std::sync::Arc;
 
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use ficant_application::ports::{
-    AccessScope, AeadCursorCodec, CursorKey, DataSourceRepository, IdempotencyKey,
-    RegisterDataSource,
+    AeadCursorCodec, AuthorizedPrincipal, CursorKey, DataSourceRepository, FoundationChangeContext,
+    IdempotencyKey, RegisterDataSource,
 };
 use ficant_data::{
     CANONICAL_QUOTE_SCHEMA_ID, CanonicalIngestRequest, CanonicalQuoteIngestor,
     FileNdjsonQuoteSource, InstrumentMapping, InstrumentMappingEntry, PointInTimeWindow,
     PostgresQuoteSource, canonical_quote_schema_hash,
 };
+use ficant_domain::governance::{ChangeJustification, PlatformRole, SourceDocumentRef};
 use ficant_domain::market::{
     Calendar, CalendarInput, CalendarSession, DataSource, DataSourceInput, DataSourceKind, Unit,
     UnitInput,
 };
-use ficant_domain::primitives::{EffectivePeriod, MarketTime, OwnerRef, Ulid, Version, VersionRef};
+use ficant_domain::primitives::{
+    ContentHash, EffectivePeriod, MarketTime, OwnerRef, Ulid, Version, VersionRef,
+};
 use ficant_storage::postgres::PostgresRepository;
 use sqlx::postgres::PgPoolOptions;
 
@@ -32,7 +35,6 @@ async fn file_and_real_postgres_produce_one_canonical_schema_and_equal_business_
     seed_external_source(&pool).await;
 
     let owner = owner();
-    let scope = access_scope(&owner);
     let repository = PostgresRepository::new(pool.clone(), cursor_codec());
     let file_source = source(
         owner.clone(),
@@ -55,7 +57,7 @@ async fn file_and_real_postgres_produce_one_canonical_schema_and_equal_business_
         let registered = repository
             .register(
                 RegisterDataSource::new(
-                    scope.clone(),
+                    admin_change(&owner, key),
                     None,
                     source.clone(),
                     IdempotencyKey::new(key).unwrap(),
@@ -184,6 +186,7 @@ fn request(
 ) -> CanonicalIngestRequest {
     let effective = calendar.effective().clone();
     let mapping = InstrumentMapping::new(
+        Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F60").unwrap(),
         owner,
         VersionRef::new(source.id().clone(), Version::new(1).unwrap()),
         vec![
@@ -278,11 +281,38 @@ fn owner() -> OwnerRef {
     )
 }
 
-fn access_scope(owner: &OwnerRef) -> AccessScope {
-    AccessScope::new(
-        owner.tenant_id().clone(),
+fn admin_change(owner: &OwnerRef, label: &str) -> FoundationChangeContext {
+    let principal = AuthorizedPrincipal::new(
+        "phase3a-admin".to_owned(),
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F00").unwrap(),
+        owner.tenant_id().clone(),
         vec![owner.owner_id().clone()],
+        PlatformRole::PlatformAdmin,
+        vec!["data-sources:write".to_owned()],
+        ContentHash::digest(b"phase3a-admin-credential"),
+    )
+    .unwrap();
+    let change = ChangeJustification::new(
+        "Phase 3A deterministic source fixture",
+        vec![
+            SourceDocumentRef::new(
+                "fixture://phase3a/source",
+                ContentHash::digest(label.as_bytes()),
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap();
+    FoundationChangeContext::administrator(
+        principal,
+        change,
+        Ulid::new(if label.ends_with("file-source") {
+            "01ARZ3NDEKTSV4RRFFQ69G5F80"
+        } else {
+            "01ARZ3NDEKTSV4RRFFQ69G5F81"
+        })
+        .unwrap(),
+        market_time("2026-07-20T03:00:00Z"),
     )
     .unwrap()
 }

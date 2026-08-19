@@ -61,6 +61,7 @@ use ficant_domain::futures_hedge::{
     FUTURES_HEDGE_ALGORITHM_ID, FUTURES_HEDGE_ALGORITHM_VERSION, FUTURES_HEDGE_CONVENTION_PROFILE,
     FuturesHedgeInput, FuturesHedgeResult,
 };
+use ficant_domain::governance::PlatformRole;
 use ficant_domain::market::{
     ArtifactInputKind, Bond, BondBusinessDayConvention, BondCouponFrequency,
     BondDayCountConvention, BondPricingTerms, BondTaxAttributes, Calendar, CalendarInput,
@@ -831,8 +832,15 @@ impl Fixture {
         } else {
             engines.clone()
         };
-        let identity = TrustedIdentity::implicit("rates-r5d-test", ["rates:analyze"])
-            .expect("test identity is valid");
+        let identity = TrustedIdentity::implicit(
+            "rates-r5d-test",
+            id('A'),
+            id('0'),
+            vec![id('1')],
+            PlatformRole::Researcher,
+            ["rates:analyze"],
+        )
+        .expect("test identity is valid");
         let application: Arc<dyn PlatformPort> = Arc::new(
             PlatformApplication::try_new(
                 Arc::new(SystemClock),
@@ -880,9 +888,43 @@ impl Fixture {
 
 #[tokio::test]
 async fn authorization_fails_before_contract_parsing_or_any_engine() {
-    let fixture = Fixture::new(Drift::None);
-    let identity = TrustedIdentity::implicit("rates-no-scope", ["rates:read"])
-        .expect("test identity is valid");
+    for (role, scopes, case) in [
+        (PlatformRole::Researcher, ["rates:read"], "missing scope"),
+        (
+            PlatformRole::PlatformAdmin,
+            ["rates:analyze"],
+            "wrong active role",
+        ),
+    ] {
+        let fixture = Fixture::new(Drift::None);
+        let (service, calls) = rates_service_with_identity(&fixture, role, scopes);
+        let response = service
+            .analyze_bond(Request::new(AnalyzeBondRequest::default()))
+            .await
+            .expect("business error is transported")
+            .into_inner();
+        let Some(analyze_bond_response::Result::Error(error)) = response.result else {
+            panic!("{case} must be rejected");
+        };
+        assert_eq!(error.code, ErrorCode::Forbidden as i32, "{case}");
+        assert_eq!(calls.total(), 0, "{case} reached a numerical engine");
+    }
+}
+
+fn rates_service_with_identity<const N: usize>(
+    fixture: &Fixture,
+    role: PlatformRole,
+    scopes: [&str; N],
+) -> (RatesGrpcService, Calls) {
+    let identity = TrustedIdentity::implicit(
+        "rates-authorization-negative",
+        id('A'),
+        id('0'),
+        vec![id('1')],
+        role,
+        scopes,
+    )
+    .expect("test identity is valid");
     let application: Arc<dyn PlatformPort> = Arc::new(
         PlatformApplication::try_new(
             Arc::new(SystemClock),
@@ -924,16 +966,7 @@ async fn authorization_fails_before_contract_parsing_or_any_engine() {
         KEY,
     )
     .expect("R5D Rates service is valid");
-    let response = service
-        .analyze_bond(Request::new(AnalyzeBondRequest::default()))
-        .await
-        .expect("business error is transported")
-        .into_inner();
-    let Some(analyze_bond_response::Result::Error(error)) = response.result else {
-        panic!("missing scope must be rejected");
-    };
-    assert_eq!(error.code, ErrorCode::Forbidden as i32);
-    assert_eq!(calls.total(), 0);
+    (service, calls)
 }
 
 #[tokio::test]

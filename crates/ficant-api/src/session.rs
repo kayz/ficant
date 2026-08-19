@@ -1,3 +1,6 @@
+use ficant_application::ports::AuthorizedPrincipal;
+use ficant_domain::governance::PlatformRole;
+use ficant_domain::primitives::{ContentHash, Ulid};
 use ring::hmac;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -46,8 +49,7 @@ impl SessionPolicy {
 
 #[derive(Clone, Debug)]
 pub struct TrustedIdentity {
-    pub(crate) subject_id: String,
-    pub(crate) scopes: Vec<String>,
+    pub(crate) principal: AuthorizedPrincipal,
     pub(crate) bearer_digest: Option<[u8; 32]>,
 }
 
@@ -60,6 +62,10 @@ impl TrustedIdentity {
     pub fn bearer<I, S>(
         subject_id: impl Into<String>,
         bearer_credential: &[u8],
+        actor_id: Ulid,
+        tenant_id: Ulid,
+        allowed_owner_ids: Vec<Ulid>,
+        active_role: PlatformRole,
         scopes: I,
     ) -> Result<Self, &'static str>
     where
@@ -69,11 +75,50 @@ impl TrustedIdentity {
         if bearer_credential.is_empty() {
             return Err("bearer credential must not be empty");
         }
+        let proof = credential_proof(bearer_credential);
         Self::build(
             subject_id,
+            actor_id,
+            tenant_id,
+            allowed_owner_ids,
+            active_role,
             scopes,
-            Some(credential_proof(bearer_credential)),
+            ContentHash::from_bytes(&proof)
+                .map_err(|_| "credential fingerprint must be SHA-256")?,
+            Some(proof),
         )
+    }
+
+    /// Builds a trusted bearer identity from one already validated principal.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the bearer credential is empty or its fingerprint does not match
+    /// the principal credential binding.
+    pub fn bearer_principal(
+        principal: AuthorizedPrincipal,
+        bearer_credential: &[u8],
+    ) -> Result<Self, &'static str> {
+        if bearer_credential.is_empty() {
+            return Err("bearer credential must not be empty");
+        }
+        let proof = credential_proof(bearer_credential);
+        if principal.credential_fingerprint().as_bytes() != &proof {
+            return Err("principal credential fingerprint must match bearer credential");
+        }
+        Ok(Self {
+            principal,
+            bearer_digest: Some(proof),
+        })
+    }
+
+    /// Builds a loopback-only trusted identity from one already validated principal.
+    #[must_use]
+    pub const fn implicit_principal(principal: AuthorizedPrincipal) -> Self {
+        Self {
+            principal,
+            bearer_digest: None,
+        }
     }
 
     /// Builds an identity available only through an explicitly loopback-bound server.
@@ -81,39 +126,105 @@ impl TrustedIdentity {
     /// # Errors
     ///
     /// Returns an error for an invalid subject or scope.
-    pub fn implicit<I, S>(subject_id: impl Into<String>, scopes: I) -> Result<Self, &'static str>
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
-        Self::build(subject_id, scopes, None)
-    }
-
-    fn build<I, S>(
+    pub fn implicit<I, S>(
         subject_id: impl Into<String>,
+        actor_id: Ulid,
+        tenant_id: Ulid,
+        allowed_owner_ids: Vec<Ulid>,
+        active_role: PlatformRole,
         scopes: I,
-        bearer_digest: Option<[u8; 32]>,
     ) -> Result<Self, &'static str>
     where
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
         let subject_id = subject_id.into();
-        if subject_id.trim().is_empty() || subject_id.len() > 128 {
-            return Err("subject ID must be 1..=128 non-blank bytes");
-        }
-        let mut scopes: Vec<String> = scopes.into_iter().map(Into::into).collect();
-        if scopes.iter().any(|scope| !valid_token(scope)) {
-            return Err("scope must be a compact ASCII token");
-        }
-        scopes.sort();
-        scopes.dedup();
-        Ok(Self {
+        let fingerprint = implicit_credential_fingerprint(
+            &subject_id,
+            &actor_id,
+            &tenant_id,
+            &allowed_owner_ids,
+            active_role,
+        );
+        Self::build(
             subject_id,
+            actor_id,
+            tenant_id,
+            allowed_owner_ids,
+            active_role,
             scopes,
+            fingerprint,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn build<I, S>(
+        subject_id: impl Into<String>,
+        actor_id: Ulid,
+        tenant_id: Ulid,
+        allowed_owner_ids: Vec<Ulid>,
+        active_role: PlatformRole,
+        scopes: I,
+        credential_fingerprint: ContentHash,
+        bearer_digest: Option<[u8; 32]>,
+    ) -> Result<Self, &'static str>
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let scopes = scopes.into_iter().map(Into::into).collect();
+        let principal = AuthorizedPrincipal::new(
+            subject_id.into(),
+            actor_id,
+            tenant_id,
+            allowed_owner_ids,
+            active_role,
+            scopes,
+            credential_fingerprint,
+        )
+        .map_err(|_| "trusted principal fields must be valid")?;
+        Ok(Self {
+            principal,
             bearer_digest,
         })
     }
+}
+
+fn implicit_credential_fingerprint(
+    subject_id: &str,
+    actor_id: &Ulid,
+    tenant_id: &Ulid,
+    allowed_owner_ids: &[Ulid],
+    active_role: PlatformRole,
+) -> ContentHash {
+    let mut owners = allowed_owner_ids.to_vec();
+    owners.sort();
+    owners.dedup();
+    let mut bytes = b"ficant-platform-implicit-credential/v1\0".to_vec();
+    append_fingerprint_field(&mut bytes, subject_id.as_bytes());
+    append_fingerprint_field(&mut bytes, actor_id.as_str().as_bytes());
+    append_fingerprint_field(&mut bytes, tenant_id.as_str().as_bytes());
+    for owner in owners {
+        append_fingerprint_field(&mut bytes, owner.as_str().as_bytes());
+    }
+    append_fingerprint_field(
+        &mut bytes,
+        &[match active_role {
+            PlatformRole::PlatformAdmin => 1,
+            PlatformRole::Researcher => 2,
+        }],
+    );
+    ContentHash::digest(&bytes)
+}
+
+fn append_fingerprint_field(bytes: &mut Vec<u8>, value: &[u8]) {
+    bytes.extend_from_slice(
+        &u64::try_from(value.len())
+            .expect("trusted identity field length fits u64")
+            .to_be_bytes(),
+    );
+    bytes.extend_from_slice(value);
 }
 
 pub(crate) fn credential_proof(credential: &[u8]) -> [u8; 32] {
@@ -127,12 +238,4 @@ pub(crate) fn credential_proof(credential: &[u8]) -> [u8; 32] {
 pub(crate) fn credential_matches(credential: &[u8], expected: &[u8; 32]) -> bool {
     let key = hmac::Key::new(hmac::HMAC_SHA256, credential);
     hmac::verify(&key, b"ficant-platform-primary-credential/v1", expected).is_ok()
-}
-
-fn valid_token(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 128
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'-' | b'_' | b'.'))
 }

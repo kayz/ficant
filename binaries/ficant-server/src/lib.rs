@@ -1,22 +1,25 @@
 use ficant_api::{
     CanonicalCurvePointSetDecoder, CanonicalSnapshotCodecAdapter, DataHealthGrpcService,
     DataSourceRegistryGrpcService, ExperimentGrpcService, FactorRegistryGrpcService,
-    GrpcWebServeError, GrpcWebServerConfig, PlatformApplication, PlatformGrpcService, PlatformPort,
-    PortfolioRiskGrpcService, PositionSnapshotGrpcService, RatesGrpcService, SessionPolicy,
-    SubjectRegistryGrpcService, SystemClock, TrustedExperimentScope, TrustedIdentity,
-    TrustedNodeCatalog,
-    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk_and_data_health,
+    FoundationChangeGrpcService, GrpcWebServeError, GrpcWebServerConfig,
+    MarketDefinitionGrpcService, MarketFactGrpcService, PlatformApplication, PlatformGrpcService,
+    PlatformPort, PortfolioRiskGrpcService, PositionSnapshotGrpcService, RatesGrpcService,
+    SessionPolicy, SnapshotGrpcService, SubjectRegistryGrpcService, SystemClock,
+    TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
+    serve_grpc_web_with_r6a_input_plane,
 };
 use ficant_application::ports::{
     AccessScope, AeadCursorCodec, ArtifactRepository, BlobStore, CursorKey,
-    CurveSnapshotMetadataRepository, DataHealthThresholdProfileRepository, DataSourceRepository,
-    DefinitionRepository, ExperimentRepository, FactorTopologyRepository, IntegrityEventSink,
-    Phase4ExecutionRepository, PositionSnapshotRepository, RunJournalRepository,
-    SnapshotRepository, SnapshotVerifiedReadMetadataRepository, SubjectRepository,
-    VerifiedBlobReader,
+    CurveSnapshotMetadataRepository, DataHealthThresholdProfileRepository,
+    DataSourceAuthorizationRepository, DataSourceRepository, DefinitionRepository,
+    ExperimentRepository, FactorTopologyRepository, FoundationChangeRepository, IntegrityEventSink,
+    MarketFactRepository, Phase4ExecutionRepository, PositionSnapshotRepository,
+    RunJournalRepository, SnapshotRepository, SnapshotVerifiedReadMetadataRepository,
+    SubjectRepository, VerifiedBlobReader,
 };
 use ficant_application::{ApplicationError, map_runtime_error};
 use ficant_cgb_futures_pack::CgbFuturesDeliveryRulePackParser;
+use ficant_domain::governance::PlatformRole;
 use ficant_domain::primitives::{ContentHash, Ulid};
 use ficant_fixed_income_native::{
     NativeBondAnalyticsEngine, NativeCarryRollEngine, NativeFuturesDeliveryEngine,
@@ -55,8 +58,16 @@ const ENV_KEYS: &[&str] = &[
     "FICANT_PLATFORM_TRACE_KEY_HEX",
     "FICANT_BOOTSTRAP_SUBJECT",
     "FICANT_BOOTSTRAP_BEARER_TOKEN",
+    "FICANT_BOOTSTRAP_ACTOR_ID",
+    "FICANT_BOOTSTRAP_TENANT_ID",
+    "FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS",
+    "FICANT_BOOTSTRAP_ACTIVE_ROLE",
     "FICANT_BOOTSTRAP_SCOPES",
     "FICANT_LOOPBACK_SUBJECT",
+    "FICANT_LOOPBACK_ACTOR_ID",
+    "FICANT_LOOPBACK_TENANT_ID",
+    "FICANT_LOOPBACK_ALLOWED_OWNER_IDS",
+    "FICANT_LOOPBACK_ACTIVE_ROLE",
     "FICANT_LOOPBACK_SCOPES",
     "FICANT_EXPERIMENT_DATABASE_URL",
     "FICANT_EXPERIMENT_S3_ENDPOINT",
@@ -70,6 +81,9 @@ const ENV_KEYS: &[&str] = &[
     "FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST",
     "FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION",
     "FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST",
+    "FICANT_INPUT_FILE_NDJSON_ROOT",
+    "FICANT_INPUT_FILE_CONNECTION_BINDING",
+    "FICANT_INPUT_POSTGRES_CONNECTION_BINDING",
 ];
 
 pub struct ServerSettings {
@@ -91,6 +105,9 @@ pub struct ServerSettings {
     experiment_runtime_image_digest: ContentHash,
     experiment_environment_attestation: String,
     experiment_native_source_digest: ContentHash,
+    input_file_ndjson_root: String,
+    input_file_connection_binding: String,
+    input_postgres_connection_binding: String,
 }
 
 impl fmt::Debug for ServerSettings {
@@ -115,6 +132,9 @@ impl fmt::Debug for ServerSettings {
             .field("experiment_runtime_image_digest", &"[REDACTED]")
             .field("experiment_environment_attestation", &"[REDACTED]")
             .field("experiment_native_source_digest", &"[REDACTED]")
+            .field("input_file_ndjson_root", &"[REDACTED]")
+            .field("input_file_connection_binding", &"[REDACTED]")
+            .field("input_postgres_connection_binding", &"[REDACTED]")
             .finish()
     }
 }
@@ -188,6 +208,17 @@ impl ServerSettings {
             )?
             .to_owned(),
             experiment_native_source_digest,
+            input_file_ndjson_root: required(values, "FICANT_INPUT_FILE_NDJSON_ROOT")?.to_owned(),
+            input_file_connection_binding: required(
+                values,
+                "FICANT_INPUT_FILE_CONNECTION_BINDING",
+            )?
+            .to_owned(),
+            input_postgres_connection_binding: required(
+                values,
+                "FICANT_INPUT_POSTGRES_CONNECTION_BINDING",
+            )?
+            .to_owned(),
         })
     }
 }
@@ -452,12 +483,12 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
     ))
 }
 
-/// Composes the complete production service set, including the stateless Data Health query.
+/// Preserves the pre-R6A complete production surface for focused compatibility tests.
 ///
 /// # Errors
 ///
 /// Returns a redacted composition error when trusted configuration or adapters cannot be built.
-#[allow(clippy::type_complexity, clippy::too_many_lines)]
+#[allow(clippy::type_complexity)]
 pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk_and_data_health(
     settings: &ServerSettings,
 ) -> Result<
@@ -474,6 +505,60 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
     ),
     ServerError,
 > {
+    let (
+        platform,
+        rates,
+        experiment,
+        registry,
+        positions,
+        factors,
+        portfolio_risk,
+        data_sources,
+        data_health,
+        _,
+        _,
+        _,
+        _,
+    ) = build_grpc_services_with_r6a_input_plane(settings)?;
+    Ok((
+        platform,
+        rates,
+        experiment,
+        registry,
+        positions,
+        factors,
+        portfolio_risk,
+        data_sources,
+        data_health,
+    ))
+}
+
+/// Composes the complete R6A production service set over one identity and persistence boundary.
+///
+/// # Errors
+///
+/// Returns a redacted composition error when trusted configuration or adapters cannot be built.
+#[allow(clippy::type_complexity, clippy::too_many_lines)]
+pub fn build_grpc_services_with_r6a_input_plane(
+    settings: &ServerSettings,
+) -> Result<
+    (
+        PlatformGrpcService,
+        RatesGrpcService,
+        ExperimentGrpcService,
+        SubjectRegistryGrpcService,
+        PositionSnapshotGrpcService,
+        FactorRegistryGrpcService,
+        PortfolioRiskGrpcService,
+        DataSourceRegistryGrpcService,
+        DataHealthGrpcService,
+        MarketDefinitionGrpcService,
+        MarketFactGrpcService,
+        SnapshotGrpcService,
+        FoundationChangeGrpcService,
+    ),
+    ServerError,
+> {
     let application = build_platform_application(settings)?;
     let platform =
         PlatformGrpcService::new(Arc::clone(&application), &settings.trace_key).map_err(config)?;
@@ -484,7 +569,7 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
             settings.experiment_s3_bucket.clone(),
             &settings.experiment_s3_access_key,
             &settings.experiment_s3_secret_key,
-            pool,
+            pool.clone(),
         )
         .map_err(|_| config("experiment S3 configuration is invalid"))?,
     );
@@ -504,8 +589,12 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
     let position_repository: Arc<dyn PositionSnapshotRepository> = repository.clone();
     let factor_repository: Arc<dyn FactorTopologyRepository> = repository.clone();
     let data_source_repository: Arc<dyn DataSourceRepository> = repository.clone();
+    let data_source_authorization_repository: Arc<dyn DataSourceAuthorizationRepository> =
+        repository.clone();
     let data_health_profile_repository: Arc<dyn DataHealthThresholdProfileRepository> =
         repository.clone();
+    let foundation_changes: Arc<dyn FoundationChangeRepository> = repository.clone();
+    let market_facts: Arc<dyn MarketFactRepository> = repository.clone();
     let curve_repository: Arc<dyn CurveSnapshotMetadataRepository> = repository.clone();
     let artifacts: Arc<dyn ArtifactRepository> = repository.clone();
     let definitions: Arc<dyn DefinitionRepository> = repository.clone();
@@ -531,7 +620,7 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
         experiments,
         journals,
         snapshot_repository.clone(),
-        cursor,
+        Arc::clone(&cursor),
         phase4,
         artifacts,
         definitions.clone(),
@@ -571,8 +660,8 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
         Arc::new(CanonicalSnapshotCodecAdapter),
         data_source_repository.clone(),
         data_health_profile_repository,
-        snapshot_repository,
-        writable_blobs,
+        snapshot_repository.clone(),
+        writable_blobs.clone(),
         &settings.trace_key,
     )
     .map_err(config)?;
@@ -580,16 +669,16 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
         Arc::clone(&application),
         access_scope.clone(),
         position_repository,
-        curve_repository,
-        definitions,
+        curve_repository.clone(),
+        definitions.clone(),
         data_source_repository.clone(),
         factor_repository.clone(),
-        blobs,
+        blobs.clone(),
         build_integrity_event_sink(),
         Arc::new(CanonicalCurvePointSetDecoder),
         Arc::new(NativeYieldCurveEngine),
         Arc::new(NativeBondAnalyticsEngine),
-        snapshots,
+        snapshots.clone(),
         Arc::new(CanonicalSnapshotCodecAdapter),
         Arc::new(CgbFuturesDeliveryRulePackParser),
         Arc::new(NativeFuturesDeliveryEngine),
@@ -598,8 +687,52 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
     .map_err(config)?;
     let data_sources = DataSourceRegistryGrpcService::new(
         Arc::clone(&application),
-        access_scope,
+        data_source_repository.clone(),
+        data_source_authorization_repository.clone(),
+        Arc::clone(&cursor),
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+    let market_definitions = MarketDefinitionGrpcService::new(
+        Arc::clone(&application),
+        definitions.clone(),
+        Arc::clone(&cursor),
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+    let market_fact = MarketFactGrpcService::new(
+        Arc::clone(&application),
+        market_facts,
+        definitions.clone(),
+        writable_blobs.clone(),
+        curve_repository,
+        blobs.clone(),
+        build_integrity_event_sink(),
+        Arc::clone(&cursor),
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+    let snapshot = SnapshotGrpcService::new_production(
+        Arc::clone(&application),
+        data_source_authorization_repository,
         data_source_repository,
+        definitions,
+        settings.input_file_connection_binding.clone(),
+        settings.input_file_ndjson_root.clone().into(),
+        settings.input_postgres_connection_binding.clone(),
+        &settings.experiment_database_url,
+        snapshot_repository,
+        writable_blobs,
+        snapshots,
+        blobs,
+        build_integrity_event_sink(),
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+    let foundation_change = FoundationChangeGrpcService::new(
+        Arc::clone(&application),
+        foundation_changes,
+        cursor,
         &settings.trace_key,
     )
     .map_err(config)?;
@@ -625,6 +758,10 @@ pub fn build_grpc_services_with_experiment_registry_and_positions_and_factors_an
         portfolio_risk,
         data_sources,
         data_health,
+        market_definitions,
+        market_fact,
+        snapshot,
+        foundation_change,
     ))
 }
 
@@ -794,8 +931,12 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         portfolio_risk,
         data_sources,
         data_health,
-    ) = build_grpc_services_with_experiment_registry_and_positions_and_factors_and_portfolio_risk_and_data_health(&settings)?;
-    serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk_and_data_health(
+        market_definitions,
+        market_facts,
+        snapshots,
+        governance,
+    ) = build_grpc_services_with_r6a_input_plane(&settings)?;
+    serve_grpc_web_with_r6a_input_plane(
         GrpcWebServerConfig {
             bind: settings.bind,
             allowed_origins: settings.allowed_origins.clone(),
@@ -809,6 +950,10 @@ pub async fn run_from_env() -> Result<(), ServerError> {
         portfolio_risk,
         data_sources,
         data_health,
+        market_definitions,
+        market_facts,
+        snapshots,
+        governance,
     )
     .await?;
     Ok(())
@@ -847,6 +992,10 @@ fn bearer_identity(
         (Some(subject), Some(credential)) => TrustedIdentity::bearer(
             subject,
             credential.as_bytes(),
+            parse_ulid_setting(required(values, "FICANT_BOOTSTRAP_ACTOR_ID")?)?,
+            parse_ulid_setting(required(values, "FICANT_BOOTSTRAP_TENANT_ID")?)?,
+            allowed_owner_ids(required(values, "FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS")?)?,
+            platform_role(required(values, "FICANT_BOOTSTRAP_ACTIVE_ROLE")?)?,
             scopes(values.get("FICANT_BOOTSTRAP_SCOPES")),
         )
         .map(Some)
@@ -861,11 +1010,16 @@ fn implicit_identity(
     values: &BTreeMap<String, String>,
 ) -> Result<Option<TrustedIdentity>, ServerError> {
     match values.get("FICANT_LOOPBACK_SUBJECT") {
-        Some(subject) => {
-            TrustedIdentity::implicit(subject, scopes(values.get("FICANT_LOOPBACK_SCOPES")))
-                .map(Some)
-                .map_err(config)
-        }
+        Some(subject) => TrustedIdentity::implicit(
+            subject,
+            parse_ulid_setting(required(values, "FICANT_LOOPBACK_ACTOR_ID")?)?,
+            parse_ulid_setting(required(values, "FICANT_LOOPBACK_TENANT_ID")?)?,
+            allowed_owner_ids(required(values, "FICANT_LOOPBACK_ALLOWED_OWNER_IDS")?)?,
+            platform_role(required(values, "FICANT_LOOPBACK_ACTIVE_ROLE")?)?,
+            scopes(values.get("FICANT_LOOPBACK_SCOPES")),
+        )
+        .map(Some)
+        .map_err(config),
         None if values.contains_key("FICANT_LOOPBACK_SCOPES") => Err(config(
             "loopback scopes require an explicit loopback subject",
         )),
@@ -881,6 +1035,29 @@ fn scopes(value: Option<&String>) -> Vec<String> {
         .filter(|scope| !scope.is_empty())
         .map(str::to_owned)
         .collect()
+}
+
+fn allowed_owner_ids(value: &str) -> Result<Vec<Ulid>, ServerError> {
+    let owners = value
+        .split(',')
+        .map(str::trim)
+        .filter(|owner| !owner.is_empty())
+        .map(parse_ulid_setting)
+        .collect::<Result<Vec<_>, _>>()?;
+    if owners.is_empty() {
+        return Err(config("trusted identity must allow at least one owner"));
+    }
+    Ok(owners)
+}
+
+fn platform_role(value: &str) -> Result<PlatformRole, ServerError> {
+    match value {
+        "PLATFORM_ADMIN" => Ok(PlatformRole::PlatformAdmin),
+        "RESEARCHER" => Ok(PlatformRole::Researcher),
+        _ => Err(config(
+            "trusted identity active role must be PLATFORM_ADMIN or RESEARCHER",
+        )),
+    }
 }
 
 fn required<'a>(

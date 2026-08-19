@@ -16,6 +16,8 @@ mod fingerprint;
 mod funding_rule_parser;
 mod futures_delivery;
 mod futures_hedge;
+mod governance;
+mod ingestion;
 mod journal;
 mod phase4_execution;
 mod positions;
@@ -29,7 +31,7 @@ mod subjects;
 mod tax_rule_parser;
 mod unit_resolution;
 
-pub use access::AccessScope;
+pub use access::{AccessScope, AuthorizedPrincipal};
 pub use analytics::{
     BondAnalyticsArtifactCodec, BondAnalyticsArtifactFacts, BondAnalyticsEngine,
     EncodedBondAnalyticsArtifact,
@@ -46,21 +48,28 @@ pub use curves::{
     CarryRollArtifactCodec, CarryRollEngine, EncodedCarryRollArtifact, YieldCurveEngine,
 };
 pub use data_health_profiles::DataHealthThresholdProfileRepository;
-pub use data_sources::{DataSourceRepository, RegisterDataSource};
+pub use data_sources::{
+    DATA_SOURCE_IMPORT_SCOPE, DATA_SOURCE_READ_SCOPE, DATA_SOURCE_WRITE_SCOPE,
+    DataSourceAuthorizationRepository, DataSourceAuthorizationResolution, DataSourceRepository,
+    PublishDataSourceAuthorization, RegisterDataSource,
+};
 pub use definitions::{
-    AppendDefinitionVersion, DefinitionIdentity, DefinitionKind, DefinitionRepository,
-    DefinitionValue, InstrumentDefinition, InstrumentSubtype,
+    AppendDefinitionVersion, DEFINITION_READ_SCOPE, DEFINITION_WRITE_SCOPE, DefinitionIdentity,
+    DefinitionKind, DefinitionRepository, DefinitionUseCase, DefinitionValue,
+    GovernedAppendDefinitionVersion, InstrumentDefinition, InstrumentSubtype,
+    stored_definition_content_hash,
 };
 pub use execution::{
     Clock, IdGenerator, Phase1AtomicWork, Phase1PublicationWork, Phase1RunWork, TransactionRunner,
 };
 pub use factor_topology::FactorTopologyRepository;
 pub use facts::{
-    AppendMarketFact, CorrectMarketFact, MarketFact, MarketFactRepository, MarketFactWindow,
-    PublishCurveSnapshot,
+    AppendMarketFact, CorrectMarketFact, GovernedAppendMarketFact, GovernedCorrectMarketFact,
+    GovernedPublishCurveSnapshot, MARKET_FACT_WRITE_SCOPE, MarketFact, MarketFactRepository,
+    MarketFactUseCase, MarketFactWindow, PublishCurveSnapshot, market_fact_content_hash,
 };
-pub use fingerprint::OperationFingerprint;
 pub(crate) use fingerprint::definition_content_hash;
+pub use fingerprint::{OperationFingerprint, data_source_content_hash};
 pub use funding_rule_parser::{FundingRate, FundingRulePackParser};
 pub use futures_delivery::{
     EncodedFuturesDeliveryArtifact, FuturesDeliveryArtifactCandidateFacts,
@@ -68,6 +77,10 @@ pub use futures_delivery::{
 };
 pub use futures_hedge::{
     EncodedFuturesHedgeArtifact, FuturesHedgeArtifactCodec, FuturesHedgeEngine,
+};
+pub use governance::{FoundationChangeContext, FoundationChangeFilter, FoundationChangeRepository};
+pub use ingestion::{
+    CanonicalImportManifestEvidence, CanonicalImportReplay, CanonicalImportReplayRequest,
 };
 pub use journal::{AppendJournalEvent, RunJournalRepository};
 pub use phase4_execution::{
@@ -98,10 +111,15 @@ pub use runs::{CreateExperimentRun, ExperimentRepository, TransitionExperimentRu
 pub use signals::{PublishSignalSet, SignalRepository};
 pub(crate) use snapshots::StagedSnapshotProofParts;
 pub use snapshots::{
-    PublishSnapshot, SnapshotBlobRole, SnapshotProofKind, SnapshotRepository, SnapshotValue,
-    StagedSnapshotBlob, StagedSnapshotProof, VerifiedSnapshotBlob, VerifiedSnapshotProof,
+    DATA_HEALTH_THRESHOLD_CONFIGURE_SCOPE, GovernedPublishSnapshot, POSITION_SNAPSHOT_WRITE_SCOPE,
+    PublishSnapshot, SNAPSHOT_WRITE_SCOPE, SnapshotBlobRole, SnapshotProofKind, SnapshotRepository,
+    SnapshotValue, StagedSnapshotBlob, StagedSnapshotProof, VerifiedSnapshotBlob,
+    VerifiedSnapshotProof,
 };
-pub use subjects::SubjectRepository;
+pub use subjects::{
+    GovernedPublishSubjectState, GovernedRegisterSubject, SUBJECT_READ_SCOPE, SUBJECT_WRITE_SCOPE,
+    SubjectRepository, subject_record_content_hash, subject_state_content_hash,
+};
 pub use tax_rule_parser::{
     CouponTaxClaimScope, CouponTaxRate, CouponTaxTreatment, GrossCouponTaxBasis, TaxRoundingMode,
     TaxRulePackParser,

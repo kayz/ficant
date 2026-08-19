@@ -24,6 +24,21 @@ class DataSourceRegistryServiceStub(object):
                 request_serializer=ficant_dot_market_dot_v1_dot_data__source__pb2.GetDataSourceRequest.SerializeToString,
                 response_deserializer=ficant_dot_market_dot_v1_dot_data__source__pb2.GetDataSourceResponse.FromString,
                 _registered_method=True)
+        self.PublishDataSourceAuthorization = channel.unary_unary(
+                '/ficant.market.v1.DataSourceRegistryService/PublishDataSourceAuthorization',
+                request_serializer=ficant_dot_market_dot_v1_dot_data__source__pb2.PublishDataSourceAuthorizationRequest.SerializeToString,
+                response_deserializer=ficant_dot_market_dot_v1_dot_data__source__pb2.PublishDataSourceAuthorizationResponse.FromString,
+                _registered_method=True)
+        self.GetDataSourceAuthorization = channel.unary_unary(
+                '/ficant.market.v1.DataSourceRegistryService/GetDataSourceAuthorization',
+                request_serializer=ficant_dot_market_dot_v1_dot_data__source__pb2.GetDataSourceAuthorizationRequest.SerializeToString,
+                response_deserializer=ficant_dot_market_dot_v1_dot_data__source__pb2.GetDataSourceAuthorizationResponse.FromString,
+                _registered_method=True)
+        self.ListDataSourceAuthorizations = channel.unary_unary(
+                '/ficant.market.v1.DataSourceRegistryService/ListDataSourceAuthorizations',
+                request_serializer=ficant_dot_market_dot_v1_dot_data__source__pb2.ListDataSourceAuthorizationsRequest.SerializeToString,
+                response_deserializer=ficant_dot_market_dot_v1_dot_data__source__pb2.ListDataSourceAuthorizationsResponse.FromString,
+                _registered_method=True)
 
 
 class DataSourceRegistryServiceServicer(object):
@@ -41,6 +56,24 @@ class DataSourceRegistryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def PublishDataSourceAuthorization(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetDataSourceAuthorization(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListDataSourceAuthorizations(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_DataSourceRegistryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -53,6 +86,21 @@ def add_DataSourceRegistryServiceServicer_to_server(servicer, server):
                     servicer.GetDataSource,
                     request_deserializer=ficant_dot_market_dot_v1_dot_data__source__pb2.GetDataSourceRequest.FromString,
                     response_serializer=ficant_dot_market_dot_v1_dot_data__source__pb2.GetDataSourceResponse.SerializeToString,
+            ),
+            'PublishDataSourceAuthorization': grpc.unary_unary_rpc_method_handler(
+                    servicer.PublishDataSourceAuthorization,
+                    request_deserializer=ficant_dot_market_dot_v1_dot_data__source__pb2.PublishDataSourceAuthorizationRequest.FromString,
+                    response_serializer=ficant_dot_market_dot_v1_dot_data__source__pb2.PublishDataSourceAuthorizationResponse.SerializeToString,
+            ),
+            'GetDataSourceAuthorization': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetDataSourceAuthorization,
+                    request_deserializer=ficant_dot_market_dot_v1_dot_data__source__pb2.GetDataSourceAuthorizationRequest.FromString,
+                    response_serializer=ficant_dot_market_dot_v1_dot_data__source__pb2.GetDataSourceAuthorizationResponse.SerializeToString,
+            ),
+            'ListDataSourceAuthorizations': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListDataSourceAuthorizations,
+                    request_deserializer=ficant_dot_market_dot_v1_dot_data__source__pb2.ListDataSourceAuthorizationsRequest.FromString,
+                    response_serializer=ficant_dot_market_dot_v1_dot_data__source__pb2.ListDataSourceAuthorizationsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -109,6 +157,87 @@ class DataSourceRegistryService(object):
             '/ficant.market.v1.DataSourceRegistryService/GetDataSource',
             ficant_dot_market_dot_v1_dot_data__source__pb2.GetDataSourceRequest.SerializeToString,
             ficant_dot_market_dot_v1_dot_data__source__pb2.GetDataSourceResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PublishDataSourceAuthorization(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ficant.market.v1.DataSourceRegistryService/PublishDataSourceAuthorization',
+            ficant_dot_market_dot_v1_dot_data__source__pb2.PublishDataSourceAuthorizationRequest.SerializeToString,
+            ficant_dot_market_dot_v1_dot_data__source__pb2.PublishDataSourceAuthorizationResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetDataSourceAuthorization(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ficant.market.v1.DataSourceRegistryService/GetDataSourceAuthorization',
+            ficant_dot_market_dot_v1_dot_data__source__pb2.GetDataSourceAuthorizationRequest.SerializeToString,
+            ficant_dot_market_dot_v1_dot_data__source__pb2.GetDataSourceAuthorizationResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListDataSourceAuthorizations(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ficant.market.v1.DataSourceRegistryService/ListDataSourceAuthorizations',
+            ficant_dot_market_dot_v1_dot_data__source__pb2.ListDataSourceAuthorizationsRequest.SerializeToString,
+            ficant_dot_market_dot_v1_dot_data__source__pb2.ListDataSourceAuthorizationsResponse.FromString,
             options,
             channel_credentials,
             insecure,

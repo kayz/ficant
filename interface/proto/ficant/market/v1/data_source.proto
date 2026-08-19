@@ -4,6 +4,7 @@ package ficant.market.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
+import "ficant/core/v1/governance.proto";
 
 enum DataSourceKind {
   DATA_SOURCE_KIND_UNSPECIFIED = 0;
@@ -17,6 +18,17 @@ enum PriceSourceType {
   PRICE_SOURCE_TYPE_ACTIVE_QUOTE = 2;
   PRICE_SOURCE_TYPE_MODEL_VALUATION = 3;
   PRICE_SOURCE_TYPE_CURVE_INTERPOLATION = 4;
+}
+
+enum ImportInterface {
+  IMPORT_INTERFACE_UNSPECIFIED = 0;
+  IMPORT_INTERFACE_CANONICAL_QUOTE_SNAPSHOT = 1;
+}
+
+enum DataSourceAuthorizationState {
+  DATA_SOURCE_AUTHORIZATION_STATE_UNSPECIFIED = 0;
+  DATA_SOURCE_AUTHORIZATION_STATE_ACTIVE = 1;
+  DATA_SOURCE_AUTHORIZATION_STATE_REVOKED = 2;
 }
 
 message DataSourceDefinition {
@@ -35,6 +47,7 @@ message RegisterDataSourceRequest {
   string idempotency_key = 1;
   uint64 expected_latest_version = 2;
   DataSourceDefinition definition = 3;
+  ficant.core.v1.ChangeJustification change = 4;
 }
 
 message RegisterDataSourceResponse {
@@ -55,7 +68,87 @@ message GetDataSourceResponse {
   }
 }
 
+message DataSourceAuthorization {
+  ficant.core.v1.VersionRef ref = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  ficant.core.v1.VersionRef source = 3;
+  ficant.core.v1.Sha256 source_hash = 4;
+  ImportInterface interface = 5;
+  string schema_id = 6;
+  ficant.core.v1.Sha256 schema_hash = 7;
+  ficant.core.v1.MarketTime effective_from = 8;
+  ficant.core.v1.MarketTime effective_to = 9;
+  DataSourceAuthorizationState state = 10;
+  ficant.core.v1.VersionRef supersedes = 11;
+  ficant.core.v1.Sha256 content_hash = 12;
+  ficant.core.v1.Ulid mapping_id = 13;
+  ficant.core.v1.Sha256 mapping_hash = 14;
+}
+
+message InstrumentMappingEntry {
+  string source_instrument_key = 1;
+  ficant.core.v1.MarketTime effective_from = 2;
+  ficant.core.v1.MarketTime effective_to = 3;
+  ficant.core.v1.VersionRef instrument = 4;
+}
+
+message InstrumentMapping {
+  ficant.core.v1.Ulid mapping_id = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  ficant.core.v1.VersionRef source = 3;
+  repeated InstrumentMappingEntry entries = 4;
+  ficant.core.v1.Sha256 content_hash = 5;
+}
+
+message PublishDataSourceAuthorizationRequest {
+  string idempotency_key = 1;
+  uint64 expected_latest_version = 2;
+  DataSourceAuthorization authorization = 3;
+  ficant.core.v1.ChangeJustification change = 4;
+  InstrumentMapping mapping = 5;
+}
+
+message PublishDataSourceAuthorizationResponse {
+  oneof result {
+    DataSourceAuthorization authorization = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message GetDataSourceAuthorizationRequest {
+  ficant.core.v1.VersionRef authorization_ref = 1;
+}
+
+message GetDataSourceAuthorizationResponse {
+  oneof result {
+    DataSourceAuthorization authorization = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message ListDataSourceAuthorizationsRequest {
+  ficant.core.v1.OwnerRef owner = 1;
+  ficant.core.v1.VersionRef data_source = 2;
+  ImportInterface import_interface = 3;
+  ficant.core.v1.PageRequest page = 4;
+}
+
+message DataSourceAuthorizations {
+  repeated DataSourceAuthorization authorizations = 1;
+  ficant.core.v1.PageResponse page = 2;
+}
+
+message ListDataSourceAuthorizationsResponse {
+  oneof result {
+    DataSourceAuthorizations authorizations = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
 service DataSourceRegistryService {
   rpc RegisterDataSource(RegisterDataSourceRequest) returns (RegisterDataSourceResponse);
   rpc GetDataSource(GetDataSourceRequest) returns (GetDataSourceResponse);
+  rpc PublishDataSourceAuthorization(PublishDataSourceAuthorizationRequest) returns (PublishDataSourceAuthorizationResponse);
+  rpc GetDataSourceAuthorization(GetDataSourceAuthorizationRequest) returns (GetDataSourceAuthorizationResponse);
+  rpc ListDataSourceAuthorizations(ListDataSourceAuthorizationsRequest) returns (ListDataSourceAuthorizationsResponse);
 }

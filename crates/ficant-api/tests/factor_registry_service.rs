@@ -13,6 +13,7 @@ use ficant_contracts::ficant::core::v1 as core;
 use ficant_contracts::ficant::research::v1 as pb;
 use ficant_contracts::ficant::research::v1::factor_registry_service_server::FactorRegistryService;
 use ficant_domain::ContentAddressed;
+use ficant_domain::governance::PlatformRole;
 use ficant_domain::primitives::{ContentHash, DecimalValue, Ulid, UnitRef, Version};
 use ficant_domain::research::{
     CurveNodeDefinition, CurveRebuildPolicy, FactorDefinition, FactorDefinitionInput, FactorTarget,
@@ -160,13 +161,43 @@ async fn factor_registry_enforces_scopes_hashes_and_global_immutability() {
         Some(pb::register_factor_definition_response::Result::Error(_))
     ));
     assert!(denied_repository.factor.lock().unwrap().is_none());
+
+    let denied_role_repository = Arc::new(Repository::default());
+    let denied_role = service_with_role(
+        ["factors:read", "factors:write"],
+        PlatformRole::PlatformAdmin,
+        denied_role_repository.clone(),
+    )
+    .register_factor_definition(Request::new(pb::RegisterFactorDefinitionRequest {
+        idempotency_key: "factor:denied-role:v1".to_owned(),
+        definition: Some(proto_factor(&definition)),
+    }))
+    .await
+    .unwrap()
+    .into_inner();
+    let Some(pb::register_factor_definition_response::Result::Error(error)) = denied_role.result
+    else {
+        panic!("platform administrator must not reach researcher-only factor operations");
+    };
+    assert_eq!(error.code, core::ErrorCode::Forbidden as i32);
+    assert!(denied_role_repository.factor.lock().unwrap().is_none());
 }
 
 fn service<const N: usize>(
     scopes: [&str; N],
     repository: Arc<Repository>,
 ) -> FactorRegistryGrpcService {
-    let identity = TrustedIdentity::implicit("factor-test", scopes).unwrap();
+    service_with_role(scopes, PlatformRole::Researcher, repository)
+}
+
+fn service_with_role<const N: usize>(
+    scopes: [&str; N],
+    role: PlatformRole,
+    repository: Arc<Repository>,
+) -> FactorRegistryGrpcService {
+    let identity =
+        TrustedIdentity::implicit("factor-test", id('A'), id('T'), vec![id('P')], role, scopes)
+            .unwrap();
     let application: Arc<dyn PlatformPort> = Arc::new(
         PlatformApplication::try_new(
             Arc::new(SystemClock),

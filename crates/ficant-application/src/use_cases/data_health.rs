@@ -7,11 +7,11 @@ use ficant_domain::{ContentAddressed, Lineaged, VersionedDefinition};
 
 use crate::ports::{
     AccessScope, ApplicationResult, BeginBlobStage, BlobStore, CanonicalSnapshotDecoder,
-    DataHealthThresholdProfileRepository, DataSourceRepository, IdempotencyKey, IntegrityEventSink,
-    PositionSnapshotRepository, PublishSnapshot, SafeTraceContext, SnapshotBlobRole,
-    SnapshotRepository, SnapshotValue, SnapshotVerifiedReadMetadataRepository, StagedSnapshotBlob,
-    StagedSnapshotProof, VerifiedBlobReader, VerifiedSnapshotBlob, VerifiedSnapshotProof,
-    VerifyBlobStage,
+    DataHealthThresholdProfileRepository, DataSourceRepository, FoundationChangeContext,
+    GovernedPublishSnapshot, IdempotencyKey, IntegrityEventSink, PositionSnapshotRepository,
+    SafeTraceContext, SnapshotBlobRole, SnapshotRepository, SnapshotValue,
+    SnapshotVerifiedReadMetadataRepository, StagedSnapshotBlob, StagedSnapshotProof,
+    VerifiedBlobReader, VerifiedSnapshotBlob, VerifiedSnapshotProof, VerifyBlobStage,
 };
 use crate::use_cases::verified_reads::{VerifiedSnapshotRead, VerifiedSnapshotReader};
 use crate::{ApplicationError, ApplicationErrorCategory, map_domain_error};
@@ -117,9 +117,10 @@ impl<'a> PublishDataHealthThresholdProfile<'a> {
     /// immutable-identity failures.
     pub async fn execute(
         &self,
-        scope: &AccessScope,
+        change_context: FoundationChangeContext,
         payload: DataHealthThresholdProfilePayload,
     ) -> ApplicationResult<DataHealthThresholdProfile> {
+        let scope = change_context.principal().access_scope().clone();
         scope.authorize(payload.profile.owner())?;
         let bytes = payload.profile.canonical_bytes();
         let expected_hash = payload.profile.content_hash().clone();
@@ -138,8 +139,12 @@ impl<'a> PublishDataHealthThresholdProfile<'a> {
                     .scoped("data-health-profile-stage")?,
             )?)
             .await?;
-        if let Err(error) = self.blob_store.append_chunk(scope, &staged_id, bytes).await {
-            let _ = self.blob_store.discard_stage(scope, &staged_id).await;
+        if let Err(error) = self
+            .blob_store
+            .append_chunk(&scope, &staged_id, bytes)
+            .await
+        {
+            let _ = self.blob_store.discard_stage(&scope, &staged_id).await;
             return Err(error);
         }
         let staged = StagedSnapshotBlob::new(
@@ -154,14 +159,15 @@ impl<'a> PublishDataHealthThresholdProfile<'a> {
         let proof = VerifiedSnapshotProof::data_health_threshold_profile(
             VerifiedSnapshotBlob::from_staged(staged, promoted)?,
         )?;
-        let command = PublishSnapshot::new(
-            SnapshotValue::DataHealthThresholdProfile(payload.profile),
+        let command = GovernedPublishSnapshot::administrator_data_health_threshold(
+            change_context,
+            payload.profile,
             proof,
             payload
                 .idempotency_key
                 .scoped("data-health-profile-metadata")?,
         )?;
-        match self.snapshots.publish_verified_manifest(command).await? {
+        match self.snapshots.publish_governed(command).await? {
             SnapshotValue::DataHealthThresholdProfile(profile) => Ok(profile),
             SnapshotValue::Data(_) | SnapshotValue::Position(_) | SnapshotValue::Universe(_) => {
                 Err(validation())

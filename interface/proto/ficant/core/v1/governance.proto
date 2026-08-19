@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package ficant.core.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+import "google/protobuf/timestamp.proto";
+
+enum PlatformRole {
+  PLATFORM_ROLE_UNSPECIFIED = 0;
+  PLATFORM_ROLE_PLATFORM_ADMIN = 1;
+  PLATFORM_ROLE_RESEARCHER = 2;
+}
+
+message SourceDocumentRef {
+  string uri = 1;
+  Sha256 sha256 = 2;
+}
+
+message ChangeJustification {
+  string reason = 1;
+  repeated SourceDocumentRef sources = 2;
+}
+
+message FoundationChangeRecord {
+  Ulid record_id = 1;
+  Ulid actor_id = 2;
+  PlatformRole active_role = 3;
+  string operation = 4;
+  string resource_ref = 5;
+  Sha256 before_hash = 6;
+  Sha256 after_hash = 7;
+  ChangeJustification change = 8;
+  Sha256 request_fingerprint = 9;
+  google.protobuf.Timestamp occurred_at = 10;
+  VersionRef authorization_ref = 11;
+}
+
+message GetFoundationChangeRequest {
+  Ulid record_id = 1;
+}
+
+message GetFoundationChangeResponse {
+  oneof result {
+    FoundationChangeRecord change = 1;
+    ErrorDetail error = 2;
+  }
+}
+
+message ListFoundationChangesRequest {
+  string resource_ref = 1;
+  Ulid actor_id = 2;
+  google.protobuf.Timestamp occurred_from = 3;
+  google.protobuf.Timestamp occurred_to = 4;
+  PageRequest page = 5;
+}
+
+message FoundationChangeRecords {
+  repeated FoundationChangeRecord changes = 1;
+  PageResponse page = 2;
+}
+
+message ListFoundationChangesResponse {
+  oneof result {
+    FoundationChangeRecords changes = 1;
+    ErrorDetail error = 2;
+  }
+}
+
+service FoundationChangeService {
+  rpc GetFoundationChange(GetFoundationChangeRequest) returns (GetFoundationChangeResponse);
+  rpc ListFoundationChanges(ListFoundationChangesRequest) returns (ListFoundationChangesResponse);
+}
