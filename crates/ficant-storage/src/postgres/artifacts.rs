@@ -7,6 +7,7 @@ use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid};
 use ficant_domain::research::{Artifact, ArtifactKind};
 use ficant_domain::{ContentAddressed, Lineaged};
+use ficant_runtime::{FormalInputReference, FormalOutputEvidence};
 use sqlx::PgConnection;
 
 use super::PostgresRepository;
@@ -44,6 +45,25 @@ impl ArtifactRepository for PostgresRepository {
         .await
         .map_err(map_sqlx_error)?;
         payload.map(|bytes| decode_artifact(&bytes)).transpose()
+    }
+
+    async fn get_formal_evidence(
+        &self,
+        scope: &AccessScope,
+        artifact_id: Ulid,
+    ) -> Result<Option<FormalOutputEvidence>, ApplicationError> {
+        let mut connection = self.pool().acquire().await.map_err(map_sqlx_error)?;
+        let Some(artifact) = load_persisted_artifact(
+            &mut connection,
+            scope.tenant_id().as_str(),
+            artifact_id.as_str(),
+        )
+        .await?
+        else {
+            return Ok(None);
+        };
+        scope.authorize(artifact.owner())?;
+        load_artifact_formal_evidence(&mut connection, &artifact).await
     }
 
     async fn get_integrity_checked_metadata(
@@ -184,7 +204,8 @@ pub(crate) async fn persist_artifact(
     )
     .await?;
     if outcome == IdempotencyOutcome::Replay {
-        return require_exact_persisted_artifact(transaction, artifact).await;
+        return require_exact_persisted_artifact(transaction, artifact, command.formal_evidence())
+            .await;
     }
 
     publish_blob_reference(
@@ -218,12 +239,15 @@ pub(crate) async fn persist_artifact(
     .await
     .map_err(map_sqlx_error)?;
     insert_lineage(transaction, tenant_id, artifact_id, artifact.lineage()).await?;
-    require_exact_persisted_artifact(transaction, artifact).await
+    persist_or_verify_artifact_formal_evidence(transaction, artifact, command.formal_evidence())
+        .await?;
+    require_exact_persisted_artifact(transaction, artifact, command.formal_evidence()).await
 }
 
 async fn require_exact_persisted_artifact(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     expected: &Artifact,
+    expected_evidence: Option<&FormalOutputEvidence>,
 ) -> Result<Artifact, ApplicationError> {
     let persisted = load_persisted_artifact(
         transaction,
@@ -233,6 +257,10 @@ async fn require_exact_persisted_artifact(
     .await?
     .ok_or_else(immutable_violation)?;
     if &persisted != expected {
+        return Err(immutable_violation());
+    }
+    let actual_evidence = load_artifact_formal_evidence(transaction, &persisted).await?;
+    if actual_evidence.as_ref() != expected_evidence {
         return Err(immutable_violation());
     }
     Ok(persisted)
@@ -274,7 +302,148 @@ pub(crate) async fn load_persisted_artifact(
 
     verify_artifact_lineage(connection, tenant_id, artifact_id, &artifact).await?;
     verify_artifact_blob_reference(connection, tenant_id, &artifact).await?;
+    let _ = load_artifact_formal_evidence(connection, &artifact).await?;
     Ok(Some(artifact))
+}
+
+pub(crate) async fn persist_or_verify_artifact_formal_evidence(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    artifact: &Artifact,
+    expected: Option<&FormalOutputEvidence>,
+) -> Result<(), ApplicationError> {
+    if let Some(evidence) = expected {
+        validate_evidence_binding(artifact, evidence)?;
+        let FormalInputReference::Object(subject) = evidence.subject().reference() else {
+            return Err(lineage_incomplete());
+        };
+        let subject_version = subject.version().ok_or_else(lineage_incomplete)?;
+        let subject_hash = subject.content_hash().ok_or_else(lineage_incomplete)?;
+        let encoded = super::formal_outputs::encode_formal_evidence(evidence);
+        sqlx::query(
+            "INSERT INTO research.artifact_formal_evidence
+             (tenant_id,artifact_id,output_identity,subject_id,subject_version,
+              subject_content_hash,code_commit_sha,code_tree_sha,code_digest,
+              runtime_image_digest,environment_digest,parameters_hash,seed,result_hash,
+              formal_evidence)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::numeric,$14,$15)
+             ON CONFLICT (tenant_id,artifact_id) DO NOTHING",
+        )
+        .bind(artifact.owner().tenant_id().as_str())
+        .bind(artifact.id().as_str())
+        .bind(hash_hex(evidence.output_identity()))
+        .bind(subject.object_id().as_str())
+        .bind(i64::try_from(subject_version.get()).map_err(|_| immutable_violation())?)
+        .bind(hash_hex(subject_hash))
+        .bind(evidence.code().git_commit_sha())
+        .bind(evidence.code().git_tree_sha())
+        .bind(hash_hex(evidence.code().digest()))
+        .bind(hash_hex(evidence.runtime().image_digest()))
+        .bind(hash_hex(evidence.runtime().environment_digest()))
+        .bind(hash_hex(evidence.parameters_hash()))
+        .bind(evidence.seed().map(|value| value.to_string()))
+        .bind(hash_hex(evidence.result_hash()))
+        .bind(encoded)
+        .execute(&mut **transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+    }
+    let actual = load_artifact_formal_evidence(transaction, artifact).await?;
+    (actual.as_ref() == expected)
+        .then_some(())
+        .ok_or_else(immutable_violation)
+}
+
+pub(crate) async fn load_artifact_formal_evidence(
+    connection: &mut PgConnection,
+    artifact: &Artifact,
+) -> Result<Option<FormalOutputEvidence>, ApplicationError> {
+    type EvidenceRow = (
+        String,
+        String,
+        i64,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+        String,
+        Vec<u8>,
+    );
+    let row: Option<EvidenceRow> = sqlx::query_as(
+        "SELECT output_identity::text,subject_id::text,subject_version,
+                subject_content_hash::text,code_commit_sha,code_tree_sha,code_digest::text,
+                runtime_image_digest::text,environment_digest::text,parameters_hash::text,
+                seed::text,result_hash::text,formal_evidence
+         FROM research.artifact_formal_evidence
+         WHERE tenant_id=$1 AND artifact_id=$2",
+    )
+    .bind(artifact.owner().tenant_id().as_str())
+    .bind(artifact.id().as_str())
+    .fetch_optional(&mut *connection)
+    .await
+    .map_err(map_sqlx_error)?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let evidence = super::formal_outputs::decode_formal_evidence(&row.12)?;
+    validate_evidence_binding(artifact, &evidence)?;
+    let FormalInputReference::Object(subject) = evidence.subject().reference() else {
+        return Err(lineage_incomplete());
+    };
+    let subject_version = subject.version().ok_or_else(lineage_incomplete)?;
+    let subject_hash = subject.content_hash().ok_or_else(lineage_incomplete)?;
+    let (
+        output_identity,
+        subject_id,
+        stored_subject_version,
+        stored_subject_hash,
+        code_commit,
+        code_tree,
+        code_digest,
+        runtime_image,
+        environment,
+        parameters,
+        seed,
+        result_hash,
+        encoded,
+    ) = row;
+    if output_identity != hash_hex(evidence.output_identity())
+        || subject_id != subject.object_id().as_str()
+        || stored_subject_version
+            != i64::try_from(subject_version.get()).map_err(|_| immutable_violation())?
+        || stored_subject_hash != hash_hex(subject_hash)
+        || code_commit != evidence.code().git_commit_sha()
+        || code_tree != evidence.code().git_tree_sha()
+        || code_digest != hash_hex(evidence.code().digest())
+        || runtime_image != hash_hex(evidence.runtime().image_digest())
+        || environment != hash_hex(evidence.runtime().environment_digest())
+        || parameters != hash_hex(evidence.parameters_hash())
+        || seed != evidence.seed().map(|value| value.to_string())
+        || result_hash != hash_hex(evidence.result_hash())
+        || encoded != super::formal_outputs::encode_formal_evidence(&evidence)
+    {
+        return Err(immutable_violation());
+    }
+    Ok(Some(evidence))
+}
+
+fn validate_evidence_binding(
+    artifact: &Artifact,
+    evidence: &FormalOutputEvidence,
+) -> Result<(), ApplicationError> {
+    if evidence.result_hash() != artifact.content_hash()
+        || evidence.subject().owner() != artifact.owner()
+    {
+        return Err(lineage_incomplete());
+    }
+    Ok(())
+}
+
+fn hash_hex(value: &ContentHash) -> String {
+    crate::s3::content_addressed::hash_hex(value)
 }
 
 async fn verify_artifact_lineage(

@@ -5,7 +5,7 @@ use crate::registry::PlatformPort;
 use chrono::{DateTime, NaiveDate, Utc};
 use ficant_application::ports::{
     AccessScope, AuthorizedPrincipal, BlobStore, FoundationChangeContext, IdempotencyKey,
-    PositionSnapshotRepository, SnapshotRepository,
+    PositionSnapshotRepository, SnapshotRepository, SubjectRepository,
 };
 use ficant_application::{
     ApplicationError, ApplicationErrorCategory, PositionSnapshotPayload, PositionViewsUseCase,
@@ -28,9 +28,16 @@ use ficant_domain::research::{
     PriceSourceSummary,
 };
 use ficant_domain::{ContentAddressed, Lineaged};
+use ficant_runtime::FormalInputKind;
 use prost_types::Timestamp;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
+
+use crate::FormalOutputPublisher;
+use crate::formal_evidence::{
+    FormalInputTimes, exact_subject_binding, implementation_binding, message_parameters_hash,
+    object_binding,
+};
 
 const READ_SCOPE: &str = "positions:read";
 const WRITE_SCOPE: &str = "positions:write";
@@ -41,6 +48,8 @@ pub struct PositionSnapshotGrpcService {
     positions: Arc<dyn PositionSnapshotRepository>,
     snapshots: Arc<dyn SnapshotRepository>,
     blobs: Arc<dyn BlobStore>,
+    subjects: Option<Arc<dyn SubjectRepository>>,
+    formal_outputs: Option<FormalOutputPublisher>,
     errors: CoreBusinessErrorMapper,
 }
 
@@ -63,8 +72,22 @@ impl PositionSnapshotGrpcService {
             positions,
             snapshots,
             blobs,
+            subjects: None,
+            formal_outputs: None,
             errors: CoreBusinessErrorMapper::new(trace_key)?,
         })
+    }
+
+    /// Enables the mandatory R7B formal-output boundary for the two derived position results.
+    #[must_use]
+    pub fn with_formal_outputs(
+        mut self,
+        subjects: Arc<dyn SubjectRepository>,
+        formal_outputs: FormalOutputPublisher,
+    ) -> Self {
+        self.subjects = Some(subjects);
+        self.formal_outputs = Some(formal_outputs);
+        self
     }
 
     fn authorize(
@@ -91,6 +114,115 @@ impl PositionSnapshotGrpcService {
     fn error(&self, operation: &str, error: &ApplicationError) -> core::ErrorDetail {
         self.errors
             .map(operation, "position-snapshot-application", error)
+    }
+
+    fn formal_configuration(
+        &self,
+    ) -> Result<(&dyn SubjectRepository, &FormalOutputPublisher), ApplicationError> {
+        Ok((
+            self.subjects.as_deref().ok_or_else(configuration)?,
+            self.formal_outputs.as_ref().ok_or_else(configuration)?,
+        ))
+    }
+
+    async fn formal_position_views(
+        &self,
+        principal: &AuthorizedPrincipal,
+        request: &pb::GetPositionViewsRequest,
+        value: &ficant_application::PositionViews,
+    ) -> Result<pb::PositionViews, ApplicationError> {
+        let (subjects, publisher) = self.formal_configuration()?;
+        let subject = exact_subject_binding(
+            subjects,
+            principal.access_scope(),
+            value.snapshot.owner(),
+            value.snapshot.subject_ref(),
+        )
+        .await?;
+        let consumed = vec![object_binding(
+            "position-snapshot",
+            FormalInputKind::PositionSnapshot,
+            value.snapshot.owner(),
+            value.snapshot.id(),
+            None,
+            value.snapshot.content_hash().clone(),
+            FormalInputTimes {
+                observed_at: Some(value.snapshot.observed_at().clone()),
+                visible_at: Some(value.snapshot.visible_at().clone()),
+                ..FormalInputTimes::default()
+            },
+        )?];
+        let implementations = vec![implementation_binding(
+            "position-views",
+            "ficant/position-views/implementation/v1",
+            &[b"immutable-position-projection-v1"],
+        )?];
+        let mut result = views(value);
+        let evidence = publisher
+            .publish_message(
+                principal.access_scope(),
+                value.snapshot.owner(),
+                "ficant.research.v1.PositionViews",
+                subject,
+                consumed,
+                implementations,
+                message_parameters_hash("ficant/position-views/parameters/v1", request),
+                None,
+                &result,
+            )
+            .await?;
+        result.formal_evidence = Some(evidence);
+        Ok(result)
+    }
+
+    async fn formal_capital_use(
+        &self,
+        principal: &AuthorizedPrincipal,
+        request: &pb::CalculateCapitalUseRequest,
+        value: &ficant_application::CapitalUse,
+    ) -> Result<pb::CapitalUse, ApplicationError> {
+        let (subjects, publisher) = self.formal_configuration()?;
+        let subject = exact_subject_binding(
+            subjects,
+            principal.access_scope(),
+            value.snapshot.owner(),
+            value.snapshot.subject_ref(),
+        )
+        .await?;
+        let consumed = vec![object_binding(
+            "position-snapshot",
+            FormalInputKind::PositionSnapshot,
+            value.snapshot.owner(),
+            value.snapshot.id(),
+            None,
+            value.snapshot.content_hash().clone(),
+            FormalInputTimes {
+                observed_at: Some(value.snapshot.observed_at().clone()),
+                visible_at: Some(value.snapshot.visible_at().clone()),
+                ..FormalInputTimes::default()
+            },
+        )?];
+        let implementations = vec![implementation_binding(
+            "capital-use",
+            "ficant/capital-use/implementation/v1",
+            &[b"imported-capital-requirement-sum-v1"],
+        )?];
+        let mut result = capital_use(value);
+        let evidence = publisher
+            .publish_message(
+                principal.access_scope(),
+                value.snapshot.owner(),
+                "ficant.research.v1.CapitalUse",
+                subject,
+                consumed,
+                implementations,
+                message_parameters_hash("ficant/capital-use/parameters/v1", request),
+                None,
+                &result,
+            )
+            .await?;
+        result.formal_evidence = Some(evidence);
+        Ok(result)
     }
 }
 
@@ -227,16 +359,23 @@ impl PositionSnapshotService for PositionSnapshotGrpcService {
                 parse_market_time(request.get_ref().knowledge_at.as_ref()),
             ) {
                 (Ok(snapshot_id), Ok(knowledge_at)) => {
-                    PositionViewsUseCase::new(self.positions.as_ref())
+                    match PositionViewsUseCase::new(self.positions.as_ref())
                         .views(principal.access_scope(), snapshot_id, knowledge_at)
                         .await
+                    {
+                        Ok(value) => {
+                            self.formal_position_views(&principal, request.get_ref(), &value)
+                                .await
+                        }
+                        Err(error) => Err(error),
+                    }
                 }
                 (Err(error), _) | (_, Err(error)) => Err(error),
             },
         };
         Ok(Response::new(pb::GetPositionViewsResponse {
             result: Some(match result {
-                Ok(value) => pb::get_position_views_response::Result::Views(views(&value)),
+                Ok(value) => pb::get_position_views_response::Result::Views(value),
                 Err(error) => {
                     pb::get_position_views_response::Result::Error(self.error(OPERATION, &error))
                 }
@@ -256,18 +395,23 @@ impl PositionSnapshotService for PositionSnapshotGrpcService {
                 parse_market_time(request.get_ref().knowledge_at.as_ref()),
             ) {
                 (Ok(snapshot_id), Ok(knowledge_at)) => {
-                    PositionViewsUseCase::new(self.positions.as_ref())
+                    match PositionViewsUseCase::new(self.positions.as_ref())
                         .capital_use(principal.access_scope(), snapshot_id, knowledge_at)
                         .await
+                    {
+                        Ok(value) => {
+                            self.formal_capital_use(&principal, request.get_ref(), &value)
+                                .await
+                        }
+                        Err(error) => Err(error),
+                    }
                 }
                 (Err(error), _) | (_, Err(error)) => Err(error),
             },
         };
         Ok(Response::new(pb::CalculateCapitalUseResponse {
             result: Some(match result {
-                Ok(value) => {
-                    pb::calculate_capital_use_response::Result::CapitalUse(capital_use(&value))
-                }
+                Ok(value) => pb::calculate_capital_use_response::Result::CapitalUse(value),
                 Err(error) => {
                     pb::calculate_capital_use_response::Result::Error(self.error(OPERATION, &error))
                 }
@@ -281,6 +425,10 @@ fn authorize_position_publish(
     owner: &OwnerRef,
 ) -> Result<(), ApplicationError> {
     principal.authorize_mutation(PlatformRole::PlatformAdmin, WRITE_SCOPE, owner)
+}
+
+fn configuration() -> ApplicationError {
+    ApplicationError::new(ApplicationErrorCategory::StateConflict, false)
 }
 
 fn server_market_time() -> MarketTime {
@@ -500,6 +648,7 @@ fn views(value: &ficant_application::PositionViews) -> pb::PositionViews {
             })
             .collect(),
         coverage: Some(coverage(&value.coverage)),
+        formal_evidence: None,
     }
 }
 
@@ -510,6 +659,7 @@ fn capital_use(value: &ficant_application::CapitalUse) -> pb::CapitalUse {
         lineage: value.snapshot.lineage().iter().map(lineage).collect(),
         total_capital_requirement: Some(decimal(&value.total_capital_requirement)),
         coverage: Some(coverage(&value.coverage)),
+        formal_evidence: None,
     }
 }
 

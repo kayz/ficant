@@ -27,7 +27,10 @@ use ficant_domain::research::{
     SignalSetInput, TypedValue, UniverseSnapshot,
 };
 use ficant_domain::{ContentAddressed, Lineaged, VersionedDefinition};
+use ficant_runtime::CodeBinding;
 use sqlx::types::chrono::{DateTime, NaiveDate, NaiveTime, Utc};
+
+use super::formal_outputs::{decode_formal_input, encode_formal_input};
 
 type CodecResult<T> = Result<T, ApplicationError>;
 
@@ -232,6 +235,17 @@ pub(crate) fn encode_execution_identity(value: &ExecutionInstanceIdentity) -> Ve
     }
     encoder.bytes(value.reproducibility_digest().as_bytes());
     encoder.bytes(value.digest().as_bytes());
+    match (reproducibility.subject(), reproducibility.code()) {
+        (Some(subject), Some(code)) => {
+            encoder.bool(true);
+            encoder.bytes(&encode_formal_input(subject));
+            encoder.string(code.git_commit_sha());
+            encoder.string(code.git_tree_sha());
+            encoder.bytes(code.digest().as_bytes());
+        }
+        (None, None) => encoder.bool(false),
+        _ => unreachable!("reproducibility construction keeps subject and code paired"),
+    }
     encoder.finish()
 }
 
@@ -278,21 +292,36 @@ pub(crate) fn decode_execution_identity(
     }
     let claimed_reproducibility = decode_hash(&mut decoder)?;
     let claimed_execution = decode_hash(&mut decoder)?;
+    let formal = if decoder.at_end() {
+        None
+    } else if decoder.bool()? {
+        let subject = decode_formal_input(&decoder.bytes()?)?;
+        let code = CodeBinding::from_claimed(
+            decoder.string()?,
+            decoder.string()?,
+            decode_hash(&mut decoder)?,
+        )
+        .map_err(ficant_application::map_domain_error)?;
+        Some((subject, code))
+    } else {
+        None
+    };
     decoder.end()?;
-    let reproducibility = ReproducibilityIdentity::new(
-        graph,
-        ReproducibilityIdentityInput {
-            external_inputs,
-            data_snapshot_hash,
-            universe_snapshot_hash,
-            parameters_hash,
-            runtime_image_digest,
-            environment_digest,
-            seed,
-            rule_pack_bindings,
-            node_implementations,
-        },
-    )
+    let input = ReproducibilityIdentityInput {
+        external_inputs,
+        data_snapshot_hash,
+        universe_snapshot_hash,
+        parameters_hash,
+        runtime_image_digest,
+        environment_digest,
+        seed,
+        rule_pack_bindings,
+        node_implementations,
+    };
+    let reproducibility = match formal {
+        Some((subject, code)) => ReproducibilityIdentity::new_formal(graph, input, subject, code),
+        None => ReproducibilityIdentity::new(graph, input),
+    }
     .map_err(|error| ficant_application::map_runtime_error(&error))?;
     if reproducibility.digest() != &claimed_reproducibility {
         return Err(codec_error());

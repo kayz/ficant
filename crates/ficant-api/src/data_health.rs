@@ -5,7 +5,7 @@ use ficant_application::ports::{
     AccessScope, AuthorizedPrincipal, BlobStore, CanonicalSnapshotDecoder,
     DataHealthThresholdProfileRepository, DataSourceRepository, FoundationChangeContext,
     IdempotencyKey, IntegrityEventSink, PositionSnapshotRepository, SnapshotRepository,
-    SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader,
+    SnapshotValue, SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobReader,
 };
 use ficant_application::{
     ApplicationError, ApplicationErrorCategory, DataHealthQuery, DataHealthThresholdProfilePayload,
@@ -18,7 +18,7 @@ use ficant_contracts::ficant::research::v1::data_health_service_server::DataHeal
 use ficant_domain::governance::{
     FoundationResourceKind, FoundationResourceRef, PlatformRole, deterministic_change_record_id,
 };
-use ficant_domain::market::PriceSourceType;
+use ficant_domain::market::{PriceSourceType, data_source_content_hash};
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, LineageRef, MarketTime, OwnerRef, Ulid, Version, VersionRef,
 };
@@ -28,6 +28,7 @@ use ficant_domain::research::{
     PriceSourceSummary,
 };
 use ficant_domain::{ContentAddressed, Lineaged};
+use ficant_runtime::FormalInputKind;
 use prost_types::Timestamp;
 use tonic::{Request, Response, Status};
 
@@ -35,6 +36,13 @@ use crate::core_error::CoreBusinessErrorMapper;
 use crate::error::{PlatformFailure, PlatformFailureCode};
 use crate::grpc_web::request_credential;
 use crate::registry::PlatformPort;
+use crate::{
+    FormalOutputPublisher,
+    formal_evidence::{
+        FormalInputTimes, exact_subject_binding, implementation_binding, message_parameters_hash,
+        object_binding,
+    },
+};
 
 const READ_SCOPE: &str = "data-health:read";
 const CONFIGURE_SCOPE: &str = "data-health:configure";
@@ -51,6 +59,8 @@ pub struct DataHealthGrpcService {
     threshold_profiles: Arc<dyn DataHealthThresholdProfileRepository>,
     snapshots: Arc<dyn SnapshotRepository>,
     blobs: Arc<dyn BlobStore>,
+    subjects: Option<Arc<dyn SubjectRepository>>,
+    formal_outputs: Option<FormalOutputPublisher>,
     errors: CoreBusinessErrorMapper,
 }
 
@@ -87,8 +97,22 @@ impl DataHealthGrpcService {
             threshold_profiles,
             snapshots,
             blobs,
+            subjects: None,
+            formal_outputs: None,
             errors: CoreBusinessErrorMapper::new(trace_key)?,
         })
+    }
+
+    /// Enables the mandatory R7B formal-output boundary for `DataHealthReport`.
+    #[must_use]
+    pub fn with_formal_outputs(
+        mut self,
+        subjects: Arc<dyn SubjectRepository>,
+        formal_outputs: FormalOutputPublisher,
+    ) -> Self {
+        self.subjects = Some(subjects);
+        self.formal_outputs = Some(formal_outputs);
+        self
     }
 
     fn authorize(
@@ -114,6 +138,142 @@ impl DataHealthGrpcService {
 
     fn error(&self, operation: &str, error: &ApplicationError) -> core::ErrorDetail {
         self.errors.map(operation, "data-health-application", error)
+    }
+
+    // The evidence assembly remains one fail-closed boundary so no verified input is omitted.
+    #[allow(clippy::too_many_lines)]
+    async fn formal_report(
+        &self,
+        principal: &AuthorizedPrincipal,
+        request: &pb::GetDataHealthReportRequest,
+        value: &DataHealthReport,
+    ) -> Result<pb::DataHealthReport, ApplicationError> {
+        let subjects = self.subjects.as_deref().ok_or_else(configuration)?;
+        let publisher = self.formal_outputs.as_ref().ok_or_else(configuration)?;
+        let subject = exact_subject_binding(
+            subjects,
+            principal.access_scope(),
+            value.owner(),
+            value.subject_ref(),
+        )
+        .await?;
+
+        let position = self
+            .positions
+            .get_position_snapshot(
+                principal.access_scope(),
+                value.position_snapshot_id().clone(),
+                value.evaluated_at().clone(),
+            )
+            .await?
+            .ok_or_else(not_found)?;
+        if position.owner() != value.owner()
+            || position.subject_ref() != value.subject_ref()
+            || position.content_hash() != value.position_snapshot_hash()
+        {
+            return Err(lineage_incomplete());
+        }
+        let mut consumed = vec![object_binding(
+            "position-snapshot",
+            FormalInputKind::PositionSnapshot,
+            value.owner(),
+            position.id(),
+            None,
+            position.content_hash().clone(),
+            FormalInputTimes {
+                observed_at: Some(position.observed_at().clone()),
+                visible_at: Some(position.visible_at().clone()),
+                ..FormalInputTimes::default()
+            },
+        )?];
+
+        let profile = value.threshold_profile();
+        consumed.push(object_binding(
+            "data-health-profile",
+            FormalInputKind::DataHealthProfile,
+            profile.owner(),
+            profile.profile_ref().id(),
+            Some(profile.profile_ref().version()),
+            profile.content_hash().clone(),
+            FormalInputTimes {
+                visible_at: Some(profile.visible_at().clone()),
+                effective_from: Some(profile.effective_from().clone()),
+                effective_to: Some(profile.effective_to().clone()),
+                ..FormalInputTimes::default()
+            },
+        )?);
+
+        if let Some(snapshot_id) = value.data_snapshot_id() {
+            let metadata = self
+                .snapshot_metadata
+                .get_verified_read_metadata(principal.access_scope(), snapshot_id.clone())
+                .await?
+                .ok_or_else(not_found)?;
+            let SnapshotValue::Data(snapshot) = metadata.snapshot() else {
+                return Err(lineage_incomplete());
+            };
+            if snapshot.owner() != value.owner()
+                || value.data_snapshot_manifest_hash() != Some(snapshot.manifest_hash())
+            {
+                return Err(lineage_incomplete());
+            }
+            consumed.push(object_binding(
+                "data-snapshot",
+                FormalInputKind::DataSnapshot,
+                snapshot.owner(),
+                snapshot.id(),
+                None,
+                snapshot.content_hash().clone(),
+                FormalInputTimes {
+                    observed_at: Some(snapshot.as_of().clone()),
+                    visible_at: Some(snapshot.visible_at().clone()),
+                    ..FormalInputTimes::default()
+                },
+            )?);
+            let source_ref = value.data_source_ref().ok_or_else(lineage_incomplete)?;
+            let source = self
+                .data_sources
+                .get_exact(principal.access_scope(), source_ref.clone())
+                .await?
+                .ok_or_else(not_found)?;
+            if source.owner() != value.owner() {
+                return Err(lineage_incomplete());
+            }
+            consumed.push(object_binding(
+                "data-source",
+                FormalInputKind::DataSource,
+                source.owner(),
+                source_ref.id(),
+                Some(source_ref.version()),
+                data_source_content_hash(&source),
+                FormalInputTimes::default(),
+            )?);
+        } else if value.data_source_ref().is_some() || value.data_snapshot_manifest_hash().is_some()
+        {
+            return Err(lineage_incomplete());
+        }
+
+        let implementations = vec![implementation_binding(
+            "data-health",
+            "ficant/data-health/implementation/v1",
+            &[b"threshold-profile-position-and-price-evaluation-v1"],
+        )?];
+        let mut result = report(value);
+        let evidence = publisher
+            .publish_message(
+                principal.access_scope(),
+                value.owner(),
+                "ficant.research.v1.DataHealthReport",
+                subject,
+                consumed,
+                implementations,
+                message_parameters_hash("ficant/data-health/parameters/v1", request),
+                None,
+                &result,
+            )
+            .await?;
+        result.formal_evidence = Some(evidence);
+        Ok(result)
     }
 }
 
@@ -197,7 +357,7 @@ impl DataHealthService for DataHealthGrpcService {
         };
         let result = match result {
             Ok((principal, query)) => {
-                GetDataHealthReport::new(
+                match GetDataHealthReport::new(
                     self.positions.as_ref(),
                     self.snapshot_metadata.as_ref(),
                     self.blob_reader.as_ref(),
@@ -208,12 +368,19 @@ impl DataHealthService for DataHealthGrpcService {
                 )
                 .execute(principal.access_scope(), query)
                 .await
+                {
+                    Ok(value) => {
+                        self.formal_report(&principal, request.get_ref(), &value)
+                            .await
+                    }
+                    Err(error) => Err(error),
+                }
             }
             Err(error) => Err(error),
         };
         Ok(Response::new(pb::GetDataHealthReportResponse {
             result: Some(match result {
-                Ok(value) => pb::get_data_health_report_response::Result::Report(report(&value)),
+                Ok(value) => pb::get_data_health_report_response::Result::Report(value),
                 Err(error) => pb::get_data_health_report_response::Result::Error(
                     self.error(OPERATION, &error),
                 ),
@@ -340,6 +507,7 @@ fn report(value: &DataHealthReport) -> pb::DataHealthReport {
         request_fingerprint: Some(hash(value.request_fingerprint())),
         content_hash: Some(hash(value.content_hash())),
         lineage: value.lineage().iter().map(lineage).collect(),
+        formal_evidence: None,
     }
 }
 
@@ -507,6 +675,18 @@ fn server_market_time() -> MarketTime {
 
 fn invalid() -> ApplicationError {
     ApplicationError::new(ApplicationErrorCategory::ValidationFailed, false)
+}
+
+fn not_found() -> ApplicationError {
+    ApplicationError::new(ApplicationErrorCategory::NotFound, false)
+}
+
+fn lineage_incomplete() -> ApplicationError {
+    ApplicationError::new(ApplicationErrorCategory::LineageIncomplete, false)
+}
+
+fn configuration() -> ApplicationError {
+    ApplicationError::new(ApplicationErrorCategory::StateConflict, false)
 }
 
 fn forbidden() -> ApplicationError {

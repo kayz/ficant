@@ -17,6 +17,8 @@ $steps = @(
     New-FicantCheckStep -Name 'Layering gate fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-File', 'scripts/test-layering-check.ps1')
     New-FicantCheckStep -Name 'Coverage descriptor gate' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/check-coverage.ps1')
     New-FicantCheckStep -Name 'Coverage gate fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-coverage-check.ps1')
+    New-FicantCheckStep -Name 'R7B MANUAL literal-runner fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-manual-check.ps1')
+    New-FicantCheckStep -Name 'R7B recovery-manifest fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-recovery-check.ps1')
     New-FicantCheckStep -Name 'Rust formatting' -FilePath 'cargo' -ArgumentList @('fmt', '--all', '--', '--check')
     New-FicantCheckStep -Name 'Rust strict Clippy' -FilePath 'cargo' -ArgumentList @('clippy', '--offline', '--workspace', '--all-targets', '--locked', '--exclude', 'ficant-contracts', '--exclude', 'ficant-contract-tests', '--no-deps', '--', '-D', 'warnings')
     New-FicantCheckStep -Name 'Rust workspace build' -FilePath 'cargo' -ArgumentList @('build', '--offline', '--workspace', '--all-targets', '--locked')
@@ -65,6 +67,7 @@ if ($IncludeIntegration) {
         New-FicantCheckStep -Name 'Phase 3B immutable snapshot integration' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-File', 'scripts/check-phase3b.ps1')
         New-FicantCheckStep -Name 'R6A governed input-plane production integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-server', '--test', 'r6a_governed_input_sit', '--', '--ignored', '--test-threads=1')
         New-FicantCheckStep -Name 'R6B Artifact production topology integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-server', '--test', 'r6b_artifact_service_sit', '--', '--ignored', '--test-threads=1')
+        New-FicantCheckStep -Name 'R7B isolated backup and fresh-restore proof' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/check-recovery.ps1')
     )
 }
 

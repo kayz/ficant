@@ -23,15 +23,16 @@ _sym_db = _symbol_database.Default()
 
 
 from ficant.core.v1 import common_pb2 as ficant_dot_core_dot_v1_dot_common__pb2
+from ficant.core.v1 import evidence_pb2 as ficant_dot_core_dot_v1_dot_evidence__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1f\x66icant/research/v1/signal.proto\x12\x12\x66icant.research.v1\x1a\x1b\x66icant/core/v1/common.proto\"\xeb\x04\n\tSignalSet\x12\x38\n\rsignal_set_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0bsignalSetId\x12.\n\x05owner\x18\x02 \x01(\x0b\x32\x18.ficant.core.v1.OwnerRefR\x05owner\x12\x36\n\x08\x61rtifact\x18\x03 \x01(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x08\x61rtifact\x12@\n\x11\x65xperiment_run_id\x18\x04 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0f\x65xperimentRunId\x12?\n\rdata_snapshot\x18\x05 \x01(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x0c\x64\x61taSnapshot\x12G\n\x11universe_snapshot\x18\x06 \x01(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x10universeSnapshot\x12\x39\n\nrule_packs\x18\x07 \x03(\x0b\x32\x1a.ficant.core.v1.VersionRefR\trulePacks\x12\x43\n\x0finput_artifacts\x18\x08 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x0einputArtifacts\x12\x39\n\nvalid_from\x18\t \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\tvalidFrom\x12\x35\n\x08valid_to\x18\n \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\x07validTob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1f\x66icant/research/v1/signal.proto\x12\x12\x66icant.research.v1\x1a\x1b\x66icant/core/v1/common.proto\x1a\x1d\x66icant/core/v1/evidence.proto\"\xba\x05\n\tSignalSet\x12\x38\n\rsignal_set_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0bsignalSetId\x12.\n\x05owner\x18\x02 \x01(\x0b\x32\x18.ficant.core.v1.OwnerRefR\x05owner\x12\x36\n\x08\x61rtifact\x18\x03 \x01(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x08\x61rtifact\x12@\n\x11\x65xperiment_run_id\x18\x04 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\x0f\x65xperimentRunId\x12?\n\rdata_snapshot\x18\x05 \x01(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x0c\x64\x61taSnapshot\x12G\n\x11universe_snapshot\x18\x06 \x01(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x10universeSnapshot\x12\x39\n\nrule_packs\x18\x07 \x03(\x0b\x32\x1a.ficant.core.v1.VersionRefR\trulePacks\x12\x43\n\x0finput_artifacts\x18\x08 \x03(\x0b\x32\x1a.ficant.core.v1.LineageRefR\x0einputArtifacts\x12\x39\n\nvalid_from\x18\t \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\tvalidFrom\x12\x35\n\x08valid_to\x18\n \x01(\x0b\x32\x1a.ficant.core.v1.MarketTimeR\x07validTo\x12M\n\x0f\x66ormal_evidence\x18\x0b \x01(\x0b\x32$.ficant.core.v1.FormalOutputEvidenceR\x0e\x66ormalEvidenceb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'ficant.research.v1.signal_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_SIGNALSET']._serialized_start=85
-  _globals['_SIGNALSET']._serialized_end=704
+  _globals['_SIGNALSET']._serialized_start=116
+  _globals['_SIGNALSET']._serialized_end=814
 # @@protoc_insertion_point(module_scope)

@@ -807,6 +807,22 @@ fn infrastructure_values(
         ("FICANT_PLATFORM_SIGNING_KEY_HEX".to_owned(), KEY.to_owned()),
         ("FICANT_PLATFORM_TRACE_KEY_HEX".to_owned(), KEY.to_owned()),
         (
+            "FICANT_CODE_COMMIT_SHA".to_owned(),
+            ficant_server::compiled_git_commit_sha().to_owned(),
+        ),
+        (
+            "FICANT_CODE_TREE_SHA".to_owned(),
+            ficant_server::compiled_git_tree_sha().to_owned(),
+        ),
+        (
+            "FICANT_SERVER_RUNTIME_IMAGE_DIGEST".to_owned(),
+            format!("sha256:{}", "ab".repeat(32)),
+        ),
+        (
+            "FICANT_SERVER_ENVIRONMENT_ATTESTATION".to_owned(),
+            format!("sha256:{}", "cd".repeat(32)),
+        ),
+        (
             "FICANT_EXPERIMENT_DATABASE_URL".to_owned(),
             environment.database_url.clone(),
         ),

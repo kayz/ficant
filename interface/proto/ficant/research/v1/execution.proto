@@ -3,6 +3,7 @@ syntax = "proto3";
 package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
+import "ficant/core/v1/evidence.proto";
 import "ficant/research/v1/graph.proto";
 
 message NodeImplementationBinding {
@@ -52,6 +53,8 @@ message ReproducibilityIdentity {
   repeated NodeImplementationBinding node_implementations = 9;
   repeated ExecutionExternalInput external_inputs = 10;
   ficant.core.v1.Sha256 digest = 11;
+  ficant.core.v1.FormalInputBinding subject = 12;
+  ficant.core.v1.CodeBinding code = 13;
 }
 
 message ExecutionInstanceIdentity {
@@ -65,6 +68,7 @@ message NodeOutputBinding {
   TypedValue value_type = 2;
   ficant.core.v1.LineageRef artifact = 3;
   ficant.core.v1.Sha256 content_hash = 4;
+  ficant.core.v1.FormalOutputEvidence formal_evidence = 5;
 }
 
 message NodeOutputManifestContent {

@@ -7,8 +7,8 @@ use ficant_application::ports::{
     IntegrityEventSink, MarketRunRulePackResolver, NodeImplementation, OutputTrace, PageRequest,
     Phase4ExecutionRepository, ReproducibilityIdentity, ReproducibilityIdentityInput,
     RulePackBinding, RunJournalRepository, SafeTraceContext, SnapshotRepository,
-    SnapshotVerifiedReadMetadataRepository, StoredNodeManifest, TransitionExperimentRun,
-    VerifiedBlobReader,
+    SnapshotVerifiedReadMetadataRepository, StoredNodeManifest, SubjectRepository,
+    TransitionExperimentRun, VerifiedBlobReader,
 };
 use ficant_application::use_cases::phase4_submission::{Phase4Submission, PreparedGraphSubmission};
 use ficant_application::use_cases::verified_reads::{VerifiedReadFacade, VerifiedSnapshotRead};
@@ -25,11 +25,17 @@ use ficant_domain::research::{
     ResearchGraph, ResearchGraphInput, ResearchNode, ResearchNodeContract,
     ResearchNodeContractInput, ResourceLimits, RunJournal, RunState, TypedValue,
 };
-use ficant_runtime::{NativePortValue, decode_canonical_output_bytes};
+use ficant_runtime::{
+    CodeBinding, FormalInputBinding, FormalInputKind, FormalInputReference, FormalOutputEvidence,
+    NativePortValue, decode_canonical_output_bytes,
+};
 use prost::Message;
 use tonic::{Request, Response, Status};
 
 use crate::core_error::CoreBusinessErrorMapper;
+use crate::formal_evidence::{
+    exact_subject_binding, parse_formal_input, proto_code_binding, proto_formal_input,
+};
 use crate::grpc_web::request_credential;
 use crate::registry::PlatformPort;
 
@@ -109,6 +115,8 @@ pub struct ExperimentGrpcService {
     integrity_events: Arc<dyn IntegrityEventSink>,
     catalog: Arc<dyn TrustedNodeCatalog>,
     trusted: TrustedExperimentScope,
+    subjects: Option<Arc<dyn SubjectRepository>>,
+    code: Option<CodeBinding>,
     errors: CoreBusinessErrorMapper,
 }
 
@@ -153,8 +161,21 @@ impl ExperimentGrpcService {
             integrity_events,
             catalog,
             trusted,
+            subjects: None,
+            code: None,
             errors: CoreBusinessErrorMapper::new(trace_key)?,
         })
+    }
+
+    #[must_use]
+    pub fn with_formal_execution(
+        mut self,
+        subjects: Arc<dyn SubjectRepository>,
+        code: CodeBinding,
+    ) -> Self {
+        self.subjects = Some(subjects);
+        self.code = Some(code);
+        self
     }
 
     fn authorize(
@@ -410,8 +431,18 @@ impl ExperimentService for ExperimentGrpcService {
             .await
             .map_err(|error| self.status("experiment-trace-output", &error))?
             .ok_or_else(|| self.status("experiment-trace-output", &not_found()))?;
+        let mut evidence = Vec::with_capacity(trace.manifests.len());
+        for manifest in &trace.manifests {
+            evidence.push(
+                self.artifacts
+                    .get_formal_evidence(principal.access_scope(), manifest.artifact.id().clone())
+                    .await
+                    .map_err(|error| self.status("experiment-trace-output", &error))?,
+            );
+        }
+        let formal_outputs = formal_trace_outputs(&trace.manifests, &evidence)?;
         Ok(Response::new(research_pb::TraceGraphOutputResponse {
-            trace: Some(output_trace_to_proto(&trace)?),
+            trace: Some(output_trace_to_proto(&trace, formal_outputs)?),
         }))
     }
 
@@ -521,6 +552,15 @@ impl ExperimentGrpcService {
         let owner = graph.owner().clone();
         let scope = principal.access_scope();
         scope.authorize(&owner)?;
+        let subjects = self.subjects.as_ref().ok_or_else(state_conflict)?;
+        let exact_subject = require_exact_subject(
+            subjects.as_ref(),
+            scope,
+            &owner,
+            parse_formal_input(request.subject.ok_or_else(validation)?)?,
+        )
+        .await?;
+        let code = self.code.clone().ok_or_else(state_conflict)?;
         let reads = VerifiedReadFacade::new(
             self.artifacts.as_ref(),
             &NoSignals,
@@ -620,7 +660,7 @@ impl ExperimentGrpcService {
             });
         }
         let parameters_hash = parse_hash_app(request.parameters_hash)?;
-        let reproducibility = ReproducibilityIdentity::new(
+        let reproducibility = ReproducibilityIdentity::new_formal(
             &graph,
             ReproducibilityIdentityInput {
                 external_inputs,
@@ -633,6 +673,8 @@ impl ExperimentGrpcService {
                 rule_pack_bindings: rule_bindings,
                 node_implementations: implementations,
             },
+            exact_subject,
+            code,
         )
         .map_err(|error| ficant_application::map_runtime_error(&error))?;
         let execution = ficant_application::ports::ExecutionInstanceIdentity::from_reproducibility(
@@ -655,6 +697,30 @@ impl ExperimentGrpcService {
             external_input_artifacts: artifact_bindings,
         })
     }
+}
+
+async fn require_exact_subject(
+    subjects: &dyn SubjectRepository,
+    scope: &AccessScope,
+    owner: &OwnerRef,
+    claimed: FormalInputBinding,
+) -> Result<FormalInputBinding, ApplicationError> {
+    if claimed.kind() != FormalInputKind::Subject
+        || claimed.role() != "subject"
+        || claimed.owner() != owner
+    {
+        return Err(lineage());
+    }
+    let FormalInputReference::Object(reference) = claimed.reference() else {
+        return Err(lineage());
+    };
+    let version = reference.version().ok_or_else(lineage)?;
+    let subject_ref = VersionRef::new(reference.object_id().clone(), version);
+    let exact = exact_subject_binding(subjects, scope, owner, &subject_ref).await?;
+    if exact != claimed {
+        return Err(lineage());
+    }
+    Ok(exact)
 }
 
 struct NoSignals;
@@ -1090,6 +1156,8 @@ fn execution_to_proto(
                     implementation_digest: Some(hash_to_proto(&binding.implementation_digest)),
                 })
                 .collect(),
+            subject: reproducibility.subject().map(proto_formal_input),
+            code: reproducibility.code().map(proto_code_binding),
             external_inputs,
             digest: Some(hash_to_proto(reproducibility.digest())),
         }),
@@ -1125,7 +1193,10 @@ fn stored_manifest_to_proto(
     })
 }
 
-fn output_trace_to_proto(trace: &OutputTrace) -> Result<research_pb::GraphOutputTrace, Status> {
+fn output_trace_to_proto(
+    trace: &OutputTrace,
+    formal_outputs: Vec<core_pb::FormalOutputEvidence>,
+) -> Result<research_pb::GraphOutputTrace, Status> {
     let manifests = trace
         .manifests
         .iter()
@@ -1157,7 +1228,28 @@ fn output_trace_to_proto(trace: &OutputTrace) -> Result<research_pb::GraphOutput
         graph_run: Some(graph_run_to_proto(&trace.run)?),
         manifests,
         external_inputs,
+        formal_outputs,
     })
+}
+
+fn formal_trace_outputs(
+    manifests: &[StoredNodeManifest],
+    evidence: &[Option<FormalOutputEvidence>],
+) -> Result<Vec<core_pb::FormalOutputEvidence>, Status> {
+    if manifests.len() != evidence.len() {
+        return Err(Status::data_loss("正式证据数量与输出清单不一致"));
+    }
+    manifests
+        .iter()
+        .zip(evidence)
+        .map(|(manifest, evidence)| {
+            evidence
+                .as_ref()
+                .filter(|value| value.result_hash() == manifest.artifact.content_hash())
+                .map(crate::formal_evidence::proto_formal_evidence)
+                .ok_or_else(|| Status::failed_precondition("完整输出血缘缺少正式证据"))
+        })
+        .collect()
 }
 
 fn comparison_dimension(value: ComparisonDimension) -> i32 {
@@ -1181,6 +1273,8 @@ fn comparison_dimension(value: ComparisonDimension) -> i32 {
             research_pb::GraphRunComparisonDimension::ExternalInput as i32
         }
         ComparisonDimension::Result => research_pb::GraphRunComparisonDimension::Result as i32,
+        ComparisonDimension::Subject => research_pb::GraphRunComparisonDimension::Subject as i32,
+        ComparisonDimension::Code => research_pb::GraphRunComparisonDimension::Code as i32,
     }
 }
 
@@ -1354,6 +1448,10 @@ fn not_found() -> ApplicationError {
     ApplicationError::new(ApplicationErrorCategory::NotFound, false)
 }
 
+fn state_conflict() -> ApplicationError {
+    ApplicationError::new(ApplicationErrorCategory::StateConflict, false)
+}
+
 fn lineage() -> ApplicationError {
     ApplicationError::new(ApplicationErrorCategory::LineageIncomplete, false)
 }
@@ -1364,7 +1462,14 @@ fn hash_mismatch() -> ApplicationError {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
     use super::*;
+    use chrono::{DateTime, Utc};
+    use ficant_domain::subject::{
+        AccessSet, FundingTier, Subject, SubjectRecord, SubjectStateSnapshot, SubjectVersion,
+        TaxTreatment,
+    };
     use tonic::Code;
 
     #[test]
@@ -1383,6 +1488,155 @@ mod tests {
         let error = require_experiment_access(principal, WRITE_SCOPE)
             .expect_err("administrator role must fail before any experiment repository call");
         assert_eq!(error.code(), Code::PermissionDenied);
+    }
+
+    #[tokio::test]
+    async fn graph_submission_subject_is_required_read_and_exactly_compared() {
+        let owner = OwnerRef::new(
+            Ulid::new("01J00000000000000000000002").unwrap(),
+            Ulid::new("01J00000000000000000000003").unwrap(),
+        );
+        let reference = VersionRef::new(
+            Ulid::new("01J00000000000000000000004").unwrap(),
+            Version::new(1).unwrap(),
+        );
+        let record = SubjectRecord::new(
+            Subject::new_owned(reference.id().clone(), owner.clone(), "R7B exact Subject").unwrap(),
+            SubjectVersion::new(
+                reference.clone(),
+                AccessSet::new(["CGB"], ["rates"]).unwrap(),
+                FundingTier::DrAvailable,
+                TaxTreatment::new("vat-none", "income-none").unwrap(),
+                "daily",
+                "general",
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let repository = SubjectFixture {
+            record: record.clone(),
+            reads: AtomicUsize::new(0),
+        };
+        let scope = AccessScope::new(
+            owner.tenant_id().clone(),
+            Ulid::new("01J00000000000000000000005").unwrap(),
+            vec![owner.owner_id().clone()],
+        )
+        .unwrap();
+        let exact_hash = ficant_application::ports::subject_record_content_hash(&record).unwrap();
+        let exact = crate::formal_evidence::object_binding(
+            "subject",
+            FormalInputKind::Subject,
+            &owner,
+            reference.id(),
+            Some(reference.version()),
+            exact_hash,
+            crate::formal_evidence::FormalInputTimes::default(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            require_exact_subject(&repository, &scope, &owner, exact.clone())
+                .await
+                .unwrap(),
+            exact,
+        );
+        assert_eq!(repository.reads.load(Ordering::SeqCst), 1);
+
+        let drifted = crate::formal_evidence::object_binding(
+            "subject",
+            FormalInputKind::Subject,
+            &owner,
+            reference.id(),
+            Some(reference.version()),
+            ContentHash::digest(b"drifted-subject"),
+            crate::formal_evidence::FormalInputTimes::default(),
+        )
+        .unwrap();
+        let error = require_exact_subject(&repository, &scope, &owner, drifted)
+            .await
+            .expect_err("claimed content drift must fail");
+        assert_eq!(
+            error.category(),
+            ApplicationErrorCategory::LineageIncomplete
+        );
+        assert_eq!(repository.reads.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn legacy_artifact_cannot_be_promoted_to_a_full_formal_trace() {
+        let artifact = ficant_domain::research::Artifact::new(
+            Ulid::new("01J00000000000000000000006").unwrap(),
+            OwnerRef::new(
+                Ulid::new("01J00000000000000000000002").unwrap(),
+                Ulid::new("01J00000000000000000000003").unwrap(),
+            ),
+            ficant_domain::research::ArtifactKind::Generic,
+            "application/octet-stream",
+            ContentHash::digest(b"legacy"),
+            6,
+            vec![LineageRef::content_addressed(
+                Ulid::new("01J00000000000000000000009").unwrap(),
+                ContentHash::digest(b"legacy-input"),
+            )],
+        )
+        .unwrap();
+        let error = formal_trace_outputs(
+            &[StoredNodeManifest {
+                run_id: Ulid::new("01J00000000000000000000007").unwrap(),
+                node_id: Ulid::new("01J00000000000000000000008").unwrap(),
+                attempt: 1,
+                artifact,
+                manifest_hash: ContentHash::digest(b"manifest"),
+                manifest: b"legacy-manifest".to_vec(),
+                checkpoint: ficant_application::ports::NodeJournalEvidence {
+                    sequence: 1,
+                    event_hash: ContentHash::digest(b"checkpoint"),
+                },
+            }],
+            &[None],
+        )
+        .expect_err("legacy output must not masquerade as a formal trace");
+        assert_eq!(error.code(), Code::FailedPrecondition);
+    }
+
+    struct SubjectFixture {
+        record: SubjectRecord,
+        reads: AtomicUsize,
+    }
+
+    #[tonic::async_trait]
+    impl SubjectRepository for SubjectFixture {
+        async fn register_subject(
+            &self,
+            _value: SubjectRecord,
+        ) -> Result<SubjectRecord, ApplicationError> {
+            panic!("subject write is not part of submission")
+        }
+
+        async fn get_subject(
+            &self,
+            reference: VersionRef,
+        ) -> Result<Option<SubjectRecord>, ApplicationError> {
+            self.reads.fetch_add(1, Ordering::SeqCst);
+            Ok((self.record.version().reference() == &reference).then(|| self.record.clone()))
+        }
+
+        async fn register_subject_state(
+            &self,
+            _value: SubjectStateSnapshot,
+        ) -> Result<SubjectStateSnapshot, ApplicationError> {
+            panic!("subject state write is not part of submission")
+        }
+
+        async fn get_subject_state(
+            &self,
+            _snapshot_id: Ulid,
+            _knowledge_at: DateTime<Utc>,
+        ) -> Result<Option<SubjectStateSnapshot>, ApplicationError> {
+            panic!("subject state read is not part of submission")
+        }
     }
 
     fn fixture_output() -> NativePortValue {

@@ -1,10 +1,11 @@
 use async_trait::async_trait;
 use ficant_application::ports::{
-    AccessScope, BeginNode, ComparisonDimension, CompleteNode, EnqueueNode,
-    ExecutionInstanceIdentity, ExternalInputArtifactBinding, FailNode, GraphNodeEvent,
-    GraphRunComparison, GraphRunRecord, NodeBeginResult, NodeFailureResult, NodeJournalEvidence,
-    NodeSuccessResult, OutputTrace, Phase4ExecutionRepository, StoredExecutionIdentity,
-    StoredNodeManifest, SubmitGraphRun, replay_graph_execution, stable_node_artifact_id,
+    AccessScope, BeginNode, CompleteNode, EnqueueNode, ExecutionInstanceIdentity,
+    ExternalInputArtifactBinding, FailNode, GraphNodeEvent, GraphRunComparison, GraphRunRecord,
+    NodeBeginResult, NodeFailureResult, NodeJournalEvidence, NodeSuccessResult,
+    OutputPublicationIntent, OutputPublicationIntentState, OutputTrace, Phase4ExecutionRepository,
+    PrepareOutputPublication, StoredExecutionIdentity, StoredNodeManifest, SubmitGraphRun,
+    compare_graph_run_dimensions, replay_graph_execution, stable_node_artifact_id,
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_contracts::ficant::research::v1 as research_pb;
@@ -13,7 +14,7 @@ use ficant_domain::research::{
     Artifact, ArtifactKind, JournalEventType, ResearchGraph, RunJournal, RunJournalInput, RunState,
 };
 use ficant_domain::{ContentAddressed, Lineaged};
-use ficant_runtime::decode_canonical_output_bytes;
+use ficant_runtime::{CodeBinding, decode_canonical_output_bytes};
 use prost::Message;
 use sqlx::types::chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
@@ -642,62 +643,11 @@ impl Phase4ExecutionRepository for PostgresRepository {
         };
         let left_r = left.identity.identity.reproducibility();
         let right_r = right.identity.identity.reproducibility();
-        let mut differences = Vec::new();
-        push_difference(
-            &mut differences,
-            ComparisonDimension::Data,
-            left_r.data_snapshot_hash() != right_r.data_snapshot_hash(),
-        );
-        push_difference(
-            &mut differences,
-            ComparisonDimension::Universe,
-            left_r.universe_snapshot_hash() != right_r.universe_snapshot_hash(),
-        );
-        push_difference(
-            &mut differences,
-            ComparisonDimension::Graph,
-            left_r.graph_digest() != right_r.graph_digest(),
-        );
-        push_difference(
-            &mut differences,
-            ComparisonDimension::Parameters,
-            left_r.parameters_hash() != right_r.parameters_hash(),
-        );
-        push_difference(
-            &mut differences,
-            ComparisonDimension::Runtime,
-            left_r.runtime_image_digest() != right_r.runtime_image_digest(),
-        );
-        push_difference(
-            &mut differences,
-            ComparisonDimension::Environment,
-            left_r.environment_digest() != right_r.environment_digest(),
-        );
-        push_difference(
-            &mut differences,
-            ComparisonDimension::Seed,
-            left_r.seed() != right_r.seed(),
-        );
-        push_difference(
-            &mut differences,
-            ComparisonDimension::RulePack,
-            left_r.rule_pack_bindings() != right_r.rule_pack_bindings(),
-        );
-        push_difference(
-            &mut differences,
-            ComparisonDimension::Implementation,
-            left_r.node_implementations() != right_r.node_implementations(),
-        );
-        push_difference(
-            &mut differences,
-            ComparisonDimension::ExternalInput,
-            left_r.external_inputs() != right_r.external_inputs(),
-        );
         let left_results = self.list_node_manifests(scope, left_run_id).await?;
         let right_results = self.list_node_manifests(scope, right_run_id).await?;
-        push_difference(
-            &mut differences,
-            ComparisonDimension::Result,
+        let differences = compare_graph_run_dimensions(
+            left_r,
+            right_r,
             terminal_result(&left.graph, &left_results)
                 != terminal_result(&right.graph, &right_results),
         );
@@ -786,6 +736,56 @@ impl Phase4ExecutionRepository for PostgresRepository {
         })
     }
 
+    async fn prepare_output_publication(
+        &self,
+        command: PrepareOutputPublication,
+    ) -> Result<OutputPublicationIntent, ApplicationError> {
+        let mut transaction = self.pool().begin().await.map_err(map_sqlx_error)?;
+        validate_active_fence(&mut transaction, command.fence()).await?;
+        validate_publication_source(&mut transaction, &command).await?;
+        let artifact = command.artifact();
+        let evidence = command.formal_evidence();
+        let encoded = super::formal_outputs::encode_formal_evidence(evidence);
+        let evidence_hash = ContentHash::digest(&encoded);
+        sqlx::query(
+            "INSERT INTO research.output_publication_intents
+             (tenant_id,intent_id,run_id,node_id,task_id,execution_identity_digest,
+              planned_artifact_id,output_identity,result_hash,blob_size,
+              formal_evidence_hash,formal_evidence,state)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'PREPARED')
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(command.fence().tenant_id.as_str())
+        .bind(command.intent_id().as_str())
+        .bind(command.fence().run_id.as_str())
+        .bind(command.fence().node_id.as_str())
+        .bind(command.fence().task_id.as_str())
+        .bind(hash_hex(&command.fence().execution_identity_digest))
+        .bind(artifact.id().as_str())
+        .bind(hash_hex(evidence.output_identity()))
+        .bind(hash_hex(artifact.content_hash()))
+        .bind(i64::try_from(artifact.blob_size()).map_err(|_| invalid())?)
+        .bind(hash_hex(&evidence_hash))
+        .bind(encoded)
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+        let record = load_publication_intent(
+            &mut transaction,
+            &command.fence().tenant_id,
+            &command.fence().run_id,
+            &command.fence().node_id,
+        )
+        .await?
+        .ok_or_else(immutable)?;
+        require_exact_publication_intent(&record, &command, &evidence_hash)?;
+        if record.state == OutputPublicationIntentState::Abandoned {
+            return Err(state_conflict());
+        }
+        transaction.commit().await.map_err(map_sqlx_error)?;
+        Ok(record)
+    }
+
     async fn complete_node(
         &self,
         command: CompleteNode,
@@ -798,6 +798,8 @@ impl Phase4ExecutionRepository for PostgresRepository {
                 != Some(command.verified_blob.size())
             || ContentHash::digest(&command.verified_payload)
                 != *command.verified_blob.content_hash()
+            || command.formal_evidence.result_hash() != command.artifact.content_hash()
+            || command.formal_evidence.subject().owner() != command.artifact.owner()
         {
             return Err(invalid());
         }
@@ -808,6 +810,12 @@ impl Phase4ExecutionRepository for PostgresRepository {
             return Ok(replayed);
         }
         validate_active_fence(&mut transaction, &command.fence).await?;
+        require_publication_intent_state(
+            &mut transaction,
+            &command,
+            OutputPublicationIntentState::Prepared,
+        )
+        .await?;
         validate_resume_node(
             &mut transaction,
             &command.fence.tenant_id,
@@ -835,7 +843,12 @@ impl Phase4ExecutionRepository for PostgresRepository {
         )
         .await?;
         validate_planned_artifact(&mut transaction, &command).await?;
-        persist_or_reuse_artifact(&mut transaction, &command.artifact).await?;
+        persist_or_reuse_artifact(
+            &mut transaction,
+            &command.artifact,
+            &command.formal_evidence,
+        )
+        .await?;
         let succeeded = append_node_event(
             &mut transaction,
             &command.fence,
@@ -896,6 +909,19 @@ impl Phase4ExecutionRepository for PostgresRepository {
         .map_err(map_sqlx_error)?;
         if completed.rows_affected() != 1 {
             return Err(concurrency());
+        }
+        let intent_completed = sqlx::query(
+            "UPDATE research.output_publication_intents
+             SET state='COMPLETED',completed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+             WHERE tenant_id=$1 AND intent_id=$2 AND state='PREPARED'",
+        )
+        .bind(command.fence.tenant_id.as_str())
+        .bind(command.publication_intent_id.as_str())
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+        if intent_completed.rows_affected() != 1 {
+            return Err(immutable());
         }
         if let Some(next) = derive_next_task(&mut transaction, &command.fence).await? {
             persist_enqueue(&mut transaction, &next).await?;
@@ -1757,6 +1783,11 @@ async fn validate_output_manifest(
             .ok_or_else(lineage)?;
         validate_proto_type(output.value_type.as_ref(), expected.value_type())?;
         let artifact = output.artifact.as_ref().ok_or_else(lineage)?;
+        let formal = &command.formal_evidence;
+        let claimed_formal = output.formal_evidence.as_ref().ok_or_else(lineage)?;
+        if claimed_formal.encode_to_vec() != super::formal_outputs::encode_formal_evidence(formal) {
+            return Err(lineage());
+        }
         // `output.content_hash` addresses the typed port payload inside the canonical output
         // envelope. The Artifact lineage reference addresses the envelope blob itself. They are
         // deliberately distinct hashes. The verified payload is first bound by hash and size to
@@ -1908,6 +1939,18 @@ fn validate_proto_execution(
 ) -> Result<(), ApplicationError> {
     let expected_r = expected.reproducibility();
     let actual_r = actual.reproducibility.as_ref().ok_or_else(lineage)?;
+    let expected_subject = expected_r.subject().ok_or_else(lineage)?;
+    let actual_subject = actual_r.subject.as_ref().ok_or_else(lineage)?;
+    let decoded_subject =
+        super::formal_outputs::decode_formal_input(&actual_subject.encode_to_vec())?;
+    let expected_code = expected_r.code().ok_or_else(lineage)?;
+    let actual_code = actual_r.code.as_ref().ok_or_else(lineage)?;
+    let decoded_code = CodeBinding::from_claimed(
+        actual_code.git_commit_sha.clone(),
+        actual_code.git_tree_sha.clone(),
+        proto_hash(actual_code.digest.as_ref())?,
+    )
+    .map_err(ficant_application::map_domain_error)?;
     if proto_id(actual.run_id.as_ref())? != *expected.run_id()
         || proto_hash(actual.digest.as_ref())? != *expected.digest()
         || proto_hash(actual_r.digest.as_ref())? != *expected.reproducibility_digest()
@@ -1923,6 +1966,8 @@ fn validate_proto_execution(
         || actual_r.node_implementations.len() != expected_r.node_implementations().len()
         || actual_r.external_inputs.len() != expected_r.external_inputs().len()
         || external_bindings.len() != expected_r.external_inputs().len()
+        || decoded_subject != *expected_subject
+        || decoded_code != *expected_code
     {
         return Err(lineage());
     }
@@ -1982,6 +2027,164 @@ fn validate_proto_type(
         return Err(lineage());
     }
     Ok(())
+}
+
+async fn validate_publication_source(
+    transaction: &mut Transaction<'_, Postgres>,
+    command: &PrepareOutputPublication,
+) -> Result<(), ApplicationError> {
+    let fence = command.fence();
+    let artifact = command.artifact();
+    let source: Option<(String, bool)> = sqlx::query_as(
+        "SELECT task.planned_artifact_id::text,
+                EXISTS(
+                  SELECT 1 FROM research.node_executions node
+                  WHERE node.tenant_id=task.tenant_id AND node.run_id=task.run_id
+                    AND node.node_id=task.node_id AND node.attempt=task.claim_count
+                    AND node.task_id=task.task_id
+                    AND node.execution_identity_digest=task.execution_identity_digest
+                    AND node.state='STARTED')
+         FROM research.execution_tasks task
+         WHERE task.tenant_id=$1 AND task.task_id=$2 AND task.run_id=$3 AND task.node_id=$4
+           AND task.execution_identity_digest=$5
+         FOR UPDATE",
+    )
+    .bind(fence.tenant_id.as_str())
+    .bind(fence.task_id.as_str())
+    .bind(fence.run_id.as_str())
+    .bind(fence.node_id.as_str())
+    .bind(hash_hex(&fence.execution_identity_digest))
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    if source != Some((artifact.id().to_string(), true))
+        || artifact.owner().tenant_id() != &fence.tenant_id
+        || command.formal_evidence().result_hash() != artifact.content_hash()
+        || command.formal_evidence().subject().owner() != artifact.owner()
+    {
+        return Err(lineage());
+    }
+    Ok(())
+}
+
+async fn load_publication_intent(
+    transaction: &mut Transaction<'_, Postgres>,
+    tenant_id: &Ulid,
+    run_id: &Ulid,
+    node_id: &Ulid,
+) -> Result<Option<OutputPublicationIntent>, ApplicationError> {
+    type IntentRow = (
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        i64,
+        String,
+        Vec<u8>,
+        String,
+    );
+    let row: Option<IntentRow> = sqlx::query_as(
+        "SELECT intent_id::text,run_id::text,node_id::text,task_id::text,
+                execution_identity_digest::text,planned_artifact_id::text,
+                output_identity::text,result_hash::text,blob_size,
+                formal_evidence_hash::text,formal_evidence,state
+         FROM research.output_publication_intents
+         WHERE tenant_id=$1 AND run_id=$2 AND node_id=$3 FOR UPDATE",
+    )
+    .bind(tenant_id.as_str())
+    .bind(run_id.as_str())
+    .bind(node_id.as_str())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    row.map(|row| {
+        let formal_evidence_hash = parse_hash(&row.9)?;
+        if ContentHash::digest(&row.10) != formal_evidence_hash {
+            return Err(immutable());
+        }
+        Ok(OutputPublicationIntent {
+            tenant_id: tenant_id.clone(),
+            intent_id: parse_id(&row.0)?,
+            run_id: parse_id(&row.1)?,
+            node_id: parse_id(&row.2)?,
+            task_id: parse_id(&row.3)?,
+            execution_identity_digest: parse_hash(&row.4)?,
+            planned_artifact_id: parse_id(&row.5)?,
+            output_identity: parse_hash(&row.6)?,
+            result_hash: parse_hash(&row.7)?,
+            blob_size: u64::try_from(row.8).map_err(|_| immutable())?,
+            formal_evidence_hash,
+            state: parse_publication_state(&row.11)?,
+        })
+    })
+    .transpose()
+}
+
+fn require_exact_publication_intent(
+    actual: &OutputPublicationIntent,
+    command: &PrepareOutputPublication,
+    evidence_hash: &ContentHash,
+) -> Result<(), ApplicationError> {
+    let fence = command.fence();
+    let artifact = command.artifact();
+    let evidence = command.formal_evidence();
+    if actual.tenant_id != fence.tenant_id
+        || actual.intent_id != *command.intent_id()
+        || actual.run_id != fence.run_id
+        || actual.node_id != fence.node_id
+        || actual.task_id != fence.task_id
+        || actual.execution_identity_digest != fence.execution_identity_digest
+        || actual.planned_artifact_id != *artifact.id()
+        || actual.output_identity != *evidence.output_identity()
+        || actual.result_hash != *artifact.content_hash()
+        || actual.blob_size != artifact.blob_size()
+        || actual.formal_evidence_hash != *evidence_hash
+    {
+        return Err(immutable());
+    }
+    Ok(())
+}
+
+async fn require_publication_intent_state(
+    transaction: &mut Transaction<'_, Postgres>,
+    command: &CompleteNode,
+    state: OutputPublicationIntentState,
+) -> Result<(), ApplicationError> {
+    let record = load_publication_intent(
+        transaction,
+        &command.fence.tenant_id,
+        &command.fence.run_id,
+        &command.fence.node_id,
+    )
+    .await?
+    .ok_or_else(state_conflict)?;
+    let prepare = PrepareOutputPublication::new(
+        command.fence.clone(),
+        command.publication_intent_id.clone(),
+        command.artifact.clone(),
+        command.formal_evidence.clone(),
+    )?;
+    let evidence = &command.formal_evidence;
+    let evidence_hash =
+        ContentHash::digest(&super::formal_outputs::encode_formal_evidence(evidence));
+    require_exact_publication_intent(&record, &prepare, &evidence_hash)?;
+    if record.state != state {
+        return Err(immutable());
+    }
+    Ok(())
+}
+
+fn parse_publication_state(value: &str) -> Result<OutputPublicationIntentState, ApplicationError> {
+    match value {
+        "PREPARED" => Ok(OutputPublicationIntentState::Prepared),
+        "COMPLETED" => Ok(OutputPublicationIntentState::Completed),
+        "ABANDONED" => Ok(OutputPublicationIntentState::Abandoned),
+        _ => Err(immutable()),
+    }
 }
 
 async fn validate_active_fence(
@@ -2208,6 +2411,7 @@ async fn validate_planned_artifact(
 async fn persist_or_reuse_artifact(
     transaction: &mut Transaction<'_, Postgres>,
     artifact: &Artifact,
+    evidence: &ficant_runtime::FormalOutputEvidence,
 ) -> Result<(), ApplicationError> {
     let by_id: Option<Vec<u8>> = sqlx::query_scalar(
         "SELECT payload FROM research.artifacts
@@ -2222,6 +2426,12 @@ async fn persist_or_reuse_artifact(
         if decode_artifact(&payload)? != *artifact {
             return Err(immutable());
         }
+        super::artifacts::persist_or_verify_artifact_formal_evidence(
+            transaction,
+            artifact,
+            Some(evidence),
+        )
+        .await?;
         return Ok(());
     }
     let idempotency = format!("phase4/native-node/{}", artifact.id());
@@ -2249,6 +2459,12 @@ async fn persist_or_reuse_artifact(
         artifact.owner().tenant_id().as_str(),
         artifact.id().as_str(),
         artifact.lineage(),
+    )
+    .await?;
+    super::artifacts::persist_or_verify_artifact_formal_evidence(
+        transaction,
+        artifact,
+        Some(evidence),
     )
     .await
 }
@@ -2317,6 +2533,19 @@ async fn replay_success(
     if artifact != command.artifact {
         return Err(immutable());
     }
+    if super::artifacts::load_artifact_formal_evidence(transaction, &artifact)
+        .await?
+        .as_ref()
+        != Some(&command.formal_evidence)
+    {
+        return Err(immutable());
+    }
+    require_publication_intent_state(
+        transaction,
+        command,
+        OutputPublicationIntentState::Completed,
+    )
+    .await?;
     Ok(Some(NodeSuccessResult {
         artifact,
         succeeded: evidence(
@@ -2395,16 +2624,6 @@ fn allowed_owners(scope: &AccessScope) -> Vec<String> {
         .iter()
         .map(|id| id.as_str().to_owned())
         .collect()
-}
-
-fn push_difference(
-    values: &mut Vec<ComparisonDimension>,
-    dimension: ComparisonDimension,
-    differs: bool,
-) {
-    if differs {
-        values.push(dimension);
-    }
 }
 
 fn terminal_result(

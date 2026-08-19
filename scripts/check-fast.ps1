@@ -10,10 +10,13 @@ $ErrorActionPreference = 'Stop'
 $steps = @(
     New-FicantCheckStep -Name 'Coverage descriptor gate' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/check-coverage.ps1')
     New-FicantCheckStep -Name 'Coverage gate fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-coverage-check.ps1')
+    New-FicantCheckStep -Name 'R7B MANUAL literal-runner fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-manual-check.ps1')
+    New-FicantCheckStep -Name 'R7B recovery-manifest fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-recovery-check.ps1')
     New-FicantCheckStep -Name 'Rust formatting' -FilePath 'cargo' -ArgumentList @('fmt', '--all', '--', '--check')
     New-FicantCheckStep -Name 'Rust workspace check' -FilePath 'cargo' -ArgumentList @('check', '--offline', '--workspace', '--all-targets', '--locked')
     New-FicantCheckStep -Name 'R5D layer dependency gate' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-contract-tests', '--test', 'r5d_layer_dependencies')
     New-FicantCheckStep -Name 'R7A zero-core-change extension gate' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-contract-tests', '--test', 'r7a_core_extension')
+    New-FicantCheckStep -Name 'R7B formal evidence contract gate' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-contract-tests', '--test', 'r7b_formal_evidence')
     New-FicantCheckStep -Name 'R6B descriptor-to-production topology gate' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-server', '--test', 'service_topology')
     New-FicantCheckStep -Name 'Rust non-environment tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--workspace', '--locked', '--exclude', 'ficant-acceptance', '--exclude', 'ficant-data', '--exclude', 'ficant-storage', '--exclude', 'ficant-contract-tests')
     New-FicantCheckStep -Name 'Rust storage library tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--lib')

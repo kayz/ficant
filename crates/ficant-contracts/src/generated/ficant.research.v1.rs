@@ -23,6 +23,8 @@ pub struct SignalSet {
     pub valid_from: ::core::option::Option<super::super::core::v1::MarketTime>,
     #[prost(message, optional, tag="10")]
     pub valid_to: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="11")]
+    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Artifact {
@@ -40,6 +42,8 @@ pub struct Artifact {
     pub blob_size: u64,
     #[prost(message, repeated, tag="7")]
     pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="8")]
+    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetArtifactRequest {
@@ -449,6 +453,10 @@ pub struct ReproducibilityIdentity {
     pub external_inputs: ::prost::alloc::vec::Vec<ExecutionExternalInput>,
     #[prost(message, optional, tag="11")]
     pub digest: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="12")]
+    pub subject: ::core::option::Option<super::super::core::v1::FormalInputBinding>,
+    #[prost(message, optional, tag="13")]
+    pub code: ::core::option::Option<super::super::core::v1::CodeBinding>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecutionInstanceIdentity {
@@ -459,7 +467,7 @@ pub struct ExecutionInstanceIdentity {
     #[prost(message, optional, tag="3")]
     pub digest: ::core::option::Option<super::super::core::v1::Sha256>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeOutputBinding {
     #[prost(string, tag="1")]
     pub port_name: ::prost::alloc::string::String,
@@ -469,6 +477,8 @@ pub struct NodeOutputBinding {
     pub artifact: ::core::option::Option<super::super::core::v1::LineageRef>,
     #[prost(message, optional, tag="4")]
     pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="5")]
+    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeOutputManifestContent {
@@ -694,6 +704,8 @@ pub struct SubmitGraphRunRequest {
     pub rule_packs: ::prost::alloc::vec::Vec<RulePackBinding>,
     #[prost(message, repeated, tag="11")]
     pub external_inputs: ::prost::alloc::vec::Vec<ExecutionExternalInput>,
+    #[prost(message, optional, tag="12")]
+    pub subject: ::core::option::Option<super::super::core::v1::FormalInputBinding>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubmitGraphRunResponse {
@@ -753,6 +765,8 @@ pub struct GraphOutputTrace {
     pub manifests: ::prost::alloc::vec::Vec<StoredNodeOutputManifest>,
     #[prost(message, repeated, tag="3")]
     pub external_inputs: ::prost::alloc::vec::Vec<ExecutionExternalInput>,
+    #[prost(message, repeated, tag="4")]
+    pub formal_outputs: ::prost::alloc::vec::Vec<super::super::core::v1::FormalOutputEvidence>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TraceGraphOutputResponse {
@@ -852,6 +866,8 @@ pub enum GraphRunComparisonDimension {
     Implementation = 9,
     ExternalInput = 10,
     Result = 11,
+    Subject = 12,
+    Code = 13,
 }
 impl GraphRunComparisonDimension {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -872,6 +888,8 @@ impl GraphRunComparisonDimension {
             Self::Implementation => "GRAPH_RUN_COMPARISON_DIMENSION_IMPLEMENTATION",
             Self::ExternalInput => "GRAPH_RUN_COMPARISON_DIMENSION_EXTERNAL_INPUT",
             Self::Result => "GRAPH_RUN_COMPARISON_DIMENSION_RESULT",
+            Self::Subject => "GRAPH_RUN_COMPARISON_DIMENSION_SUBJECT",
+            Self::Code => "GRAPH_RUN_COMPARISON_DIMENSION_CODE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -889,6 +907,8 @@ impl GraphRunComparisonDimension {
             "GRAPH_RUN_COMPARISON_DIMENSION_IMPLEMENTATION" => Some(Self::Implementation),
             "GRAPH_RUN_COMPARISON_DIMENSION_EXTERNAL_INPUT" => Some(Self::ExternalInput),
             "GRAPH_RUN_COMPARISON_DIMENSION_RESULT" => Some(Self::Result),
+            "GRAPH_RUN_COMPARISON_DIMENSION_SUBJECT" => Some(Self::Subject),
+            "GRAPH_RUN_COMPARISON_DIMENSION_CODE" => Some(Self::Code),
             _ => None,
         }
     }
@@ -946,6 +966,8 @@ pub struct PortfolioKeyRateExposure {
     pub source_confidence: ::core::option::Option<PriceSourceSummary>,
     #[prost(message, optional, tag="10")]
     pub coverage: ::core::option::Option<CoverageDeclaration>,
+    #[prost(message, optional, tag="11")]
+    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CalculateKeyRateDv01Request {
@@ -1389,6 +1411,8 @@ pub struct DataHealthReport {
     pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
     #[prost(message, repeated, tag="17")]
     pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="18")]
+    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetDataHealthReportResponse {
@@ -1650,6 +1674,8 @@ pub struct PositionViews {
     pub positions: ::prost::alloc::vec::Vec<PositionView>,
     #[prost(message, optional, tag="5")]
     pub coverage: ::core::option::Option<CoverageDeclaration>,
+    #[prost(message, optional, tag="6")]
+    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetPositionViewsRequest {
@@ -1685,6 +1711,8 @@ pub struct CapitalUse {
     pub total_capital_requirement: ::core::option::Option<super::super::core::v1::DecimalValue>,
     #[prost(message, optional, tag="5")]
     pub coverage: ::core::option::Option<CoverageDeclaration>,
+    #[prost(message, optional, tag="6")]
+    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CalculateCapitalUseRequest {

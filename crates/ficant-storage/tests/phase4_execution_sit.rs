@@ -5,12 +5,12 @@ use ficant_application::ports::{
     AppendJournalEvent, BeginNode, CompleteNode, EnqueueNode, ExecutionExternalInput,
     ExecutionInstanceIdentity, ExternalInputArtifactBinding, FailNode, IdempotencyKey,
     NodeImplementation, NodeLeaseFence, PageRequest, Phase4ExecutionRepository,
-    ReproducibilityIdentity, ReproducibilityIdentityInput, RulePackBinding, RunJournalRepository,
-    StoredExecutionIdentity, VerifiedBlobRef, replay_graph_execution, stable_node_artifact_id,
+    PrepareOutputPublication, ReproducibilityIdentity, ReproducibilityIdentityInput,
+    RulePackBinding, RunJournalRepository, StoredExecutionIdentity, VerifiedBlobRef,
+    replay_graph_execution, stable_node_artifact_id,
 };
 use ficant_application::use_cases::phase4_submission::{Phase4Submission, PreparedGraphSubmission};
 use ficant_contracts::ficant::{core::v1 as core_pb, research::v1 as research_pb};
-use ficant_domain::ContentAddressed;
 use ficant_domain::primitives::{ContentHash, LineageRef, OwnerRef, Ulid, Version};
 use ficant_domain::research::{
     Artifact, ArtifactKind, DeterminismClass, ExperimentRun, ExperimentRunInput,
@@ -18,6 +18,12 @@ use ficant_domain::research::{
     NodePermissions, PortType, ResearchEdge, ResearchGraph, ResearchGraphInput, ResearchNode,
     ResearchNodeContract, ResearchNodeContractInput, ResourceLimits, RunJournal, RunJournalInput,
     RunState, TypedValue,
+};
+use ficant_domain::{ContentAddressed, Lineaged};
+use ficant_runtime::{
+    CodeBinding, FormalImplementationBinding, FormalInputBinding, FormalInputBindingInput,
+    FormalInputKind, FormalInputReference, FormalOutputEvidence, FormalOutputEvidenceInput,
+    RuntimeBinding,
 };
 use ficant_runtime::{NativePortValue, canonical_output_bytes};
 use ficant_storage::lease_queue::PostgresLeaseQueue;
@@ -205,6 +211,7 @@ async fn phase4_postgres_closure_is_fenced_atomic_idempotent_and_terminal() {
     .unwrap()]);
     let output_hash = ContentHash::digest(&output_payload);
     seed_blob(&pool, &output_hash, output_payload.len()).await;
+    let output_evidence = formal_evidence(&first, &output_hash);
     let artifact = Artifact::new(
         planned.clone(),
         owner(),
@@ -218,13 +225,77 @@ async fn phase4_postgres_closure_is_fenced_atomic_idempotent_and_terminal() {
         )],
     )
     .unwrap();
+    let intent_id = id('0');
+    let prepared_intent = repository
+        .prepare_output_publication(
+            PrepareOutputPublication::new(
+                first_fence.clone(),
+                intent_id.clone(),
+                artifact.clone(),
+                output_evidence.clone(),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        repository
+            .prepare_output_publication(
+                PrepareOutputPublication::new(
+                    first_fence.clone(),
+                    intent_id.clone(),
+                    artifact.clone(),
+                    output_evidence.clone(),
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap(),
+        prepared_intent,
+    );
+    let drifted_hash = ContentHash::digest(b"drifted-publication-payload");
+    let drifted_evidence = formal_evidence(&first, &drifted_hash);
+    let drifted_artifact = Artifact::new(
+        planned.clone(),
+        owner(),
+        ArtifactKind::Generic,
+        "application/vnd.ficant.native-node.v1",
+        drifted_hash.clone(),
+        u64::try_from(b"drifted-publication-payload".len()).unwrap(),
+        artifact.lineage().to_vec(),
+    )
+    .unwrap();
+    assert_eq!(
+        repository
+            .prepare_output_publication(
+                PrepareOutputPublication::new(
+                    first_fence.clone(),
+                    intent_id.clone(),
+                    drifted_artifact,
+                    drifted_evidence,
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap_err()
+            .category(),
+        ApplicationErrorCategory::ImmutableViolation,
+    );
 
-    let valid_manifest = manifest(&first, &graph, &artifact, first_fence.attempt);
+    let valid_manifest = manifest(
+        &first,
+        &graph,
+        &artifact,
+        &output_evidence,
+        first_fence.attempt,
+    );
     for tampered in tampered_manifests(&valid_manifest) {
         let rollback = repository
             .complete_node(CompleteNode {
                 fence: first_fence.clone(),
+                publication_intent_id: intent_id.clone(),
                 artifact: artifact.clone(),
+                formal_evidence: output_evidence.clone(),
                 verified_blob: VerifiedBlobRef::new(
                     output_hash.clone(),
                     output_payload.len() as u64,
@@ -259,7 +330,9 @@ async fn phase4_postgres_closure_is_fenced_atomic_idempotent_and_terminal() {
 
     let success_command = CompleteNode {
         fence: first_fence.clone(),
+        publication_intent_id: intent_id,
         artifact: artifact.clone(),
+        formal_evidence: output_evidence,
         verified_blob: VerifiedBlobRef::new(output_hash.clone(), output_payload.len() as u64)
             .unwrap(),
         verified_payload: output_payload.clone(),
@@ -626,6 +699,7 @@ async fn completion_derives_the_only_legal_successor_from_the_frozen_graph() {
     .unwrap()]);
     let output_hash = ContentHash::digest(&output_payload);
     seed_blob(&pool, &output_hash, output_payload.len()).await;
+    let output_evidence = formal_evidence(&identity, &output_hash);
     let artifact = Artifact::new(
         planned,
         owner(),
@@ -636,13 +710,34 @@ async fn completion_derives_the_only_legal_successor_from_the_frozen_graph() {
         vec![LineageRef::content_addressed(id('E'), external_hash)],
     )
     .unwrap();
+    let intent_id = id('0');
+    repository
+        .prepare_output_publication(
+            PrepareOutputPublication::new(
+                fence.clone(),
+                intent_id.clone(),
+                artifact.clone(),
+                output_evidence.clone(),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
     repository
         .complete_node(CompleteNode {
             fence: fence.clone(),
+            publication_intent_id: intent_id,
             artifact: artifact.clone(),
+            formal_evidence: output_evidence.clone(),
             verified_blob: VerifiedBlobRef::new(output_hash, output_payload.len() as u64).unwrap(),
             verified_payload: output_payload.clone(),
-            output_manifest: manifest(&identity, &graph, &artifact, fence.attempt),
+            output_manifest: manifest(
+                &identity,
+                &graph,
+                &artifact,
+                &output_evidence,
+                fence.attempt,
+            ),
             succeeded_event_id: id('C'),
             checkpoint_event_id: id('D'),
         })
@@ -708,7 +803,25 @@ fn identity_value(
     external_payload: &[u8],
 ) -> StoredExecutionIdentity {
     let rule_hash = ContentHash::digest(b"rule-pack");
-    let reproducibility = ReproducibilityIdentity::new(
+    let subject = FormalInputBinding::new(FormalInputBindingInput {
+        role: "subject".to_owned(),
+        kind: FormalInputKind::Subject,
+        owner: owner(),
+        reference: FormalInputReference::Object(
+            LineageRef::new(
+                id('H'),
+                Some(Version::new(1).unwrap()),
+                Some(ContentHash::digest(b"subject")),
+            )
+            .unwrap(),
+        ),
+        observed_at: None,
+        visible_at: None,
+        effective_from: None,
+        effective_to: None,
+    })
+    .unwrap();
+    let reproducibility = ReproducibilityIdentity::new_formal(
         graph,
         ReproducibilityIdentityInput {
             external_inputs: vec![
@@ -739,6 +852,12 @@ fn identity_value(
                 })
                 .collect(),
         },
+        subject,
+        CodeBinding::new(
+            "34402344c7d2c9238dc171af52ac4db77eb6b462",
+            "f66e03c55703837d6f2aee9959eba482612272f1",
+        )
+        .unwrap(),
     )
     .unwrap();
     StoredExecutionIdentity {
@@ -752,6 +871,36 @@ fn identity_value(
             content_hash: ContentHash::digest(external_payload),
         }],
     }
+}
+
+fn formal_evidence(
+    identity: &StoredExecutionIdentity,
+    result_hash: &ContentHash,
+) -> FormalOutputEvidence {
+    let reproducibility = identity.identity.reproducibility();
+    FormalOutputEvidence::new(FormalOutputEvidenceInput {
+        schema_id: "ficant.runtime.v1.NativeNodeOutputEnvelope".to_owned(),
+        subject: reproducibility.subject().unwrap().clone(),
+        consumed_inputs: vec![],
+        code: reproducibility.code().unwrap().clone(),
+        runtime: RuntimeBinding::new(
+            reproducibility.runtime_image_digest().clone(),
+            reproducibility.environment_digest().clone(),
+        ),
+        implementations: vec![
+            FormalImplementationBinding::new(
+                "node-implementation",
+                reproducibility.node_implementations()[0]
+                    .implementation_digest
+                    .clone(),
+            )
+            .unwrap(),
+        ],
+        parameters_hash: reproducibility.parameters_hash().clone(),
+        seed: Some(reproducibility.seed()),
+        result_hash: result_hash.clone(),
+    })
+    .unwrap()
 }
 
 async fn seed_run_events(
@@ -867,6 +1016,7 @@ fn manifest(
     identity: &StoredExecutionIdentity,
     graph: &ResearchGraph,
     artifact: &Artifact,
+    formal_evidence: &FormalOutputEvidence,
     attempt: u64,
 ) -> Vec<u8> {
     let reproducibility = identity.identity.reproducibility();
@@ -915,6 +1065,7 @@ fn manifest(
             artifact: Some(lineage(artifact.id(), artifact.content_hash())),
             // Port payload and canonical envelope are intentionally different address spaces.
             content_hash: Some(pb_hash(&ContentHash::digest(b"deterministic-node-output"))),
+            formal_evidence: Some(pb_formal_evidence(formal_evidence)),
         }],
         manifest_hash: None,
     };
@@ -1080,9 +1231,79 @@ fn pb_execution(identity: &StoredExecutionIdentity) -> research_pb::ExecutionIns
                     content_hash: Some(pb_hash(input.content_hash())),
                 })
                 .collect(),
+            subject: expected.subject().map(pb_formal_input),
+            code: expected.code().map(|value| core_pb::CodeBinding {
+                git_commit_sha: value.git_commit_sha().to_owned(),
+                git_tree_sha: value.git_tree_sha().to_owned(),
+                digest: Some(pb_hash(value.digest())),
+            }),
             digest: Some(pb_hash(identity.identity.reproducibility_digest())),
         }),
         digest: Some(pb_hash(identity.identity.digest())),
+    }
+}
+
+fn pb_formal_evidence(value: &FormalOutputEvidence) -> core_pb::FormalOutputEvidence {
+    core_pb::FormalOutputEvidence {
+        schema_id: value.schema_id().to_owned(),
+        subject: Some(pb_formal_input(value.subject())),
+        consumed_inputs: value
+            .consumed_inputs()
+            .iter()
+            .map(pb_formal_input)
+            .collect(),
+        code: Some(core_pb::CodeBinding {
+            git_commit_sha: value.code().git_commit_sha().to_owned(),
+            git_tree_sha: value.code().git_tree_sha().to_owned(),
+            digest: Some(pb_hash(value.code().digest())),
+        }),
+        runtime: Some(core_pb::RuntimeBinding {
+            image_digest: Some(pb_hash(value.runtime().image_digest())),
+            environment_digest: Some(pb_hash(value.runtime().environment_digest())),
+        }),
+        implementations: value
+            .implementations()
+            .iter()
+            .map(|binding| core_pb::FormalImplementationBinding {
+                role: binding.role().to_owned(),
+                digest: Some(pb_hash(binding.digest())),
+            })
+            .collect(),
+        parameters_hash: Some(pb_hash(value.parameters_hash())),
+        seed: value.seed(),
+        result_hash: Some(pb_hash(value.result_hash())),
+        output_identity: Some(pb_hash(value.output_identity())),
+    }
+}
+
+fn pb_formal_input(value: &FormalInputBinding) -> core_pb::FormalInputBinding {
+    let FormalInputReference::Object(reference) = value.reference() else {
+        panic!("fixture only uses object formal inputs");
+    };
+    core_pb::FormalInputBinding {
+        role: value.role().to_owned(),
+        kind: core_pb::FormalInputKind::Subject as i32,
+        owner: Some(core_pb::OwnerRef {
+            tenant_id: Some(core_pb::Ulid {
+                value: value.owner().tenant_id().to_string(),
+            }),
+            owner_id: Some(core_pb::Ulid {
+                value: value.owner().owner_id().to_string(),
+            }),
+        }),
+        observed_at: None,
+        visible_at: None,
+        effective_from: None,
+        effective_to: None,
+        reference: Some(core_pb::formal_input_binding::Reference::ObjectRef(
+            core_pb::LineageRef {
+                object_id: Some(core_pb::Ulid {
+                    value: reference.object_id().to_string(),
+                }),
+                version: reference.version().map_or(0, Version::get),
+                content_hash: reference.content_hash().map(pb_hash),
+            },
+        )),
     }
 }
 

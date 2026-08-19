@@ -3,6 +3,7 @@ syntax = "proto3";
 package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
+import "ficant/core/v1/evidence.proto";
 import "ficant/research/v1/execution.proto";
 import "ficant/research/v1/graph.proto";
 import "ficant/research/v1/journal.proto";
@@ -82,6 +83,7 @@ message SubmitGraphRunRequest {
   uint64 seed = 9;
   repeated RulePackBinding rule_packs = 10;
   repeated ExecutionExternalInput external_inputs = 11;
+  ficant.core.v1.FormalInputBinding subject = 12;
 }
 
 message SubmitGraphRunResponse {
@@ -125,6 +127,7 @@ message GraphOutputTrace {
   GraphRun graph_run = 1;
   repeated StoredNodeOutputManifest manifests = 2;
   repeated ExecutionExternalInput external_inputs = 3;
+  repeated ficant.core.v1.FormalOutputEvidence formal_outputs = 4;
 }
 
 message TraceGraphOutputResponse {
@@ -164,6 +167,8 @@ enum GraphRunComparisonDimension {
   GRAPH_RUN_COMPARISON_DIMENSION_IMPLEMENTATION = 9;
   GRAPH_RUN_COMPARISON_DIMENSION_EXTERNAL_INPUT = 10;
   GRAPH_RUN_COMPARISON_DIMENSION_RESULT = 11;
+  GRAPH_RUN_COMPARISON_DIMENSION_SUBJECT = 12;
+  GRAPH_RUN_COMPARISON_DIMENSION_CODE = 13;
 }
 
 message CompareGraphRunsRequest {

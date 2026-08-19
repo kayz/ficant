@@ -8,7 +8,7 @@ use std::time::Duration;
 use chrono::{DateTime, NaiveDate, Utc};
 use ficant_api::RatesGrpcService;
 use ficant_application::ports::{
-    AppendJournalEvent, ArtifactRepository, BeginBlobStage, BlobStore, EnqueueNode,
+    AccessScope, AppendJournalEvent, ArtifactRepository, BeginBlobStage, BlobStore, EnqueueNode,
     ExecutionExternalInput, ExecutionInstanceIdentity, ExternalInputArtifactBinding,
     IdempotencyKey, NodeImplementation, PageRequest, Phase4ExecutionRepository, PublishArtifact,
     ReproducibilityIdentity, ReproducibilityIdentityInput, RulePackBinding, RunJournalRepository,
@@ -27,7 +27,7 @@ use ficant_contracts::ficant::rates::v1::{
     SnapshotBinding, analysis_input_binding, analyze_bond_request,
 };
 use ficant_contracts::ficant::research::v1::{
-    ReadNodeOutputRequest, experiment_service_server::ExperimentService,
+    ReadNodeOutputRequest, TraceGraphOutputRequest, experiment_service_server::ExperimentService,
 };
 use ficant_domain::analytics::{
     ALGORITHM_ID, AnalyticsMode, AnalyticsObjectRef, BondTerms, BusinessDayConvention,
@@ -51,11 +51,15 @@ use ficant_native_nodes::{
     cgb_bond_analytics_contract, cgb_bond_risk_summary_contract, encode_materialized_bond_input,
     materialized_bond_input_type, native_node_source_digest,
 };
-use ficant_runtime::{NativeNode, decode_canonical_output_bytes, replay_graph_execution};
+use ficant_runtime::{
+    CodeBinding, FormalInputBinding, FormalInputBindingInput, FormalInputKind,
+    FormalInputReference, NativeNode, decode_canonical_output_bytes, replay_graph_execution,
+};
 use ficant_server::{ServerSettings, build_grpc_services_with_experiment};
 use ficant_storage::s3::S3BlobStore;
 use ficant_worker::{
-    ProductionWorkerBackend, WorkerBackend, WorkerConfig, canonical_environment_digest, run_claimed,
+    ProductionWorkerBackend, WorkerBackend, WorkerConfig, canonical_environment_digest,
+    compiled_git_commit_sha, compiled_git_tree_sha, run_claimed,
 };
 use prost::Message;
 use tonic::{Code, Request};
@@ -502,7 +506,26 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
         materialized_bytes,
     )
     .unwrap();
-    let reproducibility = ReproducibilityIdentity::new(
+    let subject = FormalInputBinding::new(FormalInputBindingInput {
+        role: "subject".to_owned(),
+        kind: FormalInputKind::Subject,
+        owner: owner(),
+        reference: FormalInputReference::Object(
+            LineageRef::new(
+                id('S'),
+                Some(Version::new(1).unwrap()),
+                Some(hash(b"subject")),
+            )
+            .unwrap(),
+        ),
+        observed_at: None,
+        visible_at: None,
+        effective_from: None,
+        effective_to: None,
+    })
+    .unwrap();
+    let code = CodeBinding::new(compiled_git_commit_sha(), compiled_git_tree_sha()).unwrap();
+    let reproducibility = ReproducibilityIdentity::new_formal(
         &graph,
         ReproducibilityIdentityInput {
             external_inputs: vec![external, materialized_external],
@@ -528,6 +551,8 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
                 },
             ],
         },
+        subject,
+        code.clone(),
     )
     .unwrap();
     let identity = ExecutionInstanceIdentity::from_reproducibility(run_id.clone(), reproducibility);
@@ -579,6 +604,7 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
         s3_access_key: access_key,
         s3_secret_key: secret_key,
         worker_id: id('W'),
+        code,
         runtime_image_digest: runtime_hash,
         environment_attestation: environment_attestation.to_owned(),
         native_source_digest: native_node_source_digest(),
@@ -586,6 +612,8 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
         renew_interval: Duration::from_secs(20),
         idle_poll_interval: Duration::from_millis(10),
         node_timeout: Duration::from_secs(30),
+        orphan_grace: Duration::from_secs(60),
+        orphan_interval: Duration::from_secs(10),
     };
     let backend = ProductionWorkerBackend::connect(&config).await.unwrap();
     let abandoned = backend
@@ -620,10 +648,91 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
     .unwrap();
     let inputs = backend.read_inputs(&abandoned, &loaded).await.unwrap();
     let executed = backend.execute(&abandoned, &loaded, inputs).await.unwrap();
-    let abandoned_completion = backend
-        .promote(&abandoned, &loaded, executed)
+    let publication = backend
+        .prepare_publication(&abandoned, &loaded, &config.worker_id, executed.clone())
         .await
         .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM storage.blobs WHERE tenant_id=$1 AND content_hash=$2",
+        )
+        .bind(owner().tenant_id().as_str())
+        .bind(hex(publication.artifact.content_hash()))
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0,
+        "durable intent must exist before any output blob reference is published",
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM storage.staging_uploads")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0,
+        "durable intent must exist before any staging row is created",
+    );
+    let replayed_publication = backend
+        .prepare_publication(&abandoned, &loaded, &config.worker_id, executed)
+        .await
+        .unwrap();
+    assert_eq!(
+        replayed_publication.publication_intent_id,
+        publication.publication_intent_id
+    );
+    assert_eq!(replayed_publication.artifact, publication.artifact);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM research.output_publication_intents
+             WHERE tenant_id=$1 AND run_id=$2 AND node_id=$3 AND state='PREPARED'",
+        )
+        .bind(owner().tenant_id().as_str())
+        .bind(run_id.as_str())
+        .bind(abandoned.node_id.as_str())
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1,
+    );
+    let expected_first_artifact = publication.artifact.clone();
+    let staged_scope = AccessScope::new(
+        abandoned.tenant_id.clone(),
+        abandoned.lease_id.clone(),
+        vec![loaded.owner.owner_id().clone()],
+    )
+    .unwrap();
+    let staged = blobs
+        .begin_stage(
+            BeginBlobStage::new(
+                staged_scope.clone(),
+                loaded.owner.clone(),
+                u64::try_from(publication.execution.output_envelope.len()).unwrap(),
+                IdempotencyKey::new(format!(
+                    "phase4-node-output/{}/{}/{}",
+                    abandoned.run_id, abandoned.node_id, abandoned.attempt
+                ))
+                .unwrap(),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    blobs
+        .append_chunk(
+            &staged_scope,
+            &staged,
+            publication.execution.output_envelope.clone(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM storage.staging_uploads")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1,
+        "after-stage crash fixture must leave exactly one private staging upload",
+    );
     sqlx::query(
         "UPDATE research.execution_tasks
          SET lease_expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second'
@@ -646,21 +755,27 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
         .unwrap()
         .unwrap();
     assert_eq!(claimed.attempt, 2);
-    assert!(
-        backend
-            .complete(&abandoned, &config.worker_id, abandoned_completion)
-            .await
-            .is_err(),
-        "the expired worker fence must not finalize the promoted output"
-    );
     run_claimed(&recovered_backend, &recovered_config, &claimed)
         .await
         .unwrap();
+    recovered_backend
+        .maintain_orphans(4_102_444_800)
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM storage.staging_uploads")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0,
+        "recovery maintenance must remove the expired pre-promote staging upload",
+    );
     let artifact = repository
         .get_metadata(&scope, planned)
         .await
         .unwrap()
         .unwrap();
+    assert_eq!(artifact, expected_first_artifact);
     let second = recovered_backend
         .claim(&recovered_config.worker_id, &id('V'), 60)
         .await
@@ -670,6 +785,10 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
     assert_eq!(second.attempt, 1);
     let second_loaded = recovered_backend
         .load(&second, &recovered_config.worker_id)
+        .await
+        .unwrap();
+    recovered_backend
+        .begin(&second, &recovered_config.worker_id)
         .await
         .unwrap();
     sqlx::query(
@@ -698,7 +817,69 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
     .execute(&pool)
     .await
     .unwrap();
-    run_claimed(&recovered_backend, &recovered_config, &second)
+    let second_inputs = recovered_backend
+        .read_inputs(&second, &second_loaded)
+        .await
+        .unwrap();
+    let second_execution = recovered_backend
+        .execute(&second, &second_loaded, second_inputs)
+        .await
+        .unwrap();
+    let second_publication = recovered_backend
+        .prepare_publication(
+            &second,
+            &second_loaded,
+            &recovered_config.worker_id,
+            second_execution,
+        )
+        .await
+        .unwrap();
+    let second_completion = recovered_backend
+        .promote(&second, &second_loaded, second_publication)
+        .await
+        .unwrap();
+    recovered_backend
+        .maintain_orphans(4_102_444_800)
+        .await
+        .unwrap();
+    assert!(
+        blobs
+            .probe_verified(second_completion.artifact.content_hash())
+            .await
+            .unwrap()
+            .is_some(),
+        "active publication intent must protect promoted immutable content",
+    );
+    sqlx::query(
+        "UPDATE research.execution_tasks
+         SET lease_expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second'
+         WHERE tenant_id=$1 AND task_id=$2",
+    )
+    .bind(owner().tenant_id().as_str())
+    .bind(second.task_id.as_str())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let mut final_config = recovered_config.clone();
+    final_config.worker_id = id('D');
+    let final_backend = ProductionWorkerBackend::connect(&final_config)
+        .await
+        .unwrap();
+    let final_claim = final_backend
+        .claim(&final_config.worker_id, &id('M'), 60)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(final_claim.node_id, second.node_id);
+    assert_eq!(final_claim.attempt, 2);
+    assert!(
+        recovered_backend
+            .complete(&second, &recovered_config.worker_id, second_completion)
+            .await
+            .is_err(),
+        "the expired worker fence must not finalize a promoted output",
+    );
+    run_claimed(&final_backend, &final_config, &final_claim)
         .await
         .unwrap();
 
@@ -771,6 +952,18 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
     assert!(summary.convexity.is_some());
     assert!(summary.dv01.is_some());
     assert!(summary.source_metadata.is_some());
+    recovered_backend
+        .maintain_orphans(4_102_444_800)
+        .await
+        .unwrap();
+    assert!(
+        blobs
+            .probe_verified(artifact.content_hash())
+            .await
+            .unwrap()
+            .is_some(),
+        "completed referenced content must never be deleted by maintenance"
+    );
 
     let settings = ServerSettings::try_from_values(&server_values(
         &config.database_url,
@@ -802,6 +995,25 @@ async fn production_worker_recovers_and_executes_real_typed_cgb_graph() {
         observed.manifest.is_some(),
         "observability read must return the persisted manifest"
     );
+    let formal_trace = experiment
+        .trace_graph_output(Request::new(TraceGraphOutputRequest {
+            run_id: Some(proto_id('R')),
+            node_id: Some(proto_id('B')),
+        }))
+        .await
+        .unwrap()
+        .into_inner()
+        .trace
+        .expect("completed Graph output must expose a typed formal trace");
+    assert_eq!(formal_trace.manifests.len(), 2);
+    assert_eq!(formal_trace.formal_outputs.len(), 2);
+    for evidence in &formal_trace.formal_outputs {
+        assert!(evidence.subject.is_some());
+        assert!(evidence.code.is_some());
+        assert!(evidence.runtime.is_some());
+        assert!(evidence.result_hash.is_some());
+        assert!(evidence.output_identity.is_some());
+    }
 
     sqlx::query(
         "UPDATE storage.blobs SET blob_size=blob_size+1
@@ -853,6 +1065,22 @@ fn server_values(
     const KEY: &str = "3031323334353637383961626364656630313233343536373839616263646566";
     BTreeMap::from([
         ("FICANT_GRPC_BIND".to_owned(), "127.0.0.1:50051".to_owned()),
+        (
+            "FICANT_CODE_COMMIT_SHA".to_owned(),
+            ficant_server::compiled_git_commit_sha().to_owned(),
+        ),
+        (
+            "FICANT_CODE_TREE_SHA".to_owned(),
+            ficant_server::compiled_git_tree_sha().to_owned(),
+        ),
+        (
+            "FICANT_SERVER_RUNTIME_IMAGE_DIGEST".to_owned(),
+            format!("sha256:{}", hex(runtime_image_digest)),
+        ),
+        (
+            "FICANT_SERVER_ENVIRONMENT_ATTESTATION".to_owned(),
+            format!("sha256:{}", "cd".repeat(32)),
+        ),
         (
             "FICANT_GRPC_WEB_ALLOWED_ORIGINS".to_owned(),
             "http://127.0.0.1:4174".to_owned(),

@@ -39,7 +39,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
 
-    let expected_migration_versions = (1_i64..=24).collect::<Vec<_>>();
+    let expected_migration_versions = (1_i64..=25).collect::<Vec<_>>();
     let applied_before_repeat: Vec<(i64, bool)> =
         sqlx::query_as("SELECT version, success FROM public._sqlx_migrations ORDER BY version")
             .fetch_all(&pool)
@@ -120,11 +120,19 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         1,
         "0024 must be recorded exactly once after its successful application"
     );
+    assert_eq!(
+        applied_before_repeat
+            .iter()
+            .filter(|(version, success)| *version == 25 && *success)
+            .count(),
+        1,
+        "0025 must be recorded exactly once after its successful application"
+    );
 
     let rows = sqlx::query(
         "SELECT schemaname, tablename
          FROM pg_catalog.pg_tables
-         WHERE schemaname IN ('core', 'data', 'market', 'research', 'storage')",
+         WHERE schemaname IN ('analytics', 'core', 'data', 'market', 'research', 'storage')",
     )
     .fetch_all(&pool)
     .await
@@ -138,6 +146,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         })
         .collect::<BTreeSet<_>>();
     let required = [
+        "analytics.formal_outputs",
         "core.definition_identities",
         "core.idempotency_records",
         "core.foundation_change_records",
@@ -162,6 +171,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         "market.units",
         "market.valuations",
         "research.artifacts",
+        "research.artifact_formal_evidence",
         "research.data_snapshots",
         "research.data_health_threshold_profiles",
         "research.experiment_runs",
@@ -175,6 +185,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         "research.factor_target_bindings",
         "research.lineage_edges",
         "research.node_executions",
+        "research.output_publication_intents",
         "research.research_graphs",
         "research.run_journal",
         "research.run_journal_sequences",

@@ -16,6 +16,7 @@ ficant-native-nodes = { path = "../../crates/ficant-native-nodes" }
 ficant-runtime = { path = "../../crates/ficant-runtime" }
 ficant-storage = { path = "../../crates/ficant-storage" }
 prost = { workspace = true }
+prost-types = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true, features = ["signal"] }
 
@@ -23,7 +24,6 @@ tokio = { workspace = true, features = ["signal"] }
 chrono = { workspace = true }
 ficant-api = { path = "../../crates/ficant-api" }
 ficant-server = { path = "../ficant-server" }
-prost-types = { workspace = true }
 tonic = { workspace = true }
 
 [features]

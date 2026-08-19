@@ -23,6 +23,10 @@ use ficant_domain::primitives::{
     ContentHash, EffectivePeriod, LineageRef, MarketTime, OwnerRef, Ulid, Version, VersionRef,
 };
 use ficant_domain::research::{Artifact, ArtifactKind, SignalSet, SignalSetInput};
+use ficant_runtime::{
+    CodeBinding, FormalInputBinding, FormalInputBindingInput, FormalInputKind,
+    FormalInputReference, FormalOutputEvidence, FormalOutputEvidenceInput, RuntimeBinding,
+};
 use tonic::Request;
 
 const KEY: &[u8] = b"0123456789abcdef0123456789abcdef";
@@ -103,6 +107,50 @@ async fn researcher_reads_verified_metadata_and_canonical_lineage_pages() {
     assert!(second.page.unwrap().next_cursor.is_empty());
     assert_eq!(ports.required_reads.load(Ordering::SeqCst), 4);
     assert_eq!(ports.integrity_events.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn formal_artifact_and_signal_set_return_the_same_complete_evidence() {
+    let ports = Arc::new(Ports::new_formal());
+    let service = service(
+        Arc::clone(&ports),
+        PlatformRole::Researcher,
+        vec!["artifacts:read"],
+        actor(),
+        vec![owner().owner_id().clone()],
+    );
+    let artifact = service
+        .get_artifact(Request::new(pb::GetArtifactRequest {
+            artifact_id: Some(proto_id(&artifact_id())),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    let Some(pb::get_artifact_response::Result::Artifact(artifact)) = artifact.result else {
+        panic!("formal Artifact read must succeed")
+    };
+    let artifact_evidence = artifact
+        .formal_evidence
+        .expect("formal Artifact evidence must be returned");
+
+    let signal = service
+        .get_signal_set(Request::new(pb::GetSignalSetRequest {
+            signal_set_id: Some(proto_id(&signal_id())),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    let Some(pb::get_signal_set_response::Result::SignalSet(signal)) = signal.result else {
+        panic!("formal SignalSet read must succeed")
+    };
+    let signal_evidence = signal
+        .formal_evidence
+        .expect("formal SignalSet evidence must be returned");
+    assert_eq!(artifact_evidence, signal_evidence);
+    assert!(artifact_evidence.subject.is_some());
+    assert!(artifact_evidence.code.is_some());
+    assert!(artifact_evidence.runtime.is_some());
+    assert!(artifact_evidence.output_identity.is_some());
 }
 
 #[tokio::test]
@@ -220,6 +268,7 @@ async fn payload_integrity_loss_returns_hash_mismatch_and_emits_once() {
 struct Ports {
     artifact: Artifact,
     signal: SignalSet,
+    formal_evidence: Option<FormalOutputEvidence>,
     tamper: bool,
     artifact_reads: AtomicUsize,
     required_reads: AtomicUsize,
@@ -228,11 +277,26 @@ struct Ports {
 
 impl Ports {
     fn new(tamper: bool) -> Self {
+        Self::build(tamper, false)
+    }
+
+    fn new_formal() -> Self {
+        Self::build(false, true)
+    }
+
+    fn build(tamper: bool, formal: bool) -> Self {
         let data = LineageRef::versioned(data_id(), Version::new(1).unwrap());
         let universe = LineageRef::versioned(universe_id(), Version::new(1).unwrap());
         let rule = VersionRef::new(rule_id(), Version::new(1).unwrap());
         let input = LineageRef::versioned(input_id(), Version::new(1).unwrap());
         let hash = ContentHash::digest(PAYLOAD);
+        let lineage = vec![
+            data.clone(),
+            universe.clone(),
+            LineageRef::versioned(rule.id().clone(), rule.version()),
+            input.clone(),
+        ];
+        let evidence = formal.then(|| formal_evidence(hash.clone()));
         let artifact = Artifact::new(
             artifact_id(),
             owner(),
@@ -240,15 +304,10 @@ impl Ports {
             "application/vnd.ficant.signal-set",
             hash.clone(),
             PAYLOAD.len() as u64,
-            vec![
-                data.clone(),
-                universe.clone(),
-                LineageRef::versioned(rule.id().clone(), rule.version()),
-                input.clone(),
-            ],
+            lineage,
         )
         .unwrap();
-        let signal = SignalSet::new(SignalSetInput {
+        let signal_input = SignalSetInput {
             signal_set_id: signal_id(),
             owner: owner(),
             artifact: LineageRef::content_addressed(artifact_id(), hash),
@@ -258,11 +317,12 @@ impl Ports {
             rule_packs: vec![rule],
             input_artifacts: vec![input],
             valid: EffectivePeriod::new(time(1), time(2)).unwrap(),
-        })
-        .unwrap();
+        };
+        let signal = SignalSet::new(signal_input).unwrap();
         Self {
             artifact,
             signal,
+            formal_evidence: evidence,
             tamper,
             artifact_reads: AtomicUsize::new(0),
             required_reads: AtomicUsize::new(0),
@@ -286,6 +346,16 @@ impl ArtifactRepository for Ports {
         scope.authorize(self.artifact.owner())?;
         Ok((artifact_id == *self.artifact.id()).then(|| self.artifact.clone()))
     }
+
+    async fn get_formal_evidence(
+        &self,
+        _scope: &AccessScope,
+        artifact_id: Ulid,
+    ) -> ApplicationResult<Option<FormalOutputEvidence>> {
+        Ok((artifact_id == *self.artifact.id())
+            .then(|| self.formal_evidence.clone())
+            .flatten())
+    }
 }
 
 #[async_trait]
@@ -301,6 +371,16 @@ impl SignalRepository for Ports {
     ) -> ApplicationResult<Option<SignalSet>> {
         scope.authorize(self.signal.owner())?;
         Ok((signal_set_id == *self.signal.id()).then(|| self.signal.clone()))
+    }
+
+    async fn get_formal_evidence(
+        &self,
+        _scope: &AccessScope,
+        signal_set_id: Ulid,
+    ) -> ApplicationResult<Option<FormalOutputEvidence>> {
+        Ok((signal_set_id == *self.signal.id())
+            .then(|| self.formal_evidence.clone())
+            .flatten())
     }
 }
 
@@ -391,6 +471,46 @@ fn time(hour: u32) -> MarketTime {
         "Asia/Shanghai",
         NaiveDate::from_ymd_opt(2026, 8, 19).unwrap(),
     )
+    .unwrap()
+}
+
+fn formal_evidence(result_hash: ContentHash) -> FormalOutputEvidence {
+    let subject = FormalInputBinding::new(FormalInputBindingInput {
+        role: "subject".to_owned(),
+        kind: FormalInputKind::Subject,
+        owner: owner(),
+        reference: FormalInputReference::Object(
+            LineageRef::new(
+                id("01ARZ3NDEKTSV4RRFFQ69G5F65"),
+                Some(Version::new(1).unwrap()),
+                Some(ContentHash::digest(b"subject")),
+            )
+            .unwrap(),
+        ),
+        observed_at: None,
+        visible_at: None,
+        effective_from: None,
+        effective_to: None,
+    })
+    .unwrap();
+    FormalOutputEvidence::new(FormalOutputEvidenceInput {
+        schema_id: "ficant.research.v1.SignalSet".to_owned(),
+        subject,
+        consumed_inputs: vec![],
+        code: CodeBinding::new(
+            "34402344c7d2c9238dc171af52ac4db77eb6b462",
+            "f66e03c55703837d6f2aee9959eba482612272f1",
+        )
+        .unwrap(),
+        runtime: RuntimeBinding::new(
+            ContentHash::digest(b"worker-image"),
+            ContentHash::digest(b"worker-environment"),
+        ),
+        implementations: vec![],
+        parameters_hash: ContentHash::digest(b"parameters"),
+        seed: Some(42),
+        result_hash,
+    })
     .unwrap()
 }
 

@@ -50,6 +50,7 @@ use ficant_domain::market::{IncomeTaxStatus, ValueAddedTaxStatus};
 use ficant_domain::primitives::{
     ContentHash, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
 };
+use ficant_runtime::FormalImplementationBinding;
 use prost::Message;
 use tonic::{Request, Response, Status};
 
@@ -59,6 +60,7 @@ use crate::core_error::CoreBusinessErrorMapper;
 use crate::error::{PlatformFailure, PlatformFailureCode};
 use crate::grpc_web::request_credential;
 use crate::registry::PlatformPort;
+use crate::{FormalOutputPublisher, formal_evidence::rates_formal_inputs};
 
 const REQUIRED_SCOPE: &str = "rates:analyze";
 
@@ -86,6 +88,7 @@ pub struct RatesGrpcService {
     tax_parser: Arc<dyn TaxRulePackParser>,
     bond_codec: Arc<dyn BondAnalyticsArtifactCodec>,
     delivery_codec: Arc<dyn FuturesDeliveryArtifactCodec>,
+    formal_outputs: Option<FormalOutputPublisher>,
     errors: CoreBusinessErrorMapper,
 }
 
@@ -247,6 +250,121 @@ impl RatesGrpcService {
         delivery_codec: Arc<dyn FuturesDeliveryArtifactCodec>,
         trace_key: &[u8],
     ) -> Result<Self, &'static str> {
+        Self::build_with_materialization(
+            identity,
+            bond,
+            curve,
+            carry_roll,
+            futures_delivery,
+            definitions,
+            subjects,
+            delivery_parser,
+            snapshots,
+            blobs,
+            integrity_events,
+            snapshot_decoder,
+            funding_parser,
+            tax_parser,
+            futures_hedge,
+            data_sources,
+            curve_snapshots,
+            factors,
+            artifacts,
+            curve_decoder,
+            bond_codec,
+            delivery_codec,
+            None,
+            trace_key,
+        )
+    }
+
+    /// Constructs the production Rates service with required formal-output persistence.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the trace-key configuration is invalid.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_formal_materialization(
+        identity: Arc<dyn PlatformPort>,
+        bond: Arc<dyn BondAnalyticsEngine>,
+        curve: Arc<dyn YieldCurveEngine>,
+        carry_roll: Arc<dyn CarryRollEngine>,
+        futures_delivery: Arc<dyn FuturesDeliveryEngine>,
+        definitions: Arc<dyn DefinitionRepository>,
+        subjects: Arc<dyn SubjectRepository>,
+        delivery_parser: Arc<dyn FuturesDeliveryRuleParser>,
+        snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
+        blobs: Arc<dyn VerifiedBlobReader>,
+        integrity_events: Arc<dyn IntegrityEventSink>,
+        snapshot_decoder: Arc<dyn CanonicalSnapshotDecoder>,
+        funding_parser: Arc<dyn FundingRulePackParser>,
+        tax_parser: Arc<dyn TaxRulePackParser>,
+        futures_hedge: Arc<dyn FuturesHedgeEngine>,
+        data_sources: Arc<dyn DataSourceRepository>,
+        curve_snapshots: Arc<dyn CurveSnapshotMetadataRepository>,
+        factors: Arc<dyn FactorTopologyRepository>,
+        artifacts: Arc<dyn ArtifactRepository>,
+        curve_decoder: Arc<dyn CurvePointSetDecoder>,
+        bond_codec: Arc<dyn BondAnalyticsArtifactCodec>,
+        delivery_codec: Arc<dyn FuturesDeliveryArtifactCodec>,
+        formal_outputs: FormalOutputPublisher,
+        trace_key: &[u8],
+    ) -> Result<Self, &'static str> {
+        Self::build_with_materialization(
+            identity,
+            bond,
+            curve,
+            carry_roll,
+            futures_delivery,
+            definitions,
+            subjects,
+            delivery_parser,
+            snapshots,
+            blobs,
+            integrity_events,
+            snapshot_decoder,
+            funding_parser,
+            tax_parser,
+            futures_hedge,
+            data_sources,
+            curve_snapshots,
+            factors,
+            artifacts,
+            curve_decoder,
+            bond_codec,
+            delivery_codec,
+            Some(formal_outputs),
+            trace_key,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn build_with_materialization(
+        identity: Arc<dyn PlatformPort>,
+        bond: Arc<dyn BondAnalyticsEngine>,
+        curve: Arc<dyn YieldCurveEngine>,
+        carry_roll: Arc<dyn CarryRollEngine>,
+        futures_delivery: Arc<dyn FuturesDeliveryEngine>,
+        definitions: Arc<dyn DefinitionRepository>,
+        subjects: Arc<dyn SubjectRepository>,
+        delivery_parser: Arc<dyn FuturesDeliveryRuleParser>,
+        snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository>,
+        blobs: Arc<dyn VerifiedBlobReader>,
+        integrity_events: Arc<dyn IntegrityEventSink>,
+        snapshot_decoder: Arc<dyn CanonicalSnapshotDecoder>,
+        funding_parser: Arc<dyn FundingRulePackParser>,
+        tax_parser: Arc<dyn TaxRulePackParser>,
+        futures_hedge: Arc<dyn FuturesHedgeEngine>,
+        data_sources: Arc<dyn DataSourceRepository>,
+        curve_snapshots: Arc<dyn CurveSnapshotMetadataRepository>,
+        factors: Arc<dyn FactorTopologyRepository>,
+        artifacts: Arc<dyn ArtifactRepository>,
+        curve_decoder: Arc<dyn CurvePointSetDecoder>,
+        bond_codec: Arc<dyn BondAnalyticsArtifactCodec>,
+        delivery_codec: Arc<dyn FuturesDeliveryArtifactCodec>,
+        formal_outputs: Option<FormalOutputPublisher>,
+        trace_key: &[u8],
+    ) -> Result<Self, &'static str> {
         Ok(Self {
             identity,
             bond,
@@ -270,6 +388,7 @@ impl RatesGrpcService {
             tax_parser,
             bond_codec,
             delivery_codec,
+            formal_outputs,
             errors: CoreBusinessErrorMapper::new(trace_key)?,
         })
     }
@@ -367,12 +486,15 @@ impl RatesGrpcService {
             .map_err(map_domain_error)?;
         let after_tax =
             CalculateBondAnalytics::new(self.bond.as_ref()).execute(&after_tax_input)?;
-        bond_result(
+        let mut value = bond_result(
             &pre_tax,
             Some((&after_tax, materialized.coupon_tax_treatment())),
             &context,
             materialized.evidence(),
-        )
+        )?;
+        self.attach_rates_evidence(scope, &context, materialized.evidence(), &mut value)
+            .await?;
+        Ok(value)
     }
 
     async fn interpolate_curve_value(
@@ -415,7 +537,10 @@ impl RatesGrpcService {
         point
             .validate_against(materialized.query())
             .map_err(map_domain_error)?;
-        Ok(curve_result(&point, &context, materialized.evidence()))
+        let mut value = curve_result(&point, &context, materialized.evidence());
+        self.attach_rates_evidence(scope, &context, materialized.evidence(), &mut value)
+            .await?;
+        Ok(value)
     }
 
     async fn analyze_carry_roll_value(
@@ -457,11 +582,10 @@ impl RatesGrpcService {
         .await?;
         let result =
             CalculateCarryRoll::new(self.carry_roll.as_ref()).execute(materialized.input())?;
-        Ok(carry_roll_result(
-            &result,
-            &context,
-            materialized.evidence(),
-        ))
+        let mut value = carry_roll_result(&result, &context, materialized.evidence());
+        self.attach_rates_evidence(scope, &context, materialized.evidence(), &mut value)
+            .await?;
+        Ok(value)
     }
 
     async fn analyze_futures_delivery_value(
@@ -511,13 +635,16 @@ impl RatesGrpcService {
         }
         let result = CalculateFuturesDeliveryBasket::new(self.futures_delivery.as_ref())
             .execute(materialized.inputs())?;
-        futures_delivery_result(
+        let mut value = futures_delivery_result(
             &result,
             materialized.funding_rate().annual_financing_rate(),
             materialized.coupon_tax_treatments(),
             &context,
             materialized.evidence(),
-        )
+        )?;
+        self.attach_rates_evidence(scope, &context, materialized.evidence(), &mut value)
+            .await?;
+        Ok(value)
     }
 
     async fn analyze_futures_hedge_value(
@@ -555,11 +682,49 @@ impl RatesGrpcService {
         .await?;
         let result = CalculateFuturesHedge::new(self.futures_hedge.as_ref())
             .execute(materialized.input())?;
-        Ok(futures_hedge_result(
-            &result,
-            &context,
-            materialized.evidence(),
-        ))
+        let mut value = futures_hedge_result(&result, &context, materialized.evidence());
+        self.attach_rates_evidence(scope, &context, materialized.evidence(), &mut value)
+            .await?;
+        Ok(value)
+    }
+
+    async fn attach_rates_evidence<M: Message + RatesResultMetadata>(
+        &self,
+        scope: &AccessScope,
+        context: &ParsedContext,
+        request_evidence: &RatesRequestEvidence,
+        result: &mut M,
+    ) -> Result<(), ApplicationError> {
+        let publisher = self
+            .formal_outputs
+            .as_ref()
+            .ok_or_else(|| ApplicationError::new(ApplicationErrorCategory::StateConflict, false))?;
+        let (subject, consumed_inputs) = rates_formal_inputs(request_evidence)?;
+        let metadata = result.metadata().ok_or_else(invalid)?;
+        if metadata.formal_evidence.is_some() {
+            return Err(invalid());
+        }
+        let schema_id = metadata.schema_id.clone();
+        let implementation = FormalImplementationBinding::new(
+            "rates-engine",
+            rates_implementation_digest(context.algorithm),
+        )
+        .map_err(map_domain_error)?;
+        let formal = publisher
+            .publish_message(
+                scope,
+                &context.owner,
+                schema_id,
+                subject,
+                consumed_inputs,
+                vec![implementation],
+                request_evidence.canonical_parameters_sha256().clone(),
+                None,
+                result,
+            )
+            .await?;
+        result.metadata_mut().ok_or_else(invalid)?.formal_evidence = Some(formal);
+        Ok(())
     }
 }
 
@@ -1036,6 +1201,45 @@ struct ExpectedAlgorithm {
     id: &'static str,
     version: u32,
     convention: &'static str,
+}
+
+trait RatesResultMetadata {
+    fn metadata(&self) -> Option<&pb::ResultMetadata>;
+    fn metadata_mut(&mut self) -> Option<&mut pb::ResultMetadata>;
+}
+
+macro_rules! impl_rates_result_metadata {
+    ($($result:ty),+ $(,)?) => {
+        $(
+            impl RatesResultMetadata for $result {
+                fn metadata(&self) -> Option<&pb::ResultMetadata> {
+                    self.metadata.as_ref()
+                }
+
+                fn metadata_mut(&mut self) -> Option<&mut pb::ResultMetadata> {
+                    self.metadata.as_mut()
+                }
+            }
+        )+
+    };
+}
+
+impl_rates_result_metadata!(
+    pb::AnalyzeBondResult,
+    pb::InterpolateYieldCurveResult,
+    pb::AnalyzeCarryRollResult,
+    pb::AnalyzeFuturesDeliveryResult,
+    pb::AnalyzeFuturesHedgeResult,
+);
+
+fn rates_implementation_digest(value: ExpectedAlgorithm) -> ContentHash {
+    let algorithm = algorithm_binding(value).encode_to_vec();
+    let mut bytes = b"ficant/rates-implementation/v1".to_vec();
+    for part in [ENGINE_ID.as_bytes(), ENGINE_VERSION.as_bytes(), &algorithm] {
+        bytes.extend_from_slice(&(part.len() as u64).to_be_bytes());
+        bytes.extend_from_slice(part);
+    }
+    ContentHash::digest(&bytes)
 }
 
 impl ExpectedAlgorithm {
@@ -1677,6 +1881,7 @@ fn metadata(
             canonical_parameters_sha256: Some(proto_hash(evidence.canonical_parameters_sha256())),
         }),
         request_fingerprint: Some(proto_hash(evidence.request_fingerprint())),
+        formal_evidence: None,
     }
 }
 

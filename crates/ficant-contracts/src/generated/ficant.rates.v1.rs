@@ -135,6 +135,8 @@ pub struct ResultMetadata {
     pub parameter_digest: ::core::option::Option<ParameterDigest>,
     #[prost(message, optional, tag="10")]
     pub request_fingerprint: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="11")]
+    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DerivedCashflow {

@@ -10,7 +10,7 @@
 - 如确需新增写路径，Root 必须在首次写入前停止并取得 Human 明确授权；扩权只能作为新的 §5 条目记录精确路径、理由与边界，原 §6 清单保持不变。事后发现的越界必须如实记录为偏差，不得用修改 §6 追认。
 - 被约束的实施者不得单方改写用来判断其是否越界的约束。这一原则同样适用于允许写路径、guarded 集合、预期值、Oracle、断言与其他自管门禁；需要变更时必须由独立授权或独立可审阅证据承载。
 
-**当前迭代：** [`2026-08-r7a-layering-bitemporal.md`](2026-08-r7a-layering-bitemporal.md)（公共技术候选完成；等待精确公共 Git 交付与 private authority 后绑定 AC04、AC11–AC13。无版本发布授权，R7B 尚未开始）
+**当前迭代：** [`2026-08-r7b-evidence-recovery.md`](2026-08-r7b-evidence-recovery.md)（Human-approved authority `3e028bcadd9fe973450d35b092e03a7485a54881` 已冻结；以公共 `34402344c7d2c9238dc171af52ac4db77eb6b462` 为 execution base 实施 AC30–AC33。无版本发布授权）
 
 ## 归档说明（2026-07-26）
 

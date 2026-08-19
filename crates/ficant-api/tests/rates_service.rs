@@ -1,7 +1,7 @@
 use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
 use ficant_api::{
-    PlatformApplication, PlatformPort, RatesGrpcService, SessionPolicy, SystemClock,
-    TrustedIdentity,
+    FormalOutputPublisher, PlatformApplication, PlatformPort, RatesGrpcService, SessionPolicy,
+    SystemClock, TrustedIdentity,
 };
 use ficant_application::ports::CouponTaxTreatment;
 use ficant_application::ports::{
@@ -11,7 +11,8 @@ use ficant_application::ports::{
     CurveSnapshotMetadataRepository, DataSourceRepository, DecodedCanonicalQuotes,
     DecodedCurvePoint, DecodedCurvePointSet, DefinitionIdentity, DefinitionRepository,
     DefinitionValue, EncodedBondAnalyticsArtifact, EncodedFuturesDeliveryArtifact,
-    FactorTopologyRepository, FuturesDeliveryArtifactCandidateFacts, FuturesDeliveryArtifactCodec,
+    FactorTopologyRepository, FormalOutputRecord, FormalOutputRepository,
+    FuturesDeliveryArtifactCandidateFacts, FuturesDeliveryArtifactCodec,
     FuturesDeliveryArtifactFacts, FuturesDeliveryEngine, FuturesHedgeEngine, IdempotencyKey,
     InstrumentDefinition, InstrumentSubtype, IntegrityEvent, IntegrityEventSink, PublishArtifact,
     RegisterDataSource, RequiredVerifiedBlobRead, SafeTraceContext, SnapshotVerifiedReadMetadata,
@@ -91,14 +92,15 @@ use ficant_funding_pack::{
     FundingRulePackV1Parser, MARKET as FUNDING_MARKET, RULE_TYPE as FUNDING_RULE_TYPE,
     TYPE_URL as FUNDING_TYPE_URL,
 };
+use ficant_runtime::{CodeBinding, RuntimeBinding};
 use ficant_tax_pack::{
     MARKET as TAX_MARKET, RULE_TYPE as TAX_RULE_TYPE, SOURCE as TAX_SOURCE,
     TYPE_URL_V2 as TAX_TYPE_URL, TaxRulePackV2Parser,
 };
 use prost::Message;
 use rust_decimal::Decimal as ExactDecimal;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use tonic::Request;
 
 const KEY: &[u8] = b"0123456789abcdef0123456789abcdef";
@@ -270,6 +272,7 @@ struct FixturePorts {
     reverse_quotes: bool,
     integrity_events: AtomicUsize,
     tax_reads: AtomicUsize,
+    formal_outputs: Mutex<Vec<FormalOutputRecord>>,
 }
 
 impl FixturePorts {
@@ -570,6 +573,43 @@ impl ArtifactRepository for FixturePorts {
     }
 }
 
+#[tonic::async_trait]
+impl FormalOutputRepository for FixturePorts {
+    async fn publish(
+        &self,
+        _: &AccessScope,
+        record: FormalOutputRecord,
+    ) -> ApplicationResult<FormalOutputRecord> {
+        let mut outputs = self.formal_outputs.lock().expect("formal output lock");
+        if let Some(existing) = outputs
+            .iter()
+            .find(|existing| existing.output_identity() == record.output_identity())
+        {
+            return (existing == &record)
+                .then(|| existing.clone())
+                .ok_or_else(|| {
+                    ApplicationError::new(ApplicationErrorCategory::ImmutableViolation, false)
+                });
+        }
+        outputs.push(record.clone());
+        Ok(record)
+    }
+
+    async fn get(
+        &self,
+        _: &AccessScope,
+        output_identity: &ContentHash,
+    ) -> ApplicationResult<Option<FormalOutputRecord>> {
+        Ok(self
+            .formal_outputs
+            .lock()
+            .expect("formal output lock")
+            .iter()
+            .find(|record| record.output_identity() == output_identity)
+            .cloned())
+    }
+}
+
 impl BondAnalyticsArtifactCodec for FixturePorts {
     fn encode(
         &self,
@@ -820,6 +860,7 @@ impl Fixture {
             reverse_quotes: drift == Drift::ReverseQuoteOrder,
             integrity_events: AtomicUsize::new(0),
             tax_reads: AtomicUsize::new(0),
+            formal_outputs: Mutex::new(Vec::new()),
         });
         let calls = Calls::default();
         let engines = Arc::new(RecordingEngines {
@@ -852,7 +893,7 @@ impl Fixture {
             )
             .expect("test application is valid"),
         );
-        let service = RatesGrpcService::new_with_materialization(
+        let service = RatesGrpcService::new_with_formal_materialization(
             application,
             engines.clone(),
             engines.clone(),
@@ -875,6 +916,7 @@ impl Fixture {
             ports.clone(),
             ports.clone(),
             ports.clone(),
+            formal_publisher(ports.clone()),
             KEY,
         )
         .expect("R5D Rates service is valid");
@@ -940,7 +982,7 @@ fn rates_service_with_identity<const N: usize>(
     let engines = Arc::new(RecordingEngines {
         calls: calls.clone(),
     });
-    let service = RatesGrpcService::new_with_materialization(
+    let service = RatesGrpcService::new_with_formal_materialization(
         application,
         engines.clone(),
         engines.clone(),
@@ -963,10 +1005,26 @@ fn rates_service_with_identity<const N: usize>(
         fixture.ports.clone(),
         fixture.ports.clone(),
         fixture.ports.clone(),
+        formal_publisher(fixture.ports.clone()),
         KEY,
     )
     .expect("R5D Rates service is valid");
     (service, calls)
+}
+
+fn formal_publisher(repository: Arc<FixturePorts>) -> FormalOutputPublisher {
+    FormalOutputPublisher::new(
+        repository,
+        CodeBinding::new(
+            "34402344c7d2c9238dc171af52ac4db77eb6b462",
+            "f66e03c55703837d6f2aee9959eba482612272f1",
+        )
+        .expect("test code binding"),
+        RuntimeBinding::new(
+            ContentHash::digest(b"rates-test-image"),
+            ContentHash::digest(b"rates-test-environment"),
+        ),
+    )
 }
 
 #[tokio::test]
@@ -1385,7 +1443,13 @@ async fn private_bond_seam_rejects_stale_or_extra_proof_before_engine() {
         &public_metadata.consumed_inputs,
     )
     .expect("canonical private-port metadata is valid");
-    assert_eq!(metadata, public_metadata);
+    assert!(
+        public_metadata.formal_evidence.is_some(),
+        "public Rates success must carry persisted formal evidence"
+    );
+    let mut public_private_port_view = public_metadata.clone();
+    public_private_port_view.formal_evidence = None;
+    assert_eq!(metadata, public_private_port_view);
 
     let mut wrong_schema = metadata.clone();
     wrong_schema.schema_id.push_str(".stale");

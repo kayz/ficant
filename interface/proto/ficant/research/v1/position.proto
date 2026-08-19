@@ -4,6 +4,7 @@ package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
+import "ficant/core/v1/evidence.proto";
 import "ficant/core/v1/governance.proto";
 import "ficant/research/v1/coverage.proto";
 
@@ -110,6 +111,7 @@ message PositionViews {
   repeated ficant.core.v1.LineageRef lineage = 3;
   repeated PositionView positions = 4;
   CoverageDeclaration coverage = 5;
+  ficant.core.v1.FormalOutputEvidence formal_evidence = 6;
 }
 
 message GetPositionViewsRequest {
@@ -130,6 +132,7 @@ message CapitalUse {
   repeated ficant.core.v1.LineageRef lineage = 3;
   ficant.core.v1.DecimalValue total_capital_requirement = 4;
   CoverageDeclaration coverage = 5;
+  ficant.core.v1.FormalOutputEvidence formal_evidence = 6;
 }
 
 message CalculateCapitalUseRequest {

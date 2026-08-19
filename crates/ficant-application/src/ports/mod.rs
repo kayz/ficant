@@ -13,6 +13,7 @@ mod execution;
 mod factor_topology;
 mod facts;
 mod fingerprint;
+mod formal_outputs;
 mod funding_rule_parser;
 mod futures_delivery;
 mod futures_hedge;
@@ -70,6 +71,7 @@ pub use facts::{
 };
 pub(crate) use fingerprint::definition_content_hash;
 pub use fingerprint::{OperationFingerprint, data_source_content_hash};
+pub use formal_outputs::{FormalOutputRecord, FormalOutputRepository};
 pub use funding_rule_parser::{FundingRate, FundingRulePackParser};
 pub use futures_delivery::{
     EncodedFuturesDeliveryArtifact, FuturesDeliveryArtifactCandidateFacts,
@@ -87,10 +89,11 @@ pub use phase4_execution::{
     BeginNode, ComparisonDimension, CompleteNode, EnqueueNode, ExecutionExternalInput,
     ExecutionInstanceIdentity, ExternalInputArtifactBinding, FailNode, GraphNodeEvent,
     GraphReplayResult, GraphRunComparison, GraphRunRecord, NodeBeginResult, NodeFailureResult,
-    NodeImplementation, NodeJournalEvidence, NodeLeaseFence, NodeSuccessResult, OutputTrace,
-    Phase4ExecutionRepository, ReproducibilityIdentity, ReproducibilityIdentityInput,
+    NodeImplementation, NodeJournalEvidence, NodeLeaseFence, NodeSuccessResult,
+    OutputPublicationIntent, OutputPublicationIntentState, OutputTrace, Phase4ExecutionRepository,
+    PrepareOutputPublication, ReproducibilityIdentity, ReproducibilityIdentityInput,
     RulePackBinding, StoredExecutionIdentity, StoredNodeManifest, SubmitGraphRun,
-    replay_graph_execution, stable_node_artifact_id,
+    compare_graph_run_dimensions, replay_graph_execution, stable_node_artifact_id,
 };
 pub use positions::PositionSnapshotRepository;
 pub(crate) use required_reads::SnapshotVerifiedReadMetadataParts;

@@ -1,7 +1,8 @@
 use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
 use ficant_api::{
-    GrpcWebServerConfig, PlatformApplication, PlatformGrpcService, PlatformPort, RatesGrpcService,
-    SessionPolicy, SystemClock, TrustedIdentity, serve_grpc_web_routes,
+    FormalOutputPublisher, GrpcWebServerConfig, PlatformApplication, PlatformGrpcService,
+    PlatformPort, RatesGrpcService, SessionPolicy, SystemClock, TrustedIdentity,
+    serve_grpc_web_routes,
 };
 use ficant_application::ports::{
     AccessScope, AppendDefinitionVersion, ApplicationResult, ArtifactRepository,
@@ -10,7 +11,8 @@ use ficant_application::ports::{
     CurveSnapshotMetadataRepository, DataSourceRepository, DecodedCanonicalQuotes,
     DecodedCurvePoint, DecodedCurvePointSet, DefinitionIdentity, DefinitionRepository,
     DefinitionValue, EncodedBondAnalyticsArtifact, EncodedFuturesDeliveryArtifact,
-    FactorTopologyRepository, FuturesDeliveryArtifactCandidateFacts, FuturesDeliveryArtifactCodec,
+    FactorTopologyRepository, FormalOutputRecord, FormalOutputRepository,
+    FuturesDeliveryArtifactCandidateFacts, FuturesDeliveryArtifactCodec,
     FuturesDeliveryArtifactFacts, IdempotencyKey, InstrumentDefinition, InstrumentSubtype,
     IntegrityEvent, IntegrityEventSink, PublishArtifact, RegisterDataSource,
     RequiredVerifiedBlobRead, SnapshotVerifiedReadMetadata, SnapshotVerifiedReadMetadataRepository,
@@ -67,6 +69,7 @@ use ficant_funding_pack::{
     FundingRulePackV1Parser, MARKET as FUNDING_MARKET, RULE_TYPE as FUNDING_RULE_TYPE,
     TYPE_URL as FUNDING_TYPE_URL,
 };
+use ficant_runtime::{CodeBinding, RuntimeBinding};
 use ficant_tax_pack::{
     MARKET as TAX_MARKET, RULE_TYPE as TAX_RULE_TYPE, TYPE_URL as TAX_TYPE_URL, TaxRulePackV1Parser,
 };
@@ -206,6 +209,45 @@ impl IntegrityEventSink for FixtureIntegrityEvents {
     async fn emit(&self, _: IntegrityEvent) -> Result<(), ApplicationError> {
         panic!("fixture payload hashes and sizes are exact")
     }
+}
+
+#[derive(Clone, Copy)]
+struct FixtureFormalOutputs;
+
+#[tonic::async_trait]
+impl FormalOutputRepository for FixtureFormalOutputs {
+    async fn publish(
+        &self,
+        scope: &AccessScope,
+        record: FormalOutputRecord,
+    ) -> ApplicationResult<FormalOutputRecord> {
+        scope.authorize(record.owner())?;
+        record.verify()?;
+        Ok(record)
+    }
+
+    async fn get(
+        &self,
+        _: &AccessScope,
+        _: &ContentHash,
+    ) -> ApplicationResult<Option<FormalOutputRecord>> {
+        Ok(None)
+    }
+}
+
+fn formal_output_publisher() -> FormalOutputPublisher {
+    FormalOutputPublisher::new(
+        Arc::new(FixtureFormalOutputs),
+        CodeBinding::new(
+            "34402344c7d2c9238dc171af52ac4db77eb6b462",
+            "f66e03c55703837d6f2aee9959eba482612272f1",
+        )
+        .expect("fixture Code binding is valid"),
+        RuntimeBinding::new(
+            ContentHash::digest(b"phase2e-server-image"),
+            ContentHash::digest(b"phase2e-server-environment"),
+        ),
+    )
 }
 
 #[derive(Clone)]
@@ -503,7 +545,7 @@ async fn python_sdk_matches_phase2_reference_slices_through_live_rule_pack_compo
     let decoder = Arc::new(FixtureCanonicalSnapshotDecoder {
         source: VersionRef::new(id('6'), fixture_version()),
     });
-    let rates = RatesGrpcService::new_with_materialization(
+    let rates = RatesGrpcService::new_with_formal_materialization(
         application,
         Arc::new(NativeBondAnalyticsEngine),
         Arc::new(NativeYieldCurveEngine),
@@ -526,6 +568,7 @@ async fn python_sdk_matches_phase2_reference_slices_through_live_rule_pack_compo
         curve,
         artifacts.clone(),
         artifacts,
+        formal_output_publisher(),
         KEY,
     )
     .expect("fixture rates service is valid");

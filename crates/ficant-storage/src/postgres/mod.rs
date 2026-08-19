@@ -7,6 +7,7 @@ pub mod definitions;
 mod execution;
 pub mod factor_topology;
 pub mod facts;
+pub mod formal_outputs;
 pub mod governance;
 mod ingestion;
 pub mod journal;

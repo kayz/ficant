@@ -1,21 +1,22 @@
 use ficant_api::{
     ArtifactGrpcService, CanonicalCurvePointSetDecoder, CanonicalSnapshotCodecAdapter,
     DataHealthGrpcService, DataSourceRegistryGrpcService, ExperimentGrpcService,
-    FactorRegistryGrpcService, FoundationChangeGrpcService, GrpcWebServeError, GrpcWebServerConfig,
-    MarketDefinitionGrpcService, MarketFactGrpcService, PlatformApplication, PlatformGrpcService,
-    PlatformPort, PortfolioRiskGrpcService, PositionSnapshotGrpcService, ProductionGrpcServices,
-    RatesGrpcService, SessionPolicy, SnapshotGrpcService, SubjectRegistryGrpcService, SystemClock,
-    TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog, build_production_routes,
-    serve_production_routes,
+    FactorRegistryGrpcService, FormalOutputPublisher, FoundationChangeGrpcService,
+    GrpcWebServeError, GrpcWebServerConfig, MarketDefinitionGrpcService, MarketFactGrpcService,
+    PlatformApplication, PlatformGrpcService, PlatformPort, PortfolioRiskGrpcService,
+    PositionSnapshotGrpcService, ProductionGrpcServices, RatesGrpcService, SessionPolicy,
+    SnapshotGrpcService, SubjectRegistryGrpcService, SystemClock, TrustedExperimentScope,
+    TrustedIdentity, TrustedNodeCatalog, build_production_routes, serve_production_routes,
 };
 use ficant_application::ports::{
     AccessScope, AeadCursorCodec, ArtifactRepository, BlobStore, CursorKey,
     CurveSnapshotMetadataRepository, DataHealthThresholdProfileRepository,
     DataSourceAuthorizationRepository, DataSourceRepository, DefinitionRepository,
-    ExperimentRepository, FactorTopologyRepository, FoundationChangeRepository, IntegrityEventSink,
-    MarketFactRepository, Phase4ExecutionRepository, PositionSnapshotRepository,
-    RunJournalRepository, SignalRepository, SnapshotRepository,
-    SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobReader,
+    ExperimentRepository, FactorTopologyRepository, FormalOutputRepository,
+    FoundationChangeRepository, IntegrityEventSink, MarketFactRepository,
+    Phase4ExecutionRepository, PositionSnapshotRepository, RunJournalRepository, SignalRepository,
+    SnapshotRepository, SnapshotVerifiedReadMetadataRepository, SubjectRepository,
+    VerifiedBlobReader,
 };
 use ficant_application::{ApplicationError, map_runtime_error};
 use ficant_cgb_futures_pack::CgbFuturesDeliveryRulePackParser;
@@ -27,7 +28,7 @@ use ficant_fixed_income_native::{
 };
 use ficant_funding_pack::FundingRulePackV1Parser;
 use ficant_native_nodes::{native_node_source_digest, trusted_native_node};
-use ficant_runtime::NativeNode;
+use ficant_runtime::{CodeBinding, NativeNode, RuntimeBinding};
 use ficant_storage::postgres::PostgresRepository;
 use ficant_storage::s3::S3BlobStore;
 use ficant_storage::{
@@ -51,11 +52,28 @@ const DEFAULT_BIND: &str = "127.0.0.1:50051";
 const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(1);
 const SESSION_TTL_SECONDS: i64 = 15 * 60;
 const APP_GRANT_TTL_SECONDS: i64 = 60;
+
+/// Returns the Git commit embedded by the server build script.
+#[must_use]
+pub const fn compiled_git_commit_sha() -> &'static str {
+    env!("FICANT_COMPILED_GIT_COMMIT_SHA")
+}
+
+/// Returns the Git tree embedded by the server build script.
+#[must_use]
+pub const fn compiled_git_tree_sha() -> &'static str {
+    env!("FICANT_COMPILED_GIT_TREE_SHA")
+}
+
 const ENV_KEYS: &[&str] = &[
     "FICANT_GRPC_BIND",
     "FICANT_GRPC_WEB_ALLOWED_ORIGINS",
     "FICANT_PLATFORM_SIGNING_KEY_HEX",
     "FICANT_PLATFORM_TRACE_KEY_HEX",
+    "FICANT_CODE_COMMIT_SHA",
+    "FICANT_CODE_TREE_SHA",
+    "FICANT_SERVER_RUNTIME_IMAGE_DIGEST",
+    "FICANT_SERVER_ENVIRONMENT_ATTESTATION",
     "FICANT_BOOTSTRAP_SUBJECT",
     "FICANT_BOOTSTRAP_BEARER_TOKEN",
     "FICANT_BOOTSTRAP_ACTOR_ID",
@@ -91,6 +109,8 @@ pub struct ServerSettings {
     allowed_origins: Vec<String>,
     signing_key: Vec<u8>,
     trace_key: Vec<u8>,
+    code: CodeBinding,
+    server_runtime: RuntimeBinding,
     bearer_identity: Option<TrustedIdentity>,
     implicit_identity: Option<TrustedIdentity>,
     experiment_database_url: String,
@@ -118,6 +138,8 @@ impl fmt::Debug for ServerSettings {
             .field("allowed_origins", &self.allowed_origins)
             .field("signing_key", &"[REDACTED]")
             .field("trace_key", &"[REDACTED]")
+            .field("code", &self.code.digest())
+            .field("server_runtime", &"[ATTESTED]")
             .field("bearer_identity", &self.bearer_identity.is_some())
             .field("implicit_identity", &self.implicit_identity.is_some())
             .field("experiment_database_url", &"[REDACTED]")
@@ -163,6 +185,22 @@ impl ServerSettings {
 
         let signing_key = decode_key(required(values, "FICANT_PLATFORM_SIGNING_KEY_HEX")?)?;
         let trace_key = decode_key(required(values, "FICANT_PLATFORM_TRACE_KEY_HEX")?)?;
+        let code = CodeBinding::new(
+            required(values, "FICANT_CODE_COMMIT_SHA")?,
+            required(values, "FICANT_CODE_TREE_SHA")?,
+        )
+        .map_err(|_| config("FICANT Code binding is invalid"))?;
+        if code.git_commit_sha() != compiled_git_commit_sha()
+            || code.git_tree_sha() != compiled_git_tree_sha()
+        {
+            return Err(config(
+                "configured FICANT Code binding does not match the compiled binary",
+            ));
+        }
+        let server_runtime = RuntimeBinding::new(
+            parse_digest_setting(required(values, "FICANT_SERVER_RUNTIME_IMAGE_DIGEST")?)?,
+            parse_digest_setting(required(values, "FICANT_SERVER_ENVIRONMENT_ATTESTATION")?)?,
+        );
         let bearer_identity = bearer_identity(values)?;
         let implicit_identity = implicit_identity(values)?;
         if implicit_identity.is_some() && !bind.ip().is_loopback() {
@@ -188,6 +226,8 @@ impl ServerSettings {
             allowed_origins,
             signing_key,
             trace_key,
+            code,
+            server_runtime,
             bearer_identity,
             implicit_identity,
             experiment_database_url: required(values, "FICANT_EXPERIMENT_DATABASE_URL")?.to_owned(),
@@ -320,6 +360,7 @@ pub fn build_grpc_services(
     let curve_snapshots: Arc<dyn CurveSnapshotMetadataRepository> = repository.clone();
     let factors: Arc<dyn FactorTopologyRepository> = repository.clone();
     let artifacts: Arc<dyn ArtifactRepository> = repository.clone();
+    let formal_outputs = build_formal_output_publisher(repository.clone(), settings);
     let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository;
     let blobs: Arc<dyn VerifiedBlobReader> = blob_store;
     let rates = build_rates_service(
@@ -333,6 +374,7 @@ pub fn build_grpc_services(
         curve_snapshots,
         factors,
         artifacts,
+        formal_outputs,
         settings,
     )?;
     Ok((platform, rates))
@@ -400,6 +442,7 @@ pub fn build_grpc_services_with_experiment_and_registry(
     let factors: Arc<dyn FactorTopologyRepository> = repository.clone();
     let definitions: Arc<dyn DefinitionRepository> = repository.clone();
     let subjects: Arc<dyn SubjectRepository> = repository.clone();
+    let formal_outputs = build_formal_output_publisher(repository.clone(), settings);
     let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository;
     let blobs: Arc<dyn VerifiedBlobReader> = blob_store;
     let rates = build_rates_service(
@@ -413,6 +456,7 @@ pub fn build_grpc_services_with_experiment_and_registry(
         curve_snapshots,
         factors,
         artifacts.clone(),
+        formal_outputs,
         settings,
     )?;
     let registry_identity = Arc::clone(&application);
@@ -432,7 +476,8 @@ pub fn build_grpc_services_with_experiment_and_registry(
         trusted,
         &settings.trace_key,
     )
-    .map_err(config)?;
+    .map_err(config)?
+    .with_formal_execution(subjects.clone(), settings.code.clone());
     let registry =
         SubjectRegistryGrpcService::new(registry_identity, subjects, &settings.trace_key)
             .map_err(config)?;
@@ -581,11 +626,17 @@ pub fn build_production_grpc_services(
     let curve_repository: Arc<dyn CurveSnapshotMetadataRepository> = repository.clone();
     let artifacts: Arc<dyn ArtifactRepository> = repository.clone();
     let signals: Arc<dyn SignalRepository> = repository.clone();
+    let formal_output_repository: Arc<dyn FormalOutputRepository> = repository.clone();
     let definitions: Arc<dyn DefinitionRepository> = repository.clone();
     let subjects: Arc<dyn SubjectRepository> = repository.clone();
     let snapshots: Arc<dyn SnapshotVerifiedReadMetadataRepository> = repository.clone();
     let blobs: Arc<dyn VerifiedBlobReader> = blob_store.clone();
     let writable_blobs: Arc<dyn BlobStore> = blob_store.clone();
+    let formal_outputs = FormalOutputPublisher::new(
+        formal_output_repository,
+        settings.code.clone(),
+        settings.server_runtime.clone(),
+    );
     let rates = build_rates_service(
         Arc::clone(&application),
         definitions.clone(),
@@ -597,6 +648,7 @@ pub fn build_production_grpc_services(
         curve_repository.clone(),
         factor_repository.clone(),
         artifacts.clone(),
+        formal_outputs.clone(),
         settings,
     )?;
     let experiment = ExperimentGrpcService::new(
@@ -615,10 +667,14 @@ pub fn build_production_grpc_services(
         trusted,
         &settings.trace_key,
     )
+    .map_err(config)?
+    .with_formal_execution(subjects.clone(), settings.code.clone());
+    let registry = SubjectRegistryGrpcService::new(
+        Arc::clone(&application),
+        subjects.clone(),
+        &settings.trace_key,
+    )
     .map_err(config)?;
-    let registry =
-        SubjectRegistryGrpcService::new(Arc::clone(&application), subjects, &settings.trace_key)
-            .map_err(config)?;
     let access_scope = AccessScope::new(
         settings.experiment_tenant_id.clone(),
         settings.experiment_actor_id.clone(),
@@ -633,7 +689,8 @@ pub fn build_production_grpc_services(
         writable_blobs.clone(),
         &settings.trace_key,
     )
-    .map_err(config)?;
+    .map_err(config)?
+    .with_formal_outputs(subjects.clone(), formal_outputs.clone());
     let data_health = DataHealthGrpcService::new(
         Arc::clone(&application),
         access_scope.clone(),
@@ -648,7 +705,8 @@ pub fn build_production_grpc_services(
         writable_blobs.clone(),
         &settings.trace_key,
     )
-    .map_err(config)?;
+    .map_err(config)?
+    .with_formal_outputs(subjects.clone(), formal_outputs.clone());
     let portfolio_risk = PortfolioRiskGrpcService::new(
         Arc::clone(&application),
         access_scope.clone(),
@@ -668,7 +726,8 @@ pub fn build_production_grpc_services(
         Arc::new(NativeFuturesDeliveryEngine),
         &settings.trace_key,
     )
-    .map_err(config)?;
+    .map_err(config)?
+    .with_formal_outputs(subjects, formal_outputs);
     let data_sources = DataSourceRegistryGrpcService::new(
         Arc::clone(&application),
         data_source_repository.clone(),
@@ -865,9 +924,10 @@ fn build_rates_service(
     curve_snapshots: Arc<dyn CurveSnapshotMetadataRepository>,
     factors: Arc<dyn FactorTopologyRepository>,
     artifacts: Arc<dyn ArtifactRepository>,
+    formal_outputs: FormalOutputPublisher,
     settings: &ServerSettings,
 ) -> Result<RatesGrpcService, ServerError> {
-    RatesGrpcService::new_with_materialization(
+    RatesGrpcService::new_with_formal_materialization(
         application,
         Arc::new(NativeBondAnalyticsEngine),
         Arc::new(NativeYieldCurveEngine),
@@ -890,9 +950,22 @@ fn build_rates_service(
         Arc::new(CanonicalCurvePointSetDecoder),
         Arc::new(ArrowBondAnalyticsCodec),
         Arc::new(ArrowFuturesDeliveryCodec),
+        formal_outputs,
         &settings.trace_key,
     )
     .map_err(config)
+}
+
+fn build_formal_output_publisher(
+    repository: Arc<PostgresRepository>,
+    settings: &ServerSettings,
+) -> FormalOutputPublisher {
+    let repository: Arc<dyn FormalOutputRepository> = repository;
+    FormalOutputPublisher::new(
+        repository,
+        settings.code.clone(),
+        settings.server_runtime.clone(),
+    )
 }
 
 fn build_repository(

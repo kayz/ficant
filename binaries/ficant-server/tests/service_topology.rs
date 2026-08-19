@@ -136,6 +136,7 @@ fn build_descriptor() -> FileDescriptorSet {
     FileDescriptorSet::decode(bytes.as_slice()).expect("descriptor must decode")
 }
 
+#[allow(clippy::too_many_lines)]
 fn settings() -> BTreeMap<String, String> {
     BTreeMap::from([
         ("FICANT_GRPC_BIND".to_owned(), "127.0.0.1:50051".to_owned()),
@@ -145,6 +146,22 @@ fn settings() -> BTreeMap<String, String> {
         ),
         ("FICANT_PLATFORM_SIGNING_KEY_HEX".to_owned(), KEY.to_owned()),
         ("FICANT_PLATFORM_TRACE_KEY_HEX".to_owned(), KEY.to_owned()),
+        (
+            "FICANT_CODE_COMMIT_SHA".to_owned(),
+            ficant_server::compiled_git_commit_sha().to_owned(),
+        ),
+        (
+            "FICANT_CODE_TREE_SHA".to_owned(),
+            ficant_server::compiled_git_tree_sha().to_owned(),
+        ),
+        (
+            "FICANT_SERVER_RUNTIME_IMAGE_DIGEST".to_owned(),
+            format!("sha256:{}", "ab".repeat(32)),
+        ),
+        (
+            "FICANT_SERVER_ENVIRONMENT_ATTESTATION".to_owned(),
+            format!("sha256:{}", "cd".repeat(32)),
+        ),
         (
             "FICANT_EXPERIMENT_DATABASE_URL".to_owned(),
             "postgres://ficant:fixture@127.0.0.1:5432/ficant".to_owned(),

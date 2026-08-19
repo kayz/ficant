@@ -82,6 +82,12 @@ Closure CI run [`29200796715`](https://github.com/kayz/ficant/actions/runs/29200
 
 ## 当前治理证据
 
+### R7B 候选证据边界（2026-08-20）
+
+R7B 正在以 [`../iterations/2026-08-r7b-evidence-recovery.md`](../iterations/2026-08-r7b-evidence-recovery.md) 为唯一 Human brief 收口 AC30–AC33。当前代码候选已定义统一 `FormalOutputEvidence`、同步 formal output 持久化、Graph 13 维与 publication intent/orphan recovery，并新增隔离备份恢复和 exact authority MANUAL runner。此处只记录证据类型，不把中间 focused 命令写成最终 verdict；最终候选的真实命令、exit code、test count、descriptor/生成树/恢复 manifest digest 与 clean Git identity只写入该 brief §6。
+
+R7B 的灾备证据明确限于本地隔离 source-destroy/fresh-restore：PG dump 与全部 immutable object key/size/SHA-256 同时绑定公共 Code 和实际 Runtime，恢复后 required-read Graph Artifact 与同步 Analytics record。它不构成生产 HA、PITR、RPO/RTO 或版本交付证据。
+
 | ID | 验收 | 当前状态 | 证据位置 |
 |---|---|---|---|
 | QG-01 | 当前迭代、总体目标和有效期明确 | collected | `.proqaid/orchestrator/current-iteration.md` |

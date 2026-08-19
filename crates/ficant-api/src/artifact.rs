@@ -15,10 +15,12 @@ use ficant_domain::governance::PlatformRole;
 use ficant_domain::primitives::{ContentHash, LineageRef};
 use ficant_domain::research::{Artifact, ArtifactKind, SignalSet};
 use ficant_domain::{ContentAddressed, DomainErrorCode, Lineaged};
+use ficant_runtime::FormalOutputEvidence;
 use prost::Message;
 use tonic::{Request, Response, Status};
 
 use crate::core_error::CoreBusinessErrorMapper;
+use crate::formal_evidence::proto_formal_evidence;
 use crate::grpc_web::request_credential;
 use crate::market_definition::{hash, market_time, owner, parse_ulid, ulid, version_ref};
 use crate::registry::PlatformPort;
@@ -112,15 +114,22 @@ impl ArtifactService for ArtifactGrpcService {
             Err(error) => Err(error),
             Ok(principal) => match parse_ulid(request.get_ref().artifact_id.as_ref()) {
                 Err(error) => Err(error),
-                Ok(artifact_id) => self
+                Ok(artifact_id) => match self
                     .facade()
                     .read_verified_artifact(
                         principal.access_scope(),
-                        artifact_id,
+                        artifact_id.clone(),
                         trace_context(request.get_ref()),
                     )
                     .await
-                    .map(|value| artifact(value.artifact())),
+                {
+                    Err(error) => Err(error),
+                    Ok(value) => self
+                        .artifacts
+                        .get_formal_evidence(principal.access_scope(), artifact_id)
+                        .await
+                        .map(|evidence| artifact(value.artifact(), evidence.as_ref())),
+                },
             },
         };
         Ok(Response::new(pb::GetArtifactResponse {
@@ -142,15 +151,22 @@ impl ArtifactService for ArtifactGrpcService {
             Err(error) => Err(error),
             Ok(principal) => match parse_ulid(request.get_ref().signal_set_id.as_ref()) {
                 Err(error) => Err(error),
-                Ok(signal_id) => self
+                Ok(signal_id) => match self
                     .facade()
                     .read_verified_signal(
                         principal.access_scope(),
-                        signal_id,
+                        signal_id.clone(),
                         trace_context(request.get_ref()),
                     )
                     .await
-                    .map(|value| signal_set(value.signal())),
+                {
+                    Err(error) => Err(error),
+                    Ok(value) => self
+                        .signals
+                        .get_formal_evidence(principal.access_scope(), signal_id)
+                        .await
+                        .map(|evidence| signal_set(value.signal(), evidence.as_ref())),
+                },
             },
         };
         Ok(Response::new(pb::GetSignalSetResponse {
@@ -353,7 +369,7 @@ fn cursor_plaintext(
     )
 }
 
-fn artifact(value: &Artifact) -> pb::Artifact {
+fn artifact(value: &Artifact, evidence: Option<&FormalOutputEvidence>) -> pb::Artifact {
     pb::Artifact {
         artifact_id: Some(ulid(value.id())),
         owner: Some(owner(value.owner())),
@@ -365,10 +381,11 @@ fn artifact(value: &Artifact) -> pb::Artifact {
         content_hash: Some(hash(value.content_hash())),
         blob_size: value.blob_size(),
         lineage: value.lineage().iter().map(lineage_ref).collect(),
+        formal_evidence: evidence.map(proto_formal_evidence),
     }
 }
 
-fn signal_set(value: &SignalSet) -> pb::SignalSet {
+fn signal_set(value: &SignalSet, evidence: Option<&FormalOutputEvidence>) -> pb::SignalSet {
     pb::SignalSet {
         signal_set_id: Some(ulid(value.id())),
         owner: Some(owner(value.owner())),
@@ -380,6 +397,7 @@ fn signal_set(value: &SignalSet) -> pb::SignalSet {
         input_artifacts: value.input_artifacts().iter().map(lineage_ref).collect(),
         valid_from: Some(market_time(value.valid().from())),
         valid_to: Some(market_time(value.valid().to())),
+        formal_evidence: evidence.map(proto_formal_evidence),
     }
 }
 

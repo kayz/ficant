@@ -8,6 +8,7 @@ use super::S3BlobStore;
 pub struct CleanupReport {
     deleted_staging: u64,
     deleted_immutable: u64,
+    abandoned_intents: u64,
 }
 
 impl CleanupReport {
@@ -19,6 +20,11 @@ impl CleanupReport {
     #[must_use]
     pub fn deleted_immutable(self) -> u64 {
         self.deleted_immutable
+    }
+
+    #[must_use]
+    pub fn abandoned_intents(self) -> u64 {
+        self.abandoned_intents
     }
 }
 
@@ -46,12 +52,40 @@ impl OrphanCleaner {
         &self,
         cutoff_unix_seconds: i64,
     ) -> ApplicationResult<CleanupReport> {
+        let abandoned_intents = self.abandon_terminal_intents(cutoff_unix_seconds).await?;
+        let deleted_staging = self.cleanup_staging(cutoff_unix_seconds).await?;
+        let deleted_immutable = self.cleanup_immutable(cutoff_unix_seconds).await?;
+        Ok(CleanupReport {
+            deleted_staging,
+            deleted_immutable,
+            abandoned_intents,
+        })
+    }
+
+    async fn abandon_terminal_intents(&self, cutoff: i64) -> ApplicationResult<u64> {
+        Ok(sqlx::query(
+            "UPDATE research.output_publication_intents intent
+             SET state='ABANDONED',abandoned_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+             FROM research.execution_tasks task,research.experiment_runs run
+             WHERE intent.tenant_id=task.tenant_id AND intent.task_id=task.task_id
+               AND intent.tenant_id=run.tenant_id AND intent.run_id=run.experiment_run_id
+               AND intent.state='PREPARED' AND intent.created_at<=to_timestamp($1)
+               AND (task.state='FAILED' OR run.state IN ('FAILED','CANCELLED'))",
+        )
+        .bind(cutoff)
+        .execute(&self.pool)
+        .await
+        .map_err(|_| storage_error())?
+        .rows_affected())
+    }
+
+    async fn cleanup_staging(&self, cutoff: i64) -> ApplicationResult<u64> {
         let staging: Vec<(String,)> = sqlx::query_as(
             "SELECT object_key FROM storage.staging_uploads
              WHERE updated_at <= to_timestamp($1)
              ORDER BY object_key",
         )
-        .bind(cutoff_unix_seconds)
+        .bind(cutoff)
         .fetch_all(&self.pool)
         .await
         .map_err(|_| storage_error())?;
@@ -64,7 +98,7 @@ impl OrphanCleaner {
                  FOR UPDATE",
             )
             .bind(&key)
-            .bind(cutoff_unix_seconds)
+            .bind(cutoff)
             .fetch_optional(&mut *transaction)
             .await
             .map_err(|_| storage_error())?;
@@ -81,13 +115,16 @@ impl OrphanCleaner {
             transaction.commit().await.map_err(|_| storage_error())?;
             deleted_staging = deleted_staging.checked_add(1).ok_or_else(storage_error)?;
         }
+        Ok(deleted_staging)
+    }
 
+    async fn cleanup_immutable(&self, cutoff: i64) -> ApplicationResult<u64> {
         let candidates: Vec<(String, String)> = sqlx::query_as(
             "SELECT content_hash::text, object_key FROM storage.orphan_candidates
              WHERE created_at <= to_timestamp($1)
              ORDER BY content_hash",
         )
-        .bind(cutoff_unix_seconds)
+        .bind(cutoff)
         .fetch_all(&self.pool)
         .await
         .map_err(|_| storage_error())?;
@@ -107,13 +144,20 @@ impl OrphanCleaner {
                 transaction.commit().await.map_err(|_| storage_error())?;
                 continue;
             };
-            let referenced: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM storage.blobs WHERE content_hash = $1)",
+            let (referenced, active_intent): (bool, bool) = sqlx::query_as(
+                "SELECT EXISTS(SELECT 1 FROM storage.blobs WHERE content_hash = $1),
+                        EXISTS(
+                          SELECT 1 FROM research.output_publication_intents
+                          WHERE result_hash=$1 AND state='PREPARED')",
             )
             .bind(&hash)
             .fetch_one(&mut *transaction)
             .await
             .map_err(|_| storage_error())?;
+            if active_intent && !referenced {
+                transaction.commit().await.map_err(|_| storage_error())?;
+                continue;
+            }
             if !referenced {
                 self.store.delete_object(&key).await?;
                 deleted_immutable = deleted_immutable.checked_add(1).ok_or_else(storage_error)?;
@@ -125,10 +169,7 @@ impl OrphanCleaner {
                 .map_err(|_| storage_error())?;
             transaction.commit().await.map_err(|_| storage_error())?;
         }
-        Ok(CleanupReport {
-            deleted_staging,
-            deleted_immutable,
-        })
+        Ok(deleted_immutable)
     }
 }
 

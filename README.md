@@ -48,7 +48,7 @@ FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三�
 ## 开发与发布边界（2026-07-17）
 
 - [OPAID](docs/development.md) 管理从任务冻结、实现和本地测试到精确自测候选及唯一 Human brief；它不执行 CI/CD、部署、UAT 或服务器管理。
-- Windows PowerShell 7 统一入口为 `.\scripts\check-fast.ps1` 与 `.\scripts\check.ps1`；两者支持 `-ListOnly`，完整检查可显式增加 `-IncludeIntegration`。拟创建版本 tag 前，另运行 `.\scripts\check-release-candidate.ps1`，在干净且与远端一致的 `main` 上构建、扫描最终镜像并启动完整测试拓扑。
+- Windows PowerShell 7 统一入口为 `.\scripts\check-fast.ps1` 与 `.\scripts\check.ps1`；两者支持 `-ListOnly`，完整检查可显式增加 `-IncludeIntegration`。R7B 的隔离恢复证明使用 `.\scripts\check-recovery.ps1`，只处理名称受限的临时 PostgreSQL/Ceph project。拟创建版本 tag 前，另运行 `.\scripts\check-release-candidate.ps1`，在干净且与远端一致的 `main` 上构建、扫描最终镜像并启动完整测试拓扑。
 - Human 阅读 brief 后可以要求一次完整本地检查与人工复测，也可以接受现有证据、合并并进入下一迭代。普通 branch push、Pull Request 和 `main` 合并不运行完整 GitHub CI。
 - 数个迭代后，Human 创建指向当前 `main` 的不可变 `v*` 版本 tag，才把候选交给中央 `kayz/cicd`。该 tag 授权 GitHub 版本 CI、Linux 镜像、GHCR、测试环境部署、健康/冒烟检查和回滚；本地通过不能替代这些版本交付证据。
 - 历史 HOQA/PROQAID 材料保留在 `docs/history/hoqa/` 作为当时证据，不再驱动当前工作；权威边界见 [ADR-0009](docs/architecture/adr/0009-opaid-local-development-and-cicd-release-boundary.md)。
@@ -1250,7 +1250,9 @@ PostgreSQL 16 schema
 - 实验中断后可从安全点恢复；
 - 任意输出可追踪到每个节点。
 
-**当前候选（2026-07-24）：** Phase 4 已形成生产入口到持久化 Worker 的闭环。加法式 `ExperimentService` 从认证后的 `experiment:read`/`experiment:write` scope 接受提交和查询；Server 对 Data/Universe Snapshot、RulePack、外部 Artifact 及其 Ceph payload 执行 required read，只使用部署注入的 OCI runtime、canonical environment 和构建 source digest，客户端不能自报这些受信身份。Repository 在一个 PostgreSQL transaction 内创建并启动 Run、写 Journal、冻结 graph/identity/bindings 并发布首节点；后续 enqueue/begin/complete 都从冻结 graph 和 Journal 自行派生合法恢复节点与唯一后继。Worker 以 lease/fencing 恢复中断，先提升输出到 Ceph RGW，再原子提交经过 envelope、端口、Artifact、manifest、checkpoint 和血缘逐项校验的结果。持久查询可读取 run/manifest/checkpoint、递归追踪任意输出并比较 11 个可复现维度。本地真实 PostgreSQL + Ceph RGW 已验证 `AnalyzeBondRequest -> AnalyzeBondResult -> RiskSummary` 两节点边、promote 后/事务前中断、attempt 2 恢复、旧 fence 与上游篡改拒绝、最终 `SUCCEEDED` 和完整血缘；Phase 4 不包含 GeneratedNode/gVisor 或 Phase 5 业务 UI。
+**当前候选（2026-08-20）：** Phase 4 已形成生产入口到持久化 Worker 的闭环。加法式 `ExperimentService` 从认证后的 `experiment:read`/`experiment:write` scope 接受提交和查询；Server 对 Data/Universe Snapshot、RulePack、Subject、外部 Artifact 及其 Ceph payload 执行 required read，只使用部署注入且与二进制内嵌值一致的 Code commit/tree、OCI runtime、canonical environment 和实现摘要，客户端不能自报这些受信身份。Repository 在任何 blob stage 前冻结 output publication intent；Worker 以 lease/fencing 从 stage、promote、事务前中断或过期 lease forward-only 恢复，并由生产 orphan maintenance 保护 active intent/正式引用、清除超龄无引用候选。完成事务逐项校验 intent、fence、Artifact、manifest、formal evidence、hash/size，并只产生一个 terminal result。持久查询可读取 run/manifest/checkpoint、展开 typed formal trace，并按 Data、Universe、Graph、Parameters、Runtime、Environment、Seed、RulePack、Implementation、ExternalInput、Result、Subject、Code 共 13 维比较。Phase 4 仍不包含 GeneratedNode/gVisor 或 Phase 5 业务 UI。
+
+R7B 为五个 Rates RPC、Portfolio KRD、PositionViews、成功 CapitalUse、DataHealthReport、Experiment Artifact/SignalSet 统一增加 `FormalOutputEvidence`。它绑定稳定排序的 typed actual inputs、exact Subject、公共 Code、实际 Runtime/environment、实现、参数/seed 与 result bytes，并用同一个 domain-separated canonical v1 算法得到 output identity；同步 Analytics 在成功应答前按 identity 持久化 payload/evidence，Graph Artifact/SignalSet 在完成事务中交叉核对同一证据。最终点亮状态仍以 [R7B iteration brief](docs/iterations/2026-08-r7b-evidence-recovery.md) 的最终真实证据与后续 authority 绑定为准，本段不宣称已经发布 AC30–AC33。
 
 ### Phase 5：Rates Research Lab
 
