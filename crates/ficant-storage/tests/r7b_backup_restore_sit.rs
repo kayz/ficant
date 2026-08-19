@@ -26,6 +26,7 @@ const TENANT_ID: &str = "01ARZ3NDEKTSV4RRFFQ69G5R01";
 const OWNER_ID: &str = "01ARZ3NDEKTSV4RRFFQ69G5R02";
 const SUBJECT_ID: &str = "01ARZ3NDEKTSV4RRFFQ69G5R03";
 const ARTIFACT_ID: &str = "01ARZ3NDEKTSV4RRFFQ69G5R04";
+const RULE_PACK_ID: &str = "01ARZ3NDEKTSV4RRFFQ69G5R05";
 const GRAPH_PAYLOAD: &[u8] = b"r7b-recovery-graph-output-v1";
 const ANALYTICS_PAYLOAD: &[u8] = b"r7b-recovery-analytics-output-v1";
 
@@ -45,6 +46,7 @@ async fn seed_source() {
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
     let repository = support::repository(pool.clone());
+    seed_graph_lineage(&pool).await;
     let store = blob_store(pool);
     let scope = support::access_scope(&owner());
 
@@ -226,10 +228,9 @@ fn analytics_record() -> FormalOutputRecord {
 }
 
 fn graph_artifact() -> Artifact {
-    let evidence = graph_evidence();
-    let subject = match evidence.subject().reference() {
+    let rule_pack = match rule_pack_binding().reference() {
         FormalInputReference::Object(value) => value.clone(),
-        FormalInputReference::Named(_) => panic!("Subject must be object-backed"),
+        FormalInputReference::Named(_) => panic!("RulePack must be object-backed"),
     };
     Artifact::new(
         id(ARTIFACT_ID),
@@ -238,7 +239,7 @@ fn graph_artifact() -> Artifact {
         "application/vnd.ficant.graph-output.v1",
         ContentHash::digest(GRAPH_PAYLOAD),
         u64::try_from(GRAPH_PAYLOAD.len()).expect("size"),
-        vec![subject],
+        vec![rule_pack],
     )
     .expect("formal Graph Artifact")
 }
@@ -251,7 +252,7 @@ fn evidence(schema_id: &str, payload: &[u8]) -> FormalOutputEvidence {
     FormalOutputEvidence::new(FormalOutputEvidenceInput {
         schema_id: schema_id.to_owned(),
         subject: subject_binding(),
-        consumed_inputs: Vec::new(),
+        consumed_inputs: vec![rule_pack_binding()],
         code: CodeBinding::new(
             required_env("FICANT_RECOVERY_CODE_COMMIT_SHA"),
             required_env("FICANT_RECOVERY_CODE_TREE_SHA"),
@@ -288,6 +289,54 @@ fn subject_binding() -> FormalInputBinding {
         effective_to: None,
     })
     .expect("Subject binding")
+}
+
+fn rule_pack_binding() -> FormalInputBinding {
+    FormalInputBinding::new(FormalInputBindingInput {
+        role: "rule_pack".to_owned(),
+        kind: FormalInputKind::RulePack,
+        owner: owner(),
+        reference: FormalInputReference::Object(
+            LineageRef::new(
+                id(RULE_PACK_ID),
+                Some(Version::new(1).expect("version")),
+                Some(ContentHash::digest(b"r7b-recovery-rule-pack-v1")),
+            )
+            .expect("RulePack ref"),
+        ),
+        observed_at: None,
+        visible_at: None,
+        effective_from: None,
+        effective_to: None,
+    })
+    .expect("RulePack binding")
+}
+
+async fn seed_graph_lineage(pool: &sqlx::PgPool) {
+    let binding = rule_pack_binding();
+    let reference = match binding.reference() {
+        FormalInputReference::Object(value) => value,
+        FormalInputReference::Named(_) => panic!("RulePack must be object-backed"),
+    };
+    sqlx::query(
+        "INSERT INTO market.market_rule_packs
+         (tenant_id,rule_pack_id,version,owner_id,market,rule_type,source,
+          effective_from,effective_to,verification_status,content_hash,payload)
+         VALUES ($1,$2,$3,$4,'CGB','recovery','r7b',
+                 CURRENT_TIMESTAMP-INTERVAL '1 day',CURRENT_TIMESTAMP+INTERVAL '1 day',
+                 'VERIFIED',$5,$6)",
+    )
+    .bind(owner().tenant_id().as_str())
+    .bind(reference.object_id().as_str())
+    .bind(i64::try_from(reference.version().expect("RulePack version").get()).expect("version"))
+    .bind(owner().owner_id().as_str())
+    .bind(hash_hex(
+        reference.content_hash().expect("RulePack content hash"),
+    ))
+    .bind(vec![1_u8])
+    .execute(pool)
+    .await
+    .expect("RulePack lineage target");
 }
 
 fn blob_store(pool: sqlx::PgPool) -> S3BlobStore {
