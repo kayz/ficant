@@ -1,21 +1,174 @@
 use async_trait::async_trait;
 use ficant_application::ports::{
-    AccessScope, PublishSnapshot, SnapshotBlobRole, SnapshotProofKind, SnapshotRepository,
-    SnapshotValue, SnapshotVerifiedReadMetadata, SnapshotVerifiedReadMetadataRepository,
-    VerifiedSnapshotBlob,
+    AccessScope, CanonicalImportReplay, CanonicalImportReplayRequest, GovernedPublishSnapshot,
+    PublishSnapshot, SnapshotBlobRole, SnapshotProofKind, SnapshotRepository, SnapshotValue,
+    SnapshotVerifiedReadMetadata, SnapshotVerifiedReadMetadataRepository, VerifiedSnapshotBlob,
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
 use ficant_domain::ContentAddressed;
+use sqlx::types::chrono::{DateTime, Utc};
 
 use super::PostgresRepository;
 use super::codec::encode_snapshot;
 use super::common::{
-    IdempotencyOutcome, application_error, insert_lineage, lock_idempotency, map_sqlx_error,
-    publish_blob_reference,
+    IdempotencyOutcome, application_error, lock_idempotency, map_sqlx_error, publish_blob_reference,
 };
+use super::ingestion::insert_snapshot_lineage;
+
+struct StoredSnapshotRow {
+    kind: String,
+    payload: Vec<u8>,
+    owner_id: String,
+    content_hash: String,
+    primary_hash: Option<String>,
+    secondary_hash: Option<String>,
+    reference_id: Option<String>,
+    reference_version: Option<i64>,
+    primary_time: Option<DateTime<Utc>>,
+    secondary_time: Option<DateTime<Utc>>,
+    tertiary_time: Option<DateTime<Utc>>,
+}
+
+impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredSnapshotRow {
+    fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
+        use sqlx::Row;
+        Ok(Self {
+            kind: row.try_get("kind")?,
+            payload: row.try_get("payload")?,
+            owner_id: row.try_get("owner_id")?,
+            content_hash: row.try_get("content_hash")?,
+            primary_hash: row.try_get("primary_hash")?,
+            secondary_hash: row.try_get("secondary_hash")?,
+            reference_id: row.try_get("reference_id")?,
+            reference_version: row.try_get("reference_version")?,
+            primary_time: row.try_get("primary_time")?,
+            secondary_time: row.try_get("secondary_time")?,
+            tertiary_time: row.try_get("tertiary_time")?,
+        })
+    }
+}
 
 #[async_trait]
 impl SnapshotRepository for PostgresRepository {
+    async fn probe_canonical_import_replay(
+        &self,
+        request: &CanonicalImportReplayRequest,
+    ) -> Result<Option<CanonicalImportReplay>, ApplicationError> {
+        let tenant = request.owner().tenant_id().as_str();
+        let existing: Option<(Vec<u8>, String)> = sqlx::query_as(
+            "SELECT fingerprint, result_id::text FROM core.idempotency_records
+             WHERE tenant_id=$1 AND scope=$2 AND idempotency_key=$3",
+        )
+        .bind(tenant)
+        .bind(CANONICAL_IMPORT_REPLAY_SCOPE)
+        .bind(request.idempotency_key().as_str())
+        .fetch_optional(self.pool())
+        .await
+        .map_err(map_sqlx_error)?;
+        let Some((fingerprint, result_id)) = existing else {
+            return Ok(None);
+        };
+        if fingerprint != request.fingerprint().content_hash().as_bytes().as_slice()
+            || result_id != request.target_snapshot_id().as_str()
+        {
+            return Err(application_error(
+                ApplicationErrorCategory::AlreadyExists,
+                false,
+            ));
+        }
+        let snapshot = SnapshotRepository::get_by_id(
+            self,
+            request.change_context().principal().access_scope(),
+            request.target_snapshot_id().clone(),
+        )
+        .await?
+        .ok_or_else(immutable)?;
+        let SnapshotValue::Data(snapshot) = snapshot else {
+            return Err(immutable());
+        };
+        let audit_rows: Vec<(String, String, String, i64, String, String)> = sqlx::query_as(
+            "SELECT actor_id::text, active_role, authorization_id::text,
+                    authorization_version, reason, after_hash::text
+             FROM core.foundation_change_records
+             WHERE tenant_id=$1 AND operation='data-snapshot.import-canonical-quotes'
+               AND resource_kind='data-snapshot' AND resource_id=$2 AND owner_id=$3",
+        )
+        .bind(tenant)
+        .bind(request.target_snapshot_id().as_str())
+        .bind(request.owner().owner_id().as_str())
+        .fetch_all(self.pool())
+        .await
+        .map_err(map_sqlx_error)?;
+        let [(actor_id, active_role, authorization_id, authorization_version, reason, after_hash)] =
+            audit_rows.as_slice()
+        else {
+            return Err(immutable());
+        };
+        if active_role != "RESEARCHER"
+            || authorization_id != request.authorization().id().as_str()
+            || u64::try_from(*authorization_version).ok()
+                != Some(request.authorization().version().get())
+            || reason != request.change_context().change().reason()
+            || after_hash != &crate::s3::content_addressed::hash_hex(snapshot.content_hash())
+        {
+            return Err(immutable());
+        }
+        CanonicalImportReplay::verified(
+            request,
+            snapshot,
+            ficant_domain::primitives::Ulid::new(actor_id).map_err(|_| immutable())?,
+            request.authorization().clone(),
+            request.authorization_hash().clone(),
+        )
+        .map(Some)
+    }
+
+    async fn publish_governed(
+        &self,
+        command: GovernedPublishSnapshot,
+    ) -> Result<SnapshotValue, ApplicationError> {
+        let change = command.change_record()?;
+        let tenant = command.command().snapshot().owner().tenant_id().as_str();
+        let mut transaction = self.pool().begin().await.map_err(map_sqlx_error)?;
+        let import_outcome = if let Some(request) = command.replay_request() {
+            Some(
+                lock_idempotency(
+                    &mut transaction,
+                    tenant,
+                    CANONICAL_IMPORT_REPLAY_SCOPE,
+                    request.idempotency_key().as_str(),
+                    request.fingerprint().content_hash().as_bytes(),
+                    request.target_snapshot_id().as_str(),
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+        let (value, outcome) =
+            persist_snapshot_with_outcome(&mut transaction, command.command()).await?;
+        if import_outcome.is_some_and(|import| import != outcome) {
+            return Err(immutable());
+        }
+        match outcome {
+            IdempotencyOutcome::Fresh => {
+                super::governance::insert_change(&mut transaction, tenant, &change).await?;
+            }
+            IdempotencyOutcome::Replay => {
+                super::governance::verify_change_replay(
+                    &mut transaction,
+                    tenant,
+                    change.operation(),
+                    &change.resource().canonical_ref(),
+                    command.fingerprint().content_hash(),
+                )
+                .await?;
+            }
+        }
+        transaction.commit().await.map_err(map_sqlx_error)?;
+        Ok(value)
+    }
+
     async fn publish_verified_manifest(
         &self,
         command: PublishSnapshot,
@@ -29,20 +182,34 @@ impl SnapshotRepository for PostgresRepository {
         snapshot_id: ficant_domain::primitives::Ulid,
     ) -> Result<Option<SnapshotValue>, ApplicationError> {
         let owners = owner_strings(scope);
-        let rows: Vec<(Vec<u8>,)> = sqlx::query_as(
-            "SELECT payload FROM research.data_snapshots
+        let rows: Vec<StoredSnapshotRow> = sqlx::query_as(
+            "SELECT 'data'::text AS kind, payload, owner_id::text, content_hash::text,
+                    schema_hash::text AS primary_hash, manifest_hash::text AS secondary_hash,
+                    NULL::text AS reference_id, NULL::bigint AS reference_version,
+                    visible_at AS primary_time, as_of AS secondary_time,
+                    NULL::timestamptz AS tertiary_time
+             FROM research.data_snapshots
              WHERE tenant_id = $1 AND data_snapshot_id = $2
                AND owner_id::text = ANY($3::text[])
              UNION ALL
-             SELECT payload FROM research.universe_snapshots
+             SELECT 'universe', payload, owner_id::text, content_hash::text,
+                    filter_digest::text, NULL::text, NULL::text, NULL::bigint,
+                    NULL::timestamptz, NULL::timestamptz, NULL::timestamptz
+             FROM research.universe_snapshots
              WHERE tenant_id = $1 AND universe_snapshot_id = $2
                AND owner_id::text = ANY($3::text[])
              UNION ALL
-             SELECT payload FROM research.position_snapshots
+             SELECT 'position', payload, owner_id::text, content_hash::text,
+                    NULL::text, NULL::text, subject_id::text, subject_version,
+                    observed_at, visible_at, NULL::timestamptz
+             FROM research.position_snapshots
              WHERE tenant_id = $1 AND snapshot_id = $2
                AND owner_id::text = ANY($3::text[])
              UNION ALL
-             SELECT payload FROM research.data_health_threshold_profiles
+             SELECT 'data-health', payload, owner_id::text, content_hash::text,
+                    NULL::text, NULL::text, profile_id::text, profile_version,
+                    visible_at, effective_from, effective_to
+             FROM research.data_health_threshold_profiles
              WHERE tenant_id = $1 AND profile_snapshot_id = $2
                AND owner_id::text = ANY($3::text[])",
         )
@@ -54,13 +221,164 @@ impl SnapshotRepository for PostgresRepository {
         .map_err(map_sqlx_error)?;
         match rows.as_slice() {
             [] => Ok(None),
-            [(payload,)] => super::codec::decode_snapshot(payload).map(Some),
+            [row] => {
+                let snapshot = super::codec::decode_snapshot(&row.payload)?;
+                validate_snapshot_row(row, &snapshot, scope, &snapshot_id)?;
+                validate_snapshot_blob_references(
+                    self.pool(),
+                    scope.tenant_id().as_str(),
+                    &snapshot,
+                )
+                .await?;
+                if let SnapshotValue::Universe(value) = &snapshot {
+                    validate_universe_members(self.pool(), scope.tenant_id().as_str(), value)
+                        .await?;
+                }
+                Ok(Some(snapshot))
+            }
             _ => Err(application_error(
                 ApplicationErrorCategory::ImmutableViolation,
                 false,
             )),
         }
     }
+}
+
+const CANONICAL_IMPORT_REPLAY_SCOPE: &str = "data-snapshot:canonical-import-request:v1";
+
+fn validate_snapshot_row(
+    row: &StoredSnapshotRow,
+    snapshot: &SnapshotValue,
+    scope: &AccessScope,
+    requested_id: &ficant_domain::primitives::Ulid,
+) -> Result<(), ApplicationError> {
+    if snapshot.id() != requested_id
+        || snapshot.owner().tenant_id() != scope.tenant_id()
+        || snapshot.owner().owner_id().as_str() != row.owner_id
+        || crate::s3::content_addressed::hash_hex(snapshot.content_hash()) != row.content_hash
+    {
+        return Err(storage_integrity_error());
+    }
+    let valid = match (row.kind.as_str(), snapshot) {
+        ("data", SnapshotValue::Data(value)) => {
+            row.primary_hash.as_deref()
+                == Some(crate::s3::content_addressed::hash_hex(value.schema_hash()).as_str())
+                && row.secondary_hash.as_deref()
+                    == Some(crate::s3::content_addressed::hash_hex(value.manifest_hash()).as_str())
+                && row
+                    .primary_time
+                    .as_ref()
+                    .is_some_and(|stored| *stored == value.visible_at().instant())
+                && row
+                    .secondary_time
+                    .as_ref()
+                    .is_some_and(|stored| *stored == value.as_of().instant())
+        }
+        ("universe", SnapshotValue::Universe(value)) => {
+            row.primary_hash.as_deref()
+                == Some(crate::s3::content_addressed::hash_hex(value.filter_digest()).as_str())
+        }
+        ("position", SnapshotValue::Position(value)) => {
+            row.reference_id.as_deref() == Some(value.subject_ref().id().as_str())
+                && row.reference_version == i64::try_from(value.subject_ref().version().get()).ok()
+                && row
+                    .primary_time
+                    .as_ref()
+                    .is_some_and(|stored| *stored == value.observed_at().instant())
+                && row
+                    .secondary_time
+                    .as_ref()
+                    .is_some_and(|stored| *stored == value.visible_at().instant())
+        }
+        ("data-health", SnapshotValue::DataHealthThresholdProfile(value)) => {
+            row.reference_id.as_deref() == Some(value.profile_ref().id().as_str())
+                && row.reference_version == i64::try_from(value.profile_ref().version().get()).ok()
+                && row
+                    .primary_time
+                    .as_ref()
+                    .is_some_and(|stored| *stored == value.visible_at().instant())
+                && row
+                    .secondary_time
+                    .as_ref()
+                    .is_some_and(|stored| *stored == value.effective_from().instant())
+                && row
+                    .tertiary_time
+                    .as_ref()
+                    .is_some_and(|stored| *stored == value.effective_to().instant())
+        }
+        _ => false,
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(storage_integrity_error())
+    }
+}
+
+async fn validate_snapshot_blob_references(
+    pool: &sqlx::PgPool,
+    tenant_id: &str,
+    snapshot: &SnapshotValue,
+) -> Result<(), ApplicationError> {
+    let hashes = match snapshot {
+        SnapshotValue::Data(value) => vec![value.content_hash(), value.manifest_hash()],
+        SnapshotValue::DataHealthThresholdProfile(value) => vec![value.content_hash()],
+        SnapshotValue::Position(value) => vec![value.content_hash()],
+        SnapshotValue::Universe(value) => vec![value.content_hash()],
+    };
+    for hash in hashes {
+        let size: Option<i64> = sqlx::query_scalar(
+            "SELECT blob_size FROM storage.blobs WHERE tenant_id=$1 AND content_hash=$2",
+        )
+        .bind(tenant_id)
+        .bind(crate::s3::content_addressed::hash_hex(hash))
+        .fetch_optional(pool)
+        .await
+        .map_err(map_sqlx_error)?;
+        match size {
+            Some(value) if value > 0 => {}
+            Some(_) => return Err(storage_integrity_error()),
+            None => {
+                return Err(application_error(
+                    ApplicationErrorCategory::LineageIncomplete,
+                    false,
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn validate_universe_members(
+    pool: &sqlx::PgPool,
+    tenant_id: &str,
+    snapshot: &ficant_domain::research::UniverseSnapshot,
+) -> Result<(), ApplicationError> {
+    let rows: Vec<(i32, String, i64)> = sqlx::query_as(
+        "SELECT ordinal, instrument_id::text, instrument_version
+         FROM research.universe_members
+         WHERE tenant_id=$1 AND universe_snapshot_id=$2
+         ORDER BY ordinal",
+    )
+    .bind(tenant_id)
+    .bind(snapshot.id().as_str())
+    .fetch_all(pool)
+    .await
+    .map_err(map_sqlx_error)?;
+    if rows.len() != snapshot.instrument_versions().len() {
+        return Err(storage_integrity_error());
+    }
+    for (index, ((ordinal, instrument_id, version), expected)) in
+        rows.iter().zip(snapshot.instrument_versions()).enumerate()
+    {
+        if usize::try_from(*ordinal).ok() != Some(index)
+            || instrument_id != expected.id().as_str()
+            || u64::try_from(*version).ok() != Some(expected.version().get())
+        {
+            return Err(storage_integrity_error());
+        }
+    }
+    Ok(())
 }
 
 #[async_trait]
@@ -149,6 +467,13 @@ pub(crate) async fn persist_snapshot(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     command: &PublishSnapshot,
 ) -> Result<SnapshotValue, ApplicationError> {
+    Ok(persist_snapshot_with_outcome(transaction, command).await?.0)
+}
+
+async fn persist_snapshot_with_outcome(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    command: &PublishSnapshot,
+) -> Result<(SnapshotValue, IdempotencyOutcome), ApplicationError> {
     let snapshot = command.snapshot();
     let tenant_id = snapshot.owner().tenant_id().as_str();
     let snapshot_id = snapshot.id().as_str();
@@ -180,12 +505,12 @@ pub(crate) async fn persist_snapshot(
                 false,
             ));
         }
-        return Ok(persisted);
+        return Ok((persisted, outcome));
     }
     let payload = encode_snapshot(snapshot);
     insert_snapshot_metadata(transaction, command, &payload).await?;
-    insert_lineage(transaction, tenant_id, snapshot_id, snapshot.lineage()).await?;
-    Ok(snapshot.clone())
+    insert_snapshot_lineage(transaction, tenant_id, snapshot_id, snapshot.lineage()).await?;
+    Ok((snapshot.clone(), outcome))
 }
 
 async fn insert_snapshot_metadata(
@@ -493,6 +818,14 @@ async fn load_persisted_snapshot(
 
 fn invalid() -> ApplicationError {
     application_error(ApplicationErrorCategory::ValidationFailed, false)
+}
+
+fn storage_integrity_error() -> ApplicationError {
+    application_error(ApplicationErrorCategory::StorageUnavailable, false)
+}
+
+fn immutable() -> ApplicationError {
+    application_error(ApplicationErrorCategory::ImmutableViolation, false)
 }
 
 fn owner_strings(scope: &AccessScope) -> Vec<String> {

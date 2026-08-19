@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use ficant_application::ports::{AccessScope, FactorTopologyRepository, IdempotencyKey};
+use ficant_application::ports::{
+    AccessScope, AuthorizedPrincipal, FactorTopologyRepository, IdempotencyKey,
+};
 use ficant_application::{
     ApplicationError, ApplicationErrorCategory, FactorTopologyUseCase, map_domain_error,
 };
@@ -8,6 +10,7 @@ use ficant_contracts::ficant::core::v1 as core;
 use ficant_contracts::ficant::research::v1 as pb;
 use ficant_contracts::ficant::research::v1::factor_registry_service_server::FactorRegistryService;
 use ficant_domain::ContentAddressed;
+use ficant_domain::governance::PlatformRole;
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, OwnerRef, Ulid, UnitRef, Version, VersionRef,
 };
@@ -28,7 +31,6 @@ const WRITE_SCOPE: &str = "factors:write";
 #[derive(Clone)]
 pub struct FactorRegistryGrpcService {
     identity: Arc<dyn PlatformPort>,
-    access_scope: AccessScope,
     repository: Arc<dyn FactorTopologyRepository>,
     errors: CoreBusinessErrorMapper,
 }
@@ -42,13 +44,12 @@ impl FactorRegistryGrpcService {
     /// shared business-error mapper.
     pub fn new(
         identity: Arc<dyn PlatformPort>,
-        access_scope: AccessScope,
+        _access_scope: AccessScope,
         repository: Arc<dyn FactorTopologyRepository>,
         trace_key: &[u8],
     ) -> Result<Self, &'static str> {
         Ok(Self {
             identity,
-            access_scope,
             repository,
             errors: CoreBusinessErrorMapper::new(trace_key)?,
         })
@@ -58,15 +59,17 @@ impl FactorRegistryGrpcService {
         &self,
         request: &Request<impl Sized>,
         required_scope: &str,
-    ) -> Result<(), ApplicationError> {
+    ) -> Result<AuthorizedPrincipal, ApplicationError> {
         let credential = request_credential(request.metadata());
         let session = self
             .identity
             .current_session(&credential)
             .map_err(|_| forbidden())?;
-        session
+        let principal = session.authorized_principal()?;
+        principal.require_role(PlatformRole::Researcher)?;
+        principal
             .has_scope(required_scope)
-            .then_some(())
+            .then_some(principal)
             .ok_or_else(forbidden)
     }
 
@@ -85,13 +88,13 @@ impl FactorRegistryService for FactorRegistryGrpcService {
         const OPERATION: &str = "factors.register-definition";
         let result = match self.authorize(&request, WRITE_SCOPE) {
             Err(error) => Err(error),
-            Ok(()) => match (
+            Ok(principal) => match (
                 parse_factor(request.get_ref().definition.as_ref()),
                 IdempotencyKey::new(request.get_ref().idempotency_key.clone()),
             ) {
                 (Ok(definition), Ok(key)) => {
                     FactorTopologyUseCase::new(self.repository.as_ref())
-                        .register_factor_definition(&self.access_scope, definition, key)
+                        .register_factor_definition(principal.access_scope(), definition, key)
                         .await
                 }
                 (Err(error), _) | (_, Err(error)) => Err(error),
@@ -116,13 +119,13 @@ impl FactorRegistryService for FactorRegistryGrpcService {
         const OPERATION: &str = "factors.register-curve-node";
         let result = match self.authorize(&request, WRITE_SCOPE) {
             Err(error) => Err(error),
-            Ok(()) => match (
+            Ok(principal) => match (
                 parse_curve_node(request.get_ref().definition.as_ref()),
                 IdempotencyKey::new(request.get_ref().idempotency_key.clone()),
             ) {
                 (Ok(definition), Ok(key)) => {
                     FactorTopologyUseCase::new(self.repository.as_ref())
-                        .register_curve_node_definition(&self.access_scope, definition, key)
+                        .register_curve_node_definition(principal.access_scope(), definition, key)
                         .await
                 }
                 (Err(error), _) | (_, Err(error)) => Err(error),
@@ -147,13 +150,13 @@ impl FactorRegistryService for FactorRegistryGrpcService {
         const OPERATION: &str = "factors.bind-target";
         let result = match self.authorize(&request, WRITE_SCOPE) {
             Err(error) => Err(error),
-            Ok(()) => match (
+            Ok(principal) => match (
                 parse_binding(request.get_ref().binding.as_ref()),
                 IdempotencyKey::new(request.get_ref().idempotency_key.clone()),
             ) {
                 (Ok(binding), Ok(key)) => {
                     FactorTopologyUseCase::new(self.repository.as_ref())
-                        .bind_factor_target(&self.access_scope, binding, key)
+                        .bind_factor_target(principal.access_scope(), binding, key)
                         .await
                 }
                 (Err(error), _) | (_, Err(error)) => Err(error),
@@ -176,7 +179,7 @@ impl FactorRegistryService for FactorRegistryGrpcService {
         const OPERATION: &str = "factors.get-definition";
         let result = match self.authorize(&request, READ_SCOPE) {
             Err(error) => Err(error),
-            Ok(()) => {
+            Ok(_) => {
                 FactorTopologyUseCase::new(self.repository.as_ref())
                     .get_factor_definition(&request.get_ref().factor_id)
                     .await
@@ -199,9 +202,9 @@ impl FactorRegistryService for FactorRegistryGrpcService {
         const OPERATION: &str = "factors.get-targets";
         let result = match self.authorize(&request, READ_SCOPE) {
             Err(error) => Err(error),
-            Ok(()) => {
+            Ok(principal) => {
                 FactorTopologyUseCase::new(self.repository.as_ref())
-                    .get_factor_targets(&self.access_scope, &request.get_ref().factor_id)
+                    .get_factor_targets(principal.access_scope(), &request.get_ref().factor_id)
                     .await
             }
         };
@@ -226,10 +229,10 @@ impl FactorRegistryService for FactorRegistryGrpcService {
         const OPERATION: &str = "factors.get-target-factors";
         let result = match self.authorize(&request, READ_SCOPE) {
             Err(error) => Err(error),
-            Ok(()) => match parse_target(request.get_ref().target.as_ref()) {
+            Ok(principal) => match parse_target(request.get_ref().target.as_ref()) {
                 Ok(target) => {
                     FactorTopologyUseCase::new(self.repository.as_ref())
-                        .get_target_factors(&self.access_scope, &target)
+                        .get_target_factors(principal.access_scope(), &target)
                         .await
                 }
                 Err(error) => Err(error),

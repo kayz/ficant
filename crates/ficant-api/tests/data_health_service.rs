@@ -199,6 +199,7 @@ mod wire_byte_regression {
     use ficant_contracts::ficant::research::v1 as research_pb;
     use ficant_contracts::ficant::research::v1::data_health_service_server::DataHealthService;
     use ficant_contracts::ficant::research::v1::portfolio_risk_service_server::PortfolioRiskService;
+    use ficant_domain::governance::PlatformRole;
     use prost::Message as _;
     use tonic::Request;
 
@@ -295,10 +296,12 @@ mod wire_byte_regression {
             .await
             .unwrap()
             .into_inner();
-        assert!(matches!(
-            unauthorized_publish.result,
-            Some(research_pb::publish_data_health_threshold_profile_response::Result::Error(_))
-        ));
+        let Some(research_pb::publish_data_health_threshold_profile_response::Result::Error(error)) =
+            unauthorized_publish.result
+        else {
+            panic!("researcher must not publish a foundation threshold profile");
+        };
+        assert_eq!(error.code, core_pb::ErrorCode::Forbidden as i32);
 
         let frozen_request = krd_request(&fixture).encode_to_vec();
         let before = portfolio
@@ -413,7 +416,11 @@ mod wire_byte_regression {
     fn identity() -> Arc<dyn PlatformPort> {
         let identity = TrustedIdentity::implicit(
             "r5c-wire-byte-regression",
-            ["rates:analyze", "data-health:read"],
+            id('A'),
+            id('T'),
+            vec![id('0')],
+            PlatformRole::Researcher,
+            ["rates:analyze", "data-health:read", "data-health:configure"],
         )
         .unwrap();
         Arc::new(

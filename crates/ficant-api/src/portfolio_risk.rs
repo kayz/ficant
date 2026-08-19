@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use chrono::{NaiveDate, TimeZone, Utc};
 use ficant_application::ports::{
-    AccessScope, BondAnalyticsEngine, CanonicalSnapshotDecoder, CurvePointSetDecoder,
-    CurveSnapshotMetadataRepository, DataSourceRepository, DefinitionRepository,
-    FactorTopologyRepository, FuturesDeliveryEngine, FuturesDeliveryRuleParser, IntegrityEventSink,
-    PositionSnapshotRepository, SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader,
-    YieldCurveEngine,
+    AccessScope, AuthorizedPrincipal, BondAnalyticsEngine, CanonicalSnapshotDecoder,
+    CurvePointSetDecoder, CurveSnapshotMetadataRepository, DataSourceRepository,
+    DefinitionRepository, FactorTopologyRepository, FuturesDeliveryEngine,
+    FuturesDeliveryRuleParser, IntegrityEventSink, PositionSnapshotRepository,
+    SnapshotVerifiedReadMetadataRepository, VerifiedBlobReader, YieldCurveEngine,
 };
 use ficant_application::{
     ApplicationError, ApplicationErrorCategory, CalculateBondKeyRateDv01,
@@ -16,6 +16,7 @@ use ficant_contracts::ficant::core::v1 as core;
 use ficant_contracts::ficant::market::v1 as market;
 use ficant_contracts::ficant::research::v1 as pb;
 use ficant_contracts::ficant::research::v1::portfolio_risk_service_server::PortfolioRiskService;
+use ficant_domain::governance::PlatformRole;
 use ficant_domain::market::PriceSourceType;
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, LineageRef, MarketTime, Ulid, UnitRef, Version, VersionRef,
@@ -36,7 +37,6 @@ const ANALYZE_SCOPE: &str = "rates:analyze";
 #[derive(Clone)]
 pub struct PortfolioRiskGrpcService {
     identity: Arc<dyn PlatformPort>,
-    access_scope: AccessScope,
     positions: Arc<dyn PositionSnapshotRepository>,
     curves: Arc<dyn CurveSnapshotMetadataRepository>,
     definitions: Arc<dyn DefinitionRepository>,
@@ -63,7 +63,7 @@ impl PortfolioRiskGrpcService {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         identity: Arc<dyn PlatformPort>,
-        access_scope: AccessScope,
+        _access_scope: AccessScope,
         positions: Arc<dyn PositionSnapshotRepository>,
         curves: Arc<dyn CurveSnapshotMetadataRepository>,
         definitions: Arc<dyn DefinitionRepository>,
@@ -82,7 +82,6 @@ impl PortfolioRiskGrpcService {
     ) -> Result<Self, &'static str> {
         Ok(Self {
             identity,
-            access_scope,
             positions,
             curves,
             definitions,
@@ -101,17 +100,28 @@ impl PortfolioRiskGrpcService {
         })
     }
 
-    fn authorize(&self, request: &Request<impl Sized>) -> Result<(), ApplicationError> {
+    fn authorize(
+        &self,
+        request: &Request<impl Sized>,
+    ) -> Result<AuthorizedPrincipal, ApplicationError> {
         let credential = request_credential(request.metadata());
         let session = self
             .identity
             .current_session(&credential)
             .map_err(|_| forbidden())?;
-        session
-            .has_scope(ANALYZE_SCOPE)
-            .then_some(())
-            .ok_or_else(forbidden)
+        let principal = session.authorized_principal()?;
+        require_portfolio_risk_access(principal)
     }
+}
+
+fn require_portfolio_risk_access(
+    principal: AuthorizedPrincipal,
+) -> Result<AuthorizedPrincipal, ApplicationError> {
+    principal.require_role(PlatformRole::Researcher)?;
+    principal
+        .has_scope(ANALYZE_SCOPE)
+        .then_some(principal)
+        .ok_or_else(forbidden)
 }
 
 #[tonic::async_trait]
@@ -123,7 +133,7 @@ impl PortfolioRiskService for PortfolioRiskGrpcService {
         const OPERATION: &str = "portfolio-risk.calculate-key-rate-dv01";
         let result = match self.authorize(&request) {
             Err(error) => Err(error),
-            Ok(()) => match parse_command(request.get_ref()) {
+            Ok(principal) => match parse_command(request.get_ref()) {
                 Err(error) => Err(error),
                 Ok(command) => {
                     CalculateBondKeyRateDv01::new_with_futures(
@@ -142,7 +152,7 @@ impl PortfolioRiskService for PortfolioRiskGrpcService {
                         self.futures_rule_parser.as_ref(),
                         self.futures_engine.as_ref(),
                     )
-                    .execute(&self.access_scope, command)
+                    .execute(principal.access_scope(), command)
                     .await
                 }
             },
@@ -347,4 +357,27 @@ fn invalid() -> ApplicationError {
 
 fn forbidden() -> ApplicationError {
     ApplicationError::new(ApplicationErrorCategory::Forbidden, false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn platform_administrator_cannot_enter_portfolio_risk_even_with_analysis_scope() {
+        let principal = AuthorizedPrincipal::new(
+            "portfolio-risk-admin".to_owned(),
+            Ulid::new("01J00000000000000000000001").unwrap(),
+            Ulid::new("01J00000000000000000000002").unwrap(),
+            vec![Ulid::new("01J00000000000000000000003").unwrap()],
+            PlatformRole::PlatformAdmin,
+            vec![ANALYZE_SCOPE.to_owned()],
+            ContentHash::digest(b"credential-fingerprint"),
+        )
+        .unwrap();
+
+        let error = require_portfolio_risk_access(principal)
+            .expect_err("administrator role must fail before command parsing or engine calls");
+        assert_eq!(error.category(), ApplicationErrorCategory::Forbidden);
+    }
 }

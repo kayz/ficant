@@ -1,17 +1,39 @@
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 
-use crate::primitives::{DecimalValue, Ulid, VersionRef};
+use crate::primitives::{DecimalValue, OwnerRef, Ulid, VersionRef};
 use crate::{DomainErrorCode, DomainResult};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
     subject_id: Ulid,
     display_name: String,
+    owner: Option<OwnerRef>,
 }
 
 impl Subject {
+    /// Creates a legacy owner-less Subject value for internal pre-R6A fixtures.
+    ///
+    /// Governed public mutation commands reject this shape. New production inputs must use
+    /// [`Self::new_owned`].
     pub fn new(subject_id: Ulid, display_name: impl Into<String>) -> DomainResult<Self> {
+        Self::build(subject_id, display_name, None)
+    }
+
+    /// Creates a Subject bound to one exact tenant/owner authority.
+    pub fn new_owned(
+        subject_id: Ulid,
+        owner: OwnerRef,
+        display_name: impl Into<String>,
+    ) -> DomainResult<Self> {
+        Self::build(subject_id, display_name, Some(owner))
+    }
+
+    fn build(
+        subject_id: Ulid,
+        display_name: impl Into<String>,
+        owner: Option<OwnerRef>,
+    ) -> DomainResult<Self> {
         let display_name = display_name.into();
         require_text(&display_name)?;
         if display_name.len() > 256 {
@@ -20,6 +42,7 @@ impl Subject {
         Ok(Self {
             subject_id,
             display_name,
+            owner,
         })
     }
 
@@ -29,6 +52,10 @@ impl Subject {
 
     pub fn display_name(&self) -> &str {
         &self.display_name
+    }
+
+    pub fn owner(&self) -> Option<&OwnerRef> {
+        self.owner.as_ref()
     }
 }
 
@@ -235,6 +262,7 @@ pub struct SubjectStateSnapshot {
     observed_at: DateTime<Utc>,
     visible_at: DateTime<Utc>,
     market_timezone: String,
+    owner: Option<OwnerRef>,
 }
 
 impl SubjectStateSnapshot {
@@ -248,6 +276,53 @@ impl SubjectStateSnapshot {
         visible_at: DateTime<Utc>,
         market_timezone: impl Into<String>,
     ) -> DomainResult<Self> {
+        Self::build(
+            snapshot_id,
+            subject_ref,
+            net_capital,
+            limit_ceilings,
+            observed_at,
+            visible_at,
+            market_timezone,
+            None,
+        )
+    }
+
+    /// Creates a Subject state snapshot bound to one exact tenant/owner authority.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_owned(
+        snapshot_id: Ulid,
+        subject_ref: VersionRef,
+        net_capital: DecimalValue,
+        limit_ceilings: Vec<LimitCeiling>,
+        observed_at: DateTime<Utc>,
+        visible_at: DateTime<Utc>,
+        market_timezone: impl Into<String>,
+        owner: OwnerRef,
+    ) -> DomainResult<Self> {
+        Self::build(
+            snapshot_id,
+            subject_ref,
+            net_capital,
+            limit_ceilings,
+            observed_at,
+            visible_at,
+            market_timezone,
+            Some(owner),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn build(
+        snapshot_id: Ulid,
+        subject_ref: VersionRef,
+        net_capital: DecimalValue,
+        limit_ceilings: Vec<LimitCeiling>,
+        observed_at: DateTime<Utc>,
+        visible_at: DateTime<Utc>,
+        market_timezone: impl Into<String>,
+        owner: Option<OwnerRef>,
+    ) -> DomainResult<Self> {
         let market_timezone = market_timezone.into();
         market_timezone
             .parse::<Tz>()
@@ -255,6 +330,8 @@ impl SubjectStateSnapshot {
         if observed_at > visible_at {
             return Err(DomainErrorCode::InvalidEffectiveTime);
         }
+        let mut limit_ceilings = limit_ceilings;
+        limit_ceilings.sort_by(|left, right| left.limit_code().cmp(right.limit_code()));
         let mut codes = std::collections::BTreeSet::new();
         for ceiling in &limit_ceilings {
             if !codes.insert(ceiling.limit_code().to_owned()) {
@@ -269,6 +346,7 @@ impl SubjectStateSnapshot {
             observed_at,
             visible_at,
             market_timezone,
+            owner,
         })
     }
 
@@ -298,6 +376,10 @@ impl SubjectStateSnapshot {
 
     pub fn market_timezone(&self) -> &str {
         &self.market_timezone
+    }
+
+    pub fn owner(&self) -> Option<&OwnerRef> {
+        self.owner.as_ref()
     }
 }
 

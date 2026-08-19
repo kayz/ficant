@@ -1,5 +1,8 @@
 use crate::error::{PlatformFailure, PlatformFailureCode};
 use crate::session::{Clock, SessionPolicy, TrustedIdentity, credential_matches};
+use ficant_application::ports::AuthorizedPrincipal;
+use ficant_domain::governance::PlatformRole;
+use ficant_domain::primitives::{ContentHash, Ulid};
 use ring::hmac;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -170,7 +173,12 @@ pub enum RequestCredential {
 pub struct SessionView {
     pub(crate) session_id: String,
     pub(crate) subject_id: String,
+    pub(crate) actor_id: Ulid,
+    pub(crate) active_role: PlatformRole,
+    pub(crate) tenant_id: Ulid,
+    pub(crate) allowed_owner_ids: Vec<Ulid>,
     pub(crate) scopes: Vec<String>,
+    pub(crate) credential_fingerprint: ContentHash,
     pub(crate) issued_at: i64,
     pub(crate) expires_at: i64,
 }
@@ -181,6 +189,25 @@ impl SessionView {
         self.scopes
             .binary_search_by(|scope| scope.as_str().cmp(required))
             .is_ok()
+    }
+
+    /// Reconstructs the trusted application principal carried by this active session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an application validation error if persisted session state is invalid.
+    pub fn authorized_principal(
+        &self,
+    ) -> ficant_application::ports::ApplicationResult<AuthorizedPrincipal> {
+        AuthorizedPrincipal::new(
+            self.subject_id.clone(),
+            self.actor_id.clone(),
+            self.tenant_id.clone(),
+            self.allowed_owner_ids.clone(),
+            self.active_role,
+            self.scopes.clone(),
+            self.credential_fingerprint.clone(),
+        )
     }
 }
 
@@ -286,16 +313,16 @@ impl PlatformApplication {
         {
             return Err("implicit identity must not carry a bearer credential");
         }
-        let mut subjects = BTreeSet::new();
         let mut digests = BTreeSet::new();
+        let mut fingerprints = BTreeSet::new();
         for identity in identities.iter().chain(implicit.iter()) {
-            if !subjects.insert(identity.subject_id.clone()) {
-                return Err("trusted subject IDs must be unique");
-            }
             if let Some(digest) = identity.bearer_digest
                 && !digests.insert(digest)
             {
                 return Err("trusted bearer credentials must be unique");
+            }
+            if !fingerprints.insert(*identity.principal.credential_fingerprint().as_bytes()) {
+                return Err("trusted credential fingerprints must be unique");
             }
         }
         let mut app_ids = BTreeSet::new();
@@ -336,7 +363,7 @@ impl PlatformApplication {
     fn active_session(&self, identity: &TrustedIdentity) -> Result<SessionView, PlatformFailure> {
         let now = self.clock.now_unix_seconds();
         let sessions = self.sessions.lock().map_err(|_| internal_failure())?;
-        let Some(session) = sessions.get(&identity.subject_id) else {
+        let Some(session) = sessions.get(&identity_key(identity)) else {
             return Err(unauthenticated());
         };
         if now >= session.view.expires_at {
@@ -356,7 +383,9 @@ impl PlatformApplication {
             .ok_or_else(internal_failure)?;
         let session_id = self.signed_identifier(
             "session/v1",
-            &identity.subject_id,
+            identity.principal.subject_id(),
+            identity.principal.credential_fingerprint(),
+            identity.principal.active_role(),
             issued_at,
             expires_at,
             generation,
@@ -364,8 +393,13 @@ impl PlatformApplication {
         Ok(ActiveSession {
             view: SessionView {
                 session_id,
-                subject_id: identity.subject_id.clone(),
-                scopes: identity.scopes.clone(),
+                subject_id: identity.principal.subject_id().to_owned(),
+                actor_id: identity.principal.actor_id().clone(),
+                active_role: identity.principal.active_role(),
+                tenant_id: identity.principal.tenant_id().clone(),
+                allowed_owner_ids: identity.principal.allowed_owner_ids().to_vec(),
+                scopes: identity.principal.scopes().to_vec(),
+                credential_fingerprint: identity.principal.credential_fingerprint().clone(),
                 issued_at,
                 expires_at,
             },
@@ -374,15 +408,25 @@ impl PlatformApplication {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn signed_identifier(
         &self,
         purpose: &str,
         subject_id: &str,
+        credential_fingerprint: &ContentHash,
+        active_role: PlatformRole,
         issued_at: i64,
         expires_at: i64,
         sequence: u64,
     ) -> String {
-        let input = format!("{purpose}\0{subject_id}\0{issued_at}\0{expires_at}\0{sequence}");
+        let role = match active_role {
+            PlatformRole::PlatformAdmin => 1,
+            PlatformRole::Researcher => 2,
+        };
+        let input = format!(
+            "{purpose}\0{subject_id}\0{}\0{role}\0{issued_at}\0{expires_at}\0{sequence}",
+            hex(credential_fingerprint.as_bytes()),
+        );
         let tag = hmac::sign(&self.signing_key, input.as_bytes());
         hex(tag.as_ref())
     }
@@ -390,7 +434,10 @@ impl PlatformApplication {
     fn visible_apps(&self, identity: &TrustedIdentity) -> Vec<AppRegistration> {
         self.apps
             .iter()
-            .filter(|app| app.allowed_subjects.contains(&identity.subject_id))
+            .filter(|app| {
+                app.allowed_subjects
+                    .contains(identity.principal.subject_id())
+            })
             .cloned()
             .collect()
     }
@@ -414,7 +461,10 @@ impl PlatformApplication {
             .ok_or_else(|| {
                 PlatformFailure::new(PlatformFailureCode::NotFound, false, "unknown-app")
             })?;
-        if !app.allowed_subjects.contains(&identity.subject_id) {
+        if !app
+            .allowed_subjects
+            .contains(identity.principal.subject_id())
+        {
             return Err(PlatformFailure::new(
                 PlatformFailureCode::Forbidden,
                 false,
@@ -444,7 +494,12 @@ impl PlatformApplication {
             session.session_id, app.app_id, issued_at, expires_at, sequence
         );
         let credential = hmac::sign(&self.signing_key, input.as_bytes());
-        let session_scopes: BTreeSet<&str> = identity.scopes.iter().map(String::as_str).collect();
+        let session_scopes: BTreeSet<&str> = identity
+            .principal
+            .scopes()
+            .iter()
+            .map(String::as_str)
+            .collect();
         let scopes = app
             .grant_scopes
             .iter()
@@ -469,7 +524,8 @@ impl PlatformPort for PlatformApplication {
         let identity = self.identity(credential)?;
         let now = self.clock.now_unix_seconds();
         let mut sessions = self.sessions.lock().map_err(|_| internal_failure())?;
-        if let Some(session) = sessions.get(&identity.subject_id) {
+        let identity_key = identity_key(identity);
+        if let Some(session) = sessions.get(&identity_key) {
             if now >= session.view.expires_at {
                 return Err(expired());
             }
@@ -477,7 +533,7 @@ impl PlatformPort for PlatformApplication {
         }
         let session = self.issue_session(identity, 0)?;
         let view = session.view.clone();
-        sessions.insert(identity.subject_id.clone(), session);
+        sessions.insert(identity_key, session);
         Ok(view)
     }
 
@@ -489,7 +545,7 @@ impl PlatformPort for PlatformApplication {
         let now = self.clock.now_unix_seconds();
         let mut sessions = self.sessions.lock().map_err(|_| internal_failure())?;
         let current = sessions
-            .get(&identity.subject_id)
+            .get(&identity_key(identity))
             .ok_or_else(unauthenticated)?;
         if now >= current.view.expires_at {
             return Err(expired());
@@ -500,7 +556,7 @@ impl PlatformPort for PlatformApplication {
             .ok_or_else(internal_failure)?;
         let refreshed = self.issue_session(identity, generation)?;
         let view = refreshed.view.clone();
-        sessions.insert(identity.subject_id.clone(), refreshed);
+        sessions.insert(identity_key(identity), refreshed);
         Ok(view)
     }
 
@@ -508,7 +564,7 @@ impl PlatformPort for PlatformApplication {
         let identity = self.identity(credential)?;
         let mut sessions = self.sessions.lock().map_err(|_| internal_failure())?;
         sessions
-            .remove(&identity.subject_id)
+            .remove(&identity_key(identity))
             .ok_or_else(unauthenticated)?;
         Ok(self.clock.now_unix_seconds())
     }
@@ -532,7 +588,7 @@ impl PlatformPort for PlatformApplication {
         let app = self.app_for_subject(identity, app_id)?;
         let mut sessions = self.sessions.lock().map_err(|_| internal_failure())?;
         let state = sessions
-            .get_mut(&identity.subject_id)
+            .get_mut(&identity_key(identity))
             .ok_or_else(unauthenticated)?;
         state.revoked_apps.remove(app_id);
         drop(sessions);
@@ -549,7 +605,7 @@ impl PlatformPort for PlatformApplication {
         let app = self.app_for_subject(identity, app_id)?;
         let sessions = self.sessions.lock().map_err(|_| internal_failure())?;
         let state = sessions
-            .get(&identity.subject_id)
+            .get(&identity_key(identity))
             .ok_or_else(unauthenticated)?;
         if state.revoked_apps.contains(app_id) {
             return Err(expired());
@@ -568,12 +624,16 @@ impl PlatformPort for PlatformApplication {
         self.app_for_subject(identity, app_id)?;
         let mut sessions = self.sessions.lock().map_err(|_| internal_failure())?;
         sessions
-            .get_mut(&identity.subject_id)
+            .get_mut(&identity_key(identity))
             .ok_or_else(unauthenticated)?
             .revoked_apps
             .insert(app_id.to_owned());
         Ok(self.clock.now_unix_seconds())
     }
+}
+
+fn identity_key(identity: &TrustedIdentity) -> String {
+    hex(identity.principal.credential_fingerprint().as_bytes())
 }
 
 fn unauthenticated() -> PlatformFailure {

@@ -4,6 +4,7 @@ package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
+import "ficant/core/v1/governance.proto";
 import "ficant/research/v1/coverage.proto";
 
 message DataHealthThresholdProfile {
@@ -63,6 +64,7 @@ message GetDataHealthReportRequest {
 message PublishDataHealthThresholdProfileRequest {
   string idempotency_key = 1;
   DataHealthThresholdProfile threshold_profile = 2;
+  ficant.core.v1.ChangeJustification change = 3;
 }
 
 message PublishDataHealthThresholdProfileResponse {

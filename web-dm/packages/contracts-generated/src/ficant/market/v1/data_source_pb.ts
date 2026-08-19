@@ -4,17 +4,19 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { OwnerRef, Sha256, VersionRef } from "../../core/v1/common_pb";
+import type { MarketTime, OwnerRef, PageRequest, PageResponse, Sha256, Ulid, VersionRef } from "../../core/v1/common_pb";
 import { file_ficant_core_v1_common } from "../../core/v1/common_pb";
 import type { ErrorDetail } from "../../core/v1/error_pb";
 import { file_ficant_core_v1_error } from "../../core/v1/error_pb";
+import type { ChangeJustification } from "../../core/v1/governance_pb";
+import { file_ficant_core_v1_governance } from "../../core/v1/governance_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file ficant/market/v1/data_source.proto.
  */
 export const file_ficant_market_v1_data_source: GenFile = /*@__PURE__*/
-  fileDesc("CiJmaWNhbnQvbWFya2V0L3YxL2RhdGFfc291cmNlLnByb3RvEhBmaWNhbnQubWFya2V0LnYxIu0CChREYXRhU291cmNlRGVmaW5pdGlvbhIvCgtkYXRhX3NvdXJjZRgBIAEoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYSJwoFb3duZXIYAiABKAsyGC5maWNhbnQuY29yZS52MS5Pd25lclJlZhIuCgRraW5kGAMgASgOMiAuZmljYW50Lm1hcmtldC52MS5EYXRhU291cmNlS2luZBIMCgRuYW1lGAQgASgJEhoKEmNvbm5lY3Rpb25fYmluZGluZxgFIAEoCRIPCgdkYXRhc2V0GAYgASgJEhsKE2Nhbm9uaWNhbF9zY2hlbWFfaWQYByABKAkSNQoVY2Fub25pY2FsX3NjaGVtYV9oYXNoGAggASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EjwKEXByaWNlX3NvdXJjZV90eXBlGAkgASgOMiEuZmljYW50Lm1hcmtldC52MS5QcmljZVNvdXJjZVR5cGUikQEKGVJlZ2lzdGVyRGF0YVNvdXJjZVJlcXVlc3QSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgJEh8KF2V4cGVjdGVkX2xhdGVzdF92ZXJzaW9uGAIgASgEEjoKCmRlZmluaXRpb24YAyABKAsyJi5maWNhbnQubWFya2V0LnYxLkRhdGFTb3VyY2VEZWZpbml0aW9uIpIBChpSZWdpc3RlckRhdGFTb3VyY2VSZXNwb25zZRI8CgpkZWZpbml0aW9uGAEgASgLMiYuZmljYW50Lm1hcmtldC52MS5EYXRhU291cmNlRGVmaW5pdGlvbkgAEiwKBWVycm9yGAIgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHQiRwoUR2V0RGF0YVNvdXJjZVJlcXVlc3QSLwoLZGF0YV9zb3VyY2UYASABKAsyGi5maWNhbnQuY29yZS52MS5WZXJzaW9uUmVmIo0BChVHZXREYXRhU291cmNlUmVzcG9uc2USPAoKZGVmaW5pdGlvbhgBIAEoCzImLmZpY2FudC5tYXJrZXQudjEuRGF0YVNvdXJjZURlZmluaXRpb25IABIsCgVlcnJvchgCIAEoCzIbLmZpY2FudC5jb3JlLnYxLkVycm9yRGV0YWlsSABCCAoGcmVzdWx0KnMKDkRhdGFTb3VyY2VLaW5kEiAKHERBVEFfU09VUkNFX0tJTkRfVU5TUEVDSUZJRUQQABIgChxEQVRBX1NPVVJDRV9LSU5EX0ZJTEVfTkRKU09OEAESHQoZREFUQV9TT1VSQ0VfS0lORF9QT1NUR1JFUxACKswBCg9QcmljZVNvdXJjZVR5cGUSIQodUFJJQ0VfU09VUkNFX1RZUEVfVU5TUEVDSUZJRUQQABIgChxQUklDRV9TT1VSQ0VfVFlQRV9SRUFMX1RSQURFEAESIgoeUFJJQ0VfU09VUkNFX1RZUEVfQUNUSVZFX1FVT1RFEAISJQohUFJJQ0VfU09VUkNFX1RZUEVfTU9ERUxfVkFMVUFUSU9OEAMSKQolUFJJQ0VfU09VUkNFX1RZUEVfQ1VSVkVfSU5URVJQT0xBVElPThAEMu4BChlEYXRhU291cmNlUmVnaXN0cnlTZXJ2aWNlEm8KElJlZ2lzdGVyRGF0YVNvdXJjZRIrLmZpY2FudC5tYXJrZXQudjEuUmVnaXN0ZXJEYXRhU291cmNlUmVxdWVzdBosLmZpY2FudC5tYXJrZXQudjEuUmVnaXN0ZXJEYXRhU291cmNlUmVzcG9uc2USYAoNR2V0RGF0YVNvdXJjZRImLmZpY2FudC5tYXJrZXQudjEuR2V0RGF0YVNvdXJjZVJlcXVlc3QaJy5maWNhbnQubWFya2V0LnYxLkdldERhdGFTb3VyY2VSZXNwb25zZWIGcHJvdG8z", [file_ficant_core_v1_common, file_ficant_core_v1_error]);
+  fileDesc("CiJmaWNhbnQvbWFya2V0L3YxL2RhdGFfc291cmNlLnByb3RvEhBmaWNhbnQubWFya2V0LnYxIu0CChREYXRhU291cmNlRGVmaW5pdGlvbhIvCgtkYXRhX3NvdXJjZRgBIAEoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYSJwoFb3duZXIYAiABKAsyGC5maWNhbnQuY29yZS52MS5Pd25lclJlZhIuCgRraW5kGAMgASgOMiAuZmljYW50Lm1hcmtldC52MS5EYXRhU291cmNlS2luZBIMCgRuYW1lGAQgASgJEhoKEmNvbm5lY3Rpb25fYmluZGluZxgFIAEoCRIPCgdkYXRhc2V0GAYgASgJEhsKE2Nhbm9uaWNhbF9zY2hlbWFfaWQYByABKAkSNQoVY2Fub25pY2FsX3NjaGVtYV9oYXNoGAggASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EjwKEXByaWNlX3NvdXJjZV90eXBlGAkgASgOMiEuZmljYW50Lm1hcmtldC52MS5QcmljZVNvdXJjZVR5cGUixgEKGVJlZ2lzdGVyRGF0YVNvdXJjZVJlcXVlc3QSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgJEh8KF2V4cGVjdGVkX2xhdGVzdF92ZXJzaW9uGAIgASgEEjoKCmRlZmluaXRpb24YAyABKAsyJi5maWNhbnQubWFya2V0LnYxLkRhdGFTb3VyY2VEZWZpbml0aW9uEjMKBmNoYW5nZRgEIAEoCzIjLmZpY2FudC5jb3JlLnYxLkNoYW5nZUp1c3RpZmljYXRpb24ikgEKGlJlZ2lzdGVyRGF0YVNvdXJjZVJlc3BvbnNlEjwKCmRlZmluaXRpb24YASABKAsyJi5maWNhbnQubWFya2V0LnYxLkRhdGFTb3VyY2VEZWZpbml0aW9uSAASLAoFZXJyb3IYAiABKAsyGy5maWNhbnQuY29yZS52MS5FcnJvckRldGFpbEgAQggKBnJlc3VsdCJHChRHZXREYXRhU291cmNlUmVxdWVzdBIvCgtkYXRhX3NvdXJjZRgBIAEoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYijQEKFUdldERhdGFTb3VyY2VSZXNwb25zZRI8CgpkZWZpbml0aW9uGAEgASgLMiYuZmljYW50Lm1hcmtldC52MS5EYXRhU291cmNlRGVmaW5pdGlvbkgAEiwKBWVycm9yGAIgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHQilQUKF0RhdGFTb3VyY2VBdXRob3JpemF0aW9uEicKA3JlZhgBIAEoCzIaLmZpY2FudC5jb3JlLnYxLlZlcnNpb25SZWYSJwoFb3duZXIYAiABKAsyGC5maWNhbnQuY29yZS52MS5Pd25lclJlZhIqCgZzb3VyY2UYAyABKAsyGi5maWNhbnQuY29yZS52MS5WZXJzaW9uUmVmEisKC3NvdXJjZV9oYXNoGAQgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2EjQKCWludGVyZmFjZRgFIAEoDjIhLmZpY2FudC5tYXJrZXQudjEuSW1wb3J0SW50ZXJmYWNlEhEKCXNjaGVtYV9pZBgGIAEoCRIrCgtzY2hlbWFfaGFzaBgHIAEoCzIWLmZpY2FudC5jb3JlLnYxLlNoYTI1NhIyCg5lZmZlY3RpdmVfZnJvbRgIIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSMAoMZWZmZWN0aXZlX3RvGAkgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRI9CgVzdGF0ZRgKIAEoDjIuLmZpY2FudC5tYXJrZXQudjEuRGF0YVNvdXJjZUF1dGhvcml6YXRpb25TdGF0ZRIuCgpzdXBlcnNlZGVzGAsgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZhIsCgxjb250ZW50X2hhc2gYDCABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSKAoKbWFwcGluZ19pZBgNIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSLAoMbWFwcGluZ19oYXNoGA4gASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2Is0BChZJbnN0cnVtZW50TWFwcGluZ0VudHJ5Eh0KFXNvdXJjZV9pbnN0cnVtZW50X2tleRgBIAEoCRIyCg5lZmZlY3RpdmVfZnJvbRgCIAEoCzIaLmZpY2FudC5jb3JlLnYxLk1hcmtldFRpbWUSMAoMZWZmZWN0aXZlX3RvGAMgASgLMhouZmljYW50LmNvcmUudjEuTWFya2V0VGltZRIuCgppbnN0cnVtZW50GAQgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZiL7AQoRSW5zdHJ1bWVudE1hcHBpbmcSKAoKbWFwcGluZ19pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSJwoFb3duZXIYAiABKAsyGC5maWNhbnQuY29yZS52MS5Pd25lclJlZhIqCgZzb3VyY2UYAyABKAsyGi5maWNhbnQuY29yZS52MS5WZXJzaW9uUmVmEjkKB2VudHJpZXMYBCADKAsyKC5maWNhbnQubWFya2V0LnYxLkluc3RydW1lbnRNYXBwaW5nRW50cnkSLAoMY29udGVudF9oYXNoGAUgASgLMhYuZmljYW50LmNvcmUudjEuU2hhMjU2Io4CCiVQdWJsaXNoRGF0YVNvdXJjZUF1dGhvcml6YXRpb25SZXF1ZXN0EhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoCRIfChdleHBlY3RlZF9sYXRlc3RfdmVyc2lvbhgCIAEoBBJACg1hdXRob3JpemF0aW9uGAMgASgLMikuZmljYW50Lm1hcmtldC52MS5EYXRhU291cmNlQXV0aG9yaXphdGlvbhIzCgZjaGFuZ2UYBCABKAsyIy5maWNhbnQuY29yZS52MS5DaGFuZ2VKdXN0aWZpY2F0aW9uEjQKB21hcHBpbmcYBSABKAsyIy5maWNhbnQubWFya2V0LnYxLkluc3RydW1lbnRNYXBwaW5nIqQBCiZQdWJsaXNoRGF0YVNvdXJjZUF1dGhvcml6YXRpb25SZXNwb25zZRJCCg1hdXRob3JpemF0aW9uGAEgASgLMikuZmljYW50Lm1hcmtldC52MS5EYXRhU291cmNlQXV0aG9yaXphdGlvbkgAEiwKBWVycm9yGAIgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHQiWgohR2V0RGF0YVNvdXJjZUF1dGhvcml6YXRpb25SZXF1ZXN0EjUKEWF1dGhvcml6YXRpb25fcmVmGAEgASgLMhouZmljYW50LmNvcmUudjEuVmVyc2lvblJlZiKgAQoiR2V0RGF0YVNvdXJjZUF1dGhvcml6YXRpb25SZXNwb25zZRJCCg1hdXRob3JpemF0aW9uGAEgASgLMikuZmljYW50Lm1hcmtldC52MS5EYXRhU291cmNlQXV0aG9yaXphdGlvbkgAEiwKBWVycm9yGAIgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHQi5wEKI0xpc3REYXRhU291cmNlQXV0aG9yaXphdGlvbnNSZXF1ZXN0EicKBW93bmVyGAEgASgLMhguZmljYW50LmNvcmUudjEuT3duZXJSZWYSLwoLZGF0YV9zb3VyY2UYAiABKAsyGi5maWNhbnQuY29yZS52MS5WZXJzaW9uUmVmEjsKEGltcG9ydF9pbnRlcmZhY2UYAyABKA4yIS5maWNhbnQubWFya2V0LnYxLkltcG9ydEludGVyZmFjZRIpCgRwYWdlGAQgASgLMhsuZmljYW50LmNvcmUudjEuUGFnZVJlcXVlc3QiiQEKGERhdGFTb3VyY2VBdXRob3JpemF0aW9ucxJBCg5hdXRob3JpemF0aW9ucxgBIAMoCzIpLmZpY2FudC5tYXJrZXQudjEuRGF0YVNvdXJjZUF1dGhvcml6YXRpb24SKgoEcGFnZRgCIAEoCzIcLmZpY2FudC5jb3JlLnYxLlBhZ2VSZXNwb25zZSKkAQokTGlzdERhdGFTb3VyY2VBdXRob3JpemF0aW9uc1Jlc3BvbnNlEkQKDmF1dGhvcml6YXRpb25zGAEgASgLMiouZmljYW50Lm1hcmtldC52MS5EYXRhU291cmNlQXV0aG9yaXphdGlvbnNIABIsCgVlcnJvchgCIAEoCzIbLmZpY2FudC5jb3JlLnYxLkVycm9yRGV0YWlsSABCCAoGcmVzdWx0KnMKDkRhdGFTb3VyY2VLaW5kEiAKHERBVEFfU09VUkNFX0tJTkRfVU5TUEVDSUZJRUQQABIgChxEQVRBX1NPVVJDRV9LSU5EX0ZJTEVfTkRKU09OEAESHQoZREFUQV9TT1VSQ0VfS0lORF9QT1NUR1JFUxACKswBCg9QcmljZVNvdXJjZVR5cGUSIQodUFJJQ0VfU09VUkNFX1RZUEVfVU5TUEVDSUZJRUQQABIgChxQUklDRV9TT1VSQ0VfVFlQRV9SRUFMX1RSQURFEAESIgoeUFJJQ0VfU09VUkNFX1RZUEVfQUNUSVZFX1FVT1RFEAISJQohUFJJQ0VfU09VUkNFX1RZUEVfTU9ERUxfVkFMVUFUSU9OEAMSKQolUFJJQ0VfU09VUkNFX1RZUEVfQ1VSVkVfSU5URVJQT0xBVElPThAEKmIKD0ltcG9ydEludGVyZmFjZRIgChxJTVBPUlRfSU5URVJGQUNFX1VOU1BFQ0lGSUVEEAASLQopSU1QT1JUX0lOVEVSRkFDRV9DQU5PTklDQUxfUVVPVEVfU05BUFNIT1QQASqoAQocRGF0YVNvdXJjZUF1dGhvcml6YXRpb25TdGF0ZRIvCitEQVRBX1NPVVJDRV9BVVRIT1JJWkFUSU9OX1NUQVRFX1VOU1BFQ0lGSUVEEAASKgomREFUQV9TT1VSQ0VfQVVUSE9SSVpBVElPTl9TVEFURV9BQ1RJVkUQARIrCidEQVRBX1NPVVJDRV9BVVRIT1JJWkFUSU9OX1NUQVRFX1JFVk9LRUQQAjKeBQoZRGF0YVNvdXJjZVJlZ2lzdHJ5U2VydmljZRJvChJSZWdpc3RlckRhdGFTb3VyY2USKy5maWNhbnQubWFya2V0LnYxLlJlZ2lzdGVyRGF0YVNvdXJjZVJlcXVlc3QaLC5maWNhbnQubWFya2V0LnYxLlJlZ2lzdGVyRGF0YVNvdXJjZVJlc3BvbnNlEmAKDUdldERhdGFTb3VyY2USJi5maWNhbnQubWFya2V0LnYxLkdldERhdGFTb3VyY2VSZXF1ZXN0GicuZmljYW50Lm1hcmtldC52MS5HZXREYXRhU291cmNlUmVzcG9uc2USkwEKHlB1Ymxpc2hEYXRhU291cmNlQXV0aG9yaXphdGlvbhI3LmZpY2FudC5tYXJrZXQudjEuUHVibGlzaERhdGFTb3VyY2VBdXRob3JpemF0aW9uUmVxdWVzdBo4LmZpY2FudC5tYXJrZXQudjEuUHVibGlzaERhdGFTb3VyY2VBdXRob3JpemF0aW9uUmVzcG9uc2UShwEKGkdldERhdGFTb3VyY2VBdXRob3JpemF0aW9uEjMuZmljYW50Lm1hcmtldC52MS5HZXREYXRhU291cmNlQXV0aG9yaXphdGlvblJlcXVlc3QaNC5maWNhbnQubWFya2V0LnYxLkdldERhdGFTb3VyY2VBdXRob3JpemF0aW9uUmVzcG9uc2USjQEKHExpc3REYXRhU291cmNlQXV0aG9yaXphdGlvbnMSNS5maWNhbnQubWFya2V0LnYxLkxpc3REYXRhU291cmNlQXV0aG9yaXphdGlvbnNSZXF1ZXN0GjYuZmljYW50Lm1hcmtldC52MS5MaXN0RGF0YVNvdXJjZUF1dGhvcml6YXRpb25zUmVzcG9uc2ViBnByb3RvMw", [file_ficant_core_v1_common, file_ficant_core_v1_error, file_ficant_core_v1_governance]);
 
 /**
  * @generated from message ficant.market.v1.DataSourceDefinition
@@ -91,6 +93,11 @@ export type RegisterDataSourceRequest = Message<"ficant.market.v1.RegisterDataSo
    * @generated from field: ficant.market.v1.DataSourceDefinition definition = 3;
    */
   definition?: DataSourceDefinition;
+
+  /**
+   * @generated from field: ficant.core.v1.ChangeJustification change = 4;
+   */
+  change?: ChangeJustification;
 };
 
 /**
@@ -176,6 +183,352 @@ export const GetDataSourceResponseSchema: GenMessage<GetDataSourceResponse> = /*
   messageDesc(file_ficant_market_v1_data_source, 4);
 
 /**
+ * @generated from message ficant.market.v1.DataSourceAuthorization
+ */
+export type DataSourceAuthorization = Message<"ficant.market.v1.DataSourceAuthorization"> & {
+  /**
+   * @generated from field: ficant.core.v1.VersionRef ref = 1;
+   */
+  ref?: VersionRef;
+
+  /**
+   * @generated from field: ficant.core.v1.OwnerRef owner = 2;
+   */
+  owner?: OwnerRef;
+
+  /**
+   * @generated from field: ficant.core.v1.VersionRef source = 3;
+   */
+  source?: VersionRef;
+
+  /**
+   * @generated from field: ficant.core.v1.Sha256 source_hash = 4;
+   */
+  sourceHash?: Sha256;
+
+  /**
+   * @generated from field: ficant.market.v1.ImportInterface interface = 5;
+   */
+  interface: ImportInterface;
+
+  /**
+   * @generated from field: string schema_id = 6;
+   */
+  schemaId: string;
+
+  /**
+   * @generated from field: ficant.core.v1.Sha256 schema_hash = 7;
+   */
+  schemaHash?: Sha256;
+
+  /**
+   * @generated from field: ficant.core.v1.MarketTime effective_from = 8;
+   */
+  effectiveFrom?: MarketTime;
+
+  /**
+   * @generated from field: ficant.core.v1.MarketTime effective_to = 9;
+   */
+  effectiveTo?: MarketTime;
+
+  /**
+   * @generated from field: ficant.market.v1.DataSourceAuthorizationState state = 10;
+   */
+  state: DataSourceAuthorizationState;
+
+  /**
+   * @generated from field: ficant.core.v1.VersionRef supersedes = 11;
+   */
+  supersedes?: VersionRef;
+
+  /**
+   * @generated from field: ficant.core.v1.Sha256 content_hash = 12;
+   */
+  contentHash?: Sha256;
+
+  /**
+   * @generated from field: ficant.core.v1.Ulid mapping_id = 13;
+   */
+  mappingId?: Ulid;
+
+  /**
+   * @generated from field: ficant.core.v1.Sha256 mapping_hash = 14;
+   */
+  mappingHash?: Sha256;
+};
+
+/**
+ * Describes the message ficant.market.v1.DataSourceAuthorization.
+ * Use `create(DataSourceAuthorizationSchema)` to create a new message.
+ */
+export const DataSourceAuthorizationSchema: GenMessage<DataSourceAuthorization> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_data_source, 5);
+
+/**
+ * @generated from message ficant.market.v1.InstrumentMappingEntry
+ */
+export type InstrumentMappingEntry = Message<"ficant.market.v1.InstrumentMappingEntry"> & {
+  /**
+   * @generated from field: string source_instrument_key = 1;
+   */
+  sourceInstrumentKey: string;
+
+  /**
+   * @generated from field: ficant.core.v1.MarketTime effective_from = 2;
+   */
+  effectiveFrom?: MarketTime;
+
+  /**
+   * @generated from field: ficant.core.v1.MarketTime effective_to = 3;
+   */
+  effectiveTo?: MarketTime;
+
+  /**
+   * @generated from field: ficant.core.v1.VersionRef instrument = 4;
+   */
+  instrument?: VersionRef;
+};
+
+/**
+ * Describes the message ficant.market.v1.InstrumentMappingEntry.
+ * Use `create(InstrumentMappingEntrySchema)` to create a new message.
+ */
+export const InstrumentMappingEntrySchema: GenMessage<InstrumentMappingEntry> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_data_source, 6);
+
+/**
+ * @generated from message ficant.market.v1.InstrumentMapping
+ */
+export type InstrumentMapping = Message<"ficant.market.v1.InstrumentMapping"> & {
+  /**
+   * @generated from field: ficant.core.v1.Ulid mapping_id = 1;
+   */
+  mappingId?: Ulid;
+
+  /**
+   * @generated from field: ficant.core.v1.OwnerRef owner = 2;
+   */
+  owner?: OwnerRef;
+
+  /**
+   * @generated from field: ficant.core.v1.VersionRef source = 3;
+   */
+  source?: VersionRef;
+
+  /**
+   * @generated from field: repeated ficant.market.v1.InstrumentMappingEntry entries = 4;
+   */
+  entries: InstrumentMappingEntry[];
+
+  /**
+   * @generated from field: ficant.core.v1.Sha256 content_hash = 5;
+   */
+  contentHash?: Sha256;
+};
+
+/**
+ * Describes the message ficant.market.v1.InstrumentMapping.
+ * Use `create(InstrumentMappingSchema)` to create a new message.
+ */
+export const InstrumentMappingSchema: GenMessage<InstrumentMapping> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_data_source, 7);
+
+/**
+ * @generated from message ficant.market.v1.PublishDataSourceAuthorizationRequest
+ */
+export type PublishDataSourceAuthorizationRequest = Message<"ficant.market.v1.PublishDataSourceAuthorizationRequest"> & {
+  /**
+   * @generated from field: string idempotency_key = 1;
+   */
+  idempotencyKey: string;
+
+  /**
+   * @generated from field: uint64 expected_latest_version = 2;
+   */
+  expectedLatestVersion: bigint;
+
+  /**
+   * @generated from field: ficant.market.v1.DataSourceAuthorization authorization = 3;
+   */
+  authorization?: DataSourceAuthorization;
+
+  /**
+   * @generated from field: ficant.core.v1.ChangeJustification change = 4;
+   */
+  change?: ChangeJustification;
+
+  /**
+   * @generated from field: ficant.market.v1.InstrumentMapping mapping = 5;
+   */
+  mapping?: InstrumentMapping;
+};
+
+/**
+ * Describes the message ficant.market.v1.PublishDataSourceAuthorizationRequest.
+ * Use `create(PublishDataSourceAuthorizationRequestSchema)` to create a new message.
+ */
+export const PublishDataSourceAuthorizationRequestSchema: GenMessage<PublishDataSourceAuthorizationRequest> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_data_source, 8);
+
+/**
+ * @generated from message ficant.market.v1.PublishDataSourceAuthorizationResponse
+ */
+export type PublishDataSourceAuthorizationResponse = Message<"ficant.market.v1.PublishDataSourceAuthorizationResponse"> & {
+  /**
+   * @generated from oneof ficant.market.v1.PublishDataSourceAuthorizationResponse.result
+   */
+  result: {
+    /**
+     * @generated from field: ficant.market.v1.DataSourceAuthorization authorization = 1;
+     */
+    value: DataSourceAuthorization;
+    case: "authorization";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 2;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message ficant.market.v1.PublishDataSourceAuthorizationResponse.
+ * Use `create(PublishDataSourceAuthorizationResponseSchema)` to create a new message.
+ */
+export const PublishDataSourceAuthorizationResponseSchema: GenMessage<PublishDataSourceAuthorizationResponse> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_data_source, 9);
+
+/**
+ * @generated from message ficant.market.v1.GetDataSourceAuthorizationRequest
+ */
+export type GetDataSourceAuthorizationRequest = Message<"ficant.market.v1.GetDataSourceAuthorizationRequest"> & {
+  /**
+   * @generated from field: ficant.core.v1.VersionRef authorization_ref = 1;
+   */
+  authorizationRef?: VersionRef;
+};
+
+/**
+ * Describes the message ficant.market.v1.GetDataSourceAuthorizationRequest.
+ * Use `create(GetDataSourceAuthorizationRequestSchema)` to create a new message.
+ */
+export const GetDataSourceAuthorizationRequestSchema: GenMessage<GetDataSourceAuthorizationRequest> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_data_source, 10);
+
+/**
+ * @generated from message ficant.market.v1.GetDataSourceAuthorizationResponse
+ */
+export type GetDataSourceAuthorizationResponse = Message<"ficant.market.v1.GetDataSourceAuthorizationResponse"> & {
+  /**
+   * @generated from oneof ficant.market.v1.GetDataSourceAuthorizationResponse.result
+   */
+  result: {
+    /**
+     * @generated from field: ficant.market.v1.DataSourceAuthorization authorization = 1;
+     */
+    value: DataSourceAuthorization;
+    case: "authorization";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 2;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message ficant.market.v1.GetDataSourceAuthorizationResponse.
+ * Use `create(GetDataSourceAuthorizationResponseSchema)` to create a new message.
+ */
+export const GetDataSourceAuthorizationResponseSchema: GenMessage<GetDataSourceAuthorizationResponse> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_data_source, 11);
+
+/**
+ * @generated from message ficant.market.v1.ListDataSourceAuthorizationsRequest
+ */
+export type ListDataSourceAuthorizationsRequest = Message<"ficant.market.v1.ListDataSourceAuthorizationsRequest"> & {
+  /**
+   * @generated from field: ficant.core.v1.OwnerRef owner = 1;
+   */
+  owner?: OwnerRef;
+
+  /**
+   * @generated from field: ficant.core.v1.VersionRef data_source = 2;
+   */
+  dataSource?: VersionRef;
+
+  /**
+   * @generated from field: ficant.market.v1.ImportInterface import_interface = 3;
+   */
+  importInterface: ImportInterface;
+
+  /**
+   * @generated from field: ficant.core.v1.PageRequest page = 4;
+   */
+  page?: PageRequest;
+};
+
+/**
+ * Describes the message ficant.market.v1.ListDataSourceAuthorizationsRequest.
+ * Use `create(ListDataSourceAuthorizationsRequestSchema)` to create a new message.
+ */
+export const ListDataSourceAuthorizationsRequestSchema: GenMessage<ListDataSourceAuthorizationsRequest> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_data_source, 12);
+
+/**
+ * @generated from message ficant.market.v1.DataSourceAuthorizations
+ */
+export type DataSourceAuthorizations = Message<"ficant.market.v1.DataSourceAuthorizations"> & {
+  /**
+   * @generated from field: repeated ficant.market.v1.DataSourceAuthorization authorizations = 1;
+   */
+  authorizations: DataSourceAuthorization[];
+
+  /**
+   * @generated from field: ficant.core.v1.PageResponse page = 2;
+   */
+  page?: PageResponse;
+};
+
+/**
+ * Describes the message ficant.market.v1.DataSourceAuthorizations.
+ * Use `create(DataSourceAuthorizationsSchema)` to create a new message.
+ */
+export const DataSourceAuthorizationsSchema: GenMessage<DataSourceAuthorizations> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_data_source, 13);
+
+/**
+ * @generated from message ficant.market.v1.ListDataSourceAuthorizationsResponse
+ */
+export type ListDataSourceAuthorizationsResponse = Message<"ficant.market.v1.ListDataSourceAuthorizationsResponse"> & {
+  /**
+   * @generated from oneof ficant.market.v1.ListDataSourceAuthorizationsResponse.result
+   */
+  result: {
+    /**
+     * @generated from field: ficant.market.v1.DataSourceAuthorizations authorizations = 1;
+     */
+    value: DataSourceAuthorizations;
+    case: "authorizations";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 2;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message ficant.market.v1.ListDataSourceAuthorizationsResponse.
+ * Use `create(ListDataSourceAuthorizationsResponseSchema)` to create a new message.
+ */
+export const ListDataSourceAuthorizationsResponseSchema: GenMessage<ListDataSourceAuthorizationsResponse> = /*@__PURE__*/
+  messageDesc(file_ficant_market_v1_data_source, 14);
+
+/**
  * @generated from enum ficant.market.v1.DataSourceKind
  */
 export enum DataSourceKind {
@@ -238,6 +591,53 @@ export const PriceSourceTypeSchema: GenEnum<PriceSourceType> = /*@__PURE__*/
   enumDesc(file_ficant_market_v1_data_source, 1);
 
 /**
+ * @generated from enum ficant.market.v1.ImportInterface
+ */
+export enum ImportInterface {
+  /**
+   * @generated from enum value: IMPORT_INTERFACE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: IMPORT_INTERFACE_CANONICAL_QUOTE_SNAPSHOT = 1;
+   */
+  CANONICAL_QUOTE_SNAPSHOT = 1,
+}
+
+/**
+ * Describes the enum ficant.market.v1.ImportInterface.
+ */
+export const ImportInterfaceSchema: GenEnum<ImportInterface> = /*@__PURE__*/
+  enumDesc(file_ficant_market_v1_data_source, 2);
+
+/**
+ * @generated from enum ficant.market.v1.DataSourceAuthorizationState
+ */
+export enum DataSourceAuthorizationState {
+  /**
+   * @generated from enum value: DATA_SOURCE_AUTHORIZATION_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: DATA_SOURCE_AUTHORIZATION_STATE_ACTIVE = 1;
+   */
+  ACTIVE = 1,
+
+  /**
+   * @generated from enum value: DATA_SOURCE_AUTHORIZATION_STATE_REVOKED = 2;
+   */
+  REVOKED = 2,
+}
+
+/**
+ * Describes the enum ficant.market.v1.DataSourceAuthorizationState.
+ */
+export const DataSourceAuthorizationStateSchema: GenEnum<DataSourceAuthorizationState> = /*@__PURE__*/
+  enumDesc(file_ficant_market_v1_data_source, 3);
+
+/**
  * @generated from service ficant.market.v1.DataSourceRegistryService
  */
 export const DataSourceRegistryService: GenService<{
@@ -256,6 +656,30 @@ export const DataSourceRegistryService: GenService<{
     methodKind: "unary";
     input: typeof GetDataSourceRequestSchema;
     output: typeof GetDataSourceResponseSchema;
+  },
+  /**
+   * @generated from rpc ficant.market.v1.DataSourceRegistryService.PublishDataSourceAuthorization
+   */
+  publishDataSourceAuthorization: {
+    methodKind: "unary";
+    input: typeof PublishDataSourceAuthorizationRequestSchema;
+    output: typeof PublishDataSourceAuthorizationResponseSchema;
+  },
+  /**
+   * @generated from rpc ficant.market.v1.DataSourceRegistryService.GetDataSourceAuthorization
+   */
+  getDataSourceAuthorization: {
+    methodKind: "unary";
+    input: typeof GetDataSourceAuthorizationRequestSchema;
+    output: typeof GetDataSourceAuthorizationResponseSchema;
+  },
+  /**
+   * @generated from rpc ficant.market.v1.DataSourceRegistryService.ListDataSourceAuthorizations
+   */
+  listDataSourceAuthorizations: {
+    methodKind: "unary";
+    input: typeof ListDataSourceAuthorizationsRequestSchema;
+    output: typeof ListDataSourceAuthorizationsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_ficant_market_v1_data_source, 0);

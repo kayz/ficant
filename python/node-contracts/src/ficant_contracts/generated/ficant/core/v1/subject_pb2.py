@@ -24,38 +24,39 @@ _sym_db = _symbol_database.Default()
 
 from ficant.core.v1 import common_pb2 as ficant_dot_core_dot_v1_dot_common__pb2
 from ficant.core.v1 import error_pb2 as ficant_dot_core_dot_v1_dot_error__pb2
+from ficant.core.v1 import governance_pb2 as ficant_dot_core_dot_v1_dot_governance__pb2
 from ficant.core.v1 import subject_state_pb2 as ficant_dot_core_dot_v1_dot_subject__state__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1c\x66icant/core/v1/subject.proto\x12\x0e\x66icant.core.v1\x1a\x1b\x66icant/core/v1/common.proto\x1a\x1a\x66icant/core/v1/error.proto\x1a\"ficant/core/v1/subject_state.proto\"a\n\x07Subject\x12\x33\n\nsubject_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\tsubjectId\x12!\n\x0c\x64isplay_name\x18\x02 \x01(\tR\x0b\x64isplayName\"\xba\x03\n\x0eSubjectVersion\x12;\n\x0bsubject_ref\x18\x01 \x01(\x0b\x32\x1a.ficant.core.v1.VersionRefR\nsubjectRef\x12\x38\n\naccess_set\x18\x02 \x01(\x0b\x32\x19.ficant.core.v1.AccessSetR\taccessSet\x12>\n\x0c\x66unding_tier\x18\x03 \x01(\x0e\x32\x1b.ficant.core.v1.FundingTierR\x0b\x66undingTier\x12\x41\n\rtax_treatment\x18\x04 \x01(\x0b\x32\x1c.ficant.core.v1.TaxTreatmentR\x0ctaxTreatment\x12\x31\n\x14\x61ssessment_mechanism\x18\x05 \x01(\tR\x13\x61ssessmentMechanism\x12+\n\x11liability_profile\x18\x06 \x01(\tR\x10liabilityProfile\x12N\n\x12\x63onstraint_set_ref\x18\x07 \x01(\x0b\x32 .ficant.core.v1.ConstraintSetRefR\x10\x63onstraintSetRef\"\x8b\x01\n\rSubjectRecord\x12\x31\n\x07subject\x18\x01 \x01(\x0b\x32\x17.ficant.core.v1.SubjectR\x07subject\x12G\n\x0fsubject_version\x18\x02 \x01(\x0b\x32\x1e.ficant.core.v1.SubjectVersionR\x0esubjectVersion\"M\n\tAccessSet\x12!\n\x0cmarket_codes\x18\x01 \x03(\tR\x0bmarketCodes\x12\x1d\n\ntool_codes\x18\x02 \x03(\tR\ttoolCodes\"s\n\x0cTaxTreatment\x12\x35\n\x17value_added_tax_profile\x18\x01 \x01(\tR\x14valueAddedTaxProfile\x12,\n\x12income_tax_profile\x18\x02 \x01(\tR\x10incomeTaxProfile\"@\n\x10\x43onstraintSetRef\x12,\n\x03ref\x18\x01 \x01(\x0b\x32\x1a.ficant.core.v1.VersionRefR\x03ref\"\x94\x01\n\x16RegisterSubjectRequest\x12\x31\n\x07subject\x18\x01 \x01(\x0b\x32\x17.ficant.core.v1.SubjectR\x07subject\x12G\n\x0fsubject_version\x18\x02 \x01(\x0b\x32\x1e.ficant.core.v1.SubjectVersionR\x0esubjectVersion\"\x93\x01\n\x17RegisterSubjectResponse\x12\x39\n\x07subject\x18\x01 \x01(\x0b\x32\x1d.ficant.core.v1.SubjectRecordH\x00R\x07subject\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result\"P\n\x11GetSubjectRequest\x12;\n\x0bsubject_ref\x18\x01 \x01(\x0b\x32\x1a.ficant.core.v1.VersionRefR\nsubjectRef\"\x8e\x01\n\x12GetSubjectResponse\x12\x39\n\x07subject\x18\x01 \x01(\x0b\x32\x1d.ficant.core.v1.SubjectRecordH\x00R\x07subject\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result*c\n\x0b\x46undingTier\x12\x1c\n\x18\x46UNDING_TIER_UNSPECIFIED\x10\x00\x12\x1d\n\x19\x46UNDING_TIER_DR_AVAILABLE\x10\x01\x12\x17\n\x13\x46UNDING_TIER_R_ONLY\x10\x02\x32\xa1\x03\n\x0fRegistryService\x12\x62\n\x0fRegisterSubject\x12&.ficant.core.v1.RegisterSubjectRequest\x1a\'.ficant.core.v1.RegisterSubjectResponse\x12S\n\nGetSubject\x12!.ficant.core.v1.GetSubjectRequest\x1a\".ficant.core.v1.GetSubjectResponse\x12q\n\x14RegisterSubjectState\x12+.ficant.core.v1.RegisterSubjectStateRequest\x1a,.ficant.core.v1.RegisterSubjectStateResponse\x12\x62\n\x0fGetSubjectState\x12&.ficant.core.v1.GetSubjectStateRequest\x1a\'.ficant.core.v1.GetSubjectStateResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1c\x66icant/core/v1/subject.proto\x12\x0e\x66icant.core.v1\x1a\x1b\x66icant/core/v1/common.proto\x1a\x1a\x66icant/core/v1/error.proto\x1a\x1f\x66icant/core/v1/governance.proto\x1a\"ficant/core/v1/subject_state.proto\"\x91\x01\n\x07Subject\x12\x33\n\nsubject_id\x18\x01 \x01(\x0b\x32\x14.ficant.core.v1.UlidR\tsubjectId\x12!\n\x0c\x64isplay_name\x18\x02 \x01(\tR\x0b\x64isplayName\x12.\n\x05owner\x18\x03 \x01(\x0b\x32\x18.ficant.core.v1.OwnerRefR\x05owner\"\xba\x03\n\x0eSubjectVersion\x12;\n\x0bsubject_ref\x18\x01 \x01(\x0b\x32\x1a.ficant.core.v1.VersionRefR\nsubjectRef\x12\x38\n\naccess_set\x18\x02 \x01(\x0b\x32\x19.ficant.core.v1.AccessSetR\taccessSet\x12>\n\x0c\x66unding_tier\x18\x03 \x01(\x0e\x32\x1b.ficant.core.v1.FundingTierR\x0b\x66undingTier\x12\x41\n\rtax_treatment\x18\x04 \x01(\x0b\x32\x1c.ficant.core.v1.TaxTreatmentR\x0ctaxTreatment\x12\x31\n\x14\x61ssessment_mechanism\x18\x05 \x01(\tR\x13\x61ssessmentMechanism\x12+\n\x11liability_profile\x18\x06 \x01(\tR\x10liabilityProfile\x12N\n\x12\x63onstraint_set_ref\x18\x07 \x01(\x0b\x32 .ficant.core.v1.ConstraintSetRefR\x10\x63onstraintSetRef\"\x8b\x01\n\rSubjectRecord\x12\x31\n\x07subject\x18\x01 \x01(\x0b\x32\x17.ficant.core.v1.SubjectR\x07subject\x12G\n\x0fsubject_version\x18\x02 \x01(\x0b\x32\x1e.ficant.core.v1.SubjectVersionR\x0esubjectVersion\"M\n\tAccessSet\x12!\n\x0cmarket_codes\x18\x01 \x03(\tR\x0bmarketCodes\x12\x1d\n\ntool_codes\x18\x02 \x03(\tR\ttoolCodes\"s\n\x0cTaxTreatment\x12\x35\n\x17value_added_tax_profile\x18\x01 \x01(\tR\x14valueAddedTaxProfile\x12,\n\x12income_tax_profile\x18\x02 \x01(\tR\x10incomeTaxProfile\"@\n\x10\x43onstraintSetRef\x12,\n\x03ref\x18\x01 \x01(\x0b\x32\x1a.ficant.core.v1.VersionRefR\x03ref\"\xfa\x01\n\x16RegisterSubjectRequest\x12\x31\n\x07subject\x18\x01 \x01(\x0b\x32\x17.ficant.core.v1.SubjectR\x07subject\x12G\n\x0fsubject_version\x18\x02 \x01(\x0b\x32\x1e.ficant.core.v1.SubjectVersionR\x0esubjectVersion\x12;\n\x06\x63hange\x18\x03 \x01(\x0b\x32#.ficant.core.v1.ChangeJustificationR\x06\x63hange\x12\'\n\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\"\x93\x01\n\x17RegisterSubjectResponse\x12\x39\n\x07subject\x18\x01 \x01(\x0b\x32\x1d.ficant.core.v1.SubjectRecordH\x00R\x07subject\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result\"P\n\x11GetSubjectRequest\x12;\n\x0bsubject_ref\x18\x01 \x01(\x0b\x32\x1a.ficant.core.v1.VersionRefR\nsubjectRef\"\x8e\x01\n\x12GetSubjectResponse\x12\x39\n\x07subject\x18\x01 \x01(\x0b\x32\x1d.ficant.core.v1.SubjectRecordH\x00R\x07subject\x12\x33\n\x05\x65rror\x18\x02 \x01(\x0b\x32\x1b.ficant.core.v1.ErrorDetailH\x00R\x05\x65rrorB\x08\n\x06result*c\n\x0b\x46undingTier\x12\x1c\n\x18\x46UNDING_TIER_UNSPECIFIED\x10\x00\x12\x1d\n\x19\x46UNDING_TIER_DR_AVAILABLE\x10\x01\x12\x17\n\x13\x46UNDING_TIER_R_ONLY\x10\x02\x32\xa1\x03\n\x0fRegistryService\x12\x62\n\x0fRegisterSubject\x12&.ficant.core.v1.RegisterSubjectRequest\x1a\'.ficant.core.v1.RegisterSubjectResponse\x12S\n\nGetSubject\x12!.ficant.core.v1.GetSubjectRequest\x1a\".ficant.core.v1.GetSubjectResponse\x12q\n\x14RegisterSubjectState\x12+.ficant.core.v1.RegisterSubjectStateRequest\x1a,.ficant.core.v1.RegisterSubjectStateResponse\x12\x62\n\x0fGetSubjectState\x12&.ficant.core.v1.GetSubjectStateRequest\x1a\'.ficant.core.v1.GetSubjectStateResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'ficant.core.v1.subject_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_FUNDINGTIER']._serialized_start=1617
-  _globals['_FUNDINGTIER']._serialized_end=1716
-  _globals['_SUBJECT']._serialized_start=141
-  _globals['_SUBJECT']._serialized_end=238
-  _globals['_SUBJECTVERSION']._serialized_start=241
-  _globals['_SUBJECTVERSION']._serialized_end=683
-  _globals['_SUBJECTRECORD']._serialized_start=686
-  _globals['_SUBJECTRECORD']._serialized_end=825
-  _globals['_ACCESSSET']._serialized_start=827
-  _globals['_ACCESSSET']._serialized_end=904
-  _globals['_TAXTREATMENT']._serialized_start=906
-  _globals['_TAXTREATMENT']._serialized_end=1021
-  _globals['_CONSTRAINTSETREF']._serialized_start=1023
-  _globals['_CONSTRAINTSETREF']._serialized_end=1087
-  _globals['_REGISTERSUBJECTREQUEST']._serialized_start=1090
-  _globals['_REGISTERSUBJECTREQUEST']._serialized_end=1238
-  _globals['_REGISTERSUBJECTRESPONSE']._serialized_start=1241
-  _globals['_REGISTERSUBJECTRESPONSE']._serialized_end=1388
-  _globals['_GETSUBJECTREQUEST']._serialized_start=1390
-  _globals['_GETSUBJECTREQUEST']._serialized_end=1470
-  _globals['_GETSUBJECTRESPONSE']._serialized_start=1473
-  _globals['_GETSUBJECTRESPONSE']._serialized_end=1615
-  _globals['_REGISTRYSERVICE']._serialized_start=1719
-  _globals['_REGISTRYSERVICE']._serialized_end=2136
+  _globals['_FUNDINGTIER']._serialized_start=1801
+  _globals['_FUNDINGTIER']._serialized_end=1900
+  _globals['_SUBJECT']._serialized_start=175
+  _globals['_SUBJECT']._serialized_end=320
+  _globals['_SUBJECTVERSION']._serialized_start=323
+  _globals['_SUBJECTVERSION']._serialized_end=765
+  _globals['_SUBJECTRECORD']._serialized_start=768
+  _globals['_SUBJECTRECORD']._serialized_end=907
+  _globals['_ACCESSSET']._serialized_start=909
+  _globals['_ACCESSSET']._serialized_end=986
+  _globals['_TAXTREATMENT']._serialized_start=988
+  _globals['_TAXTREATMENT']._serialized_end=1103
+  _globals['_CONSTRAINTSETREF']._serialized_start=1105
+  _globals['_CONSTRAINTSETREF']._serialized_end=1169
+  _globals['_REGISTERSUBJECTREQUEST']._serialized_start=1172
+  _globals['_REGISTERSUBJECTREQUEST']._serialized_end=1422
+  _globals['_REGISTERSUBJECTRESPONSE']._serialized_start=1425
+  _globals['_REGISTERSUBJECTRESPONSE']._serialized_end=1572
+  _globals['_GETSUBJECTREQUEST']._serialized_start=1574
+  _globals['_GETSUBJECTREQUEST']._serialized_end=1654
+  _globals['_GETSUBJECTRESPONSE']._serialized_start=1657
+  _globals['_GETSUBJECTRESPONSE']._serialized_end=1799
+  _globals['_REGISTRYSERVICE']._serialized_start=1903
+  _globals['_REGISTRYSERVICE']._serialized_end=2320
 # @@protoc_insertion_point(module_scope)

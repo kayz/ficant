@@ -89,6 +89,12 @@ total_return = carry + roll_down
 
 `AnalyzeBond` 保留原市场税前字段，并以同一 clean price、逐期 `gross/(1+0.06)` 在 12 位 ties-to-even 后重算主体 YTM；`AnalyzeFuturesDelivery` 保留原市场 IRR、funding-adjusted IRR 和市场 CTD，同时为每只候选返回税收调整后 interim coupon、主体 IRR 与独立主体 CTD。该口径严格标注为“coupon 销项 VAT 调整、抵扣进项前”，不代表机构最终应纳 VAT、完整税后利润、金融商品转让/期货平仓/实物交割税务或完整税务会计；境外机构、小规模纳税人、非国债及其他未批准 profile 失败关闭。
 
+## 2026-08 / R6A 受治理输入平面（实施候选）
+
+当前候选把 Platform Admin 与 Researcher 固化为独立 active role，并从受信 session 逐请求派生 actor、tenant、owner 与 scopes。Definition、Fact、Snapshot 和 FoundationChange 公共服务已组合进同一生产 native gRPC / gRPC-Web server；管理员可以原子发布完整 Definition、直接 Fact/Curve/Universe 与精确 DataSource authorization，研究用户只能通过管理员批准的 exact source version、mapping、schema、接口和有效期执行 server-side canonical import。
+
+导入路径从 registry connection binding 选择 adapter，验证 Calendar、Unit、双时间与内容身份，发布可重启读回的不可变 Parquet/Manifest，并把 authorization、actor 与实际输入写入 lineage、请求指纹和 append-only change record。未授权或漂移请求在 adapter、blob 与 repository 前失败关闭。该能力是后续投研 WebApp 的后台前置条件，不新增 Portfolio/Book、NAV/P&L、Benchmark、归因、VaR、模拟组合或 UI；在迭代 brief 完成最终取证前不得把候选宣传为已发布 AC37。
+
 ## 2026-07 / Phase 3A 已落地双源 Canonical Quote 接入
 
 当前实现新增版本化 `DataSource` 注册和 `ficant-data` 接入边界。文件 NDJSON 与 PostgreSQL adapter 只消费冻结的 raw quote 合同，通过精确 Instrument、Calendar、Unit 版本映射以及 observed/visible 双时间点时选择，生成固定 16 列的 `ficant.market.quote.canonical.v1` Arrow RecordBatch。

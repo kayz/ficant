@@ -23,7 +23,7 @@ use crate::{
     canonical_quote_schema, canonical_quote_schema_hash,
 };
 
-pub const SNAPSHOT_MANIFEST_SCHEMA_ID: &str = "ficant.data.snapshot-manifest.v1";
+pub const SNAPSHOT_MANIFEST_SCHEMA_ID: &str = "ficant.data.snapshot-manifest.v2";
 pub const PARQUET_CREATED_BY: &str = "ficant-parquet/59.1.0";
 const PARQUET_LIBRARY_VERSION: &str = "59.1.0";
 const PARQUET_WRITE_BATCH_SIZE: usize = 1_024;
@@ -34,6 +34,40 @@ pub struct CanonicalSnapshotPackage {
     snapshot: DataSnapshot,
     parquet: Vec<u8>,
     manifest: Vec<u8>,
+}
+
+/// Server-owned governance evidence added only after the application authorization gate passes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CanonicalImportEvidence {
+    authorization: VersionRef,
+    authorization_hash: ContentHash,
+    actor_id: Ulid,
+}
+
+impl CanonicalImportEvidence {
+    #[must_use]
+    pub fn new(authorization: VersionRef, authorization_hash: ContentHash, actor_id: Ulid) -> Self {
+        Self {
+            authorization,
+            authorization_hash,
+            actor_id,
+        }
+    }
+
+    #[must_use]
+    pub fn authorization(&self) -> &VersionRef {
+        &self.authorization
+    }
+
+    #[must_use]
+    pub fn authorization_hash(&self) -> &ContentHash {
+        &self.authorization_hash
+    }
+
+    #[must_use]
+    pub fn actor_id(&self) -> &Ulid {
+        &self.actor_id
+    }
 }
 
 impl CanonicalSnapshotPackage {
@@ -152,7 +186,12 @@ pub struct SnapshotManifest {
     parquet: ParquetPayload,
     point_in_time: PointInTimeBinding,
     data_source: ExactVersion,
+    instrument_mapping_id: String,
     instrument_mapping_digest: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    authorization: Option<ExactVersionWithHash>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    actor_id: Option<String>,
     calendar: ExactVersion,
     unit: ExactVersion,
     instruments: Vec<ExactVersion>,
@@ -180,6 +219,33 @@ impl SnapshotManifest {
     pub fn instrument_mapping_digest(&self) -> &str {
         &self.instrument_mapping_digest
     }
+
+    #[must_use]
+    pub fn instrument_mapping_id(&self) -> &str {
+        &self.instrument_mapping_id
+    }
+
+    #[must_use]
+    pub fn authorization_id(&self) -> Option<&str> {
+        self.authorization.as_ref().map(|value| value.id.as_str())
+    }
+
+    #[must_use]
+    pub fn authorization_version(&self) -> Option<u64> {
+        self.authorization.as_ref().map(|value| value.version)
+    }
+
+    #[must_use]
+    pub fn authorization_hash(&self) -> Option<&str> {
+        self.authorization
+            .as_ref()
+            .map(|value| value.content_hash.as_str())
+    }
+
+    #[must_use]
+    pub fn actor_id(&self) -> Option<&str> {
+        self.actor_id.as_deref()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -203,6 +269,14 @@ struct PointInTimeBinding {
 struct ExactVersion {
     id: String,
     version: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExactVersionWithHash {
+    id: String,
+    version: u64,
+    content_hash: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -243,11 +317,31 @@ impl CanonicalSnapshotCodec {
         request: &CanonicalIngestRequest,
         canonical: &CanonicalQuoteBatch,
     ) -> DataResult<CanonicalSnapshotPackage> {
+        Self::build_inner(snapshot_id, request, canonical, None)
+    }
+
+    /// Encodes a canonical quote snapshot with exact authorization and server actor evidence.
+    pub fn build_authorized(
+        &self,
+        snapshot_id: Ulid,
+        request: &CanonicalIngestRequest,
+        canonical: &CanonicalQuoteBatch,
+        evidence: &CanonicalImportEvidence,
+    ) -> DataResult<CanonicalSnapshotPackage> {
+        Self::build_inner(snapshot_id, request, canonical, Some(evidence))
+    }
+
+    fn build_inner(
+        snapshot_id: Ulid,
+        request: &CanonicalIngestRequest,
+        canonical: &CanonicalQuoteBatch,
+        evidence: Option<&CanonicalImportEvidence>,
+    ) -> DataResult<CanonicalSnapshotPackage> {
         validate_canonical_batch(request, canonical.batch())?;
         let parquet = encode_parquet(canonical.batch())?;
         let parquet_hash = ContentHash::digest(&parquet);
         let instruments = batch_instruments(canonical.batch())?;
-        let lineage = snapshot_lineage(request, &instruments)?;
+        let lineage = snapshot_lineage(request, &instruments, evidence)?;
         let manifest = SnapshotManifest {
             manifest_schema: SNAPSHOT_MANIFEST_SCHEMA_ID.to_owned(),
             snapshot_id: snapshot_id.as_str().to_owned(),
@@ -268,7 +362,14 @@ impl CanonicalSnapshotCodec {
                 market_timezone: request.window().as_of().market_timezone().to_owned(),
             },
             data_source: exact_version(request.source().id(), request.source().version()),
+            instrument_mapping_id: request.mapping().id().as_str().to_owned(),
             instrument_mapping_digest: hash_hex(&request.mapping().contract_hash()),
+            authorization: evidence.map(|value| ExactVersionWithHash {
+                id: value.authorization().id().as_str().to_owned(),
+                version: value.authorization().version().get(),
+                content_hash: hash_hex(value.authorization_hash()),
+            }),
+            actor_id: evidence.map(|value| value.actor_id().as_str().to_owned()),
             calendar: ExactVersion {
                 id: request.calendar().identity().to_owned(),
                 version: request.calendar().version(),
@@ -463,7 +564,17 @@ fn validate_manifest(
     {
         return Err(DataError::SnapshotIntegrityFailed);
     }
+    Ulid::new(manifest.instrument_mapping_id.clone())
+        .map_err(|_| DataError::SnapshotIntegrityFailed)?;
     parse_hash(&manifest.instrument_mapping_digest)?;
+    match (&manifest.authorization, &manifest.actor_id) {
+        (Some(authorization), Some(actor_id)) => {
+            version_ref_with_hash(authorization)?;
+            Ulid::new(actor_id.clone()).map_err(|_| DataError::SnapshotIntegrityFailed)?;
+        }
+        (None, None) => {}
+        _ => return Err(DataError::SnapshotIntegrityFailed),
+    }
     Ok(())
 }
 
@@ -636,6 +747,7 @@ fn batch_instruments(batch: &RecordBatch) -> DataResult<Vec<VersionRef>> {
 fn snapshot_lineage(
     request: &CanonicalIngestRequest,
     instruments: &[VersionRef],
+    evidence: Option<&CanonicalImportEvidence>,
 ) -> DataResult<Vec<LineageRef>> {
     let mut lineage = vec![
         LineageRef::versioned(
@@ -643,6 +755,22 @@ fn snapshot_lineage(
             Version::new(request.source().version())
                 .map_err(|_| DataError::SnapshotIntegrityFailed)?,
         ),
+        LineageRef::content_addressed(
+            request.mapping().id().clone(),
+            request.mapping().content_hash().clone(),
+        ),
+    ];
+    if let Some(evidence) = evidence {
+        lineage.push(
+            LineageRef::new(
+                evidence.authorization().id().clone(),
+                Some(evidence.authorization().version()),
+                Some(evidence.authorization_hash().clone()),
+            )
+            .map_err(|_| DataError::SnapshotIntegrityFailed)?,
+        );
+    }
+    lineage.extend([
         LineageRef::versioned(
             Ulid::new(request.calendar().identity())
                 .map_err(|_| DataError::SnapshotIntegrityFailed)?,
@@ -654,7 +782,7 @@ fn snapshot_lineage(
             Version::new(request.unit().version())
                 .map_err(|_| DataError::SnapshotIntegrityFailed)?,
         ),
-    ];
+    ]);
     lineage.extend(
         instruments
             .iter()
@@ -684,13 +812,30 @@ fn manifest_lineage(
     instruments: &[VersionRef],
 ) -> DataResult<Vec<LineageRef>> {
     let source = version_ref(&manifest.data_source)?;
+    let mapping_id = Ulid::new(manifest.instrument_mapping_id.clone())
+        .map_err(|_| DataError::SnapshotIntegrityFailed)?;
+    let mapping_hash = parse_hash(&manifest.instrument_mapping_digest)?;
     let calendar = version_ref(&manifest.calendar)?;
     let unit = version_ref(&manifest.unit)?;
     let mut lineage = vec![
         LineageRef::versioned(source.id().clone(), source.version()),
+        LineageRef::content_addressed(mapping_id, mapping_hash),
+    ];
+    if let Some(authorization) = manifest.authorization.as_ref() {
+        let (reference, hash) = version_ref_with_hash(authorization)?;
+        lineage.push(
+            LineageRef::new(
+                reference.id().clone(),
+                Some(reference.version()),
+                Some(hash),
+            )
+            .map_err(|_| DataError::SnapshotIntegrityFailed)?,
+        );
+    }
+    lineage.extend([
         LineageRef::versioned(calendar.id().clone(), calendar.version()),
         LineageRef::versioned(unit.id().clone(), unit.version()),
-    ];
+    ]);
     lineage.extend(
         instruments
             .iter()
@@ -735,6 +880,16 @@ fn version_ref(value: &ExactVersion) -> DataResult<VersionRef> {
     Ok(VersionRef::new(
         Ulid::new(&value.id).map_err(|_| DataError::SnapshotIntegrityFailed)?,
         Version::new(value.version).map_err(|_| DataError::SnapshotIntegrityFailed)?,
+    ))
+}
+
+fn version_ref_with_hash(value: &ExactVersionWithHash) -> DataResult<(VersionRef, ContentHash)> {
+    Ok((
+        VersionRef::new(
+            Ulid::new(value.id.clone()).map_err(|_| DataError::SnapshotIntegrityFailed)?,
+            Version::new(value.version).map_err(|_| DataError::SnapshotIntegrityFailed)?,
+        ),
+        parse_hash(&value.content_hash)?,
     ))
 }
 

@@ -18,6 +18,8 @@ use super::definitions::{DefinitionValue, InstrumentDefinition, InstrumentSubtyp
 use super::facts::MarketFact;
 use super::snapshots::SnapshotValue;
 
+pub use ficant_domain::market::data_source_content_hash;
+
 const MAGIC: &[u8; 4] = b"FCMD";
 const VERSION: u16 = 1;
 
@@ -74,7 +76,7 @@ impl FingerprintBuilder {
         OperationFingerprint(ContentHash::digest(&self.bytes))
     }
 
-    fn into_bytes(self) -> Vec<u8> {
+    pub(crate) fn into_bytes(self) -> Vec<u8> {
         self.bytes
     }
 }

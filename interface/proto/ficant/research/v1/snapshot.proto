@@ -3,6 +3,10 @@ syntax = "proto3";
 package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+import "ficant/core/v1/governance.proto";
+import "ficant/market/v1/data_source.proto";
+import "ficant/market/v1/definition.proto";
 
 message DataSnapshot {
   ficant.core.v1.Ulid data_snapshot_id = 1;
@@ -13,6 +17,8 @@ message DataSnapshot {
   ficant.core.v1.Sha256 manifest_hash = 6;
   ficant.core.v1.Sha256 blob_content_hash = 7;
   repeated ficant.core.v1.LineageRef lineage = 8;
+  ficant.core.v1.VersionRef authorization_ref = 9;
+  ficant.core.v1.Ulid actor_id = 10;
 }
 
 message UniverseSnapshot {
@@ -22,24 +28,45 @@ message UniverseSnapshot {
   ficant.core.v1.Sha256 filter_digest = 4;
   ficant.core.v1.Sha256 content_hash = 5;
   repeated ficant.core.v1.LineageRef lineage = 6;
+  ficant.core.v1.Ulid actor_id = 7;
 }
 
-message PublishDataSnapshotRequest {
+message ImportCanonicalQuoteSnapshotRequest {
   string idempotency_key = 1;
-  DataSnapshot data_snapshot = 2;
+  ficant.core.v1.Ulid target_snapshot_id = 2;
+  ficant.core.v1.VersionRef authorization_ref = 3;
+  ficant.market.v1.InstrumentMapping mapping = 4;
+  ficant.market.v1.Calendar calendar = 5;
+  ficant.market.v1.Unit unit = 6;
+  ficant.core.v1.MarketTime as_of = 7;
+  ficant.core.v1.MarketTime visible_at = 8;
+  string import_reason = 9;
 }
 
-message PublishDataSnapshotResponse {
-  DataSnapshot data_snapshot = 1;
+message ImportCanonicalQuoteSnapshotResponse {
+  oneof result {
+    DataSnapshot data_snapshot = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
 }
 
 message PublishUniverseSnapshotRequest {
   string idempotency_key = 1;
-  UniverseSnapshot universe_snapshot = 2;
+  reserved 2;
+  reserved "universe_snapshot";
+  ficant.core.v1.Ulid universe_snapshot_id = 3;
+  ficant.core.v1.OwnerRef owner = 4;
+  repeated ficant.core.v1.VersionRef instrument_versions = 5;
+  ficant.core.v1.Sha256 filter_digest = 6;
+  repeated ficant.core.v1.LineageRef lineage = 7;
+  ficant.core.v1.ChangeJustification change = 8;
 }
 
 message PublishUniverseSnapshotResponse {
-  UniverseSnapshot universe_snapshot = 1;
+  oneof result {
+    UniverseSnapshot universe_snapshot = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
 }
 
 message GetSnapshotRequest {
@@ -47,14 +74,15 @@ message GetSnapshotRequest {
 }
 
 message GetSnapshotResponse {
-  oneof snapshot {
+  oneof result {
     DataSnapshot data_snapshot = 1;
     UniverseSnapshot universe_snapshot = 2;
+    ficant.core.v1.ErrorDetail error = 3;
   }
 }
 
 service SnapshotService {
-  rpc PublishDataSnapshot(PublishDataSnapshotRequest) returns (PublishDataSnapshotResponse);
+  rpc ImportCanonicalQuoteSnapshot(ImportCanonicalQuoteSnapshotRequest) returns (ImportCanonicalQuoteSnapshotResponse);
   rpc PublishUniverseSnapshot(PublishUniverseSnapshotRequest) returns (PublishUniverseSnapshotResponse);
   rpc GetSnapshot(GetSnapshotRequest) returns (GetSnapshotResponse);
 }

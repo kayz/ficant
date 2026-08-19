@@ -1,9 +1,11 @@
 use async_trait::async_trait;
 use ficant_application::ports::{
-    AccessScope, AppendDefinitionVersion, DefinitionIdentity, DefinitionKind, DefinitionRepository,
-    DefinitionValue, InstrumentSubtype,
+    AccessScope, AppendDefinitionVersion, Cursor, CursorPage, DefinitionIdentity, DefinitionKind,
+    DefinitionRepository, DefinitionValue, GovernedAppendDefinitionVersion, InstrumentSubtype,
+    PageRequest, stored_definition_content_hash,
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory};
+use ficant_domain::governance::FoundationChangeOperation;
 use ficant_domain::primitives::{MarketTime, Ulid, Version};
 use ficant_domain::{ContentAddressed, VersionedDefinition};
 use sqlx::{Postgres, Transaction};
@@ -14,6 +16,32 @@ use super::common::{IdempotencyOutcome, application_error, lock_idempotency, map
 
 #[async_trait]
 impl DefinitionRepository for PostgresRepository {
+    async fn append_complete(
+        &self,
+        command: GovernedAppendDefinitionVersion,
+    ) -> Result<DefinitionValue, ApplicationError> {
+        command.scope().authorize(command.value().owner())?;
+        let value = command.value().clone();
+        let tenant_id = value.owner().tenant_id().as_str();
+        let mut transaction = self.pool().begin().await.map_err(map_sqlx_error)?;
+        let outcome = lock_idempotency(
+            &mut transaction,
+            tenant_id,
+            "definition:append-complete:v1",
+            command.idempotency_key().as_str(),
+            command.fingerprint().content_hash().as_bytes(),
+            command.value().identity(),
+        )
+        .await?;
+        if outcome == IdempotencyOutcome::Replay {
+            verify_governed_definition_replay(&mut transaction, &command).await?;
+        } else {
+            append_governed_definition(&mut transaction, &command).await?;
+        }
+        transaction.commit().await.map_err(map_sqlx_error)?;
+        Ok(value)
+    }
+
     async fn create_identity(&self, identity: DefinitionIdentity) -> Result<(), ApplicationError> {
         let tenant_id = identity.owner().tenant_id().as_str();
         let mut transaction = self.pool().begin().await.map_err(map_sqlx_error)?;
@@ -140,6 +168,252 @@ impl DefinitionRepository for PostgresRepository {
     ) -> Result<Option<DefinitionValue>, ApplicationError> {
         read_definition(self, scope, definition_id.as_str(), None, Some(&instant)).await
     }
+
+    async fn list_versions(
+        &self,
+        scope: &AccessScope,
+        definition_id: Ulid,
+        page: PageRequest,
+    ) -> Result<CursorPage<DefinitionValue>, ApplicationError> {
+        page.authorize_scope(scope)?;
+        let owners = scope
+            .allowed_owner_ids()
+            .iter()
+            .map(|id| id.as_str().to_owned())
+            .collect::<Vec<_>>();
+        let identity: Option<(String,)> = sqlx::query_as(
+            "SELECT kind FROM core.definition_identities
+             WHERE tenant_id = $1 AND definition_id = $2
+               AND owner_id::text = ANY($3::text[])",
+        )
+        .bind(scope.tenant_id().as_str())
+        .bind(definition_id.as_str())
+        .bind(&owners)
+        .fetch_optional(self.pool())
+        .await
+        .map_err(map_sqlx_error)?;
+        let Some((kind,)) = identity else {
+            return Ok(CursorPage::new(Vec::new(), None));
+        };
+        let after = page
+            .cursor()
+            .map(|cursor| cursor.opaque_value().parse::<i64>().map_err(|_| invalid()))
+            .transpose()?
+            .unwrap_or(0);
+        let limit = i64::from(page.limit()) + 1;
+        let table = match kind.as_str() {
+            "UNIT" => "market.units",
+            "INSTRUMENT" => "market.instruments",
+            "CALENDAR" => "market.calendars",
+            "MARKET_RULE_PACK" => "market.market_rule_packs",
+            _ => return Err(storage_corruption()),
+        };
+        let id_column = match kind.as_str() {
+            "UNIT" => "unit_id",
+            "INSTRUMENT" => "instrument_id",
+            "CALENDAR" => "calendar_id",
+            "MARKET_RULE_PACK" => "rule_pack_id",
+            _ => return Err(storage_corruption()),
+        };
+        let query = format!(
+            "SELECT version, payload FROM {table}
+             WHERE tenant_id = $1 AND {id_column} = $2
+               AND owner_id::text = ANY($3::text[]) AND version > $4
+             ORDER BY version ASC LIMIT $5",
+        );
+        let rows: Vec<(i64, Vec<u8>)> = sqlx::query_as(&query)
+            .bind(scope.tenant_id().as_str())
+            .bind(definition_id.as_str())
+            .bind(&owners)
+            .bind(after)
+            .bind(limit)
+            .fetch_all(self.pool())
+            .await
+            .map_err(map_sqlx_error)?;
+        let page_len = usize::try_from(page.limit()).map_err(|_| invalid())?;
+        let has_more = rows.len() > page_len;
+        let page_rows = rows.into_iter().take(page_len).collect::<Vec<_>>();
+        let next_cursor = if has_more {
+            let (version, _) = page_rows.last().ok_or_else(storage_corruption)?;
+            Some(Cursor::issue(
+                self.cursor_codec(),
+                scope,
+                version.to_string(),
+            )?)
+        } else {
+            None
+        };
+        let values = page_rows
+            .into_iter()
+            .map(|(_, payload)| decode_definition(&payload))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(CursorPage::new(values, next_cursor))
+    }
+}
+
+async fn verify_governed_definition_replay(
+    transaction: &mut Transaction<'_, Postgres>,
+    command: &GovernedAppendDefinitionVersion,
+) -> Result<(), ApplicationError> {
+    let value = command.value();
+    let persisted = read_exact_definition_in_transaction(transaction, value).await?;
+    if persisted.as_ref() != Some(value) {
+        return Err(application_error(
+            ApplicationErrorCategory::ImmutableViolation,
+            false,
+        ));
+    }
+    super::governance::verify_change_replay(
+        transaction,
+        value.owner().tenant_id().as_str(),
+        FoundationChangeOperation::AppendMarketDefinition,
+        &format!("market-definition:{}@{}", value.identity(), value.version()),
+        command.fingerprint().content_hash(),
+    )
+    .await
+}
+
+async fn append_governed_definition(
+    transaction: &mut Transaction<'_, Postgres>,
+    command: &GovernedAppendDefinitionVersion,
+) -> Result<(), ApplicationError> {
+    let value = command.value();
+    let expected_latest = lock_definition_identity(transaction, command).await?;
+    let before_hash = if expected_latest == 0 {
+        None
+    } else {
+        Some(stored_definition_content_hash(
+            &read_exact_definition_in_transaction_for_version(
+                transaction,
+                value,
+                u64::try_from(expected_latest).map_err(|_| invalid())?,
+            )
+            .await?
+            .ok_or_else(|| application_error(ApplicationErrorCategory::VersionConflict, true))?,
+        ))
+    };
+    insert_definition(transaction, value).await?;
+    advance_definition_identity(transaction, value, expected_latest).await?;
+    let change = command.change_record(before_hash)?;
+    super::governance::insert_change(transaction, value.owner().tenant_id().as_str(), &change).await
+}
+
+async fn lock_definition_identity(
+    transaction: &mut Transaction<'_, Postgres>,
+    command: &GovernedAppendDefinitionVersion,
+) -> Result<i64, ApplicationError> {
+    let value = command.value();
+    let expected_latest = command
+        .expected_latest_version()
+        .map(|version| version_i64(version.get()))
+        .transpose()?
+        .unwrap_or(0);
+    if expected_latest == 0 {
+        let inserted = sqlx::query(
+            "INSERT INTO core.definition_identities
+             (tenant_id, definition_id, owner_id, kind, idempotency_key, fingerprint, latest_version)
+             VALUES ($1, $2, $3, $4, $5, $6, 0)
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(value.owner().tenant_id().as_str())
+        .bind(value.identity())
+        .bind(value.owner().owner_id().as_str())
+        .bind(definition_kind(value.kind()))
+        .bind(command.idempotency_key().as_str())
+        .bind(command.fingerprint().content_hash().as_bytes().as_slice())
+        .execute(&mut **transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+        if inserted.rows_affected() != 1 {
+            return Err(application_error(
+                ApplicationErrorCategory::VersionConflict,
+                true,
+            ));
+        }
+        return Ok(0);
+    }
+    let identity: Option<(String, String, i64)> = sqlx::query_as(
+        "SELECT owner_id::text, kind, latest_version
+         FROM core.definition_identities
+         WHERE tenant_id = $1 AND definition_id = $2
+         FOR UPDATE",
+    )
+    .bind(value.owner().tenant_id().as_str())
+    .bind(value.identity())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    if identity
+        != Some((
+            value.owner().owner_id().as_str().to_owned(),
+            definition_kind(value.kind()).to_owned(),
+            expected_latest,
+        ))
+    {
+        return Err(application_error(
+            ApplicationErrorCategory::VersionConflict,
+            true,
+        ));
+    }
+    Ok(expected_latest)
+}
+
+async fn advance_definition_identity(
+    transaction: &mut Transaction<'_, Postgres>,
+    value: &DefinitionValue,
+    expected_latest: i64,
+) -> Result<(), ApplicationError> {
+    let updated = sqlx::query(
+        "UPDATE core.definition_identities
+         SET latest_version = $3
+         WHERE tenant_id = $1 AND definition_id = $2 AND latest_version = $4",
+    )
+    .bind(value.owner().tenant_id().as_str())
+    .bind(value.identity())
+    .bind(version_i64(value.version())?)
+    .bind(expected_latest)
+    .execute(&mut **transaction)
+    .await
+    .map_err(map_sqlx_error)?;
+    if updated.rows_affected() != 1 {
+        return Err(application_error(
+            ApplicationErrorCategory::ConcurrencyConflict,
+            true,
+        ));
+    }
+    Ok(())
+}
+
+async fn read_exact_definition_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    value: &DefinitionValue,
+) -> Result<Option<DefinitionValue>, ApplicationError> {
+    read_exact_definition_in_transaction_for_version(transaction, value, value.version()).await
+}
+
+async fn read_exact_definition_in_transaction_for_version(
+    transaction: &mut Transaction<'_, Postgres>,
+    value: &DefinitionValue,
+    version: u64,
+) -> Result<Option<DefinitionValue>, ApplicationError> {
+    let (table, id_column) = match value.kind() {
+        DefinitionKind::Unit => ("market.units", "unit_id"),
+        DefinitionKind::Instrument => ("market.instruments", "instrument_id"),
+        DefinitionKind::Calendar => ("market.calendars", "calendar_id"),
+        DefinitionKind::MarketRulePack => ("market.market_rule_packs", "rule_pack_id"),
+    };
+    let query = format!(
+        "SELECT payload FROM {table}
+         WHERE tenant_id = $1 AND {id_column} = $2 AND version = $3",
+    );
+    let payload: Option<Vec<u8>> = sqlx::query_scalar(&query)
+        .bind(value.owner().tenant_id().as_str())
+        .bind(value.identity())
+        .bind(version_i64(version)?)
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(map_sqlx_error)?;
+    payload.map(|bytes| decode_definition(&bytes)).transpose()
 }
 
 // Keeping all definition variants together makes the table mapping auditable against the enum.

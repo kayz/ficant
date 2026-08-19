@@ -10,6 +10,8 @@ use ficant_contracts::ficant::app::v1::{
     platform_service_server::PlatformService, refresh_session_response, revoke_app_launch_response,
     revoke_session_response,
 };
+use ficant_domain::governance::PlatformRole;
+use ficant_domain::primitives::Ulid;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
 use tonic::Request;
@@ -65,8 +67,20 @@ fn app(allowed_subjects: &[&str]) -> AppRegistration {
 }
 
 fn identity(subject: &str, token: &str) -> TrustedIdentity {
-    TrustedIdentity::bearer(subject, token.as_bytes(), ["rates:read", "other:read"])
-        .expect("valid identity")
+    TrustedIdentity::bearer(
+        subject,
+        token.as_bytes(),
+        id('A'),
+        id('T'),
+        vec![id('B')],
+        PlatformRole::Researcher,
+        ["rates:read", "other:read"],
+    )
+    .expect("valid identity")
+}
+
+fn id(suffix: char) -> Ulid {
+    Ulid::new(format!("01ARZ3NDEKTSV4RRFFQ69G5F0{suffix}")).unwrap()
 }
 
 fn service(

@@ -5,10 +5,10 @@ use ficant_domain::research::{
 };
 
 use crate::ports::{
-    AccessScope, ApplicationResult, BeginBlobStage, BlobStore, IdempotencyKey,
-    PositionSnapshotRepository, PublishSnapshot, SnapshotBlobRole, SnapshotRepository,
-    SnapshotValue, StagedSnapshotBlob, StagedSnapshotProof, VerifiedSnapshotBlob,
-    VerifiedSnapshotProof, VerifyBlobStage,
+    AccessScope, ApplicationResult, BeginBlobStage, BlobStore, FoundationChangeContext,
+    GovernedPublishSnapshot, IdempotencyKey, PositionSnapshotRepository, SnapshotBlobRole,
+    SnapshotRepository, SnapshotValue, StagedSnapshotBlob, StagedSnapshotProof,
+    VerifiedSnapshotBlob, VerifiedSnapshotProof, VerifyBlobStage,
 };
 use crate::{ApplicationError, ApplicationErrorCategory};
 
@@ -92,9 +92,10 @@ impl<'a> PublishPositionSnapshot<'a> {
     /// Returns a classified access, hash, blob, or persistence failure without publishing metadata.
     pub async fn execute(
         &self,
-        scope: &AccessScope,
+        change_context: FoundationChangeContext,
         payload: PositionSnapshotPayload,
     ) -> ApplicationResult<PositionSnapshot> {
+        let scope = change_context.principal().access_scope().clone();
         scope.authorize(payload.snapshot.owner())?;
         let bytes = payload.snapshot.canonical_payload();
         let expected_hash = payload.snapshot.content_hash().clone();
@@ -111,8 +112,12 @@ impl<'a> PublishPositionSnapshot<'a> {
                 payload.idempotency_key.scoped("position-payload-stage")?,
             )?)
             .await?;
-        if let Err(error) = self.blob_store.append_chunk(scope, &staged_id, bytes).await {
-            let _ = self.blob_store.discard_stage(scope, &staged_id).await;
+        if let Err(error) = self
+            .blob_store
+            .append_chunk(&scope, &staged_id, bytes)
+            .await
+        {
+            let _ = self.blob_store.discard_stage(&scope, &staged_id).await;
             return Err(error);
         }
         let staged = StagedSnapshotBlob::new(
@@ -126,12 +131,13 @@ impl<'a> PublishPositionSnapshot<'a> {
             .await?;
         let proof =
             VerifiedSnapshotProof::position(VerifiedSnapshotBlob::from_staged(staged, promoted)?)?;
-        let command = PublishSnapshot::new(
-            SnapshotValue::Position(payload.snapshot),
+        let command = GovernedPublishSnapshot::administrator_position(
+            change_context,
+            payload.snapshot,
             proof,
             payload.idempotency_key.scoped("position-metadata")?,
         )?;
-        match self.snapshots.publish_verified_manifest(command).await? {
+        match self.snapshots.publish_governed(command).await? {
             SnapshotValue::Position(snapshot) => Ok(snapshot),
             SnapshotValue::Data(_)
             | SnapshotValue::DataHealthThresholdProfile(_)

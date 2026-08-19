@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use ficant_application::ports::{
-    AccessScope, AeadCursorCodec, ArtifactRepository, ComparisonDimension, CreateExperimentRun,
-    Cursor, DefinitionRepository, DefinitionValue, ExecutionExternalInput, ExperimentRepository,
-    ExternalInputArtifactBinding, GraphRunRecord, IdempotencyKey, IntegrityEventSink,
-    MarketRunRulePackResolver, NodeImplementation, OutputTrace, PageRequest,
+    AccessScope, AeadCursorCodec, ArtifactRepository, AuthorizedPrincipal, ComparisonDimension,
+    CreateExperimentRun, Cursor, DefinitionRepository, DefinitionValue, ExecutionExternalInput,
+    ExperimentRepository, ExternalInputArtifactBinding, GraphRunRecord, IdempotencyKey,
+    IntegrityEventSink, MarketRunRulePackResolver, NodeImplementation, OutputTrace, PageRequest,
     Phase4ExecutionRepository, ReproducibilityIdentity, ReproducibilityIdentityInput,
     RulePackBinding, RunJournalRepository, SafeTraceContext, SnapshotRepository,
     SnapshotVerifiedReadMetadataRepository, StoredNodeManifest, TransitionExperimentRun,
@@ -17,6 +17,7 @@ use ficant_contracts::ficant::core::v1 as core_pb;
 use ficant_contracts::ficant::research::v1 as research_pb;
 use ficant_contracts::ficant::research::v1::experiment_service_server::ExperimentService;
 use ficant_domain::ContentAddressed;
+use ficant_domain::governance::PlatformRole;
 use ficant_domain::primitives::{ContentHash, LineageRef, OwnerRef, Ulid, Version, VersionRef};
 use ficant_domain::research::{
     DeterminismClass, ExperimentRun, ExperimentRunInput, FilesystemPermission, GraphExternalInput,
@@ -50,8 +51,6 @@ pub trait TrustedNodeCatalog: Send + Sync {
 
 #[derive(Clone)]
 pub struct TrustedExperimentScope {
-    access: AccessScope,
-    owner: OwnerRef,
     runtime_image_digest: ContentHash,
     environment_attestation: String,
     environment_digest: ContentHash,
@@ -59,42 +58,29 @@ pub struct TrustedExperimentScope {
 }
 
 impl TrustedExperimentScope {
-    /// Builds the deployment-owned scope and attestation. None of these values are accepted from
-    /// an RPC request.
+    /// Builds the deployment-owned runtime attestation. None of these values are accepted from an
+    /// RPC request. The legacy identity parameters remain temporarily for constructor-call-site
+    /// compatibility, but authorization is derived exclusively from each request principal.
     ///
     /// # Errors
     ///
-    /// Returns an application error when the environment attestation or access scope is invalid.
+    /// Returns an application error when the environment attestation is invalid.
     pub fn new(
-        tenant_id: Ulid,
-        owner_id: Ulid,
-        actor_id: Ulid,
+        _tenant_id: Ulid,
+        _owner_id: Ulid,
+        _actor_id: Ulid,
         runtime_image_digest: ContentHash,
         environment_attestation: String,
         native_source_digest: ContentHash,
     ) -> Result<Self, ApplicationError> {
         validate_environment_attestation(&environment_attestation)?;
-        let owner = OwnerRef::new(tenant_id.clone(), owner_id.clone());
-        let access = AccessScope::new(tenant_id, actor_id, vec![owner_id])?;
         let environment_digest = ContentHash::digest(environment_attestation.as_bytes());
         Ok(Self {
-            access,
-            owner,
             runtime_image_digest,
             environment_attestation,
             environment_digest,
             native_source_digest,
         })
-    }
-
-    #[must_use]
-    pub fn access(&self) -> &AccessScope {
-        &self.access
-    }
-
-    #[must_use]
-    pub fn owner(&self) -> &OwnerRef {
-        &self.owner
     }
 
     #[must_use]
@@ -175,20 +161,30 @@ impl ExperimentGrpcService {
         &self,
         metadata: &tonic::metadata::MetadataMap,
         scope: &str,
-    ) -> Result<(), Status> {
+    ) -> Result<AuthorizedPrincipal, Status> {
         let session = self
             .platform
             .current_session(&request_credential(metadata))
             .map_err(|_| Status::unauthenticated("当前身份未通过认证"))?;
-        if !session.has_scope(scope) {
-            return Err(Status::permission_denied("当前身份无权执行此操作"));
-        }
-        Ok(())
+        let principal = session
+            .authorized_principal()
+            .map_err(|_| Status::permission_denied("当前身份无权执行此操作"))?;
+        require_experiment_access(principal, scope)
     }
 
     fn status(&self, operation: &str, error: &ApplicationError) -> Status {
         self.errors.status(operation, operation, error)
     }
+}
+
+fn require_experiment_access(
+    principal: AuthorizedPrincipal,
+    scope: &str,
+) -> Result<AuthorizedPrincipal, Status> {
+    if principal.active_role() != PlatformRole::Researcher || !principal.has_scope(scope) {
+        return Err(Status::permission_denied("当前身份无权执行此操作"));
+    }
+    Ok(principal)
 }
 
 #[tonic::async_trait]
@@ -197,24 +193,25 @@ impl ExperimentService for ExperimentGrpcService {
         &self,
         request: Request<research_pb::CreateRunRequest>,
     ) -> Result<Response<research_pb::CreateRunResponse>, Status> {
-        self.authorize(request.metadata(), WRITE_SCOPE)?;
+        let principal = self.authorize(request.metadata(), WRITE_SCOPE)?;
         let value = request.into_inner();
         let run = legacy_run_from_proto(
             value
                 .run
                 .ok_or_else(|| Status::invalid_argument("run 缺失"))?,
             &self.trusted,
+            &principal,
         )
         .map_err(|error| self.status("experiment-create-run", &error))?;
         let validated = MarketRunRulePackResolver::new(
             self.definitions.as_ref(),
             self.snapshot_repository.as_ref(),
         )
-        .resolve(self.trusted.access(), run)
+        .resolve(principal.access_scope(), run)
         .await
         .map_err(|error| self.status("experiment-create-run", &error))?;
         let command = CreateExperimentRun::new(
-            self.trusted.access().clone(),
+            principal.access_scope().clone(),
             validated,
             IdempotencyKey::new(value.idempotency_key)
                 .map_err(|error| self.status("experiment-create-run", &error))?,
@@ -234,10 +231,16 @@ impl ExperimentService for ExperimentGrpcService {
         &self,
         request: Request<research_pb::TransitionRunRequest>,
     ) -> Result<Response<research_pb::TransitionRunResponse>, Status> {
-        self.authorize(request.metadata(), WRITE_SCOPE)?;
+        let principal = self.authorize(request.metadata(), WRITE_SCOPE)?;
         let value = request.into_inner();
         let run_id = parse_ulid(value.run_id)?;
         let next_state = legacy_run_state(value.next_state)?;
+        let current = self
+            .experiments
+            .get_run(principal.access_scope(), run_id.clone())
+            .await
+            .map_err(|error| self.status("experiment-transition-run", &error))?
+            .ok_or_else(|| self.status("experiment-transition-run", &not_found()))?;
         let key = format!(
             "legacy-transition/{}/{}/{}",
             run_id.as_str(),
@@ -245,8 +248,8 @@ impl ExperimentService for ExperimentGrpcService {
             value.next_state
         );
         let command = TransitionExperimentRun::new(
-            self.trusted.access().clone(),
-            self.trusted.owner().clone(),
+            principal.access_scope().clone(),
+            current.owner().clone(),
             run_id,
             value.expected_revision,
             next_state,
@@ -268,11 +271,11 @@ impl ExperimentService for ExperimentGrpcService {
         &self,
         request: Request<research_pb::GetRunRequest>,
     ) -> Result<Response<research_pb::GetRunResponse>, Status> {
-        self.authorize(request.metadata(), READ_SCOPE)?;
+        let principal = self.authorize(request.metadata(), READ_SCOPE)?;
         let run_id = parse_ulid(request.into_inner().run_id)?;
         let run = self
             .experiments
-            .get_run(self.trusted.access(), run_id)
+            .get_run(principal.access_scope(), run_id)
             .await
             .map_err(|error| self.status("experiment-get-run", &error))?
             .ok_or_else(|| self.status("experiment-get-run", &not_found()))?;
@@ -285,7 +288,7 @@ impl ExperimentService for ExperimentGrpcService {
         &self,
         request: Request<research_pb::ReadRunJournalRequest>,
     ) -> Result<Response<research_pb::ReadRunJournalResponse>, Status> {
-        self.authorize(request.metadata(), READ_SCOPE)?;
+        let principal = self.authorize(request.metadata(), READ_SCOPE)?;
         let value = request.into_inner();
         let run_id = parse_ulid(value.run_id)?;
         let requested_page = value.page.unwrap_or(core_pb::PageRequest {
@@ -307,7 +310,7 @@ impl ExperimentService for ExperimentGrpcService {
                 .then(|| {
                     Cursor::issue(
                         self.cursor_codec.as_ref(),
-                        self.trusted.access(),
+                        principal.access_scope(),
                         value.from_sequence.to_string(),
                     )
                 })
@@ -315,17 +318,17 @@ impl ExperimentService for ExperimentGrpcService {
         } else {
             Cursor::resume(
                 self.cursor_codec.as_ref(),
-                self.trusted.access(),
+                principal.access_scope(),
                 requested_page.cursor,
             )
             .map(Some)
         }
         .map_err(|error| self.status("experiment-read-journal", &error))?;
-        let page_request = PageRequest::new(self.trusted.access().clone(), cursor, limit)
+        let page_request = PageRequest::new(principal.access_scope().clone(), cursor, limit)
             .map_err(|error| self.status("experiment-read-journal", &error))?;
         let page = self
             .journals
-            .read(self.trusted.access(), run_id, page_request)
+            .read(principal.access_scope(), run_id, page_request)
             .await
             .map_err(|error| self.status("experiment-read-journal", &error))?;
         let next_cursor = page
@@ -341,10 +344,10 @@ impl ExperimentService for ExperimentGrpcService {
         &self,
         request: Request<research_pb::SubmitGraphRunRequest>,
     ) -> Result<Response<research_pb::SubmitGraphRunResponse>, Status> {
-        self.authorize(request.metadata(), WRITE_SCOPE)?;
+        let principal = self.authorize(request.metadata(), WRITE_SCOPE)?;
         let trace = trace_context(request.get_ref());
         let parsed = self
-            .prepare_submission(request.into_inner(), trace)
+            .prepare_submission(request.into_inner(), trace, &principal)
             .await
             .map_err(|error| self.status("experiment-submit", &error))?;
         let record = Phase4Submission::new(self.phase4.as_ref())
@@ -361,11 +364,11 @@ impl ExperimentService for ExperimentGrpcService {
         &self,
         request: Request<research_pb::GetGraphRunRequest>,
     ) -> Result<Response<research_pb::GetGraphRunResponse>, Status> {
-        self.authorize(request.metadata(), READ_SCOPE)?;
+        let principal = self.authorize(request.metadata(), READ_SCOPE)?;
         let run_id = parse_ulid(request.into_inner().run_id)?;
         let record = self
             .phase4
-            .get_graph_run(self.trusted.access(), &run_id)
+            .get_graph_run(principal.access_scope(), &run_id)
             .await
             .map_err(|error| self.status("experiment-get-graph-run", &error))?
             .ok_or_else(|| self.status("experiment-get-graph-run", &not_found()))?;
@@ -378,11 +381,11 @@ impl ExperimentService for ExperimentGrpcService {
         &self,
         request: Request<research_pb::ListNodeOutputManifestsRequest>,
     ) -> Result<Response<research_pb::ListNodeOutputManifestsResponse>, Status> {
-        self.authorize(request.metadata(), READ_SCOPE)?;
+        let principal = self.authorize(request.metadata(), READ_SCOPE)?;
         let run_id = parse_ulid(request.into_inner().run_id)?;
         let manifests = self
             .phase4
-            .list_node_manifests(self.trusted.access(), &run_id)
+            .list_node_manifests(principal.access_scope(), &run_id)
             .await
             .map_err(|error| self.status("experiment-list-manifests", &error))?
             .iter()
@@ -397,13 +400,13 @@ impl ExperimentService for ExperimentGrpcService {
         &self,
         request: Request<research_pb::TraceGraphOutputRequest>,
     ) -> Result<Response<research_pb::TraceGraphOutputResponse>, Status> {
-        self.authorize(request.metadata(), READ_SCOPE)?;
+        let principal = self.authorize(request.metadata(), READ_SCOPE)?;
         let value = request.into_inner();
         let run_id = parse_ulid(value.run_id)?;
         let node_id = parse_ulid(value.node_id)?;
         let trace = self
             .phase4
-            .trace_output(self.trusted.access(), &run_id, &node_id)
+            .trace_output(principal.access_scope(), &run_id, &node_id)
             .await
             .map_err(|error| self.status("experiment-trace-output", &error))?
             .ok_or_else(|| self.status("experiment-trace-output", &not_found()))?;
@@ -416,14 +419,14 @@ impl ExperimentService for ExperimentGrpcService {
         &self,
         request: Request<research_pb::ReadNodeOutputRequest>,
     ) -> Result<Response<research_pb::ReadNodeOutputResponse>, Status> {
-        self.authorize(request.metadata(), READ_SCOPE)?;
+        let principal = self.authorize(request.metadata(), READ_SCOPE)?;
         let trace_context = trace_context(request.get_ref());
         let value = request.into_inner();
         let run_id = parse_ulid(value.run_id)?;
         let node_id = parse_ulid(value.node_id)?;
         let trace = self
             .phase4
-            .trace_output(self.trusted.access(), &run_id, &node_id)
+            .trace_output(principal.access_scope(), &run_id, &node_id)
             .await
             .map_err(|error| self.status("experiment-read-node-output", &error))?
             .ok_or_else(|| self.status("experiment-read-node-output", &not_found()))?;
@@ -449,7 +452,7 @@ impl ExperimentService for ExperimentGrpcService {
         );
         let verified = reads
             .read_verified_artifact(
-                self.trusted.access(),
+                principal.access_scope(),
                 stored.artifact.id().clone(),
                 trace_context,
             )
@@ -483,13 +486,13 @@ impl ExperimentService for ExperimentGrpcService {
         &self,
         request: Request<research_pb::CompareGraphRunsRequest>,
     ) -> Result<Response<research_pb::CompareGraphRunsResponse>, Status> {
-        self.authorize(request.metadata(), READ_SCOPE)?;
+        let principal = self.authorize(request.metadata(), READ_SCOPE)?;
         let value = request.into_inner();
         let left = parse_ulid(value.left_run_id)?;
         let right = parse_ulid(value.right_run_id)?;
         let comparison = self
             .phase4
-            .compare_graph_runs(self.trusted.access(), &left, &right)
+            .compare_graph_runs(principal.access_scope(), &left, &right)
             .await
             .map_err(|error| self.status("experiment-compare-runs", &error))?
             .ok_or_else(|| self.status("experiment-compare-runs", &not_found()))?;
@@ -511,12 +514,13 @@ impl ExperimentGrpcService {
         &self,
         request: research_pb::SubmitGraphRunRequest,
         trace: SafeTraceContext,
+        principal: &AuthorizedPrincipal,
     ) -> Result<PreparedGraphSubmission, ApplicationError> {
         let run_id = parse_ulid_app(request.run_id)?;
         let graph = graph_from_proto(request.graph.ok_or_else(validation)?)?;
-        if graph.owner() != self.trusted.owner() {
-            return Err(forbidden());
-        }
+        let owner = graph.owner().clone();
+        let scope = principal.access_scope();
+        scope.authorize(&owner)?;
         let reads = VerifiedReadFacade::new(
             self.artifacts.as_ref(),
             &NoSignals,
@@ -529,22 +533,14 @@ impl ExperimentGrpcService {
         let claimed_data = parse_hash_app(request.data_snapshot_hash)?;
         let claimed_universe = parse_hash_app(request.universe_snapshot_hash)?;
         let data = reads
-            .read_verified_snapshot(
-                self.trusted.access(),
-                data_ref.object_id().clone(),
-                trace.clone(),
-            )
+            .read_verified_snapshot(scope, data_ref.object_id().clone(), trace.clone())
             .await?;
         let universe = reads
-            .read_verified_snapshot(
-                self.trusted.access(),
-                universe_ref.object_id().clone(),
-                trace.clone(),
-            )
+            .read_verified_snapshot(scope, universe_ref.object_id().clone(), trace.clone())
             .await?;
         match data {
             VerifiedSnapshotRead::Data { snapshot, .. }
-                if snapshot.owner() == self.trusted.owner()
+                if snapshot.owner() == &owner
                     && snapshot.id() == data_ref.object_id()
                     && data_ref.version().is_none()
                     && data_ref.content_hash() == Some(snapshot.content_hash())
@@ -553,7 +549,7 @@ impl ExperimentGrpcService {
         }
         match universe {
             VerifiedSnapshotRead::Universe { snapshot, .. }
-                if snapshot.owner() == self.trusted.owner()
+                if snapshot.owner() == &owner
                     && snapshot.id() == universe_ref.object_id()
                     && universe_ref.version().is_none()
                     && universe_ref.content_hash() == Some(snapshot.content_hash())
@@ -569,13 +565,13 @@ impl ExperimentGrpcService {
             let claimed = parse_hash_app(binding.content_hash)?;
             let value = self
                 .definitions
-                .get_version(self.trusted.access(), id.clone(), version)
+                .get_version(scope, id.clone(), version)
                 .await?
                 .ok_or_else(not_found)?;
             let DefinitionValue::MarketRulePack(rule) = value else {
                 return Err(lineage());
             };
-            if rule.owner() != self.trusted.owner() || rule.content_hash() != &claimed {
+            if rule.owner() != &owner || rule.content_hash() != &claimed {
                 return Err(lineage());
             }
             rule_bindings.push(RulePackBinding {
@@ -592,13 +588,9 @@ impl ExperimentGrpcService {
             let artifact_ref = lineage_from_proto(input.resolved_artifact.ok_or_else(validation)?)?;
             let claimed = parse_hash_app(input.content_hash)?;
             let verified = reads
-                .read_verified_artifact(
-                    self.trusted.access(),
-                    artifact_ref.object_id().clone(),
-                    trace.clone(),
-                )
+                .read_verified_artifact(scope, artifact_ref.object_id().clone(), trace.clone())
                 .await?;
-            if verified.artifact().owner() != self.trusted.owner()
+            if verified.artifact().owner() != &owner
                 || verified.artifact().content_hash() != &claimed
                 || artifact_ref.content_hash() != Some(&claimed)
             {
@@ -649,8 +641,8 @@ impl ExperimentGrpcService {
         );
         Ok(PreparedGraphSubmission {
             idempotency_key: request.idempotency_key,
-            scope: self.trusted.access.clone(),
-            owner: self.trusted.owner.clone(),
+            scope: scope.clone(),
+            owner,
             run_id,
             graph,
             data_snapshot: data_ref,
@@ -838,6 +830,7 @@ fn graph_run_to_proto(record: &GraphRunRecord) -> Result<research_pb::GraphRun, 
 fn legacy_run_from_proto(
     value: research_pb::ExperimentRun,
     trusted: &TrustedExperimentScope,
+    principal: &AuthorizedPrincipal,
 ) -> Result<ExperimentRun, ApplicationError> {
     if value.state != research_pb::RunState::Created as i32 || value.revision != 1 {
         return Err(ApplicationError::new(
@@ -846,8 +839,9 @@ fn legacy_run_from_proto(
         ));
     }
     let owner = owner_from_proto(value.owner.ok_or_else(validation)?)?;
+    principal.access_scope().authorize(&owner)?;
     let runtime_image_digest = parse_hash_app(value.runtime_image_digest)?;
-    if &owner != trusted.owner() || runtime_image_digest != trusted.runtime_image_digest {
+    if runtime_image_digest != trusted.runtime_image_digest {
         return Err(forbidden());
     }
     ExperimentRun::new(ExperimentRunInput {
@@ -1372,6 +1366,24 @@ fn hash_mismatch() -> ApplicationError {
 mod tests {
     use super::*;
     use tonic::Code;
+
+    #[test]
+    fn platform_administrator_cannot_enter_researcher_experiment_operations() {
+        let principal = AuthorizedPrincipal::new(
+            "experiment-admin".to_owned(),
+            Ulid::new("01J00000000000000000000001").unwrap(),
+            Ulid::new("01J00000000000000000000002").unwrap(),
+            vec![Ulid::new("01J00000000000000000000003").unwrap()],
+            PlatformRole::PlatformAdmin,
+            vec![READ_SCOPE.to_owned(), WRITE_SCOPE.to_owned()],
+            ContentHash::digest(b"credential-fingerprint"),
+        )
+        .unwrap();
+
+        let error = require_experiment_access(principal, WRITE_SCOPE)
+            .expect_err("administrator role must fail before any experiment repository call");
+        assert_eq!(error.code(), Code::PermissionDenied);
+    }
 
     fn fixture_output() -> NativePortValue {
         NativePortValue::new(

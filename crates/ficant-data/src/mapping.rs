@@ -1,4 +1,6 @@
-use ficant_domain::primitives::{ContentHash, EffectivePeriod, MarketTime, OwnerRef, VersionRef};
+use ficant_domain::primitives::{
+    ContentHash, EffectivePeriod, MarketTime, OwnerRef, Ulid, VersionRef,
+};
 
 use crate::{DataError, DataResult};
 
@@ -44,13 +46,16 @@ impl InstrumentMappingEntry {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InstrumentMapping {
+    mapping_id: Ulid,
     owner: OwnerRef,
     source: VersionRef,
     entries: Vec<InstrumentMappingEntry>,
+    content_hash: ContentHash,
 }
 
 impl InstrumentMapping {
     pub fn new(
+        mapping_id: Ulid,
         owner: OwnerRef,
         source: VersionRef,
         mut entries: Vec<InstrumentMappingEntry>,
@@ -77,11 +82,18 @@ impl InstrumentMapping {
                 return Err(DataError::InvalidConfiguration);
             }
         }
+        let content_hash = mapping_content_hash(&mapping_id, &owner, &source, &entries);
         Ok(Self {
+            mapping_id,
             owner,
             source,
             entries,
+            content_hash,
         })
+    }
+
+    pub fn id(&self) -> &Ulid {
+        &self.mapping_id
     }
 
     pub fn owner(&self) -> &OwnerRef {
@@ -97,33 +109,11 @@ impl InstrumentMapping {
     }
 
     pub fn contract_hash(&self) -> ContentHash {
-        let mut bytes = b"ficant-instrument-mapping/v1\0".to_vec();
-        append(&mut bytes, self.owner.tenant_id().as_str());
-        append(&mut bytes, self.owner.owner_id().as_str());
-        append(&mut bytes, self.source.id().as_str());
-        bytes.extend_from_slice(&self.source.version().get().to_be_bytes());
-        for entry in &self.entries {
-            append(&mut bytes, entry.source_instrument_key());
-            bytes.extend_from_slice(
-                &entry
-                    .effective()
-                    .from()
-                    .instant()
-                    .timestamp_micros()
-                    .to_be_bytes(),
-            );
-            bytes.extend_from_slice(
-                &entry
-                    .effective()
-                    .to()
-                    .instant()
-                    .timestamp_micros()
-                    .to_be_bytes(),
-            );
-            append(&mut bytes, entry.instrument().id().as_str());
-            bytes.extend_from_slice(&entry.instrument().version().get().to_be_bytes());
-        }
-        ContentHash::digest(&bytes)
+        self.content_hash.clone()
+    }
+
+    pub fn content_hash(&self) -> &ContentHash {
+        &self.content_hash
     }
 
     pub fn resolve(
@@ -142,6 +132,35 @@ impl InstrumentMapping {
         }
         Ok(&value.instrument)
     }
+}
+
+fn mapping_content_hash(
+    mapping_id: &Ulid,
+    owner: &OwnerRef,
+    source: &VersionRef,
+    entries: &[InstrumentMappingEntry],
+) -> ContentHash {
+    let mut bytes = b"ficant-instrument-mapping/v2\0".to_vec();
+    append(&mut bytes, mapping_id.as_str());
+    append(&mut bytes, owner.tenant_id().as_str());
+    append(&mut bytes, owner.owner_id().as_str());
+    append(&mut bytes, source.id().as_str());
+    bytes.extend_from_slice(&source.version().get().to_be_bytes());
+    for entry in entries {
+        append(&mut bytes, entry.source_instrument_key());
+        append_market_time(&mut bytes, entry.effective().from());
+        append_market_time(&mut bytes, entry.effective().to());
+        append(&mut bytes, entry.instrument().id().as_str());
+        bytes.extend_from_slice(&entry.instrument().version().get().to_be_bytes());
+    }
+    ContentHash::digest(&bytes)
+}
+
+fn append_market_time(bytes: &mut Vec<u8>, value: &MarketTime) {
+    bytes.extend_from_slice(&value.instant().timestamp().to_be_bytes());
+    bytes.extend_from_slice(&value.instant().timestamp_subsec_nanos().to_be_bytes());
+    append(bytes, value.market_timezone());
+    append(bytes, &value.local_trading_date().to_string());
 }
 
 fn append(bytes: &mut Vec<u8>, value: &str) {

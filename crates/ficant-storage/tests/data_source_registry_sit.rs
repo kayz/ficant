@@ -1,7 +1,12 @@
 mod support;
 
+use chrono::{NaiveDate, TimeZone, Utc};
 use ficant_application::ApplicationErrorCategory;
-use ficant_application::ports::{DataSourceRepository, IdempotencyKey, RegisterDataSource};
+use ficant_application::ports::{
+    AuthorizedPrincipal, DataSourceRepository, FoundationChangeContext, IdempotencyKey,
+    RegisterDataSource,
+};
+use ficant_domain::governance::{ChangeJustification, PlatformRole, SourceDocumentRef};
 use ficant_domain::market::{DataSource, DataSourceInput, DataSourceKind, PriceSourceType};
 use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid, Version, VersionRef};
 
@@ -22,7 +27,7 @@ async fn data_source_registration_is_append_only_idempotent_and_scope_bound() {
         PriceSourceType::ActiveQuote,
     );
     let command = RegisterDataSource::new(
-        scope.clone(),
+        context(&owner, "phase3a-source-v1", '1'),
         None,
         first.clone(),
         IdempotencyKey::new("phase3a-source-v1").unwrap(),
@@ -32,7 +37,7 @@ async fn data_source_registration_is_append_only_idempotent_and_scope_bound() {
     assert_eq!(repository.register(command).await.unwrap(), first);
 
     let changed_replay = RegisterDataSource::new(
-        scope.clone(),
+        context(&owner, "phase3a-source-v1", '1'),
         None,
         source(
             owner.clone(),
@@ -61,7 +66,7 @@ async fn data_source_registration_is_append_only_idempotent_and_scope_bound() {
         PriceSourceType::RealTrade,
     );
     let append = RegisterDataSource::new(
-        scope.clone(),
+        context(&owner, "phase3a-source-v2", '2'),
         Some(Version::new(1).unwrap()),
         second.clone(),
         IdempotencyKey::new("phase3a-source-v2").unwrap(),
@@ -134,4 +139,38 @@ fn owner() -> OwnerRef {
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F01").unwrap(),
         Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F02").unwrap(),
     )
+}
+
+fn context(owner: &OwnerRef, reason: &str, suffix: char) -> FoundationChangeContext {
+    FoundationChangeContext::administrator(
+        AuthorizedPrincipal::new(
+            "storage-admin".to_owned(),
+            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F00").unwrap(),
+            owner.tenant_id().clone(),
+            vec![owner.owner_id().clone()],
+            PlatformRole::PlatformAdmin,
+            vec![
+                "data-sources:write".to_owned(),
+                "governance:read".to_owned(),
+            ],
+            ContentHash::digest(b"credential"),
+        )
+        .unwrap(),
+        ChangeJustification::new(
+            reason,
+            vec![
+                SourceDocumentRef::new("urn:test:data-source", ContentHash::digest(b"evidence"))
+                    .unwrap(),
+            ],
+        )
+        .unwrap(),
+        Ulid::new(format!("01ARZ3NDEKTSV4RRFFQ69G5FA{suffix}")).unwrap(),
+        ficant_domain::primitives::MarketTime::new(
+            Utc.with_ymd_and_hms(2026, 8, 13, 0, 0, 0).unwrap(),
+            "UTC",
+            NaiveDate::from_ymd_opt(2026, 8, 13).unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap()
 }

@@ -55,7 +55,8 @@ async fn deterministic_parquet_manifest_and_verified_round_trip_are_exact() {
         first.snapshot().visible_at(),
         request.window().visible_at_cutoff()
     );
-    assert_eq!(first.snapshot().lineage().len(), 4);
+    // source + immutable mapping + calendar + unit + resolved instrument
+    assert_eq!(first.snapshot().lineage().len(), 5);
 
     let manifest_text = std::str::from_utf8(first.manifest()).unwrap();
     assert!(manifest_text.contains(SNAPSHOT_MANIFEST_SCHEMA_ID));
@@ -97,8 +98,12 @@ async fn deterministic_parquet_manifest_and_verified_round_trip_are_exact() {
         request.source().version()
     );
     assert_eq!(
+        decoded.manifest().instrument_mapping_id(),
+        request.mapping().id().as_str()
+    );
+    assert_eq!(
         decoded.manifest().instrument_mapping_digest(),
-        "8ec7f1016e6b00a9649e4c86202fbb90381948fec31bd12a7750b511c0d5e61e"
+        "eea5eaf3ae40e4eba6b26fd6ef87bace1db98f96b34d2778850c1fdd0d2414c5"
     );
     let ids = decoded
         .batch()
@@ -359,6 +364,7 @@ fn request() -> CanonicalIngestRequest {
     )
     .unwrap();
     let mapping = InstrumentMapping::new(
+        Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F60").unwrap(),
         owner.clone(),
         VersionRef::new(source.id().clone(), Version::new(1).unwrap()),
         vec![

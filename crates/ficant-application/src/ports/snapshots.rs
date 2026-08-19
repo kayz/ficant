@@ -1,14 +1,26 @@
 use async_trait::async_trait;
-use ficant_domain::primitives::{ContentHash, LineageRef, OwnerRef, Ulid};
+use ficant_domain::governance::{
+    ChangeJustification, FoundationChangeOperation, FoundationChangeRecord,
+    FoundationChangeRecordInput, FoundationResourceKind, FoundationResourceRef, PlatformRole,
+};
+use ficant_domain::primitives::{ContentHash, LineageRef, OwnerRef, Ulid, VersionRef};
 use ficant_domain::research::{
     DataHealthThresholdProfile, DataSnapshot, PositionSnapshot, UniverseSnapshot,
 };
 use ficant_domain::{ContentAddressed, DomainErrorCode, Lineaged};
 
 use super::blob_store::{VerifiedBlobRef, VerifyBlobStage};
+use super::data_sources::DATA_SOURCE_IMPORT_SCOPE;
 use super::fingerprint::{FingerprintBuilder, owner_bytes, snapshot_bytes};
-use super::{AccessScope, ApplicationResult, IdempotencyKey, OperationFingerprint};
+use super::{
+    AccessScope, ApplicationResult, CanonicalImportReplay, CanonicalImportReplayRequest,
+    FoundationChangeContext, IdempotencyKey, OperationFingerprint,
+};
 use crate::map_domain_error;
+
+pub const SNAPSHOT_WRITE_SCOPE: &str = "snapshots:write";
+pub const POSITION_SNAPSHOT_WRITE_SCOPE: &str = "positions:write";
+pub const DATA_HEALTH_THRESHOLD_CONFIGURE_SCOPE: &str = "data-health:configure";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SnapshotValue {
@@ -683,6 +695,308 @@ impl PublishSnapshot {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum GovernedSnapshotAuthority {
+    AuthorizedImport {
+        replay_request: Box<CanonicalImportReplayRequest>,
+    },
+    AdministratorUniverse,
+    AdministratorPosition,
+    AdministratorDataHealthThreshold,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GovernedPublishSnapshot {
+    change_context: FoundationChangeContext,
+    publish: PublishSnapshot,
+    authority: GovernedSnapshotAuthority,
+    fingerprint: OperationFingerprint,
+}
+
+impl GovernedPublishSnapshot {
+    /// Creates a governed canonical `DataSnapshot` import after exact source authorization.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, lineage, proof, or idempotency validation failure.
+    pub fn authorized_import(
+        replay_request: CanonicalImportReplayRequest,
+        snapshot: DataSnapshot,
+        proof: VerifiedSnapshotProof,
+        idempotency_key: IdempotencyKey,
+    ) -> ApplicationResult<Self> {
+        replay_request.validate_snapshot(&snapshot)?;
+        validate_authorized_import_context(
+            replay_request.change_context(),
+            replay_request.authorization(),
+            &snapshot,
+        )?;
+        Self::new(
+            replay_request.change_context().clone(),
+            SnapshotValue::Data(snapshot),
+            proof,
+            idempotency_key,
+            GovernedSnapshotAuthority::AuthorizedImport {
+                replay_request: Box::new(replay_request),
+            },
+        )
+    }
+
+    /// Creates a governed server-hashed `UniverseSnapshot` publication by a Platform Admin.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, proof, or idempotency validation failure.
+    pub fn administrator_universe(
+        change_context: FoundationChangeContext,
+        snapshot: UniverseSnapshot,
+        proof: VerifiedSnapshotProof,
+        idempotency_key: IdempotencyKey,
+    ) -> ApplicationResult<Self> {
+        change_context.principal().authorize_mutation(
+            PlatformRole::PlatformAdmin,
+            SNAPSHOT_WRITE_SCOPE,
+            snapshot.owner(),
+        )?;
+        Self::new(
+            change_context,
+            SnapshotValue::Universe(snapshot),
+            proof,
+            idempotency_key,
+            GovernedSnapshotAuthority::AdministratorUniverse,
+        )
+    }
+
+    /// Creates a governed `PositionSnapshot` publication by a Platform Admin.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, proof, or idempotency validation failure.
+    pub fn administrator_position(
+        change_context: FoundationChangeContext,
+        snapshot: PositionSnapshot,
+        proof: VerifiedSnapshotProof,
+        idempotency_key: IdempotencyKey,
+    ) -> ApplicationResult<Self> {
+        change_context.principal().authorize_mutation(
+            PlatformRole::PlatformAdmin,
+            POSITION_SNAPSHOT_WRITE_SCOPE,
+            snapshot.owner(),
+        )?;
+        Self::new(
+            change_context,
+            SnapshotValue::Position(snapshot),
+            proof,
+            idempotency_key,
+            GovernedSnapshotAuthority::AdministratorPosition,
+        )
+    }
+
+    /// Creates a governed `DataHealthThresholdProfile` publication by a Platform Admin.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, proof, or idempotency validation failure.
+    pub fn administrator_data_health_threshold(
+        change_context: FoundationChangeContext,
+        profile: DataHealthThresholdProfile,
+        proof: VerifiedSnapshotProof,
+        idempotency_key: IdempotencyKey,
+    ) -> ApplicationResult<Self> {
+        change_context.principal().authorize_mutation(
+            PlatformRole::PlatformAdmin,
+            DATA_HEALTH_THRESHOLD_CONFIGURE_SCOPE,
+            profile.owner(),
+        )?;
+        Self::new(
+            change_context,
+            SnapshotValue::DataHealthThresholdProfile(profile),
+            proof,
+            idempotency_key,
+            GovernedSnapshotAuthority::AdministratorDataHealthThreshold,
+        )
+    }
+
+    fn new(
+        change_context: FoundationChangeContext,
+        snapshot: SnapshotValue,
+        proof: VerifiedSnapshotProof,
+        idempotency_key: IdempotencyKey,
+        authority: GovernedSnapshotAuthority,
+    ) -> ApplicationResult<Self> {
+        if !proof
+            .blobs()
+            .all(|blob| blob.scope() == change_context.principal().access_scope())
+        {
+            return Err(crate::ApplicationError::new(
+                crate::ApplicationErrorCategory::Forbidden,
+                false,
+            ));
+        }
+        let publish = PublishSnapshot::new(snapshot, proof, idempotency_key)?;
+        let mut canonical = FingerprintBuilder::new("governed-publish-snapshot/v1");
+        canonical.field(
+            2,
+            change_context
+                .principal()
+                .fingerprint()
+                .content_hash()
+                .as_bytes(),
+        );
+        canonical.field(3, publish.fingerprint().content_hash().as_bytes());
+        canonical.field(4, &change_bytes(change_context.change()));
+        match &authority {
+            GovernedSnapshotAuthority::AuthorizedImport { replay_request } => {
+                canonical.field(5, b"authorized-import");
+                canonical.field(6, replay_request.fingerprint().content_hash().as_bytes());
+            }
+            GovernedSnapshotAuthority::AdministratorUniverse => {
+                canonical.field(5, b"administrator-universe");
+            }
+            GovernedSnapshotAuthority::AdministratorPosition => {
+                canonical.field(5, b"administrator-position");
+            }
+            GovernedSnapshotAuthority::AdministratorDataHealthThreshold => {
+                canonical.field(5, b"administrator-data-health-threshold");
+            }
+        }
+        let fingerprint = canonical.finish();
+        Ok(Self {
+            change_context,
+            publish,
+            authority,
+            fingerprint,
+        })
+    }
+
+    #[must_use]
+    pub fn change_context(&self) -> &FoundationChangeContext {
+        &self.change_context
+    }
+    #[must_use]
+    pub fn command(&self) -> &PublishSnapshot {
+        &self.publish
+    }
+    #[must_use]
+    pub fn fingerprint(&self) -> &OperationFingerprint {
+        &self.fingerprint
+    }
+    #[must_use]
+    pub fn authorization_ref(&self) -> Option<&VersionRef> {
+        match &self.authority {
+            GovernedSnapshotAuthority::AuthorizedImport { replay_request } => {
+                Some(replay_request.authorization())
+            }
+            GovernedSnapshotAuthority::AdministratorUniverse
+            | GovernedSnapshotAuthority::AdministratorPosition
+            | GovernedSnapshotAuthority::AdministratorDataHealthThreshold => None,
+        }
+    }
+    #[must_use]
+    pub fn replay_request(&self) -> Option<&CanonicalImportReplayRequest> {
+        match &self.authority {
+            GovernedSnapshotAuthority::AuthorizedImport { replay_request } => Some(replay_request),
+            GovernedSnapshotAuthority::AdministratorUniverse
+            | GovernedSnapshotAuthority::AdministratorPosition
+            | GovernedSnapshotAuthority::AdministratorDataHealthThreshold => None,
+        }
+    }
+    /// Materializes the immutable governance record bound into this command fingerprint.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation failure if the command cannot form a valid governance record.
+    pub fn change_record(&self) -> ApplicationResult<FoundationChangeRecord> {
+        let (operation, resource_kind, active_role, authorization_ref) = match &self.authority {
+            GovernedSnapshotAuthority::AuthorizedImport { replay_request } => (
+                FoundationChangeOperation::ImportCanonicalQuoteSnapshot,
+                FoundationResourceKind::DataSnapshot,
+                PlatformRole::Researcher,
+                Some(replay_request.authorization().clone()),
+            ),
+            GovernedSnapshotAuthority::AdministratorUniverse => (
+                FoundationChangeOperation::PublishUniverseSnapshot,
+                FoundationResourceKind::UniverseSnapshot,
+                PlatformRole::PlatformAdmin,
+                None,
+            ),
+            GovernedSnapshotAuthority::AdministratorPosition => (
+                FoundationChangeOperation::PublishPositionSnapshot,
+                FoundationResourceKind::PositionSnapshot,
+                PlatformRole::PlatformAdmin,
+                None,
+            ),
+            GovernedSnapshotAuthority::AdministratorDataHealthThreshold => (
+                FoundationChangeOperation::ConfigureDataHealthThreshold,
+                FoundationResourceKind::DataHealthThresholdProfile,
+                PlatformRole::PlatformAdmin,
+                None,
+            ),
+        };
+        let resource = match (&self.authority, self.publish.snapshot()) {
+            (
+                GovernedSnapshotAuthority::AdministratorDataHealthThreshold,
+                SnapshotValue::DataHealthThresholdProfile(profile),
+            ) => FoundationResourceRef::versioned(resource_kind, profile.profile_ref().clone()),
+            _ => FoundationResourceRef::unversioned(
+                resource_kind,
+                self.publish.snapshot().id().clone(),
+            ),
+        };
+        FoundationChangeRecord::new(FoundationChangeRecordInput {
+            record_id: self.change_context.record_id().clone(),
+            actor_id: self.change_context.principal().actor_id().clone(),
+            owner: self.publish.snapshot().owner().clone(),
+            active_role,
+            operation,
+            resource,
+            before_hash: None,
+            after_hash: self.publish.snapshot().content_hash().clone(),
+            change: self.change_context.change().clone(),
+            request_fingerprint: self.fingerprint.content_hash().clone(),
+            occurred_at: self.change_context.occurred_at().clone(),
+            authorization_ref,
+        })
+        .map_err(map_domain_error)
+    }
+}
+
+pub(crate) fn validate_authorized_import_context(
+    change_context: &FoundationChangeContext,
+    authorization: &VersionRef,
+    snapshot: &DataSnapshot,
+) -> ApplicationResult<()> {
+    change_context.principal().authorize_mutation(
+        PlatformRole::Researcher,
+        DATA_SOURCE_IMPORT_SCOPE,
+        snapshot.owner(),
+    )?;
+    if snapshot
+        .lineage()
+        .iter()
+        .filter(|reference| {
+            reference.object_id() == authorization.id()
+                && reference.version() == Some(authorization.version())
+                && reference.content_hash().is_some()
+        })
+        .count()
+        != 1
+    {
+        return Err(map_domain_error(DomainErrorCode::BrokenLineage));
+    }
+    Ok(())
+}
+
+fn change_bytes(change: &ChangeJustification) -> Vec<u8> {
+    let mut canonical = FingerprintBuilder::new("change-justification/v1");
+    canonical.field(2, change.reason().as_bytes());
+    for source in change.sources() {
+        canonical.field(3, source.uri().as_bytes());
+        canonical.field(4, source.sha256().as_bytes());
+    }
+    canonical.into_bytes()
+}
+
 fn validate_staged_blob(
     blob: &StagedSnapshotBlob,
     expected_owner: &OwnerRef,
@@ -735,6 +1049,27 @@ fn forbidden() -> crate::ApplicationError {
 
 #[async_trait]
 pub trait SnapshotRepository: Send + Sync {
+    /// Returns a hardened existing canonical import before any external adapter is invoked.
+    async fn probe_canonical_import_replay(
+        &self,
+        _request: &CanonicalImportReplayRequest,
+    ) -> ApplicationResult<Option<CanonicalImportReplay>> {
+        Err(crate::ApplicationError::new(
+            crate::ApplicationErrorCategory::StateConflict,
+            false,
+        ))
+    }
+
+    async fn publish_governed(
+        &self,
+        _command: GovernedPublishSnapshot,
+    ) -> ApplicationResult<SnapshotValue> {
+        Err(crate::ApplicationError::new(
+            crate::ApplicationErrorCategory::StateConflict,
+            false,
+        ))
+    }
+
     /// Publishes snapshot metadata for a verified immutable blob and lineage.
     ///
     /// # Errors
@@ -786,6 +1121,25 @@ mod tests {
             durable.validate_shape().unwrap_err().category(),
             ApplicationErrorCategory::ValidationFailed
         );
+    }
+
+    #[test]
+    fn change_fingerprint_field_boundaries_are_unambiguous() {
+        let evidence_hash = ContentHash::digest(b"evidence");
+        let first = ChangeJustification::new(
+            "a",
+            vec![
+                ficant_domain::governance::SourceDocumentRef::new("bc", evidence_hash.clone())
+                    .unwrap(),
+            ],
+        )
+        .unwrap();
+        let second = ChangeJustification::new(
+            "ab",
+            vec![ficant_domain::governance::SourceDocumentRef::new("c", evidence_hash).unwrap()],
+        )
+        .unwrap();
+        assert_ne!(change_bytes(&first), change_bytes(&second));
     }
 
     fn staged_blob(role: SnapshotBlobRole, suffix: char, hash_byte: u8) -> StagedSnapshotBlob {

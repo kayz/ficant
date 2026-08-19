@@ -324,6 +324,7 @@ fn request(kind: DataSourceKind, binding: &str, dataset: &str) -> CanonicalInges
     )
     .unwrap();
     let mapping = InstrumentMapping::new(
+        Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F60").unwrap(),
         owner.clone(),
         VersionRef::new(source.id().clone(), Version::new(1).unwrap()),
         vec![

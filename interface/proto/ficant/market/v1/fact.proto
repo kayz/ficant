@@ -3,12 +3,22 @@ syntax = "proto3";
 package ficant.market.v1;
 
 import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+import "ficant/core/v1/governance.proto";
 
 message FactSource {
   string source_id = 1;
   string external_id = 2;
   uint64 source_revision = 3;
   ficant.core.v1.VersionRef data_source = 4;
+}
+
+enum CashflowType {
+  CASHFLOW_TYPE_UNSPECIFIED = 0;
+  CASHFLOW_TYPE_COUPON = 1;
+  CASHFLOW_TYPE_PRINCIPAL = 2;
+  CASHFLOW_TYPE_FEE = 3;
+  CASHFLOW_TYPE_OTHER = 4;
 }
 
 // Cashflow records an external source fact. It never generates a schedule.
@@ -22,6 +32,7 @@ message Cashflow {
   ficant.core.v1.Ulid supersedes_id = 7;
   string schedule_id = 8;
   uint64 sequence = 9;
+  CashflowType cashflow_type = 10;
 }
 
 message Quote {
@@ -76,6 +87,20 @@ message CurveSnapshot {
   string curve_family_id = 12;
 }
 
+message CurveSnapshotInput {
+  ficant.core.v1.Ulid curve_snapshot_id = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  ficant.core.v1.MarketTime as_of = 3;
+  ficant.core.v1.UnitRef currency = 4;
+  string curve_kind = 5;
+  ficant.core.v1.VersionRef calendar = 6;
+  ficant.core.v1.VersionRef rule_pack = 7;
+  string point_schema = 8;
+  repeated ficant.core.v1.LineageRef lineage = 9;
+  ficant.core.v1.MarketTime visible_at = 10;
+  string curve_family_id = 11;
+}
+
 // CurvePointSet is the canonical payload for point_schema
 // ficant.yield-curve-points.protobuf.v1.
 message CurvePoint {
@@ -89,57 +114,55 @@ message CurvePointSet {
   repeated CurvePoint points = 2;
 }
 
-message AppendCashflowRequest {
-  string idempotency_key = 1;
-  Cashflow cashflow = 2;
-}
-
-message AppendCashflowResponse {
-  Cashflow cashflow = 1;
-}
-
-message AppendQuoteRequest {
-  string idempotency_key = 1;
-  Quote quote = 2;
-}
-
-message AppendQuoteResponse {
-  Quote quote = 1;
-}
-
-message AppendTradeRequest {
-  string idempotency_key = 1;
-  Trade trade = 2;
-}
-
-message AppendTradeResponse {
-  Trade trade = 1;
-}
-
-message AppendValuationRequest {
-  string idempotency_key = 1;
-  Valuation valuation = 2;
-}
-
-message AppendValuationResponse {
-  Valuation valuation = 1;
-}
-
-message PublishCurveSnapshotRequest {
-  string idempotency_key = 1;
-  CurveSnapshot curve_snapshot = 2;
-}
-
-message PublishCurveSnapshotResponse {
-  CurveSnapshot curve_snapshot = 1;
-}
-
 message MarketFact {
   oneof fact {
     Cashflow cashflow = 1;
     Quote quote = 2;
     Trade trade = 3;
     Valuation valuation = 4;
+  }
+}
+
+message AppendMarketFactRequest {
+  string idempotency_key = 1;
+  MarketFact fact = 2;
+  ficant.core.v1.ChangeJustification change = 3;
+}
+
+message AppendMarketFactResponse {
+  oneof result {
+    MarketFact fact = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message CorrectMarketFactRequest {
+  string idempotency_key = 1;
+  ficant.core.v1.Ulid original_fact_id = 2;
+  MarketFact fact = 3;
+  ficant.core.v1.ChangeJustification change = 4;
+}
+
+message CorrectMarketFactResponse {
+  oneof result {
+    MarketFact fact = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message PublishCurveSnapshotRequest {
+  string idempotency_key = 1;
+  reserved 2;
+  reserved "curve_snapshot";
+  CurvePointSet points = 3;
+  ficant.core.v1.ChangeJustification change = 4;
+  CurveSnapshotInput curve = 5;
+}
+
+message PublishCurveSnapshotResponse {
+  oneof result {
+    CurveSnapshot curve_snapshot = 1;
+    ficant.core.v1.ErrorDetail error = 2;
   }
 }
 
@@ -150,24 +173,41 @@ message QueryInstrumentFactsRequest {
   ficant.core.v1.PageRequest page = 4;
 }
 
-message QueryInstrumentFactsResponse {
+message InstrumentFacts {
   repeated MarketFact facts = 1;
   ficant.core.v1.PageResponse page = 2;
+}
+
+message QueryInstrumentFactsResponse {
+  reserved 1, 2;
+  reserved "facts", "page";
+  oneof result {
+    InstrumentFacts instrument_facts = 3;
+    ficant.core.v1.ErrorDetail error = 4;
+  }
 }
 
 message GetCurveSnapshotRequest {
   ficant.core.v1.Ulid curve_snapshot_id = 1;
 }
 
-message GetCurveSnapshotResponse {
+message CurveSnapshotPayload {
   CurveSnapshot curve_snapshot = 1;
+  CurvePointSet points = 2;
+}
+
+message GetCurveSnapshotResponse {
+  reserved 1;
+  reserved "curve_snapshot";
+  oneof result {
+    CurveSnapshotPayload curve = 2;
+    ficant.core.v1.ErrorDetail error = 3;
+  }
 }
 
 service MarketFactService {
-  rpc AppendCashflow(AppendCashflowRequest) returns (AppendCashflowResponse);
-  rpc AppendQuote(AppendQuoteRequest) returns (AppendQuoteResponse);
-  rpc AppendTrade(AppendTradeRequest) returns (AppendTradeResponse);
-  rpc AppendValuation(AppendValuationRequest) returns (AppendValuationResponse);
+  rpc AppendMarketFact(AppendMarketFactRequest) returns (AppendMarketFactResponse);
+  rpc CorrectMarketFact(CorrectMarketFactRequest) returns (CorrectMarketFactResponse);
   rpc PublishCurveSnapshot(PublishCurveSnapshotRequest) returns (PublishCurveSnapshotResponse);
   rpc QueryInstrumentFacts(QueryInstrumentFactsRequest) returns (QueryInstrumentFactsResponse);
   rpc GetCurveSnapshot(GetCurveSnapshotRequest) returns (GetCurveSnapshotResponse);

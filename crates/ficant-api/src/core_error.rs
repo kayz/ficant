@@ -50,6 +50,7 @@ impl CoreBusinessErrorMapper {
         );
         let trace = hmac::sign(&self.trace_key, trace_input.as_bytes());
 
+        let mut resource_ref = String::new();
         let field_violations = match error.detail() {
             Some(ApplicationErrorDetail::RulePackItemMissing { path }) => vec![FieldViolation {
                 field: path.clone(),
@@ -68,6 +69,32 @@ impl CoreBusinessErrorMapper {
                     })
                     .collect()
             }
+            Some(ApplicationErrorDetail::DataSourceNotAuthorized {
+                authorization_ref,
+                data_source_ref,
+                import_interface: _,
+            }) => {
+                resource_ref = data_source_ref.as_ref().map_or_else(
+                    || {
+                        format!(
+                            "data-source-authorization:{}@{}",
+                            authorization_ref.id(),
+                            authorization_ref.version().get(),
+                        )
+                    },
+                    |reference| {
+                        format!(
+                            "data-source:{}@{}",
+                            reference.id(),
+                            reference.version().get(),
+                        )
+                    },
+                );
+                vec![FieldViolation {
+                    field: "authorization_ref".to_owned(),
+                    description: "exact DataSource 未获 Platform Admin 授权".to_owned(),
+                }]
+            }
             None => Vec::new(),
         };
 
@@ -76,7 +103,7 @@ impl CoreBusinessErrorMapper {
             message: mapping.safe_message.to_owned(),
             trace_id: format_trace_id(trace.as_ref()),
             retryable: error.retryable() && !mapping.force_non_retryable,
-            resource_ref: String::new(),
+            resource_ref,
             field_violations,
         }
     }

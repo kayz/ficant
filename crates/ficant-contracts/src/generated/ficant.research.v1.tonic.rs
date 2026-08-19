@@ -4033,11 +4033,11 @@ pub mod snapshot_service_client {
             self
         }
         ///
-        pub async fn publish_data_snapshot(
+        pub async fn import_canonical_quote_snapshot(
             &mut self,
-            request: impl tonic::IntoRequest<super::PublishDataSnapshotRequest>,
+            request: impl tonic::IntoRequest<super::ImportCanonicalQuoteSnapshotRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::PublishDataSnapshotResponse>,
+            tonic::Response<super::ImportCanonicalQuoteSnapshotResponse>,
             tonic::Status,
         > {
             self.inner
@@ -4050,14 +4050,14 @@ pub mod snapshot_service_client {
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/ficant.research.v1.SnapshotService/PublishDataSnapshot",
+                "/ficant.research.v1.SnapshotService/ImportCanonicalQuoteSnapshot",
             );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(
                     GrpcMethod::new(
                         "ficant.research.v1.SnapshotService",
-                        "PublishDataSnapshot",
+                        "ImportCanonicalQuoteSnapshot",
                     ),
                 );
             self.inner.unary(req, path, codec).await
@@ -4135,11 +4135,11 @@ pub mod snapshot_service_server {
     #[async_trait]
     pub trait SnapshotService: std::marker::Send + std::marker::Sync + 'static {
         ///
-        async fn publish_data_snapshot(
+        async fn import_canonical_quote_snapshot(
             &self,
-            request: tonic::Request<super::PublishDataSnapshotRequest>,
+            request: tonic::Request<super::ImportCanonicalQuoteSnapshotRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::PublishDataSnapshotResponse>,
+            tonic::Response<super::ImportCanonicalQuoteSnapshotResponse>,
             tonic::Status,
         >;
         ///
@@ -4236,25 +4236,30 @@ pub mod snapshot_service_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/ficant.research.v1.SnapshotService/PublishDataSnapshot" => {
+                "/ficant.research.v1.SnapshotService/ImportCanonicalQuoteSnapshot" => {
                     #[allow(non_camel_case_types)]
-                    struct PublishDataSnapshotSvc<T: SnapshotService>(pub Arc<T>);
+                    struct ImportCanonicalQuoteSnapshotSvc<T: SnapshotService>(
+                        pub Arc<T>,
+                    );
                     impl<
                         T: SnapshotService,
-                    > tonic::server::UnaryService<super::PublishDataSnapshotRequest>
-                    for PublishDataSnapshotSvc<T> {
-                        type Response = super::PublishDataSnapshotResponse;
+                    > tonic::server::UnaryService<
+                        super::ImportCanonicalQuoteSnapshotRequest,
+                    > for ImportCanonicalQuoteSnapshotSvc<T> {
+                        type Response = super::ImportCanonicalQuoteSnapshotResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::PublishDataSnapshotRequest>,
+                            request: tonic::Request<
+                                super::ImportCanonicalQuoteSnapshotRequest,
+                            >,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as SnapshotService>::publish_data_snapshot(
+                                <T as SnapshotService>::import_canonical_quote_snapshot(
                                         &inner,
                                         request,
                                     )
@@ -4269,7 +4274,7 @@ pub mod snapshot_service_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = PublishDataSnapshotSvc(inner);
+                        let method = ImportCanonicalQuoteSnapshotSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

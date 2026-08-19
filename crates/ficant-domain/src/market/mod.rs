@@ -3,6 +3,7 @@ mod calendar;
 mod cashflow;
 mod curve_snapshot;
 mod data_source;
+mod data_source_authorization;
 mod futures_contract;
 mod instrument;
 mod market_rule_pack;
@@ -19,6 +20,10 @@ pub use calendar::{Calendar, CalendarInput, CalendarSession};
 pub use cashflow::{Cashflow, CashflowInput, CashflowType};
 pub use curve_snapshot::{ArtifactInputKind, CurveSnapshot, CurveSnapshotInput};
 pub use data_source::{DataSource, DataSourceInput, DataSourceKind, PriceSourceType};
+pub use data_source_authorization::{
+    DataSourceAuthorization, DataSourceAuthorizationInput, DataSourceAuthorizationState,
+    ImportInterface, data_source_content_hash,
+};
 pub use futures_contract::FuturesContract;
 pub use instrument::{Instrument, InstrumentInput, InstrumentKind};
 pub use market_rule_pack::{

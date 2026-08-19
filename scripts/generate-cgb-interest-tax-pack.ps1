@@ -33,11 +33,32 @@ foreach ($required in @($source, $manifest)) {
         throw "CGB interest-tax input is missing: $required"
     }
 }
+
+function Get-CanonicalUtf8Bytes {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $utf8 = [System.Text.UTF8Encoding]::new($false, $true)
+    try {
+        $text = $utf8.GetString([System.IO.File]::ReadAllBytes($Path))
+    }
+    catch {
+        throw "Authority text is not strict UTF-8: $Path"
+    }
+    if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) {
+        throw "Authority text must not contain a UTF-8 BOM: $Path"
+    }
+    $withoutCrLf = $text.Replace("`r`n", '')
+    if ($withoutCrLf.Contains("`r")) {
+        throw "Authority text contains a lone carriage return: $Path"
+    }
+    $utf8.GetBytes($text.Replace("`r`n", "`n"))
+}
+
 $sourceHash = [Convert]::ToHexString(
-    [System.Security.Cryptography.SHA256]::HashData([System.IO.File]::ReadAllBytes($source))
+    [System.Security.Cryptography.SHA256]::HashData((Get-CanonicalUtf8Bytes -Path $source))
 ).ToLowerInvariant()
 $manifestHash = [Convert]::ToHexString(
-    [System.Security.Cryptography.SHA256]::HashData([System.IO.File]::ReadAllBytes($manifest))
+    [System.Security.Cryptography.SHA256]::HashData((Get-CanonicalUtf8Bytes -Path $manifest))
 ).ToLowerInvariant()
 if ($sourceHash -ne $expectedSourceHash) {
     throw "Authority canonical JSON drifted: expected $expectedSourceHash, got $sourceHash"

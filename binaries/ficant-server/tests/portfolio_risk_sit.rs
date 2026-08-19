@@ -198,8 +198,36 @@ fn values() -> BTreeMap<String, String> {
             ficant_native_nodes::native_node_source_digest_attestation(),
         ),
         (
+            "FICANT_INPUT_FILE_NDJSON_ROOT".to_owned(),
+            "C:\\ficant-input".to_owned(),
+        ),
+        (
+            "FICANT_INPUT_FILE_CONNECTION_BINDING".to_owned(),
+            "fixture-file".to_owned(),
+        ),
+        (
+            "FICANT_INPUT_POSTGRES_CONNECTION_BINDING".to_owned(),
+            "fixture-postgres".to_owned(),
+        ),
+        (
             "FICANT_LOOPBACK_SUBJECT".to_owned(),
             "browser-user".to_owned(),
+        ),
+        (
+            "FICANT_LOOPBACK_ACTOR_ID".to_owned(),
+            "0000000000000000000000000A".to_owned(),
+        ),
+        (
+            "FICANT_LOOPBACK_TENANT_ID".to_owned(),
+            "0000000000000000000000000T".to_owned(),
+        ),
+        (
+            "FICANT_LOOPBACK_ALLOWED_OWNER_IDS".to_owned(),
+            "0000000000000000000000000B".to_owned(),
+        ),
+        (
+            "FICANT_LOOPBACK_ACTIVE_ROLE".to_owned(),
+            "RESEARCHER".to_owned(),
         ),
         (
             "FICANT_LOOPBACK_SCOPES".to_owned(),

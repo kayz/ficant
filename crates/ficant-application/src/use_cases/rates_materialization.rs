@@ -21,7 +21,7 @@ use ficant_domain::futures_hedge::{
 };
 use ficant_domain::market::{
     Bond, BondBusinessDayConvention, BondCouponFrequency, BondDayCountConvention, Calendar,
-    DataSource, DataSourceKind, MarketRulePack, PriceSourceType, Unit, VerificationStatus,
+    DataSource, MarketRulePack, PriceSourceType, Unit, VerificationStatus,
 };
 use ficant_domain::primitives::{
     ContentHash, FixedDecimal, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
@@ -2133,28 +2133,7 @@ fn curve_node_definition_evidence(
 /// Returns the R5D canonical content identity of one immutable `DataSource` definition.
 #[must_use]
 pub fn rates_data_source_content_hash(value: &DataSource) -> ContentHash {
-    let mut bytes = Vec::new();
-    append(&mut bytes, b"ficant.rates.data-source.v1");
-    append(&mut bytes, value.id().as_str().as_bytes());
-    append(&mut bytes, &value.version().to_be_bytes());
-    append(&mut bytes, value.owner().tenant_id().as_str().as_bytes());
-    append(&mut bytes, value.owner().owner_id().as_str().as_bytes());
-    append(
-        &mut bytes,
-        &[match value.kind() {
-            DataSourceKind::FileNdjson => 1,
-            DataSourceKind::Postgres => 2,
-        }],
-    );
-    append(&mut bytes, value.name().as_bytes());
-    append(&mut bytes, value.connection_binding().as_bytes());
-    append(&mut bytes, value.dataset().as_bytes());
-    append(&mut bytes, value.canonical_schema_id().as_bytes());
-    append(&mut bytes, value.canonical_schema_hash().as_bytes());
-    if let Some(source_type) = value.price_source_type() {
-        append(&mut bytes, &[(source_type as u8).saturating_add(1)]);
-    }
-    ContentHash::digest(&bytes)
+    ficant_domain::market::data_source_content_hash(value)
 }
 
 fn artifact_evidence(

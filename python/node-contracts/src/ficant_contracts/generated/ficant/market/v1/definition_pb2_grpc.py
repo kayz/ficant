@@ -2,3 +2,205 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
+from ficant.market.v1 import definition_pb2 as ficant_dot_market_dot_v1_dot_definition__pb2
+
+
+class MarketDefinitionServiceStub(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.AppendDefinition = channel.unary_unary(
+                '/ficant.market.v1.MarketDefinitionService/AppendDefinition',
+                request_serializer=ficant_dot_market_dot_v1_dot_definition__pb2.AppendDefinitionRequest.SerializeToString,
+                response_deserializer=ficant_dot_market_dot_v1_dot_definition__pb2.AppendDefinitionResponse.FromString,
+                _registered_method=True)
+        self.GetDefinitionVersion = channel.unary_unary(
+                '/ficant.market.v1.MarketDefinitionService/GetDefinitionVersion',
+                request_serializer=ficant_dot_market_dot_v1_dot_definition__pb2.GetDefinitionVersionRequest.SerializeToString,
+                response_deserializer=ficant_dot_market_dot_v1_dot_definition__pb2.GetDefinitionVersionResponse.FromString,
+                _registered_method=True)
+        self.ResolveDefinitionAsOf = channel.unary_unary(
+                '/ficant.market.v1.MarketDefinitionService/ResolveDefinitionAsOf',
+                request_serializer=ficant_dot_market_dot_v1_dot_definition__pb2.ResolveDefinitionAsOfRequest.SerializeToString,
+                response_deserializer=ficant_dot_market_dot_v1_dot_definition__pb2.ResolveDefinitionAsOfResponse.FromString,
+                _registered_method=True)
+        self.ListDefinitionVersions = channel.unary_unary(
+                '/ficant.market.v1.MarketDefinitionService/ListDefinitionVersions',
+                request_serializer=ficant_dot_market_dot_v1_dot_definition__pb2.ListDefinitionVersionsRequest.SerializeToString,
+                response_deserializer=ficant_dot_market_dot_v1_dot_definition__pb2.ListDefinitionVersionsResponse.FromString,
+                _registered_method=True)
+
+
+class MarketDefinitionServiceServicer(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def AppendDefinition(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetDefinitionVersion(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ResolveDefinitionAsOf(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListDefinitionVersions(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_MarketDefinitionServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'AppendDefinition': grpc.unary_unary_rpc_method_handler(
+                    servicer.AppendDefinition,
+                    request_deserializer=ficant_dot_market_dot_v1_dot_definition__pb2.AppendDefinitionRequest.FromString,
+                    response_serializer=ficant_dot_market_dot_v1_dot_definition__pb2.AppendDefinitionResponse.SerializeToString,
+            ),
+            'GetDefinitionVersion': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetDefinitionVersion,
+                    request_deserializer=ficant_dot_market_dot_v1_dot_definition__pb2.GetDefinitionVersionRequest.FromString,
+                    response_serializer=ficant_dot_market_dot_v1_dot_definition__pb2.GetDefinitionVersionResponse.SerializeToString,
+            ),
+            'ResolveDefinitionAsOf': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResolveDefinitionAsOf,
+                    request_deserializer=ficant_dot_market_dot_v1_dot_definition__pb2.ResolveDefinitionAsOfRequest.FromString,
+                    response_serializer=ficant_dot_market_dot_v1_dot_definition__pb2.ResolveDefinitionAsOfResponse.SerializeToString,
+            ),
+            'ListDefinitionVersions': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListDefinitionVersions,
+                    request_deserializer=ficant_dot_market_dot_v1_dot_definition__pb2.ListDefinitionVersionsRequest.FromString,
+                    response_serializer=ficant_dot_market_dot_v1_dot_definition__pb2.ListDefinitionVersionsResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'ficant.market.v1.MarketDefinitionService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('ficant.market.v1.MarketDefinitionService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class MarketDefinitionService(object):
+    """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def AppendDefinition(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ficant.market.v1.MarketDefinitionService/AppendDefinition',
+            ficant_dot_market_dot_v1_dot_definition__pb2.AppendDefinitionRequest.SerializeToString,
+            ficant_dot_market_dot_v1_dot_definition__pb2.AppendDefinitionResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetDefinitionVersion(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ficant.market.v1.MarketDefinitionService/GetDefinitionVersion',
+            ficant_dot_market_dot_v1_dot_definition__pb2.GetDefinitionVersionRequest.SerializeToString,
+            ficant_dot_market_dot_v1_dot_definition__pb2.GetDefinitionVersionResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResolveDefinitionAsOf(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ficant.market.v1.MarketDefinitionService/ResolveDefinitionAsOf',
+            ficant_dot_market_dot_v1_dot_definition__pb2.ResolveDefinitionAsOfRequest.SerializeToString,
+            ficant_dot_market_dot_v1_dot_definition__pb2.ResolveDefinitionAsOfResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListDefinitionVersions(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ficant.market.v1.MarketDefinitionService/ListDefinitionVersions',
+            ficant_dot_market_dot_v1_dot_definition__pb2.ListDefinitionVersionsRequest.SerializeToString,
+            ficant_dot_market_dot_v1_dot_definition__pb2.ListDefinitionVersionsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)

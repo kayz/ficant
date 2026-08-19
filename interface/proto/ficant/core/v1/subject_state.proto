@@ -4,6 +4,7 @@ package ficant.core.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
+import "ficant/core/v1/governance.proto";
 import "google/protobuf/timestamp.proto";
 
 message SubjectStateSnapshot {
@@ -14,6 +15,7 @@ message SubjectStateSnapshot {
   google.protobuf.Timestamp observed_at = 5;
   google.protobuf.Timestamp visible_at = 6;
   string market_timezone = 7;
+  OwnerRef owner = 8;
 }
 
 message LimitCeiling {
@@ -23,6 +25,8 @@ message LimitCeiling {
 
 message RegisterSubjectStateRequest {
   SubjectStateSnapshot snapshot = 1;
+  ChangeJustification change = 2;
+  string idempotency_key = 3;
 }
 
 message RegisterSubjectStateResponse {

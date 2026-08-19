@@ -4,6 +4,10 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import type { Ulid } from "../../core/v1/common_pb";
+import { file_ficant_core_v1_common } from "../../core/v1/common_pb";
+import type { PlatformRole } from "../../core/v1/governance_pb";
+import { file_ficant_core_v1_governance } from "../../core/v1/governance_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
@@ -12,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ficant/app/v1/session.proto.
  */
 export const file_ficant_app_v1_session: GenFile = /*@__PURE__*/
-  fileDesc("ChtmaWNhbnQvYXBwL3YxL3Nlc3Npb24ucHJvdG8SDWZpY2FudC5hcHAudjEioAEKB1Nlc3Npb24SEgoKc2Vzc2lvbl9pZBgBIAEoCRISCgpzdWJqZWN0X2lkGAIgASgJEg4KBnNjb3BlcxgDIAMoCRItCglpc3N1ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkMKEVNlc3Npb25SZXZvY2F0aW9uEi4KCnJldm9rZWRfYXQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("ChtmaWNhbnQvYXBwL3YxL3Nlc3Npb24ucHJvdG8SDWZpY2FudC5hcHAudjEi1QIKB1Nlc3Npb24SEgoKc2Vzc2lvbl9pZBgBIAEoCRISCgpzdWJqZWN0X2lkGAIgASgJEg4KBnNjb3BlcxgDIAMoCRItCglpc3N1ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiYKCGFjdG9yX2lkGAYgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZBIxCgthY3RpdmVfcm9sZRgHIAEoDjIcLmZpY2FudC5jb3JlLnYxLlBsYXRmb3JtUm9sZRInCgl0ZW5hbnRfaWQYCCABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEi8KEWFsbG93ZWRfb3duZXJfaWRzGAkgAygLMhQuZmljYW50LmNvcmUudjEuVWxpZCJDChFTZXNzaW9uUmV2b2NhdGlvbhIuCgpyZXZva2VkX2F0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcGIGcHJvdG8z", [file_ficant_core_v1_common, file_ficant_core_v1_governance, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message ficant.app.v1.Session
@@ -42,6 +46,26 @@ export type Session = Message<"ficant.app.v1.Session"> & {
    * @generated from field: google.protobuf.Timestamp expires_at = 5;
    */
   expiresAt?: Timestamp;
+
+  /**
+   * @generated from field: ficant.core.v1.Ulid actor_id = 6;
+   */
+  actorId?: Ulid;
+
+  /**
+   * @generated from field: ficant.core.v1.PlatformRole active_role = 7;
+   */
+  activeRole: PlatformRole;
+
+  /**
+   * @generated from field: ficant.core.v1.Ulid tenant_id = 8;
+   */
+  tenantId?: Ulid;
+
+  /**
+   * @generated from field: repeated ficant.core.v1.Ulid allowed_owner_ids = 9;
+   */
+  allowedOwnerIds: Ulid[];
 };
 
 /**

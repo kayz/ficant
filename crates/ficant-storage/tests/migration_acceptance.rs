@@ -39,7 +39,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
 
-    let expected_migration_versions = (1_i64..=22).collect::<Vec<_>>();
+    let expected_migration_versions = (1_i64..=23).collect::<Vec<_>>();
     let applied_before_repeat: Vec<(i64, bool)> =
         sqlx::query_as("SELECT version, success FROM public._sqlx_migrations ORDER BY version")
             .fetch_all(&pool)
@@ -104,6 +104,14 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         1,
         "0022 must be recorded exactly once after its successful application"
     );
+    assert_eq!(
+        applied_before_repeat
+            .iter()
+            .filter(|(version, success)| *version == 23 && *success)
+            .count(),
+        1,
+        "0023 must be recorded exactly once after its successful application"
+    );
 
     let rows = sqlx::query(
         "SELECT schemaname, tablename
@@ -124,11 +132,16 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     let required = [
         "core.definition_identities",
         "core.idempotency_records",
+        "core.foundation_change_records",
+        "core.foundation_change_sources",
         "core.subject_versions",
+        "core.subject_identities",
         "core.subject_state_snapshots",
         "core.subject_state_limit_ceilings",
         "data.source_identities",
         "data.sources",
+        "data.source_authorization_identities",
+        "data.source_authorizations",
         "market.bonds",
         "market.calendars",
         "market.cashflows",
@@ -684,6 +697,154 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
             .expect("0021 failure history must be queryable");
     assert_eq!(failed_0021_history, 0);
     std::fs::remove_dir_all(fixture).expect("0021 migration fixture must be removed");
+}
+
+#[tokio::test]
+async fn r6a_governed_input_migration_failure_is_atomic() {
+    let _guard = migration_test_lock().lock().await;
+    let pool = support::postgres_pool().await;
+    support::reset_postgres(&pool).await;
+    let source =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../migrations/postgresql");
+    let fixture = std::env::temp_dir().join(format!(
+        "ficant-failing-0023-migration-{}",
+        std::process::id()
+    ));
+    if fixture.exists() {
+        std::fs::remove_dir_all(&fixture).expect("stale 0023 fixture must be removable");
+    }
+    std::fs::create_dir(&fixture).expect("0023 fixture directory must be creatable");
+    for version in 1..=22 {
+        let prefix = format!("{version:04}_");
+        let migration = std::fs::read_dir(&source)
+            .expect("migration source must be readable")
+            .map(Result::unwrap)
+            .find(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+            .expect("every pre-0023 migration must exist");
+        std::fs::copy(migration.path(), fixture.join(migration.file_name()))
+            .expect("pre-0023 migration must copy without mutation");
+    }
+    let original = std::fs::read_to_string(source.join("0023_r6a_governed_input_plane.sql"))
+        .expect("0023 migration source must be readable");
+    std::fs::write(
+        fixture.join("0023_r6a_governed_input_plane.sql"),
+        format!(
+            "{original}\nINSERT INTO core.foundation_change_records(unknown_column) VALUES ('x');\n"
+        ),
+    )
+    .expect("failing 0023 fixture must be writable");
+
+    let migrator = sqlx::migrate::Migrator::new(fixture.clone())
+        .await
+        .expect("failing 0023 fixture must load");
+    migrator
+        .run(&pool)
+        .await
+        .expect_err("invalid tail statement must fail all of migration 0023");
+    let r6a_tables: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pg_catalog.pg_tables
+         WHERE (schemaname='data' AND tablename IN
+                ('source_authorization_identities','source_authorizations'))
+             OR (schemaname='core' AND tablename IN
+                ('subject_identities','foundation_change_records','foundation_change_sources'))",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("schema inventory must remain queryable after failed 0023");
+    assert_eq!(r6a_tables, 0, "failed migration must leave no R6A tables");
+    let recorded: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM public._sqlx_migrations WHERE version=23")
+            .fetch_one(&pool)
+            .await
+            .expect("migration history must remain queryable after failed 0023");
+    assert_eq!(recorded, 0);
+    std::fs::remove_dir_all(fixture).expect("0023 fixture must be removed");
+}
+
+#[tokio::test]
+async fn r6a_refuses_to_invent_owner_for_legacy_subject_rows() {
+    let _guard = migration_test_lock().lock().await;
+    let pool = support::postgres_pool().await;
+    support::reset_postgres(&pool).await;
+    let source =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../migrations/postgresql");
+    let fixture = std::env::temp_dir().join(format!(
+        "ficant-legacy-subject-0023-migration-{}",
+        std::process::id()
+    ));
+    if fixture.exists() {
+        std::fs::remove_dir_all(&fixture).expect("stale Subject fixture must be removable");
+    }
+    std::fs::create_dir(&fixture).expect("Subject fixture directory must be creatable");
+    for version in 1..=22 {
+        let prefix = format!("{version:04}_");
+        let migration = std::fs::read_dir(&source)
+            .expect("migration source must be readable")
+            .map(Result::unwrap)
+            .find(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+            .expect("every pre-0023 migration must exist");
+        std::fs::copy(migration.path(), fixture.join(migration.file_name()))
+            .expect("pre-0023 migration must copy without mutation");
+    }
+    let pre_r6a = sqlx::migrate::Migrator::new(fixture.clone())
+        .await
+        .expect("pre-R6A Subject fixture must load");
+    pre_r6a
+        .run(&pool)
+        .await
+        .expect("0001..0022 migrations must apply");
+    sqlx::query(
+        "INSERT INTO core.subject_versions
+         (subject_id, version, display_name, market_codes, tool_codes, funding_tier,
+          value_added_tax_profile, income_tax_profile, assessment_mechanism, liability_profile)
+         VALUES ($1, 1, 'Legacy Subject', '{}', '{}', 'DR_AVAILABLE',
+                 'vat', 'income', 'daily', 'general')",
+    )
+    .bind("01ARZ3NDEKTSV4RRFFQ69G5FAS")
+    .execute(&pool)
+    .await
+    .expect("one real pre-R6A Subject row must be seedable");
+    std::fs::copy(
+        source.join("0023_r6a_governed_input_plane.sql"),
+        fixture.join("0023_r6a_governed_input_plane.sql"),
+    )
+    .expect("0023 migration must copy without mutation");
+    let r6a = sqlx::migrate::Migrator::new(fixture.clone())
+        .await
+        .expect("R6A Subject guard fixture must load");
+    let error = r6a
+        .run(&pool)
+        .await
+        .expect_err("legacy Subject rows without OwnerRef must block R6A");
+    assert!(
+        error
+            .to_string()
+            .contains("explicit tenant/owner migration"),
+        "the failure must explain the required Human migration: {error}",
+    );
+    let legacy_rows: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM core.subject_versions WHERE display_name=$1")
+            .bind("Legacy Subject")
+            .fetch_one(&pool)
+            .await
+            .expect("legacy Subject row must remain readable");
+    assert_eq!(legacy_rows, 1);
+    let r6a_schema_changes: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM information_schema.columns
+         WHERE table_schema='core' AND table_name='subject_versions'
+           AND column_name IN ('tenant_id', 'owner_id')",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("Subject schema must remain inspectable");
+    assert_eq!(r6a_schema_changes, 0);
+    let recorded: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM public._sqlx_migrations WHERE version=23")
+            .fetch_one(&pool)
+            .await
+            .expect("migration history must remain inspectable");
+    assert_eq!(recorded, 0);
+    std::fs::remove_dir_all(fixture).expect("Subject fixture must be removed");
 }
 
 #[tokio::test]
