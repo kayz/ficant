@@ -929,6 +929,9 @@ fn artifact_lineage_query_service_has_exact_signatures() {
         "ficant.research.v1.ArtifactService",
         &artifact_methods(),
     );
+    let messages = top_level_messages(descriptor_set);
+    let enums = top_level_enums(descriptor_set);
+    assert_r6b_artifact_contracts(&messages, &enums);
 }
 
 #[test]
@@ -1081,7 +1084,7 @@ fn composition_level_outputs_have_coverage() {
         })
         .sum::<usize>();
     assert_eq!(
-        classified_non_composition_count, 62,
+        classified_non_composition_count, 60,
         "every non-composition success arm must select one of the three closed reasons"
     );
     let expected_keys = expected.keys().cloned().collect::<BTreeSet<_>>();
@@ -1249,12 +1252,10 @@ fn expected_success_arms() -> BTreeMap<String, SuccessArmClass> {
         ("ficant.rates.v1.RatesAnalyticsService/AnalyzeFuturesDelivery:analysis->ficant.rates.v1.AnalyzeFuturesDeliveryResult", NonComposition(NoNumericAggregate)),
         ("ficant.rates.v1.RatesAnalyticsService/AnalyzeFuturesHedge:analysis->ficant.rates.v1.AnalyzeFuturesHedgeResult", NonComposition(NoNumericAggregate)),
         ("ficant.rates.v1.RatesAnalyticsService/InterpolateYieldCurve:point->ficant.rates.v1.InterpolateYieldCurveResult", NonComposition(NoNumericAggregate)),
-        ("ficant.research.v1.ArtifactService/GetArtifact:response->ficant.research.v1.GetArtifactResponse", NonComposition(RegistryMetadata)),
-        ("ficant.research.v1.ArtifactService/GetSignalSet:response->ficant.research.v1.GetSignalSetResponse", NonComposition(RegistryMetadata)),
-        ("ficant.research.v1.ArtifactService/PublishArtifact:response->ficant.research.v1.PublishArtifactResponse", NonComposition(AckOrEcho)),
-        ("ficant.research.v1.ArtifactService/PublishSignalSet:response->ficant.research.v1.PublishSignalSetResponse", NonComposition(AckOrEcho)),
-        ("ficant.research.v1.ArtifactService/ReadArtifactLineage:response->ficant.research.v1.ReadArtifactLineageResponse", NonComposition(RegistryMetadata)),
-        ("ficant.research.v1.ArtifactService/ReadSignalSetLineage:response->ficant.research.v1.ReadSignalSetLineageResponse", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ArtifactService/GetArtifact:artifact->ficant.research.v1.Artifact", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ArtifactService/GetSignalSet:signal_set->ficant.research.v1.SignalSet", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ArtifactService/ReadArtifactLineage:lineage_page->ficant.research.v1.LineagePage", NonComposition(RegistryMetadata)),
+        ("ficant.research.v1.ArtifactService/ReadSignalSetLineage:lineage_page->ficant.research.v1.LineagePage", NonComposition(RegistryMetadata)),
         ("ficant.research.v1.DataHealthService/GetDataHealthReport:report->ficant.research.v1.DataHealthReport", SuccessArmClass::Composition),
         ("ficant.research.v1.DataHealthService/PublishDataHealthThresholdProfile:threshold_profile->ficant.research.v1.DataHealthThresholdProfile", NonComposition(AckOrEcho)),
         ("ficant.research.v1.ExperimentService/CompareGraphRuns:response->ficant.research.v1.CompareGraphRunsResponse", NonComposition(NoNumericAggregate)),
@@ -3874,6 +3875,95 @@ fn assert_query_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     assert_field_oneof(get_curve_response, "curve", "result");
     assert_field_oneof(get_curve_response, "error", "result");
 
+    assert_r6b_artifact_messages(messages, id, page_request, page_response);
+}
+
+fn assert_r6b_artifact_contracts(
+    messages: &BTreeMap<String, &DescriptorProto>,
+    enums: &BTreeMap<String, &EnumDescriptorProto>,
+) {
+    for removed in [
+        "ficant.research.v1.PublishArtifactRequest",
+        "ficant.research.v1.PublishArtifactResponse",
+        "ficant.research.v1.PublishSignalSetRequest",
+        "ficant.research.v1.PublishSignalSetResponse",
+    ] {
+        assert!(
+            !messages.contains_key(removed),
+            "R6B removes the dishonest public publish message {removed}"
+        );
+    }
+    let enumeration = enums
+        .get("ficant.research.v1.ArtifactKind")
+        .expect("ArtifactKind exists");
+    let reserved_ranges = enumeration
+        .reserved_range
+        .iter()
+        .map(|range| (range.start(), range.end()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        reserved_ranges,
+        vec![(2, 4)],
+        "ArtifactKind must reserve the exact orphan numeric range 2..=4"
+    );
+    let reserved_names = enumeration
+        .reserved_name
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        reserved_names,
+        BTreeSet::from([
+            "ARTIFACT_KIND_CURVE_SNAPSHOT",
+            "ARTIFACT_KIND_DATA_SNAPSHOT",
+            "ARTIFACT_KIND_UNIVERSE_SNAPSHOT",
+        ]),
+        "ArtifactKind must reserve all removed orphan names"
+    );
+}
+
+fn assert_r6b_artifact_messages(
+    messages: &BTreeMap<String, &DescriptorProto>,
+    id: &'static str,
+    page_request: &'static str,
+    page_response: &'static str,
+) {
+    assert_fields(
+        messages,
+        "ficant.research.v1.GetArtifactRequest",
+        &[ExpectedField::message("artifact_id", id)],
+    );
+    for (message, success_field, success_type) in [
+        (
+            "ficant.research.v1.GetArtifactResponse",
+            "artifact",
+            ".ficant.research.v1.Artifact",
+        ),
+        (
+            "ficant.research.v1.GetSignalSetResponse",
+            "signal_set",
+            ".ficant.research.v1.SignalSet",
+        ),
+    ] {
+        let response = messages
+            .get(message)
+            .unwrap_or_else(|| panic!("missing {message}"));
+        assert_exact_tagged_fields(
+            response,
+            &[
+                (success_field, 1, Type::Message, Some(success_type), false),
+                (
+                    "error",
+                    2,
+                    Type::Message,
+                    Some(".ficant.core.v1.ErrorDetail"),
+                    false,
+                ),
+            ],
+        );
+        assert_field_oneof(response, success_field, "result");
+        assert_field_oneof(response, "error", "result");
+    }
     assert_fields(
         messages,
         "ficant.research.v1.GetSignalSetRequest",
@@ -3881,11 +3971,11 @@ fn assert_query_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
     );
     assert_fields(
         messages,
-        "ficant.research.v1.GetSignalSetResponse",
-        &[ExpectedField::message(
-            "signal_set",
-            ".ficant.research.v1.SignalSet",
-        )],
+        "ficant.research.v1.LineagePage",
+        &[
+            ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
+            ExpectedField::message("page", page_response),
+        ],
     );
     for (message, id_field) in [
         (
@@ -3910,14 +4000,30 @@ fn assert_query_contracts(messages: &BTreeMap<String, &DescriptorProto>) {
         "ficant.research.v1.ReadArtifactLineageResponse",
         "ficant.research.v1.ReadSignalSetLineageResponse",
     ] {
-        assert_fields(
-            messages,
-            message,
+        let response = messages
+            .get(message)
+            .unwrap_or_else(|| panic!("missing {message}"));
+        assert_exact_tagged_fields(
+            response,
             &[
-                ExpectedField::repeated_message("lineage", ".ficant.core.v1.LineageRef"),
-                ExpectedField::message("page", page_response),
+                (
+                    "lineage_page",
+                    1,
+                    Type::Message,
+                    Some(".ficant.research.v1.LineagePage"),
+                    false,
+                ),
+                (
+                    "error",
+                    2,
+                    Type::Message,
+                    Some(".ficant.core.v1.ErrorDetail"),
+                    false,
+                ),
             ],
         );
+        assert_field_oneof(response, "lineage_page", "result");
+        assert_field_oneof(response, "error", "result");
     }
 }
 
@@ -4025,9 +4131,6 @@ fn assert_domain_enums(enums: &BTreeMap<String, &EnumDescriptorProto>) {
         &[
             ("ARTIFACT_KIND_UNSPECIFIED", 0),
             ("ARTIFACT_KIND_GENERIC", 1),
-            ("ARTIFACT_KIND_CURVE_SNAPSHOT", 2),
-            ("ARTIFACT_KIND_DATA_SNAPSHOT", 3),
-            ("ARTIFACT_KIND_UNIVERSE_SNAPSHOT", 4),
             ("ARTIFACT_KIND_SIGNAL_SET", 5),
         ],
     );
@@ -4215,19 +4318,9 @@ fn market_fact_methods() -> Vec<ExpectedMethod> {
 fn artifact_methods() -> Vec<ExpectedMethod> {
     vec![
         ExpectedMethod::new(
-            "PublishArtifact",
-            ".ficant.research.v1.PublishArtifactRequest",
-            ".ficant.research.v1.PublishArtifactResponse",
-        ),
-        ExpectedMethod::new(
             "GetArtifact",
             ".ficant.research.v1.GetArtifactRequest",
             ".ficant.research.v1.GetArtifactResponse",
-        ),
-        ExpectedMethod::new(
-            "PublishSignalSet",
-            ".ficant.research.v1.PublishSignalSetRequest",
-            ".ficant.research.v1.PublishSignalSetResponse",
         ),
         ExpectedMethod::new(
             "GetSignalSet",

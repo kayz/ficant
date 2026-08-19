@@ -310,7 +310,7 @@ def digest_files(paths):
     return h.hexdigest()
 
 artifacts = {
-    "rust": digest_files(["build/rust/release/ficant-server", "build/rust/release/ficant-worker", "build/rust/release/ficant-web"]),
+    "rust": digest_files(["build/rust/release/ficant-server", "build/rust/release/ficant-worker"]),
     "python": digest_files(["python/uv.lock", "build/python-freeze.txt", "build/python-artifacts.json"]),
     "cpp": digest_files(["build/cpp/libficant_kernel.so"]),
     "web": digest_files(["web-dm/platform-shell/dist/**/*"]),

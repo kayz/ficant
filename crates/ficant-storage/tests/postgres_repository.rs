@@ -1,16 +1,20 @@
 mod support;
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use async_trait::async_trait;
 use ficant_application::ports::{
-    AccessScope, AppendDefinitionVersion, AppendJournalEvent, AppendMarketFact, ArtifactRepository,
-    AuthorizedPrincipal, BeginBlobStage, BlobStore, CreateExperimentRun,
+    AccessScope, AppendDefinitionVersion, AppendJournalEvent, AppendMarketFact, ApplicationResult,
+    ArtifactRepository, AuthorizedPrincipal, BeginBlobStage, BlobStore, CreateExperimentRun,
     CurveSnapshotMetadataRepository, DataSourceRepository, DefinitionIdentity, DefinitionKind,
     DefinitionRepository, DefinitionValue, ExperimentRepository, FoundationChangeContext,
     FullyValidatedMarketFact, GovernedAppendDefinitionVersion, GovernedAppendMarketFact,
     GovernedCorrectMarketFact, GovernedPublishCurveSnapshot, IdempotencyKey, InstrumentDefinition,
-    MarketFact, MarketFactFieldRole, MarketFactRepository, MarketFactRulePackResolver,
-    MarketFactUnitResolver, MarketFactWindow, MarketRunRulePackResolver, PageRequest,
-    PublishArtifact, PublishCurveSnapshot, PublishSignalSet, PublishSnapshot, RegisterDataSource,
-    RunJournalRepository, SignalRepository, SnapshotBlobRole, SnapshotRepository, SnapshotValue,
+    IntegrityEvent, IntegrityEventSink, MarketFact, MarketFactFieldRole, MarketFactRepository,
+    MarketFactRulePackResolver, MarketFactUnitResolver, MarketFactWindow,
+    MarketRunRulePackResolver, PageRequest, PublishArtifact, PublishCurveSnapshot,
+    PublishSignalSet, PublishSnapshot, RegisterDataSource, RunJournalRepository, SafeTraceContext,
+    SignalRepository, SnapshotBlobRole, SnapshotRepository, SnapshotValue,
     SnapshotVerifiedReadMetadataRepository, TransitionExperimentRun, VerifiedBlobRef,
     VerifiedSnapshotBlob, VerifiedSnapshotProof, VerifyBlobStage, stored_definition_content_hash,
 };
@@ -1396,6 +1400,8 @@ async fn signal_repository_publishes_distinct_signal_and_artifact_identities() {
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
     let repository = support::repository(pool.clone());
+    let events = CountingIntegritySink::default();
+    let trace = SafeTraceContext::new("abcdef0123456789abcdef0123456789").unwrap();
     let owner = test_owner();
     let scope = support::access_scope(&owner);
     let run = seed_experiment_run(&repository, &pool, &owner).await;
@@ -1496,14 +1502,17 @@ async fn signal_repository_publishes_distinct_signal_and_artifact_identities() {
         signal
     );
     assert_eq!(
-        repository.publish_signal_set(command).await.unwrap(),
+        repository
+            .publish_signal_set(command.clone())
+            .await
+            .unwrap(),
         signal
     );
     assert_eq!(
         SignalRepository::get(&repository, &scope, signal_id.clone())
             .await
             .unwrap(),
-        Some(signal)
+        Some(signal.clone())
     );
     assert_eq!(
         SignalRepository::get(&repository, &scope, artifact_id.clone())
@@ -1515,10 +1524,10 @@ async fn signal_repository_publishes_distinct_signal_and_artifact_identities() {
         ArtifactRepository::get_metadata(&repository, &scope, artifact_id)
             .await
             .unwrap(),
-        Some(artifact)
+        Some(artifact.clone())
     );
     assert_eq!(
-        ArtifactRepository::get_metadata(&repository, &scope, signal_id)
+        ArtifactRepository::get_metadata(&repository, &scope, signal_id.clone())
             .await
             .unwrap(),
         None
@@ -1539,6 +1548,221 @@ async fn signal_repository_publishes_distinct_signal_and_artifact_identities() {
     assert_eq!(
         persisted,
         ("01ARZ3NDEKTSV4RRFFQ69G5F18".to_owned(), 1, 1, 5, 1)
+    );
+
+    sqlx::query(
+        "UPDATE research.signal_sets SET valid_to = valid_to + interval '1 day' \
+         WHERE tenant_id = $1 AND signal_set_id = $2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(signal_id.as_str())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let error = SignalRepository::get_integrity_checked(
+        &repository,
+        &scope,
+        signal_id.clone(),
+        trace.clone(),
+        &events,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(
+        error.category(),
+        ficant_application::ApplicationErrorCategory::ImmutableViolation
+    );
+    assert_eq!(events.count.load(Ordering::SeqCst), 1);
+    let error = repository.publish_signal_set(command).await.unwrap_err();
+    assert_eq!(
+        error.category(),
+        ficant_application::ApplicationErrorCategory::ImmutableViolation
+    );
+
+    sqlx::query(
+        "UPDATE research.signal_sets SET valid_to = $3 \
+         WHERE tenant_id = $1 AND signal_set_id = $2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(signal_id.as_str())
+    .bind(signal.valid().to().instant())
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE research.lineage_edges SET target_version = 2 \
+         WHERE tenant_id = $1 AND source_object_id = $2 AND lineage_ordinal = 1",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(signal_id.as_str())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let error =
+        SignalRepository::get_integrity_checked(&repository, &scope, signal_id, trace, &events)
+            .await
+            .unwrap_err();
+    assert_eq!(
+        error.category(),
+        ficant_application::ApplicationErrorCategory::LineageIncomplete
+    );
+    assert_eq!(events.count.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn artifact_repository_rejects_sql_and_lineage_drift_on_read() {
+    let pool = support::postgres_pool().await;
+    support::reset_postgres(&pool).await;
+    support::migrate(&pool).await;
+    let repository = support::repository(pool.clone());
+    let events = CountingIntegritySink::default();
+    let trace = SafeTraceContext::new("0123456789abcdef0123456789abcdef").unwrap();
+    let owner = test_owner();
+    let scope = support::access_scope(&owner);
+    let artifact_id = Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5H01").unwrap();
+    let lineage_id = Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5H02").unwrap();
+    seed_unit(&repository, &owner, lineage_id.clone(), "R6B-READ").await;
+    let bytes = b"r6b artifact required read";
+    let hash = ContentHash::digest(bytes);
+    let verified = stage_verified_blob(&pool, owner.clone(), "r6b:artifact:blob", bytes).await;
+    let artifact = Artifact::new(
+        artifact_id.clone(),
+        owner.clone(),
+        ArtifactKind::Generic,
+        "application/vnd.ficant.artifact",
+        hash,
+        u64::try_from(bytes.len()).unwrap(),
+        vec![LineageRef::versioned(lineage_id, Version::new(1).unwrap())],
+    )
+    .unwrap();
+    repository
+        .publish_verified_blob(
+            PublishArtifact::new(
+                artifact,
+                verified,
+                IdempotencyKey::new("r6b:artifact:publish").unwrap(),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "UPDATE research.artifacts SET media_type = 'application/tampered' \
+         WHERE tenant_id = $1 AND artifact_id = $2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(artifact_id.as_str())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let error = ArtifactRepository::get_integrity_checked_metadata(
+        &repository,
+        &scope,
+        artifact_id.clone(),
+        trace.clone(),
+        &events,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(
+        error.category(),
+        ficant_application::ApplicationErrorCategory::ImmutableViolation
+    );
+    assert_eq!(events.count.load(Ordering::SeqCst), 1);
+
+    sqlx::query(
+        "UPDATE research.artifacts SET media_type = 'application/vnd.ficant.artifact' \
+         WHERE tenant_id = $1 AND artifact_id = $2",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(artifact_id.as_str())
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE research.lineage_edges SET target_version = 2 \
+         WHERE tenant_id = $1 AND source_object_id = $2 AND lineage_ordinal = 0",
+    )
+    .bind(owner.tenant_id().as_str())
+    .bind(artifact_id.as_str())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let error = ArtifactRepository::get_integrity_checked_metadata(
+        &repository,
+        &scope,
+        artifact_id,
+        trace,
+        &events,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(
+        error.category(),
+        ficant_application::ApplicationErrorCategory::LineageIncomplete
+    );
+    assert_eq!(events.count.load(Ordering::SeqCst), 2);
+}
+
+#[derive(Default)]
+struct CountingIntegritySink {
+    count: AtomicUsize,
+}
+
+#[async_trait]
+impl IntegrityEventSink for CountingIntegritySink {
+    async fn emit(&self, _event: IntegrityEvent) -> ApplicationResult<()> {
+        self.count.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn artifact_repository_replay_requires_the_persisted_value() {
+    let pool = support::postgres_pool().await;
+    support::reset_postgres(&pool).await;
+    support::migrate(&pool).await;
+    let repository = support::repository(pool.clone());
+    let owner = test_owner();
+    let artifact_id = Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5H03").unwrap();
+    let lineage_id = Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5H04").unwrap();
+    seed_unit(&repository, &owner, lineage_id.clone(), "R6B-REPLAY").await;
+    let bytes = b"r6b artifact replay";
+    let hash = ContentHash::digest(bytes);
+    let verified =
+        stage_verified_blob(&pool, owner.clone(), "r6b:artifact:replay:blob", bytes).await;
+    let artifact = Artifact::new(
+        artifact_id.clone(),
+        owner.clone(),
+        ArtifactKind::Generic,
+        "application/vnd.ficant.artifact",
+        hash,
+        u64::try_from(bytes.len()).unwrap(),
+        vec![LineageRef::versioned(lineage_id, Version::new(1).unwrap())],
+    )
+    .unwrap();
+    let command = PublishArtifact::new(
+        artifact,
+        verified,
+        IdempotencyKey::new("r6b:artifact:replay:publish").unwrap(),
+    )
+    .unwrap();
+    repository
+        .publish_verified_blob(command.clone())
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM research.artifacts WHERE tenant_id = $1 AND artifact_id = $2")
+        .bind(owner.tenant_id().as_str())
+        .bind(artifact_id.as_str())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let error = repository.publish_verified_blob(command).await.unwrap_err();
+    assert_eq!(
+        error.category(),
+        ficant_application::ApplicationErrorCategory::ImmutableViolation
     );
 }
 

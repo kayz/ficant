@@ -171,7 +171,7 @@ R5b 在 R5a 之后建立 `CoverageDeclaration`，R5c 在 R5a 之后建立 `DataH
 | **R5D** | **系统完整性重整** | 五个 Rates RPC 精确输入物化与实际消费血缘；`FixedDecimal` 下沉并消除 L1→L2 反向依赖；结构门禁；独立 Decimal KRD Oracle；20 个一方包许可证闭合与必要事实文档修复 | —（S3 / I3 前置） |
 | **R5E** | **税后 CTD 双口径** | Human 批准且带来源/hash 的 TaxRulePack；独立税后 YTM Oracle；候选双 IRR、市场/主体双 CTD、反转篮子和无税差对照 | AC09 |
 | **R6A** | **角色、白名单与输入服务组合** | 平台管理员/研究用户分离；实现并生产组合 Definition、Fact、Snapshot 输入面；数据源白名单和基础数据变更留痕 | AC37 |
-| **R6B** | **Artifact 服务与拓扑闭合** | 实现 Artifact 查询/发布面并接通现有 publish use case；建立“声明即生产可达”门禁；清理 dead gRPC-Web 代码和 `ficant-web` 逻辑孤儿 | —（服务拓扑闭合） |
+| **R6B** | **Artifact 服务与拓扑闭合** | 实现 verified Artifact 查询面并保留既有 server-owned publish use case；建立“声明即生产可达”门禁；收敛为单一 gRPC/gRPC-Web route builder，并删除 `ficant-web` 逻辑孤儿 | —（服务拓扑闭合） |
 | **R7A** | **分层与双时间重取证** | 虚构市场零核心改动；重取证双时间与不可变性；跨 clang 原始数值比对；按 AC04 实证决定是否拆分 domain crates | AC04 AC11–AC13 |
 | **R7B** | **一期证据与恢复收口** | 完整代码/镜像/输入血缘、确定性与恢复；MANUAL、运行手册、当前能力文档及全量重取证 | AC30–AC33 |
 | **独立治理轮** | **远端仓库与发布治理** | 由 Human/CICD 决定轻量 PR 检查、CODEOWNERS/审批/status checks、Dependabot、secret scanning、push protection、Release 对齐和签名策略；不进入 OPAID 产品迭代 | — |

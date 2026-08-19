@@ -1590,9 +1590,6 @@ fn decode_run_state(value: u8) -> CodecResult<RunState> {
 const fn artifact_kind_code(value: ArtifactKind) -> u8 {
     match value {
         ArtifactKind::Generic => 1,
-        ArtifactKind::CurveSnapshot => 2,
-        ArtifactKind::DataSnapshot => 3,
-        ArtifactKind::UniverseSnapshot => 4,
         ArtifactKind::SignalSet => 5,
     }
 }
@@ -1600,9 +1597,6 @@ const fn artifact_kind_code(value: ArtifactKind) -> u8 {
 fn decode_artifact_kind(value: u8) -> CodecResult<ArtifactKind> {
     match value {
         1 => Ok(ArtifactKind::Generic),
-        2 => Ok(ArtifactKind::CurveSnapshot),
-        3 => Ok(ArtifactKind::DataSnapshot),
-        4 => Ok(ArtifactKind::UniverseSnapshot),
         5 => Ok(ArtifactKind::SignalSet),
         _ => Err(codec_error()),
     }

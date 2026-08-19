@@ -6,6 +6,8 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { LineageRef, OwnerRef, PageRequest, PageResponse, Sha256, Ulid } from "../../core/v1/common_pb";
 import { file_ficant_core_v1_common } from "../../core/v1/common_pb";
+import type { ErrorDetail } from "../../core/v1/error_pb";
+import { file_ficant_core_v1_error } from "../../core/v1/error_pb";
 import type { SignalSet } from "./signal_pb";
 import { file_ficant_research_v1_signal } from "./signal_pb";
 import type { Message } from "@bufbuild/protobuf";
@@ -14,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ficant/research/v1/artifact.proto.
  */
 export const file_ficant_research_v1_artifact: GenFile = /*@__PURE__*/
-  fileDesc("CiFmaWNhbnQvcmVzZWFyY2gvdjEvYXJ0aWZhY3QucHJvdG8SEmZpY2FudC5yZXNlYXJjaC52MSKQAgoIQXJ0aWZhY3QSKQoLYXJ0aWZhY3RfaWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEicKBW93bmVyGAIgASgLMhguZmljYW50LmNvcmUudjEuT3duZXJSZWYSLgoEa2luZBgDIAEoDjIgLmZpY2FudC5yZXNlYXJjaC52MS5BcnRpZmFjdEtpbmQSEgoKbWVkaWFfdHlwZRgEIAEoCRIsCgxjb250ZW50X2hhc2gYBSABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSEQoJYmxvYl9zaXplGAYgASgEEisKB2xpbmVhZ2UYByADKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmImEKFlB1Ymxpc2hBcnRpZmFjdFJlcXVlc3QSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgJEi4KCGFydGlmYWN0GAIgASgLMhwuZmljYW50LnJlc2VhcmNoLnYxLkFydGlmYWN0IkkKF1B1Ymxpc2hBcnRpZmFjdFJlc3BvbnNlEi4KCGFydGlmYWN0GAEgASgLMhwuZmljYW50LnJlc2VhcmNoLnYxLkFydGlmYWN0Ij8KEkdldEFydGlmYWN0UmVxdWVzdBIpCgthcnRpZmFjdF9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQiRQoTR2V0QXJ0aWZhY3RSZXNwb25zZRIuCghhcnRpZmFjdBgBIAEoCzIcLmZpY2FudC5yZXNlYXJjaC52MS5BcnRpZmFjdCJlChdQdWJsaXNoU2lnbmFsU2V0UmVxdWVzdBIXCg9pZGVtcG90ZW5jeV9rZXkYASABKAkSMQoKc2lnbmFsX3NldBgCIAEoCzIdLmZpY2FudC5yZXNlYXJjaC52MS5TaWduYWxTZXQiTQoYUHVibGlzaFNpZ25hbFNldFJlc3BvbnNlEjEKCnNpZ25hbF9zZXQYASABKAsyHS5maWNhbnQucmVzZWFyY2gudjEuU2lnbmFsU2V0IkIKE0dldFNpZ25hbFNldFJlcXVlc3QSKwoNc2lnbmFsX3NldF9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQiSQoUR2V0U2lnbmFsU2V0UmVzcG9uc2USMQoKc2lnbmFsX3NldBgBIAEoCzIdLmZpY2FudC5yZXNlYXJjaC52MS5TaWduYWxTZXQicgoaUmVhZEFydGlmYWN0TGluZWFnZVJlcXVlc3QSKQoLYXJ0aWZhY3RfaWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEikKBHBhZ2UYAiABKAsyGy5maWNhbnQuY29yZS52MS5QYWdlUmVxdWVzdCJ2ChtSZWFkQXJ0aWZhY3RMaW5lYWdlUmVzcG9uc2USKwoHbGluZWFnZRgBIAMoCzIaLmZpY2FudC5jb3JlLnYxLkxpbmVhZ2VSZWYSKgoEcGFnZRgCIAEoCzIcLmZpY2FudC5jb3JlLnYxLlBhZ2VSZXNwb25zZSJ1ChtSZWFkU2lnbmFsU2V0TGluZWFnZVJlcXVlc3QSKwoNc2lnbmFsX3NldF9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQSKQoEcGFnZRgCIAEoCzIbLmZpY2FudC5jb3JlLnYxLlBhZ2VSZXF1ZXN0IncKHFJlYWRTaWduYWxTZXRMaW5lYWdlUmVzcG9uc2USKwoHbGluZWFnZRgBIAMoCzIaLmZpY2FudC5jb3JlLnYxLkxpbmVhZ2VSZWYSKgoEcGFnZRgCIAEoCzIcLmZpY2FudC5jb3JlLnYxLlBhZ2VSZXNwb25zZSrOAQoMQXJ0aWZhY3RLaW5kEh0KGUFSVElGQUNUX0tJTkRfVU5TUEVDSUZJRUQQABIZChVBUlRJRkFDVF9LSU5EX0dFTkVSSUMQARIgChxBUlRJRkFDVF9LSU5EX0NVUlZFX1NOQVBTSE9UEAISHwobQVJUSUZBQ1RfS0lORF9EQVRBX1NOQVBTSE9UEAMSIwofQVJUSUZBQ1RfS0lORF9VTklWRVJTRV9TTkFQU0hPVBAEEhwKGEFSVElGQUNUX0tJTkRfU0lHTkFMX1NFVBAFMqIFCg9BcnRpZmFjdFNlcnZpY2USagoPUHVibGlzaEFydGlmYWN0EiouZmljYW50LnJlc2VhcmNoLnYxLlB1Ymxpc2hBcnRpZmFjdFJlcXVlc3QaKy5maWNhbnQucmVzZWFyY2gudjEuUHVibGlzaEFydGlmYWN0UmVzcG9uc2USXgoLR2V0QXJ0aWZhY3QSJi5maWNhbnQucmVzZWFyY2gudjEuR2V0QXJ0aWZhY3RSZXF1ZXN0GicuZmljYW50LnJlc2VhcmNoLnYxLkdldEFydGlmYWN0UmVzcG9uc2USbQoQUHVibGlzaFNpZ25hbFNldBIrLmZpY2FudC5yZXNlYXJjaC52MS5QdWJsaXNoU2lnbmFsU2V0UmVxdWVzdBosLmZpY2FudC5yZXNlYXJjaC52MS5QdWJsaXNoU2lnbmFsU2V0UmVzcG9uc2USYQoMR2V0U2lnbmFsU2V0EicuZmljYW50LnJlc2VhcmNoLnYxLkdldFNpZ25hbFNldFJlcXVlc3QaKC5maWNhbnQucmVzZWFyY2gudjEuR2V0U2lnbmFsU2V0UmVzcG9uc2USdgoTUmVhZEFydGlmYWN0TGluZWFnZRIuLmZpY2FudC5yZXNlYXJjaC52MS5SZWFkQXJ0aWZhY3RMaW5lYWdlUmVxdWVzdBovLmZpY2FudC5yZXNlYXJjaC52MS5SZWFkQXJ0aWZhY3RMaW5lYWdlUmVzcG9uc2USeQoUUmVhZFNpZ25hbFNldExpbmVhZ2USLy5maWNhbnQucmVzZWFyY2gudjEuUmVhZFNpZ25hbFNldExpbmVhZ2VSZXF1ZXN0GjAuZmljYW50LnJlc2VhcmNoLnYxLlJlYWRTaWduYWxTZXRMaW5lYWdlUmVzcG9uc2ViBnByb3RvMw", [file_ficant_core_v1_common, file_ficant_research_v1_signal]);
+  fileDesc("CiFmaWNhbnQvcmVzZWFyY2gvdjEvYXJ0aWZhY3QucHJvdG8SEmZpY2FudC5yZXNlYXJjaC52MSKQAgoIQXJ0aWZhY3QSKQoLYXJ0aWZhY3RfaWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEicKBW93bmVyGAIgASgLMhguZmljYW50LmNvcmUudjEuT3duZXJSZWYSLgoEa2luZBgDIAEoDjIgLmZpY2FudC5yZXNlYXJjaC52MS5BcnRpZmFjdEtpbmQSEgoKbWVkaWFfdHlwZRgEIAEoCRIsCgxjb250ZW50X2hhc2gYBSABKAsyFi5maWNhbnQuY29yZS52MS5TaGEyNTYSEQoJYmxvYl9zaXplGAYgASgEEisKB2xpbmVhZ2UYByADKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmIj8KEkdldEFydGlmYWN0UmVxdWVzdBIpCgthcnRpZmFjdF9pZBgBIAEoCzIULmZpY2FudC5jb3JlLnYxLlVsaWQifwoTR2V0QXJ0aWZhY3RSZXNwb25zZRIwCghhcnRpZmFjdBgBIAEoCzIcLmZpY2FudC5yZXNlYXJjaC52MS5BcnRpZmFjdEgAEiwKBWVycm9yGAIgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHQiQgoTR2V0U2lnbmFsU2V0UmVxdWVzdBIrCg1zaWduYWxfc2V0X2lkGAEgASgLMhQuZmljYW50LmNvcmUudjEuVWxpZCKDAQoUR2V0U2lnbmFsU2V0UmVzcG9uc2USMwoKc2lnbmFsX3NldBgBIAEoCzIdLmZpY2FudC5yZXNlYXJjaC52MS5TaWduYWxTZXRIABIsCgVlcnJvchgCIAEoCzIbLmZpY2FudC5jb3JlLnYxLkVycm9yRGV0YWlsSABCCAoGcmVzdWx0ImYKC0xpbmVhZ2VQYWdlEisKB2xpbmVhZ2UYASADKAsyGi5maWNhbnQuY29yZS52MS5MaW5lYWdlUmVmEioKBHBhZ2UYAiABKAsyHC5maWNhbnQuY29yZS52MS5QYWdlUmVzcG9uc2UicgoaUmVhZEFydGlmYWN0TGluZWFnZVJlcXVlc3QSKQoLYXJ0aWZhY3RfaWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEikKBHBhZ2UYAiABKAsyGy5maWNhbnQuY29yZS52MS5QYWdlUmVxdWVzdCKOAQobUmVhZEFydGlmYWN0TGluZWFnZVJlc3BvbnNlEjcKDGxpbmVhZ2VfcGFnZRgBIAEoCzIfLmZpY2FudC5yZXNlYXJjaC52MS5MaW5lYWdlUGFnZUgAEiwKBWVycm9yGAIgASgLMhsuZmljYW50LmNvcmUudjEuRXJyb3JEZXRhaWxIAEIICgZyZXN1bHQidQobUmVhZFNpZ25hbFNldExpbmVhZ2VSZXF1ZXN0EisKDXNpZ25hbF9zZXRfaWQYASABKAsyFC5maWNhbnQuY29yZS52MS5VbGlkEikKBHBhZ2UYAiABKAsyGy5maWNhbnQuY29yZS52MS5QYWdlUmVxdWVzdCKPAQocUmVhZFNpZ25hbFNldExpbmVhZ2VSZXNwb25zZRI3CgxsaW5lYWdlX3BhZ2UYASABKAsyHy5maWNhbnQucmVzZWFyY2gudjEuTGluZWFnZVBhZ2VIABIsCgVlcnJvchgCIAEoCzIbLmZpY2FudC5jb3JlLnYxLkVycm9yRGV0YWlsSABCCAoGcmVzdWx0KsgBCgxBcnRpZmFjdEtpbmQSHQoZQVJUSUZBQ1RfS0lORF9VTlNQRUNJRklFRBAAEhkKFUFSVElGQUNUX0tJTkRfR0VORVJJQxABEhwKGEFSVElGQUNUX0tJTkRfU0lHTkFMX1NFVBAFIgQIAhAEKhxBUlRJRkFDVF9LSU5EX0NVUlZFX1NOQVBTSE9UKhtBUlRJRkFDVF9LSU5EX0RBVEFfU05BUFNIT1QqH0FSVElGQUNUX0tJTkRfVU5JVkVSU0VfU05BUFNIT1QyxwMKD0FydGlmYWN0U2VydmljZRJeCgtHZXRBcnRpZmFjdBImLmZpY2FudC5yZXNlYXJjaC52MS5HZXRBcnRpZmFjdFJlcXVlc3QaJy5maWNhbnQucmVzZWFyY2gudjEuR2V0QXJ0aWZhY3RSZXNwb25zZRJhCgxHZXRTaWduYWxTZXQSJy5maWNhbnQucmVzZWFyY2gudjEuR2V0U2lnbmFsU2V0UmVxdWVzdBooLmZpY2FudC5yZXNlYXJjaC52MS5HZXRTaWduYWxTZXRSZXNwb25zZRJ2ChNSZWFkQXJ0aWZhY3RMaW5lYWdlEi4uZmljYW50LnJlc2VhcmNoLnYxLlJlYWRBcnRpZmFjdExpbmVhZ2VSZXF1ZXN0Gi8uZmljYW50LnJlc2VhcmNoLnYxLlJlYWRBcnRpZmFjdExpbmVhZ2VSZXNwb25zZRJ5ChRSZWFkU2lnbmFsU2V0TGluZWFnZRIvLmZpY2FudC5yZXNlYXJjaC52MS5SZWFkU2lnbmFsU2V0TGluZWFnZVJlcXVlc3QaMC5maWNhbnQucmVzZWFyY2gudjEuUmVhZFNpZ25hbFNldExpbmVhZ2VSZXNwb25zZWIGcHJvdG8z", [file_ficant_core_v1_common, file_ficant_core_v1_error, file_ficant_research_v1_signal]);
 
 /**
  * @generated from message ficant.research.v1.Artifact
@@ -64,45 +66,6 @@ export const ArtifactSchema: GenMessage<Artifact> = /*@__PURE__*/
   messageDesc(file_ficant_research_v1_artifact, 0);
 
 /**
- * @generated from message ficant.research.v1.PublishArtifactRequest
- */
-export type PublishArtifactRequest = Message<"ficant.research.v1.PublishArtifactRequest"> & {
-  /**
-   * @generated from field: string idempotency_key = 1;
-   */
-  idempotencyKey: string;
-
-  /**
-   * @generated from field: ficant.research.v1.Artifact artifact = 2;
-   */
-  artifact?: Artifact;
-};
-
-/**
- * Describes the message ficant.research.v1.PublishArtifactRequest.
- * Use `create(PublishArtifactRequestSchema)` to create a new message.
- */
-export const PublishArtifactRequestSchema: GenMessage<PublishArtifactRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_artifact, 1);
-
-/**
- * @generated from message ficant.research.v1.PublishArtifactResponse
- */
-export type PublishArtifactResponse = Message<"ficant.research.v1.PublishArtifactResponse"> & {
-  /**
-   * @generated from field: ficant.research.v1.Artifact artifact = 1;
-   */
-  artifact?: Artifact;
-};
-
-/**
- * Describes the message ficant.research.v1.PublishArtifactResponse.
- * Use `create(PublishArtifactResponseSchema)` to create a new message.
- */
-export const PublishArtifactResponseSchema: GenMessage<PublishArtifactResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_artifact, 2);
-
-/**
  * @generated from message ficant.research.v1.GetArtifactRequest
  */
 export type GetArtifactRequest = Message<"ficant.research.v1.GetArtifactRequest"> & {
@@ -117,16 +80,28 @@ export type GetArtifactRequest = Message<"ficant.research.v1.GetArtifactRequest"
  * Use `create(GetArtifactRequestSchema)` to create a new message.
  */
 export const GetArtifactRequestSchema: GenMessage<GetArtifactRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_artifact, 3);
+  messageDesc(file_ficant_research_v1_artifact, 1);
 
 /**
  * @generated from message ficant.research.v1.GetArtifactResponse
  */
 export type GetArtifactResponse = Message<"ficant.research.v1.GetArtifactResponse"> & {
   /**
-   * @generated from field: ficant.research.v1.Artifact artifact = 1;
+   * @generated from oneof ficant.research.v1.GetArtifactResponse.result
    */
-  artifact?: Artifact;
+  result: {
+    /**
+     * @generated from field: ficant.research.v1.Artifact artifact = 1;
+     */
+    value: Artifact;
+    case: "artifact";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 2;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
 };
 
 /**
@@ -134,46 +109,7 @@ export type GetArtifactResponse = Message<"ficant.research.v1.GetArtifactRespons
  * Use `create(GetArtifactResponseSchema)` to create a new message.
  */
 export const GetArtifactResponseSchema: GenMessage<GetArtifactResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_artifact, 4);
-
-/**
- * @generated from message ficant.research.v1.PublishSignalSetRequest
- */
-export type PublishSignalSetRequest = Message<"ficant.research.v1.PublishSignalSetRequest"> & {
-  /**
-   * @generated from field: string idempotency_key = 1;
-   */
-  idempotencyKey: string;
-
-  /**
-   * @generated from field: ficant.research.v1.SignalSet signal_set = 2;
-   */
-  signalSet?: SignalSet;
-};
-
-/**
- * Describes the message ficant.research.v1.PublishSignalSetRequest.
- * Use `create(PublishSignalSetRequestSchema)` to create a new message.
- */
-export const PublishSignalSetRequestSchema: GenMessage<PublishSignalSetRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_artifact, 5);
-
-/**
- * @generated from message ficant.research.v1.PublishSignalSetResponse
- */
-export type PublishSignalSetResponse = Message<"ficant.research.v1.PublishSignalSetResponse"> & {
-  /**
-   * @generated from field: ficant.research.v1.SignalSet signal_set = 1;
-   */
-  signalSet?: SignalSet;
-};
-
-/**
- * Describes the message ficant.research.v1.PublishSignalSetResponse.
- * Use `create(PublishSignalSetResponseSchema)` to create a new message.
- */
-export const PublishSignalSetResponseSchema: GenMessage<PublishSignalSetResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_artifact, 6);
+  messageDesc(file_ficant_research_v1_artifact, 2);
 
 /**
  * @generated from message ficant.research.v1.GetSignalSetRequest
@@ -190,16 +126,28 @@ export type GetSignalSetRequest = Message<"ficant.research.v1.GetSignalSetReques
  * Use `create(GetSignalSetRequestSchema)` to create a new message.
  */
 export const GetSignalSetRequestSchema: GenMessage<GetSignalSetRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_artifact, 7);
+  messageDesc(file_ficant_research_v1_artifact, 3);
 
 /**
  * @generated from message ficant.research.v1.GetSignalSetResponse
  */
 export type GetSignalSetResponse = Message<"ficant.research.v1.GetSignalSetResponse"> & {
   /**
-   * @generated from field: ficant.research.v1.SignalSet signal_set = 1;
+   * @generated from oneof ficant.research.v1.GetSignalSetResponse.result
    */
-  signalSet?: SignalSet;
+  result: {
+    /**
+     * @generated from field: ficant.research.v1.SignalSet signal_set = 1;
+     */
+    value: SignalSet;
+    case: "signalSet";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 2;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
 };
 
 /**
@@ -207,7 +155,29 @@ export type GetSignalSetResponse = Message<"ficant.research.v1.GetSignalSetRespo
  * Use `create(GetSignalSetResponseSchema)` to create a new message.
  */
 export const GetSignalSetResponseSchema: GenMessage<GetSignalSetResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_artifact, 8);
+  messageDesc(file_ficant_research_v1_artifact, 4);
+
+/**
+ * @generated from message ficant.research.v1.LineagePage
+ */
+export type LineagePage = Message<"ficant.research.v1.LineagePage"> & {
+  /**
+   * @generated from field: repeated ficant.core.v1.LineageRef lineage = 1;
+   */
+  lineage: LineageRef[];
+
+  /**
+   * @generated from field: ficant.core.v1.PageResponse page = 2;
+   */
+  page?: PageResponse;
+};
+
+/**
+ * Describes the message ficant.research.v1.LineagePage.
+ * Use `create(LineagePageSchema)` to create a new message.
+ */
+export const LineagePageSchema: GenMessage<LineagePage> = /*@__PURE__*/
+  messageDesc(file_ficant_research_v1_artifact, 5);
 
 /**
  * @generated from message ficant.research.v1.ReadArtifactLineageRequest
@@ -229,21 +199,28 @@ export type ReadArtifactLineageRequest = Message<"ficant.research.v1.ReadArtifac
  * Use `create(ReadArtifactLineageRequestSchema)` to create a new message.
  */
 export const ReadArtifactLineageRequestSchema: GenMessage<ReadArtifactLineageRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_artifact, 9);
+  messageDesc(file_ficant_research_v1_artifact, 6);
 
 /**
  * @generated from message ficant.research.v1.ReadArtifactLineageResponse
  */
 export type ReadArtifactLineageResponse = Message<"ficant.research.v1.ReadArtifactLineageResponse"> & {
   /**
-   * @generated from field: repeated ficant.core.v1.LineageRef lineage = 1;
+   * @generated from oneof ficant.research.v1.ReadArtifactLineageResponse.result
    */
-  lineage: LineageRef[];
-
-  /**
-   * @generated from field: ficant.core.v1.PageResponse page = 2;
-   */
-  page?: PageResponse;
+  result: {
+    /**
+     * @generated from field: ficant.research.v1.LineagePage lineage_page = 1;
+     */
+    value: LineagePage;
+    case: "lineagePage";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 2;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
 };
 
 /**
@@ -251,7 +228,7 @@ export type ReadArtifactLineageResponse = Message<"ficant.research.v1.ReadArtifa
  * Use `create(ReadArtifactLineageResponseSchema)` to create a new message.
  */
 export const ReadArtifactLineageResponseSchema: GenMessage<ReadArtifactLineageResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_artifact, 10);
+  messageDesc(file_ficant_research_v1_artifact, 7);
 
 /**
  * @generated from message ficant.research.v1.ReadSignalSetLineageRequest
@@ -273,21 +250,28 @@ export type ReadSignalSetLineageRequest = Message<"ficant.research.v1.ReadSignal
  * Use `create(ReadSignalSetLineageRequestSchema)` to create a new message.
  */
 export const ReadSignalSetLineageRequestSchema: GenMessage<ReadSignalSetLineageRequest> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_artifact, 11);
+  messageDesc(file_ficant_research_v1_artifact, 8);
 
 /**
  * @generated from message ficant.research.v1.ReadSignalSetLineageResponse
  */
 export type ReadSignalSetLineageResponse = Message<"ficant.research.v1.ReadSignalSetLineageResponse"> & {
   /**
-   * @generated from field: repeated ficant.core.v1.LineageRef lineage = 1;
+   * @generated from oneof ficant.research.v1.ReadSignalSetLineageResponse.result
    */
-  lineage: LineageRef[];
-
-  /**
-   * @generated from field: ficant.core.v1.PageResponse page = 2;
-   */
-  page?: PageResponse;
+  result: {
+    /**
+     * @generated from field: ficant.research.v1.LineagePage lineage_page = 1;
+     */
+    value: LineagePage;
+    case: "lineagePage";
+  } | {
+    /**
+     * @generated from field: ficant.core.v1.ErrorDetail error = 2;
+     */
+    value: ErrorDetail;
+    case: "error";
+  } | { case: undefined; value?: undefined };
 };
 
 /**
@@ -295,7 +279,7 @@ export type ReadSignalSetLineageResponse = Message<"ficant.research.v1.ReadSigna
  * Use `create(ReadSignalSetLineageResponseSchema)` to create a new message.
  */
 export const ReadSignalSetLineageResponseSchema: GenMessage<ReadSignalSetLineageResponse> = /*@__PURE__*/
-  messageDesc(file_ficant_research_v1_artifact, 12);
+  messageDesc(file_ficant_research_v1_artifact, 9);
 
 /**
  * @generated from enum ficant.research.v1.ArtifactKind
@@ -310,21 +294,6 @@ export enum ArtifactKind {
    * @generated from enum value: ARTIFACT_KIND_GENERIC = 1;
    */
   GENERIC = 1,
-
-  /**
-   * @generated from enum value: ARTIFACT_KIND_CURVE_SNAPSHOT = 2;
-   */
-  CURVE_SNAPSHOT = 2,
-
-  /**
-   * @generated from enum value: ARTIFACT_KIND_DATA_SNAPSHOT = 3;
-   */
-  DATA_SNAPSHOT = 3,
-
-  /**
-   * @generated from enum value: ARTIFACT_KIND_UNIVERSE_SNAPSHOT = 4;
-   */
-  UNIVERSE_SNAPSHOT = 4,
 
   /**
    * @generated from enum value: ARTIFACT_KIND_SIGNAL_SET = 5;
@@ -343,28 +312,12 @@ export const ArtifactKindSchema: GenEnum<ArtifactKind> = /*@__PURE__*/
  */
 export const ArtifactService: GenService<{
   /**
-   * @generated from rpc ficant.research.v1.ArtifactService.PublishArtifact
-   */
-  publishArtifact: {
-    methodKind: "unary";
-    input: typeof PublishArtifactRequestSchema;
-    output: typeof PublishArtifactResponseSchema;
-  },
-  /**
    * @generated from rpc ficant.research.v1.ArtifactService.GetArtifact
    */
   getArtifact: {
     methodKind: "unary";
     input: typeof GetArtifactRequestSchema;
     output: typeof GetArtifactResponseSchema;
-  },
-  /**
-   * @generated from rpc ficant.research.v1.ArtifactService.PublishSignalSet
-   */
-  publishSignalSet: {
-    methodKind: "unary";
-    input: typeof PublishSignalSetRequestSchema;
-    output: typeof PublishSignalSetResponseSchema;
   },
   /**
    * @generated from rpc ficant.research.v1.ArtifactService.GetSignalSet

@@ -93,6 +93,14 @@ import {
   DataSnapshotSchema,
   SnapshotService,
 } from "../../packages/contracts-generated/src/ficant/research/v1/snapshot_pb";
+import {
+  ArtifactKind,
+  ArtifactSchema,
+  ArtifactService,
+  GetArtifactResponseSchema,
+  LineagePageSchema,
+  ReadArtifactLineageResponseSchema,
+} from "../../packages/contracts-generated/src/ficant/research/v1/artifact_pb";
 import { describe, expect, it } from "vitest";
 
 describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
@@ -427,5 +435,26 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
       "ficant.rates.v1.ArtifactBinding",
     );
     expect("targetDv01" in hedgeRequest).toBe(false);
+    const artifact = create(ArtifactSchema, { kind: ArtifactKind.GENERIC });
+    const artifactResponse = create(GetArtifactResponseSchema, {
+      result: { case: "artifact", value: artifact },
+    });
+    const lineagePage = create(LineagePageSchema);
+    const lineageResponse = create(ReadArtifactLineageResponseSchema, {
+      result: { case: "lineagePage", value: lineagePage },
+    });
+    expect(artifactResponse.result.case).toBe("artifact");
+    expect(lineageResponse.result.case).toBe("lineagePage");
+    expect(ArtifactService.methods.map((method) => method.localName).sort()).toEqual([
+      "getArtifact",
+      "getSignalSet",
+      "readArtifactLineage",
+      "readSignalSetLineage",
+    ]);
+    expect(Object.values(ArtifactKind).filter((value) => typeof value === "number")).toEqual([
+      0,
+      1,
+      5,
+    ]);
   });
 });

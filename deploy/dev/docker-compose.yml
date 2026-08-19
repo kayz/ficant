@@ -193,23 +193,6 @@ services:
       ficant-server:
         condition: service_healthy
 
-  ficant-web:
-    <<: *rust-service
-    build:
-      context: ../..
-      dockerfile: deploy/dev/RustService.Dockerfile
-      args:
-        BINARY: ficant-web
-    ports:
-      - "127.0.0.1:${FICANT_WEB_PORT:-18082}:8080"
-    depends_on:
-      migration:
-        condition: service_completed_successfully
-      ceph-rgw:
-        condition: service_healthy
-      ficant-server:
-        condition: service_healthy
-
   ficant-ui:
     <<: *secure-service
     profiles: [ui]

@@ -1,7 +1,7 @@
 use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
 use ficant_api::{
     GrpcWebServerConfig, PlatformApplication, PlatformGrpcService, PlatformPort, RatesGrpcService,
-    SessionPolicy, SystemClock, TrustedIdentity, serve_grpc_web_with_rates,
+    SessionPolicy, SystemClock, TrustedIdentity, serve_grpc_web_routes,
 };
 use ficant_application::ports::{
     AccessScope, AppendDefinitionVersion, ApplicationResult, ArtifactRepository,
@@ -21,6 +21,7 @@ use ficant_application::{
     FUTURES_DELIVERY_MEDIA_TYPE, rates_data_source_content_hash,
 };
 use ficant_cgb_futures_pack::{CgbFuturesDeliveryRulePackParser, MARKET, RULE_TYPE, TYPE_URL};
+use ficant_contracts::ficant::app::v1::platform_service_server::PlatformServiceServer;
 use ficant_contracts::ficant::core::v1::{
     DecimalValue, FundingTier as ProtoFundingTier, Ulid as ProtoUlid, UnitRef as ProtoUnitRef,
 };
@@ -29,6 +30,7 @@ use ficant_contracts::ficant::market::v1::{
     IncomeTaxStatus as ProtoIncomeTaxStatus, SubjectCouponTaxRate, TaxRulePack,
     ValueAddedTaxStatus as ProtoValueAddedTaxStatus,
 };
+use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsServiceServer;
 use ficant_domain::analytics::{
     AnalyticsError, AnalyticsObjectRef, BondAnalyticsInput, BondAnalyticsResult, FixedDecimal,
 };
@@ -73,6 +75,7 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
+use tonic::service::RoutesBuilder;
 
 const KEY: &[u8] = b"0123456789abcdef0123456789abcdef";
 const TOKEN: &str = "phase2e-python-sdk-test-token";
@@ -527,13 +530,15 @@ async fn python_sdk_matches_phase2_reference_slices_through_live_rule_pack_compo
     )
     .expect("fixture rates service is valid");
     let server = tokio::spawn(async move {
-        serve_grpc_web_with_rates(
+        let mut routes = RoutesBuilder::default();
+        routes.add_service(PlatformServiceServer::new(platform));
+        routes.add_service(RatesAnalyticsServiceServer::new(rates));
+        serve_grpc_web_routes(
             GrpcWebServerConfig {
                 bind: address,
                 allowed_origins: vec!["http://127.0.0.1:4174".to_owned()],
             },
-            platform,
-            rates,
+            routes.routes(),
         )
         .await
     });

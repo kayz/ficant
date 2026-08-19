@@ -29,6 +29,7 @@ plugins:
       - ficant.market.v1.MarketDefinitionService
       - ficant.market.v1.MarketFactService
       - ficant.research.v1.SnapshotService
+      - ficant.research.v1.ArtifactService
   - remote: buf.build/bufbuild/es:v2.5.2
     revision: 1
     out: web-dm/packages/contracts-generated/src

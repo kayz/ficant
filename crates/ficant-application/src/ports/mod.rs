@@ -36,7 +36,7 @@ pub use analytics::{
     BondAnalyticsArtifactCodec, BondAnalyticsArtifactFacts, BondAnalyticsEngine,
     EncodedBondAnalyticsArtifact,
 };
-pub use artifacts::{ArtifactRepository, PublishArtifact};
+pub use artifacts::{ARTIFACT_READ_SCOPE, ArtifactRepository, PublishArtifact};
 pub use blob_store::{BeginBlobStage, BlobStore, StagedBlobRef, VerifiedBlobRef, VerifyBlobStage};
 pub use canonical_snapshot::{CanonicalQuote, CanonicalSnapshotDecoder, DecodedCanonicalQuotes};
 pub use cursor::{AeadCursorCodec, Cursor, CursorKey};

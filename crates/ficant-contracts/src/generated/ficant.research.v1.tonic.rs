@@ -92,36 +92,6 @@ pub mod artifact_service_client {
             self
         }
         ///
-        pub async fn publish_artifact(
-            &mut self,
-            request: impl tonic::IntoRequest<super::PublishArtifactRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::PublishArtifactResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/ficant.research.v1.ArtifactService/PublishArtifact",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "ficant.research.v1.ArtifactService",
-                        "PublishArtifact",
-                    ),
-                );
-            self.inner.unary(req, path, codec).await
-        }
-        ///
         pub async fn get_artifact(
             &mut self,
             request: impl tonic::IntoRequest<super::GetArtifactRequest>,
@@ -145,36 +115,6 @@ pub mod artifact_service_client {
             req.extensions_mut()
                 .insert(
                     GrpcMethod::new("ficant.research.v1.ArtifactService", "GetArtifact"),
-                );
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn publish_signal_set(
-            &mut self,
-            request: impl tonic::IntoRequest<super::PublishSignalSetRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::PublishSignalSetResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/ficant.research.v1.ArtifactService/PublishSignalSet",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "ficant.research.v1.ArtifactService",
-                        "PublishSignalSet",
-                    ),
                 );
             self.inner.unary(req, path, codec).await
         }
@@ -281,27 +221,11 @@ pub mod artifact_service_server {
     #[async_trait]
     pub trait ArtifactService: std::marker::Send + std::marker::Sync + 'static {
         ///
-        async fn publish_artifact(
-            &self,
-            request: tonic::Request<super::PublishArtifactRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::PublishArtifactResponse>,
-            tonic::Status,
-        >;
-        ///
         async fn get_artifact(
             &self,
             request: tonic::Request<super::GetArtifactRequest>,
         ) -> std::result::Result<
             tonic::Response<super::GetArtifactResponse>,
-            tonic::Status,
-        >;
-        ///
-        async fn publish_signal_set(
-            &self,
-            request: tonic::Request<super::PublishSignalSetRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::PublishSignalSetResponse>,
             tonic::Status,
         >;
         ///
@@ -406,52 +330,6 @@ pub mod artifact_service_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/ficant.research.v1.ArtifactService/PublishArtifact" => {
-                    #[allow(non_camel_case_types)]
-                    struct PublishArtifactSvc<T: ArtifactService>(pub Arc<T>);
-                    impl<
-                        T: ArtifactService,
-                    > tonic::server::UnaryService<super::PublishArtifactRequest>
-                    for PublishArtifactSvc<T> {
-                        type Response = super::PublishArtifactResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::PublishArtifactRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as ArtifactService>::publish_artifact(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = PublishArtifactSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
                 "/ficant.research.v1.ArtifactService/GetArtifact" => {
                     #[allow(non_camel_case_types)]
                     struct GetArtifactSvc<T: ArtifactService>(pub Arc<T>);
@@ -482,52 +360,6 @@ pub mod artifact_service_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = GetArtifactSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/ficant.research.v1.ArtifactService/PublishSignalSet" => {
-                    #[allow(non_camel_case_types)]
-                    struct PublishSignalSetSvc<T: ArtifactService>(pub Arc<T>);
-                    impl<
-                        T: ArtifactService,
-                    > tonic::server::UnaryService<super::PublishSignalSetRequest>
-                    for PublishSignalSetSvc<T> {
-                        type Response = super::PublishSignalSetResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::PublishSignalSetRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as ArtifactService>::publish_signal_set(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = PublishSignalSetSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

@@ -61,11 +61,11 @@ FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三�
 
 - 本节属于中央 `cicd` 发布管理边界，不是 OPAID 本地自测的一部分。
 - 中央管理源位于私有仓库 `kayz/cicd` 的 `ficant/`；本仓库中的 `cicd.yml`、`.github/workflows/release-test.yml` 和 `deploy/test/` 是固定平台版本生成的业务接入文件。
-- Human 创建符合版本格式且指向当前 `main` 精确提交的 `v*` tag 后，GitHub 才运行现有十项完整 `ci`。CI 成功后 Linux Runner 构建 `ficant-server`、`ficant-worker`、`ficant-web`、`ficant-ui` 和 `ficant-ceph-rgw` 的 `sha-<commit>` 镜像；全部扫描通过后，再把同一组镜像提升为不可变版本 tag。测试机始终部署 SHA 标签，不维护 `test-latest`。
+- Human 创建符合版本格式且指向当前 `main` 精确提交的 `v*` tag 后，GitHub 才运行现有十项完整 `ci`。CI 成功后 Linux Runner 构建 `ficant-server`、`ficant-worker`、`ficant-ui` 和 `ficant-ceph-rgw` 的 `sha-<commit>` 镜像；全部扫描通过后，再把同一组镜像提升为不可变版本 tag。测试机始终部署 SHA 标签，不维护 `test-latest`。
 - GitHub `test` Environment 通过专用 SSH 身份连接测试机的 `ficant-deploy` 账号；测试机只拉镜像、执行版本化 PostgreSQL migration 和 Docker Compose，不现场编译源码。
 - 发布脚本记录 current、previous、镜像 SHA、部署时间、migration、健康检查和冒烟结果；失败时如存在 previous SHA，直接切回上一组镜像。回滚验证要求旧版本所需 migration 全部存在，允许数据库保留 forward-only 后续 migration。
 - 测试发布拓扑装配真实 Phase 4 Worker、PostgreSQL 和受管单节点 Ceph RGW；Worker 的数据库、S3 和身份合同 fail-closed，凭据只由 GitHub `test` Environment 注入。源码 Workspace 使用 Apache `object_store`，锁文件与可达依赖图不包含 `minio`/`async-std`，既有 `RUSTSEC-2025-0052` 风险接受已退出。
-- Ceph 测试存储运行时由 `deploy/storage-runtime.lock.json` 独立绑定构建输入、来源提交和 OCI index/platform/config identity。应用版本只构建、扫描和晋升 Server、Worker、Web、UI；锁定 Ceph digest 仍在每个候选使用最新漏洞库扫描，但只通过独立 Human 手工任务按需流式准备，不随应用版本重建或传输。
+- Ceph 测试存储运行时由 `deploy/storage-runtime.lock.json` 独立绑定构建输入、来源提交和 OCI index/platform/config identity。应用版本只构建、扫描和晋升 Server、Worker、UI；锁定 Ceph digest 仍在每个候选使用最新漏洞库扫描，但只通过独立 Human 手工任务按需流式准备，不随应用版本重建或传输。
 - 该环境证明发布链路、真实 Worker 启动与对象存储连接，不等于完整业务 UAT、生产发布或生产 Ceph 集群拓扑验收。
 
 ---
@@ -776,14 +776,12 @@ CapabilityArtifact
 
 ### 8.1 进程模型
 
-首版采用一个 Rust Cargo Workspace，形成以下固定进程：
+当前 v0.1 候选采用一个 Rust Cargo Workspace 与一个静态 Platform Shell，形成以下运行单元：
 
 ```text
 ficant-server          控制平面和统一 API
 ficant-worker          NativeNode 执行与批量任务
-ficant-sandbox         GeneratedNode 沙箱调度
-ficant-web             WebApp Shell 和静态资源服务
-python-node-runtime    Python GeneratedNode 运行镜像
+ficant-ui              静态 Platform Shell，直接反代 ficant-server
 ```
 
 C++ 数值库作为共享库由 `ficant-worker` 调用，不单独形成服务。
@@ -792,11 +790,12 @@ C++ 数值库作为共享库由 `ficant-worker` 调用，不单独形成服务�
 
 `ficant-server` 是模块化单体，现在不拆分微服务。模块边界通过 Rust crate、数据库 Schema、Protobuf service 和内部 trait 保持清晰。
 
-只有以下执行单元物理隔离：
+当前只有以下执行单元物理隔离：
 
 - 批量计算 Worker；
-- Python GeneratedNode 沙箱；
 - Web 静态服务。
+
+GeneratedNode 沙箱和 Python node runtime 继续顺延至 v0.2，不属于当前生产拓扑。
 
 ### 8.3 数据流
 
@@ -1437,8 +1436,7 @@ ficant/
 ├── binaries/                       # Rust composition roots
 │   ├── ficant-bootstrap/
 │   ├── ficant-server/
-│   ├── ficant-worker/
-│   └── ficant-web/
+│   └── ficant-worker/
 ├── cpp/                            # C++20 数值库
 │   └── fixed-income-kernel/
 │       └── {include,src,tests}/

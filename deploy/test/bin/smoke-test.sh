@@ -20,12 +20,10 @@ export FICANT_STORAGE_RUNTIME_IMAGE
 source "$root/.env"
 server_port=${FICANT_SERVER_PORT:-28080}
 worker_port=${FICANT_WORKER_PORT:-28081}
-web_port=${FICANT_WEB_PORT:-28082}
 ui_port=${FICANT_UI_PORT:-28083}
 
 timeout 3 bash -c "exec 3<>/dev/tcp/127.0.0.1/$server_port"
 [[ $(curl --fail --silent --show-error "http://127.0.0.1:$worker_port/worker-ready") == ok ]]
-[[ $(curl --fail --silent --show-error "http://127.0.0.1:$web_port/web-ready") == ok ]]
 ui_html=$(curl --fail --silent --show-error "http://127.0.0.1:$ui_port/ficant/")
 [[ "$ui_html" == *'<div id="root">'* ]] || { echo "FICANT UI root marker is missing." >&2; exit 1; }
 

@@ -1,13 +1,15 @@
 use ficant_api::{
     GrpcWebServerConfig, PlatformApplication, PlatformGrpcService, SessionPolicy, SystemClock,
-    TrustedIdentity, serve_grpc_web,
+    TrustedIdentity, serve_grpc_web_routes,
 };
+use ficant_contracts::ficant::app::v1::platform_service_server::PlatformServiceServer;
 use ficant_domain::governance::PlatformRole;
 use ficant_domain::primitives::Ulid;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::time::Duration;
+use tonic::service::RoutesBuilder;
 
 const SIGNING_KEY: &[u8] = b"0123456789abcdef0123456789abcdef";
 const TRACE_KEY: &[u8] = b"trace-key-0123456789abcdef-00001";
@@ -37,12 +39,14 @@ async fn grpc_web_endpoint_serves_real_session_with_exact_cors_boundary() {
     .expect("valid application");
     let service =
         PlatformGrpcService::new(Arc::new(application), TRACE_KEY).expect("valid service");
-    let server = tokio::spawn(serve_grpc_web(
+    let mut routes = RoutesBuilder::default();
+    routes.add_service(PlatformServiceServer::new(service));
+    let server = tokio::spawn(serve_grpc_web_routes(
         GrpcWebServerConfig {
             bind: address,
             allowed_origins: vec![ALLOWED_ORIGIN.to_owned()],
         },
-        service,
+        routes.routes(),
     ));
     wait_until_listening(address).await;
 

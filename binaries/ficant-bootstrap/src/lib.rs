@@ -21,7 +21,6 @@ const MAX_ROUTE_BYTES: usize = 128;
 pub enum ServiceRole {
     Server,
     Worker,
-    Web,
 }
 
 impl ServiceRole {
@@ -29,7 +28,6 @@ impl ServiceRole {
         match self {
             Self::Server => "ficant-server",
             Self::Worker => "ficant-worker",
-            Self::Web => "ficant-web",
         }
     }
 }
@@ -82,7 +80,6 @@ impl From<io::Error> for BootstrapError {
 struct Configuration {
     server: ServiceConfig,
     worker: ServiceConfig,
-    web: ServiceConfig,
 }
 
 impl Configuration {
@@ -98,7 +95,6 @@ impl Configuration {
         let configuration: Self = toml::from_str(input).map_err(BootstrapError::ConfigParse)?;
         configuration.server.validate("server")?;
         configuration.worker.validate("worker")?;
-        configuration.web.validate("web")?;
         Ok(configuration)
     }
 
@@ -106,7 +102,6 @@ impl Configuration {
         match role {
             ServiceRole::Server => &self.server,
             ServiceRole::Worker => &self.worker,
-            ServiceRole::Web => &self.web,
         }
     }
 }
@@ -379,10 +374,6 @@ mod tests {
         health_path = "/worker-health"
         readiness_path = "/worker-ready"
 
-        [web]
-        bind = "127.0.0.1:4102"
-        health_path = "/web-health"
-        readiness_path = "/web-ready"
     "#;
 
     #[test]

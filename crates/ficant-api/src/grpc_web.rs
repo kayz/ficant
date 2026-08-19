@@ -9,11 +9,11 @@ use ficant_contracts::ficant::app::v1::{
     RefreshAppLaunchRequest, RefreshSessionRequest, RefreshSessionResponse, RevokeAppLaunchRequest,
     RevokeAppLaunchResponse, RevokeSessionRequest, RevokeSessionResponse, Session,
     SessionRevocation, app_launch_authorization_response, get_app_registry_response,
-    get_current_session_response,
-    platform_service_server::{PlatformService, PlatformServiceServer},
+    get_current_session_response, platform_service_server::PlatformService,
     refresh_session_response, revoke_app_launch_response, revoke_session_response,
 };
 use prost_types::Timestamp;
+use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
 use std::future::Future;
@@ -32,6 +32,8 @@ use tonic::codegen::http::{
     HeaderValue, Method, Request as HttpRequest, Response as HttpResponse, StatusCode, Uri,
 };
 use tonic::metadata::MetadataMap;
+use tonic::server::NamedService;
+use tonic::service::{Routes, RoutesBuilder};
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 use tonic_web::GrpcWebLayer;
@@ -295,6 +297,7 @@ pub struct GrpcWebServerConfig {
 #[derive(Debug)]
 pub enum GrpcWebServeError {
     InvalidOrigin(String),
+    DuplicateService(String),
     Transport(tonic::transport::Error),
 }
 
@@ -302,6 +305,9 @@ impl fmt::Display for GrpcWebServeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidOrigin(origin) => write!(formatter, "invalid exact CORS origin: {origin}"),
+            Self::DuplicateService(service) => {
+                write!(formatter, "duplicate production gRPC service: {service}")
+            }
             Self::Transport(error) => write!(formatter, "gRPC-Web server failure: {error}"),
         }
     }
@@ -310,7 +316,7 @@ impl fmt::Display for GrpcWebServeError {
 impl Error for GrpcWebServeError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::InvalidOrigin(_) => None,
+            Self::InvalidOrigin(_) | Self::DuplicateService(_) => None,
             Self::Transport(error) => Some(error),
         }
     }
@@ -322,273 +328,58 @@ impl From<tonic::transport::Error> for GrpcWebServeError {
     }
 }
 
-/// Serves the frozen platform service over native gRPC and gRPC-Web.
-///
-/// # Errors
-///
-/// Returns an error for an invalid exact CORS origin or a transport failure.
-pub async fn serve_grpc_web(
-    config: GrpcWebServerConfig,
-    service: PlatformGrpcService,
-) -> Result<(), GrpcWebServeError> {
-    let cors = ExactCorsLayer::try_new(&config.allowed_origins)?;
-    let service = PlatformServiceServer::new(service);
-    let service = GrpcWebLayer::new().layer(service);
-    let service = cors.layer(service);
-    Server::builder()
-        .accept_http1(true)
-        .serve(config.bind, service)
-        .await?;
-    Ok(())
+/// The complete set of concrete adapters accepted by the production route builder.
+pub struct ProductionGrpcServices {
+    pub platform: PlatformGrpcService,
+    pub rates: crate::rates::RatesGrpcService,
+    pub experiment: crate::experiment::ExperimentGrpcService,
+    pub registry: crate::subject_registry::SubjectRegistryGrpcService,
+    pub positions: crate::position_snapshot::PositionSnapshotGrpcService,
+    pub factors: crate::factor_registry::FactorRegistryGrpcService,
+    pub portfolio_risk: crate::portfolio_risk::PortfolioRiskGrpcService,
+    pub data_sources: crate::data_source_registry::DataSourceRegistryGrpcService,
+    pub data_health: crate::data_health::DataHealthGrpcService,
+    pub definitions: crate::market_definition::MarketDefinitionGrpcService,
+    pub facts: crate::market_fact::MarketFactGrpcService,
+    pub snapshots: crate::snapshot::SnapshotGrpcService,
+    pub governance: crate::governance::FoundationChangeGrpcService,
+    pub artifacts: crate::artifact::ArtifactGrpcService,
 }
 
-/// Serves the platform and Phase 2 analytics services on one native gRPC/gRPC-Web listener.
-///
-/// # Errors
-///
-/// Returns an error for an invalid exact CORS origin or a transport failure.
-pub async fn serve_grpc_web_with_rates(
-    config: GrpcWebServerConfig,
-    platform: PlatformGrpcService,
-    rates: crate::rates::RatesGrpcService,
-) -> Result<(), GrpcWebServeError> {
-    use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsServiceServer;
-
-    let cors = ExactCorsLayer::try_new(&config.allowed_origins)?;
-    let service = PlatformRatesService {
-        platform: PlatformServiceServer::new(platform),
-        rates: RatesAnalyticsServiceServer::new(rates),
-    };
-    let service = GrpcWebLayer::new().layer(service);
-    let service = cors.layer(service);
-    Server::builder()
-        .accept_http1(true)
-        .serve(config.bind, service)
-        .await?;
-    Ok(())
+/// Tonic routes and the exact `NamedService` inventory produced by the same registrations.
+pub struct ProductionRouteSet {
+    routes: Routes,
+    service_names: BTreeSet<String>,
 }
 
-/// Serves Platform, Rates and authenticated Experiment APIs on one exact gRPC-Web listener.
-///
-/// # Errors
-///
-/// Returns an error for an invalid exact CORS origin or a transport failure.
-pub async fn serve_grpc_web_with_rates_and_experiment(
-    config: GrpcWebServerConfig,
-    platform: PlatformGrpcService,
-    rates: crate::rates::RatesGrpcService,
-    experiment: crate::experiment::ExperimentGrpcService,
-) -> Result<(), GrpcWebServeError> {
-    use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsServiceServer;
-    use ficant_contracts::ficant::research::v1::experiment_service_server::ExperimentServiceServer;
+impl ProductionRouteSet {
+    #[must_use]
+    pub fn service_names(&self) -> &BTreeSet<String> {
+        &self.service_names
+    }
 
-    let cors = ExactCorsLayer::try_new(&config.allowed_origins)?;
-    let service = PlatformRatesExperimentService {
-        platform: PlatformServiceServer::new(platform),
-        rates: RatesAnalyticsServiceServer::new(rates),
-        experiment: ExperimentServiceServer::new(experiment),
-    };
-    let service = GrpcWebLayer::new().layer(service);
-    let service = cors.layer(service);
-    Server::builder()
-        .accept_http1(true)
-        .serve(config.bind, service)
-        .await?;
-    Ok(())
+    #[must_use]
+    pub fn into_routes(self) -> Routes {
+        self.routes
+    }
 }
 
-/// Serves Platform, Rates, Experiment and the authenticated Subject Registry on one listener.
+/// Registers every production adapter once and records each actual `NamedService::NAME`.
 ///
 /// # Errors
 ///
-/// Returns an error for an invalid exact CORS origin or a transport failure.
-pub async fn serve_grpc_web_with_rates_and_experiment_and_registry(
-    config: GrpcWebServerConfig,
-    platform: PlatformGrpcService,
-    rates: crate::rates::RatesGrpcService,
-    experiment: crate::experiment::ExperimentGrpcService,
-    registry: crate::subject_registry::SubjectRegistryGrpcService,
-) -> Result<(), GrpcWebServeError> {
-    use ficant_contracts::ficant::core::v1::registry_service_server::RegistryServiceServer;
-    use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsServiceServer;
-    use ficant_contracts::ficant::research::v1::experiment_service_server::ExperimentServiceServer;
-
-    let cors = ExactCorsLayer::try_new(&config.allowed_origins)?;
-    let service = PlatformRatesExperimentRegistryService {
-        platform: PlatformServiceServer::new(platform),
-        rates: RatesAnalyticsServiceServer::new(rates),
-        experiment: ExperimentServiceServer::new(experiment),
-        registry: RegistryServiceServer::new(registry),
-    };
-    let service = GrpcWebLayer::new().layer(service);
-    let service = cors.layer(service);
-    Server::builder()
-        .accept_http1(true)
-        .serve(config.bind, service)
-        .await?;
-    Ok(())
-}
-
-/// Serves Platform, analytics, registry, and `PositionSnapshot` services on one listener.
-///
-/// # Errors
-///
-/// Returns an error for an invalid exact CORS origin or a transport failure.
-#[allow(dead_code)]
-pub async fn serve_grpc_web_with_rates_and_experiment_and_registry_and_positions(
-    config: GrpcWebServerConfig,
-    platform: PlatformGrpcService,
-    rates: crate::rates::RatesGrpcService,
-    experiment: crate::experiment::ExperimentGrpcService,
-    registry: crate::subject_registry::SubjectRegistryGrpcService,
-    positions: crate::position_snapshot::PositionSnapshotGrpcService,
-) -> Result<(), GrpcWebServeError> {
-    use ficant_contracts::ficant::core::v1::registry_service_server::RegistryServiceServer;
-    use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsServiceServer;
-    use ficant_contracts::ficant::research::v1::experiment_service_server::ExperimentServiceServer;
-    use ficant_contracts::ficant::research::v1::position_snapshot_service_server::PositionSnapshotServiceServer;
-
-    let cors = ExactCorsLayer::try_new(&config.allowed_origins)?;
-    let service = PlatformRatesExperimentRegistryPositionService {
-        platform: PlatformServiceServer::new(platform),
-        rates: RatesAnalyticsServiceServer::new(rates),
-        experiment: ExperimentServiceServer::new(experiment),
-        registry: RegistryServiceServer::new(registry),
-        positions: PositionSnapshotServiceServer::new(positions),
-    };
-    let service = GrpcWebLayer::new().layer(service);
-    let service = cors.layer(service);
-    Server::builder()
-        .accept_http1(true)
-        .serve(config.bind, service)
-        .await?;
-    Ok(())
-}
-
-/// Serves Platform, analytics, registry, `PositionSnapshot`, and Factor Registry services on one listener.
-///
-/// # Errors
-///
-/// Returns an error for an invalid exact CORS origin or a transport failure.
-#[allow(clippy::too_many_arguments)]
-pub async fn serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk(
-    config: GrpcWebServerConfig,
-    platform: PlatformGrpcService,
-    rates: crate::rates::RatesGrpcService,
-    experiment: crate::experiment::ExperimentGrpcService,
-    registry: crate::subject_registry::SubjectRegistryGrpcService,
-    positions: crate::position_snapshot::PositionSnapshotGrpcService,
-    factors: crate::factor_registry::FactorRegistryGrpcService,
-    portfolio_risk: crate::portfolio_risk::PortfolioRiskGrpcService,
-    data_sources: crate::data_source_registry::DataSourceRegistryGrpcService,
-) -> Result<(), GrpcWebServeError> {
-    use ficant_contracts::ficant::core::v1::registry_service_server::RegistryServiceServer;
-    use ficant_contracts::ficant::market::v1::data_source_registry_service_server::DataSourceRegistryServiceServer;
-    use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsServiceServer;
-    use ficant_contracts::ficant::research::v1::experiment_service_server::ExperimentServiceServer;
-    use ficant_contracts::ficant::research::v1::factor_registry_service_server::FactorRegistryServiceServer;
-    use ficant_contracts::ficant::research::v1::portfolio_risk_service_server::PortfolioRiskServiceServer;
-    use ficant_contracts::ficant::research::v1::position_snapshot_service_server::PositionSnapshotServiceServer;
-
-    let cors = ExactCorsLayer::try_new(&config.allowed_origins)?;
-    let service = PlatformRatesExperimentRegistryPositionFactorRiskService {
-        platform: PlatformServiceServer::new(platform),
-        rates: RatesAnalyticsServiceServer::new(rates),
-        experiment: ExperimentServiceServer::new(experiment),
-        registry: RegistryServiceServer::new(registry),
-        positions: PositionSnapshotServiceServer::new(positions),
-        factors: FactorRegistryServiceServer::new(factors),
-        portfolio_risk: PortfolioRiskServiceServer::new(portfolio_risk),
-        data_sources: DataSourceRegistryServiceServer::new(data_sources),
-    };
-    let service = GrpcWebLayer::new().layer(service);
-    let service = cors.layer(service);
-    Server::builder()
-        .accept_http1(true)
-        .serve(config.bind, service)
-        .await?;
-    Ok(())
-}
-
-/// Serves the complete production API, including the stateless Data Health query service.
-///
-/// # Errors
-///
-/// Returns an error for an invalid exact CORS origin or a transport failure.
-#[allow(clippy::too_many_arguments)]
-pub async fn serve_grpc_web_with_rates_and_experiment_and_registry_and_positions_and_factors_and_portfolio_risk_and_data_health(
-    config: GrpcWebServerConfig,
-    platform: PlatformGrpcService,
-    rates: crate::rates::RatesGrpcService,
-    experiment: crate::experiment::ExperimentGrpcService,
-    registry: crate::subject_registry::SubjectRegistryGrpcService,
-    positions: crate::position_snapshot::PositionSnapshotGrpcService,
-    factors: crate::factor_registry::FactorRegistryGrpcService,
-    portfolio_risk: crate::portfolio_risk::PortfolioRiskGrpcService,
-    data_sources: crate::data_source_registry::DataSourceRegistryGrpcService,
-    data_health: crate::data_health::DataHealthGrpcService,
-) -> Result<(), GrpcWebServeError> {
-    use ficant_contracts::ficant::core::v1::registry_service_server::RegistryServiceServer;
-    use ficant_contracts::ficant::market::v1::data_source_registry_service_server::DataSourceRegistryServiceServer;
-    use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsServiceServer;
-    use ficant_contracts::ficant::research::v1::data_health_service_server::DataHealthServiceServer;
-    use ficant_contracts::ficant::research::v1::experiment_service_server::ExperimentServiceServer;
-    use ficant_contracts::ficant::research::v1::factor_registry_service_server::FactorRegistryServiceServer;
-    use ficant_contracts::ficant::research::v1::portfolio_risk_service_server::PortfolioRiskServiceServer;
-    use ficant_contracts::ficant::research::v1::position_snapshot_service_server::PositionSnapshotServiceServer;
-
-    let cors = ExactCorsLayer::try_new(&config.allowed_origins)?;
-    let base = PlatformRatesExperimentRegistryPositionFactorRiskService {
-        platform: PlatformServiceServer::new(platform),
-        rates: RatesAnalyticsServiceServer::new(rates),
-        experiment: ExperimentServiceServer::new(experiment),
-        registry: RegistryServiceServer::new(registry),
-        positions: PositionSnapshotServiceServer::new(positions),
-        factors: FactorRegistryServiceServer::new(factors),
-        portfolio_risk: PortfolioRiskServiceServer::new(portfolio_risk),
-        data_sources: DataSourceRegistryServiceServer::new(data_sources),
-    };
-    let service = CompleteProductionService {
-        base,
-        data_health: DataHealthServiceServer::new(data_health),
-    };
-    let service = GrpcWebLayer::new().layer(service);
-    let service = cors.layer(service);
-    Server::builder()
-        .accept_http1(true)
-        .serve(config.bind, service)
-        .await?;
-    Ok(())
-}
-
-/// Serves the complete R6A production API through the same native gRPC and gRPC-Web boundary.
-///
-/// # Errors
-///
-/// Returns an error for an invalid exact CORS origin or a transport failure.
-#[allow(clippy::too_many_arguments)]
-pub async fn serve_grpc_web_with_r6a_input_plane(
-    config: GrpcWebServerConfig,
-    platform: PlatformGrpcService,
-    rates: crate::rates::RatesGrpcService,
-    experiment: crate::experiment::ExperimentGrpcService,
-    registry: crate::subject_registry::SubjectRegistryGrpcService,
-    positions: crate::position_snapshot::PositionSnapshotGrpcService,
-    factors: crate::factor_registry::FactorRegistryGrpcService,
-    portfolio_risk: crate::portfolio_risk::PortfolioRiskGrpcService,
-    data_sources: crate::data_source_registry::DataSourceRegistryGrpcService,
-    data_health: crate::data_health::DataHealthGrpcService,
-    definitions: crate::market_definition::MarketDefinitionGrpcService,
-    facts: crate::market_fact::MarketFactGrpcService,
-    snapshots: crate::snapshot::SnapshotGrpcService,
-    governance: crate::governance::FoundationChangeGrpcService,
-) -> Result<(), GrpcWebServeError> {
+/// Returns an error if two registered server adapters claim the same service name.
+pub fn build_production_routes(
+    services: ProductionGrpcServices,
+) -> Result<ProductionRouteSet, GrpcWebServeError> {
+    use ficant_contracts::ficant::app::v1::platform_service_server::PlatformServiceServer;
     use ficant_contracts::ficant::core::v1::foundation_change_service_server::FoundationChangeServiceServer;
     use ficant_contracts::ficant::core::v1::registry_service_server::RegistryServiceServer;
     use ficant_contracts::ficant::market::v1::data_source_registry_service_server::DataSourceRegistryServiceServer;
     use ficant_contracts::ficant::market::v1::market_definition_service_server::MarketDefinitionServiceServer;
     use ficant_contracts::ficant::market::v1::market_fact_service_server::MarketFactServiceServer;
     use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsServiceServer;
+    use ficant_contracts::ficant::research::v1::artifact_service_server::ArtifactServiceServer;
     use ficant_contracts::ficant::research::v1::data_health_service_server::DataHealthServiceServer;
     use ficant_contracts::ficant::research::v1::experiment_service_server::ExperimentServiceServer;
     use ficant_contracts::ficant::research::v1::factor_registry_service_server::FactorRegistryServiceServer;
@@ -596,28 +387,57 @@ pub async fn serve_grpc_web_with_r6a_input_plane(
     use ficant_contracts::ficant::research::v1::position_snapshot_service_server::PositionSnapshotServiceServer;
     use ficant_contracts::ficant::research::v1::snapshot_service_server::SnapshotServiceServer;
 
+    let mut builder = RoutesBuilder::default();
+    let mut service_names = BTreeSet::new();
+    macro_rules! register {
+        ($service:expr) => {{
+            let service = $service;
+            let name = named_service_name(&service);
+            if !service_names.insert(name.to_owned()) {
+                return Err(GrpcWebServeError::DuplicateService(name.to_owned()));
+            }
+            builder.add_service(service);
+        }};
+    }
+
+    register!(PlatformServiceServer::new(services.platform));
+    register!(RatesAnalyticsServiceServer::new(services.rates));
+    register!(ExperimentServiceServer::new(services.experiment));
+    register!(RegistryServiceServer::new(services.registry));
+    register!(PositionSnapshotServiceServer::new(services.positions));
+    register!(FactorRegistryServiceServer::new(services.factors));
+    register!(PortfolioRiskServiceServer::new(services.portfolio_risk));
+    register!(DataSourceRegistryServiceServer::new(services.data_sources));
+    register!(DataHealthServiceServer::new(services.data_health));
+    register!(MarketDefinitionServiceServer::new(services.definitions));
+    register!(MarketFactServiceServer::new(services.facts));
+    register!(SnapshotServiceServer::new(services.snapshots));
+    register!(FoundationChangeServiceServer::new(services.governance));
+    register!(ArtifactServiceServer::new(services.artifacts));
+
+    Ok(ProductionRouteSet {
+        routes: builder.routes(),
+        service_names,
+    })
+}
+
+fn named_service_name<S: NamedService>(_: &S) -> &'static str {
+    S::NAME
+}
+
+/// Serves an explicitly constructed focused route set over native gRPC and gRPC-Web.
+///
+/// Production callers must use [`build_production_routes`] to create this value.
+///
+/// # Errors
+///
+/// Returns an error for an invalid exact CORS origin or a transport failure.
+pub async fn serve_grpc_web_routes(
+    config: GrpcWebServerConfig,
+    routes: Routes,
+) -> Result<(), GrpcWebServeError> {
     let cors = ExactCorsLayer::try_new(&config.allowed_origins)?;
-    let base = CompleteProductionService {
-        base: PlatformRatesExperimentRegistryPositionFactorRiskService {
-            platform: PlatformServiceServer::new(platform),
-            rates: RatesAnalyticsServiceServer::new(rates),
-            experiment: ExperimentServiceServer::new(experiment),
-            registry: RegistryServiceServer::new(registry),
-            positions: PositionSnapshotServiceServer::new(positions),
-            factors: FactorRegistryServiceServer::new(factors),
-            portfolio_risk: PortfolioRiskServiceServer::new(portfolio_risk),
-            data_sources: DataSourceRegistryServiceServer::new(data_sources),
-        },
-        data_health: DataHealthServiceServer::new(data_health),
-    };
-    let service = R6aInputPlaneService {
-        base,
-        definitions: MarketDefinitionServiceServer::new(definitions),
-        facts: MarketFactServiceServer::new(facts),
-        snapshots: SnapshotServiceServer::new(snapshots),
-        governance: FoundationChangeServiceServer::new(governance),
-    };
-    let service = GrpcWebLayer::new().layer(service);
+    let service = GrpcWebLayer::new().layer(routes);
     let service = cors.layer(service);
     Server::builder()
         .accept_http1(true)
@@ -626,478 +446,16 @@ pub async fn serve_grpc_web_with_r6a_input_plane(
     Ok(())
 }
 
-#[derive(Clone, Debug)]
-struct PlatformRatesExperimentService<P, R, E> {
-    platform: P,
-    rates: R,
-    experiment: E,
-}
-
-#[derive(Clone, Debug)]
-struct PlatformRatesExperimentRegistryService<P, R, E, G> {
-    platform: P,
-    rates: R,
-    experiment: E,
-    registry: G,
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug)]
-struct PlatformRatesExperimentRegistryPositionService<P, R, E, G, S> {
-    platform: P,
-    rates: R,
-    experiment: E,
-    registry: G,
-    positions: S,
-}
-
-#[derive(Clone, Debug)]
-struct PlatformRatesExperimentRegistryPositionFactorRiskService<P, R, E, G, S, F, K, D> {
-    platform: P,
-    rates: R,
-    experiment: E,
-    registry: G,
-    positions: S,
-    factors: F,
-    portfolio_risk: K,
-    data_sources: D,
-}
-
-#[derive(Clone, Debug)]
-struct CompleteProductionService<B, H> {
-    base: B,
-    data_health: H,
-}
-
-#[derive(Clone, Debug)]
-struct R6aInputPlaneService<B, D, F, S, G> {
-    base: B,
-    definitions: D,
-    facts: F,
-    snapshots: S,
-    governance: G,
-}
-
-impl<B, D, F, S, G, RequestBody> Service<HttpRequest<RequestBody>>
-    for R6aInputPlaneService<B, D, F, S, G>
-where
-    B: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>> + Send + 'static,
-    D: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = B::Error>
-        + Send
-        + 'static,
-    F: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = B::Error>
-        + Send
-        + 'static,
-    S: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = B::Error>
-        + Send
-        + 'static,
-    G: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = B::Error>
-        + Send
-        + 'static,
-    B::Future: Send + 'static,
-    D::Future: Send + 'static,
-    F::Future: Send + 'static,
-    S::Future: Send + 'static,
-    G::Future: Send + 'static,
-    B::Error: Send + 'static,
-    RequestBody: Send + 'static,
-{
-    type Response = HttpResponse<Body>;
-    type Error = B::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, context: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        for readiness in [
-            self.base.poll_ready(context),
-            self.definitions.poll_ready(context),
-            self.facts.poll_ready(context),
-            self.snapshots.poll_ready(context),
-            self.governance.poll_ready(context),
-        ] {
-            match readiness {
-                Poll::Ready(Ok(())) => {}
-                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-                Poll::Pending => return Poll::Pending,
-            }
-        }
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, request: HttpRequest<RequestBody>) -> Self::Future {
-        let path = request.uri().path();
-        if path.starts_with("/ficant.market.v1.MarketDefinitionService/") {
-            Box::pin(self.definitions.call(request))
-        } else if path.starts_with("/ficant.market.v1.MarketFactService/") {
-            Box::pin(self.facts.call(request))
-        } else if path.starts_with("/ficant.research.v1.SnapshotService/") {
-            Box::pin(self.snapshots.call(request))
-        } else if path.starts_with("/ficant.core.v1.FoundationChangeService/") {
-            Box::pin(self.governance.call(request))
-        } else {
-            Box::pin(self.base.call(request))
-        }
-    }
-}
-
-impl<B, H, RequestBody> Service<HttpRequest<RequestBody>> for CompleteProductionService<B, H>
-where
-    B: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>> + Send + 'static,
-    H: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = B::Error>
-        + Send
-        + 'static,
-    B::Future: Send + 'static,
-    H::Future: Send + 'static,
-    B::Error: Send + 'static,
-    RequestBody: Send + 'static,
-{
-    type Response = HttpResponse<Body>;
-    type Error = B::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, context: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self.base.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        self.data_health.poll_ready(context)
-    }
-
-    fn call(&mut self, request: HttpRequest<RequestBody>) -> Self::Future {
-        if request
-            .uri()
-            .path()
-            .starts_with("/ficant.research.v1.DataHealthService/")
-        {
-            Box::pin(self.data_health.call(request))
-        } else {
-            Box::pin(self.base.call(request))
-        }
-    }
-}
-
-impl<P, R, E, G, S, F, K, D, RequestBody> Service<HttpRequest<RequestBody>>
-    for PlatformRatesExperimentRegistryPositionFactorRiskService<P, R, E, G, S, F, K, D>
-where
-    P: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>> + Send + 'static,
-    R: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    E: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    G: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    S: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    F: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    K: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    D: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    P::Future: Send + 'static,
-    R::Future: Send + 'static,
-    E::Future: Send + 'static,
-    G::Future: Send + 'static,
-    S::Future: Send + 'static,
-    F::Future: Send + 'static,
-    K::Future: Send + 'static,
-    D::Future: Send + 'static,
-    P::Error: Send + 'static,
-    RequestBody: Send + 'static,
-{
-    type Response = HttpResponse<Body>;
-    type Error = P::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, context: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self.platform.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        match self.rates.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        match self.experiment.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        match self.registry.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        match self.positions.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        match self.factors.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        match self.portfolio_risk.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        self.data_sources.poll_ready(context)
-    }
-
-    fn call(&mut self, request: HttpRequest<RequestBody>) -> Self::Future {
-        let path = request.uri().path();
-        if path.starts_with("/ficant.rates.v1.RatesAnalyticsService/") {
-            Box::pin(self.rates.call(request))
-        } else if path.starts_with("/ficant.research.v1.ExperimentService/") {
-            Box::pin(self.experiment.call(request))
-        } else if path.starts_with("/ficant.core.v1.RegistryService/") {
-            Box::pin(self.registry.call(request))
-        } else if path.starts_with("/ficant.research.v1.PositionSnapshotService/") {
-            Box::pin(self.positions.call(request))
-        } else if path.starts_with("/ficant.research.v1.FactorRegistryService/") {
-            Box::pin(self.factors.call(request))
-        } else if path.starts_with("/ficant.research.v1.PortfolioRiskService/") {
-            Box::pin(self.portfolio_risk.call(request))
-        } else if path.starts_with("/ficant.market.v1.DataSourceRegistryService/") {
-            Box::pin(self.data_sources.call(request))
-        } else {
-            Box::pin(self.platform.call(request))
-        }
-    }
-}
-
-impl<P, R, E, G, S, RequestBody> Service<HttpRequest<RequestBody>>
-    for PlatformRatesExperimentRegistryPositionService<P, R, E, G, S>
-where
-    P: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>> + Send + 'static,
-    R: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    E: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    G: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    S: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    P::Future: Send + 'static,
-    R::Future: Send + 'static,
-    E::Future: Send + 'static,
-    G::Future: Send + 'static,
-    S::Future: Send + 'static,
-    P::Error: Send + 'static,
-    RequestBody: Send + 'static,
-{
-    type Response = HttpResponse<Body>;
-    type Error = P::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, context: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self.platform.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        match self.rates.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        match self.experiment.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        match self.registry.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        self.positions.poll_ready(context)
-    }
-
-    fn call(&mut self, request: HttpRequest<RequestBody>) -> Self::Future {
-        let path = request.uri().path();
-        if path.starts_with("/ficant.rates.v1.RatesAnalyticsService/") {
-            Box::pin(self.rates.call(request))
-        } else if path.starts_with("/ficant.research.v1.ExperimentService/") {
-            Box::pin(self.experiment.call(request))
-        } else if path.starts_with("/ficant.core.v1.RegistryService/") {
-            Box::pin(self.registry.call(request))
-        } else if path.starts_with("/ficant.research.v1.PositionSnapshotService/") {
-            Box::pin(self.positions.call(request))
-        } else {
-            Box::pin(self.platform.call(request))
-        }
-    }
-}
-
-impl<P, R, E, G, RequestBody> Service<HttpRequest<RequestBody>>
-    for PlatformRatesExperimentRegistryService<P, R, E, G>
-where
-    P: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>> + Send + 'static,
-    R: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    E: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    G: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    P::Future: Send + 'static,
-    R::Future: Send + 'static,
-    E::Future: Send + 'static,
-    G::Future: Send + 'static,
-    P::Error: Send + 'static,
-    RequestBody: Send + 'static,
-{
-    type Response = HttpResponse<Body>;
-    type Error = P::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, context: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self.platform.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        match self.rates.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        match self.experiment.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        self.registry.poll_ready(context)
-    }
-
-    fn call(&mut self, request: HttpRequest<RequestBody>) -> Self::Future {
-        let path = request.uri().path();
-        if path.starts_with("/ficant.rates.v1.RatesAnalyticsService/") {
-            Box::pin(self.rates.call(request))
-        } else if path.starts_with("/ficant.research.v1.ExperimentService/") {
-            Box::pin(self.experiment.call(request))
-        } else if path.starts_with("/ficant.core.v1.RegistryService/") {
-            Box::pin(self.registry.call(request))
-        } else {
-            Box::pin(self.platform.call(request))
-        }
-    }
-}
-
-impl<P, R, E, RequestBody> Service<HttpRequest<RequestBody>>
-    for PlatformRatesExperimentService<P, R, E>
-where
-    P: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>> + Send + 'static,
-    R: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    E: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    P::Future: Send + 'static,
-    R::Future: Send + 'static,
-    E::Future: Send + 'static,
-    P::Error: Send + 'static,
-    RequestBody: Send + 'static,
-{
-    type Response = HttpResponse<Body>;
-    type Error = P::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, context: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self.platform.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        match self.rates.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        self.experiment.poll_ready(context)
-    }
-
-    fn call(&mut self, request: HttpRequest<RequestBody>) -> Self::Future {
-        if request
-            .uri()
-            .path()
-            .starts_with("/ficant.rates.v1.RatesAnalyticsService/")
-        {
-            Box::pin(self.rates.call(request))
-        } else if request
-            .uri()
-            .path()
-            .starts_with("/ficant.research.v1.ExperimentService/")
-        {
-            Box::pin(self.experiment.call(request))
-        } else {
-            Box::pin(self.platform.call(request))
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-struct PlatformRatesService<P, R> {
-    platform: P,
-    rates: R,
-}
-
-impl<P, R, RequestBody> Service<HttpRequest<RequestBody>> for PlatformRatesService<P, R>
-where
-    P: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>> + Send + 'static,
-    R: Service<HttpRequest<RequestBody>, Response = HttpResponse<Body>, Error = P::Error>
-        + Send
-        + 'static,
-    P::Future: Send + 'static,
-    R::Future: Send + 'static,
-    P::Error: Send + 'static,
-    RequestBody: Send + 'static,
-{
-    type Response = HttpResponse<Body>;
-    type Error = P::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, context: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self.platform.poll_ready(context) {
-            Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
-            Poll::Pending => return Poll::Pending,
-        }
-        self.rates.poll_ready(context)
-    }
-
-    fn call(&mut self, request: HttpRequest<RequestBody>) -> Self::Future {
-        if request
-            .uri()
-            .path()
-            .starts_with("/ficant.rates.v1.RatesAnalyticsService/")
-        {
-            let future = self.rates.call(request);
-            Box::pin(future)
-        } else {
-            let future = self.platform.call(request);
-            Box::pin(future)
-        }
-    }
+/// Serves the one complete production route set over native gRPC and gRPC-Web.
+///
+/// # Errors
+///
+/// Returns an error for an invalid exact CORS origin or a transport failure.
+pub async fn serve_production_routes(
+    config: GrpcWebServerConfig,
+    routes: ProductionRouteSet,
+) -> Result<(), GrpcWebServeError> {
+    serve_grpc_web_routes(config, routes.into_routes()).await
 }
 
 #[derive(Clone, Debug)]

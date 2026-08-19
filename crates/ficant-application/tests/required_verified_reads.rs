@@ -222,6 +222,37 @@ fn signal_artifact_extra_lineage_ref_is_rejected_before_required_reader() {
 }
 
 #[test]
+fn signal_artifact_lineage_order_drift_is_rejected_before_required_reader() {
+    let fixture = fixture();
+    let mut metadata = Metadata::from_fixture(&fixture);
+    let mut lineage = fixture.artifact.lineage().to_vec();
+    lineage.reverse();
+    metadata.artifact = Some(
+        Artifact::new(
+            fixture.artifact.id().clone(),
+            fixture.artifact.owner().clone(),
+            fixture.artifact.kind(),
+            fixture.artifact.media_type(),
+            fixture.artifact.content_hash().clone(),
+            fixture.artifact.blob_size(),
+            lineage,
+        )
+        .unwrap(),
+    );
+    let reader = RecordingReader::good();
+    let sink = RecordingSink::default();
+    let error = block_on(facade(&metadata, &reader, &sink).read_verified_signal(
+        &scope(),
+        id('S'),
+        trace(),
+    ))
+    .unwrap_err();
+    assert_error(&error, ApplicationErrorCategory::LineageIncomplete, false);
+    assert_eq!(reader.calls.load(Ordering::SeqCst), 0);
+    assert!(lock(&sink.events).is_empty());
+}
+
+#[test]
 fn safe_trace_context_accepts_only_exact_lowercase_hex32() {
     assert!(SafeTraceContext::new("0123456789abcdef0123456789abcdef").is_ok());
     for invalid in [

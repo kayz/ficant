@@ -18,7 +18,7 @@ ficant 是面向专业投资研究团队的 AI 原生量化研究平台。平台
 
 - Rust Workspace 是唯一后台实现；Python 只承担生成节点运行时/合同消费，C++20 只保留稳定 C ABI 数值库边界。
 - `interface/` 是后台 Protobuf 唯一来源，并生成 Rust、Python、TypeScript consumer；不建立平行 REST/OpenAPI DTO。
-- PostgreSQL Migration、Ceph RGW 内容寻址对象、开发 Compose、固定工具链和多语言构建有冻结合同；`scripts/dev-up.ps1` 构建并启动七个服务，从真实 Worker 镜像派生 runtime/source identity，并通过 React UI 反代验证已认证的 gRPC-Web Session。
+- PostgreSQL Migration、Ceph RGW 内容寻址对象、开发 Compose、固定工具链和多语言构建有冻结合同；`scripts/dev-up.ps1` 构建并启动六个服务，从真实 Worker 镜像派生 runtime/source identity，并通过 React UI 直接反代 `ficant-server` 验证已认证的 gRPC-Web Session。
 - React Platform Shell 已实现真实 Rust gRPC-Web 路径、会话、应用目录和短期应用启动授权。
 - 多 WebApp 的页面设计、代码和测试统一位于 `web-dm/`；后台接口设计保留在根 `interface/`，避免未来 WebApp 各自复制后台合同。
 

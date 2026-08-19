@@ -138,13 +138,6 @@
           "source": "crates/ficant-tax-pack"
       },
       {
-          "name": "ficant-web",
-          "version": "0.1.0",
-          "purl": "pkg:cargo/ficant-web@0.1.0",
-          "ecosystem": "crates.io",
-          "source": "binaries/ficant-web"
-      },
-      {
           "name": "ficant-worker",
           "version": "0.1.0",
           "purl": "pkg:cargo/ficant-worker@0.1.0",

@@ -6,7 +6,7 @@ use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use ficant_api::{GrpcWebServerConfig, serve_grpc_web_with_r6a_input_plane};
+use ficant_api::{GrpcWebServerConfig, build_production_routes, serve_production_routes};
 use ficant_contracts::ficant::core::v1 as core;
 use ficant_contracts::ficant::core::v1::foundation_change_service_client::FoundationChangeServiceClient;
 use ficant_contracts::ficant::market::v1 as market;
@@ -17,7 +17,7 @@ use ficant_contracts::ficant::research::v1 as research;
 use ficant_contracts::ficant::research::v1::snapshot_service_client::SnapshotServiceClient;
 use ficant_domain::governance::PlatformRole;
 use ficant_domain::primitives::{ContentHash, Ulid};
-use ficant_server::{ServerSettings, build_grpc_services_with_r6a_input_plane};
+use ficant_server::{ServerSettings, build_production_grpc_services};
 use sqlx::postgres::PgPoolOptions;
 use tonic::{Request, transport::Channel};
 
@@ -280,40 +280,15 @@ impl RunningServer {
         values: &BTreeMap<String, String>,
     ) -> Self {
         let settings = ServerSettings::try_from_values(values).expect("SIT settings are valid");
-        let (
-            platform,
-            rates,
-            experiment,
-            registry,
-            positions,
-            factors,
-            portfolio_risk,
-            data_sources,
-            data_health,
-            definitions,
-            facts,
-            snapshots,
-            governance,
-        ) = build_grpc_services_with_r6a_input_plane(&settings)
-            .expect("production R6A services compose");
-        let handle = tokio::spawn(serve_grpc_web_with_r6a_input_plane(
+        let services =
+            build_production_grpc_services(&settings).expect("production R6B services compose");
+        let routes = build_production_routes(services).expect("production routes are unique");
+        let handle = tokio::spawn(serve_production_routes(
             GrpcWebServerConfig {
                 bind: address,
                 allowed_origins: vec![ALLOWED_ORIGIN.to_owned()],
             },
-            platform,
-            rates,
-            experiment,
-            registry,
-            positions,
-            factors,
-            portfolio_risk,
-            data_sources,
-            data_health,
-            definitions,
-            facts,
-            snapshots,
-            governance,
+            routes,
         ));
         wait_until_listening(address).await;
         Self { handle }
