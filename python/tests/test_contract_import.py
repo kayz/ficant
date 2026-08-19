@@ -122,7 +122,7 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
             display_name="consumer Subject",
             owner=owner,
         ),
-        idempotency_key="subject-consumer-v1",
+        idempotency_key="fixture",
     )
     state_request = RegisterSubjectStateRequest(
         snapshot=SubjectStateSnapshot(owner=owner),
@@ -309,7 +309,7 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert RatesAnalyticsServiceStub.__name__ == "RatesAnalyticsServiceStub"
     assert FoundationChangeServiceStub.__name__ == "FoundationChangeServiceStub"
     assert subject_request.subject.owner == owner
-    assert subject_request.idempotency_key == "subject-consumer-v1"
+    assert subject_request.idempotency_key == "fixture"
     assert state_request.snapshot.owner == owner
     assert state_request.idempotency_key == "subject-state-consumer-v1"
     assert DataSourceRegistryServiceStub.__name__ == "DataSourceRegistryServiceStub"

@@ -4,7 +4,7 @@ set -euo pipefail
 
 scripts_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 lock_file="$scripts_dir/supply-chain.lock.json"
-SUPPLY_LOCK_SHA256=0034c5292b780b6174105385344d335c3a44b7d07545ee66d78213b502bbe265
+SUPPLY_LOCK_SHA256=01630ee02025f07d29495137c0e87694cd4b928f615f0fee3ab723bc9016d199
 
 die() {
   printf 'supply-chain: %s\n' "$1" >&2
@@ -39,7 +39,7 @@ verify_lock() {
   lock_sha=$(sha256_file "$lock_file") || die 'cannot hash supply-chain lock'
   [[ $lock_sha == "$SUPPLY_LOCK_SHA256" ]] || die "supply-chain lock hash mismatch: $lock_sha"
   python3 - "$lock_file" "$scripts_dir/../.." <<'PY'
-import datetime, hashlib, json, pathlib, sys, urllib.parse
+import datetime, hashlib, json, pathlib, re, sys, urllib.parse
 try:
     data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 except Exception as exc:
@@ -52,6 +52,12 @@ if data.get("release_topology") != {
     "main_update": "squash-merge-only-after-final-consistency-audit",
 }:
     print("supply-chain: frozen release topology mismatch", file=sys.stderr); raise SystemExit(2)
+accepted_secret_fingerprints = data.get("accepted_historical_secret_false_positives")
+if (not isinstance(accepted_secret_fingerprints, list)
+        or len(accepted_secret_fingerprints) != len(set(accepted_secret_fingerprints))
+        or any(not re.fullmatch(r"[0-9a-f]{40}:[^:]+:generic-api-key:[1-9][0-9]*", item)
+               for item in accepted_secret_fingerprints)):
+    print("supply-chain: historical secret false-positive bindings invalid", file=sys.stderr); raise SystemExit(2)
 if data.get("cargo_reachability") != {
     "cargo_version": "1.96.1",
     "command": ["tree", "--locked", "--all-features", "--target", "all", "--prefix", "none", "--format", "{p}"],
@@ -226,7 +232,25 @@ scan_release_secrets() {
   [[ -f $output/secrets-base.json ]] || printf '[]\n' >"$output/secrets-base.json"
   [[ -f $output/secrets-range.json ]] || printf '[]\n' >"$output/secrets-range.json"
   [[ -f $output/secrets-dir.json ]] || printf '[]\n' >"$output/secrets-dir.json"
-  if [[ $base_rc -eq 1 || $range_rc -eq 1 || $tree_rc -eq 1 ]]; then
+  if ! python3 - "$lock_file" "$output/secrets-base.json" "$output/secrets-range.json" "$output/secrets-dir.json" <<'PY'
+import json
+import pathlib
+import sys
+
+lock = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+accepted = set(lock["accepted_historical_secret_false_positives"])
+base = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+candidate_range = json.loads(pathlib.Path(sys.argv[3]).read_text(encoding="utf-8"))
+release_tree = json.loads(pathlib.Path(sys.argv[4]).read_text(encoding="utf-8"))
+unexpected_base = [item.get("Fingerprint") for item in base if item.get("Fingerprint") not in accepted]
+if unexpected_base or candidate_range or release_tree:
+    print(
+        "supply-chain: secret findings outside the exact historical false-positive bindings",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+PY
+  then
     return 1
   fi
 }
@@ -246,7 +270,7 @@ verify_syft_scope_fixture() {
   [[ $# -eq 1 ]] || die '--verify-syft-scope-fixture requires Syft'
   local syft=$1 root
   root=$(mktemp -d)
-  mkdir -p "$root/production" "$root/test-fixtures"
+  mkdir -p "$root/production" "$root/test-fixtures" "$root/.github/workflows"
   cat >"$root/production/Cargo.lock" <<'EOF'
 version = 4
 
@@ -265,12 +289,18 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 EOF
-  "$syft" scan "dir:$root" -o "syft-json=$root/packages.json" >/dev/null || { rm -rf "$root"; die 'Syft scope fixture scan failed'; }
+  cat >"$root/.github/workflows/not-a-delivery-package.yml" <<'EOF'
+steps:
+  - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+EOF
+  "$syft" scan "dir:$root" --exclude './.github/**' -o "syft-json=$root/packages.json" >/dev/null || { rm -rf "$root"; die 'Syft scope fixture scan failed'; }
   if ! python3 - "$root/packages.json" <<'PY'
 import json, pathlib, sys
 artifacts=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")).get("artifacts", [])
 purls=[item.get("purl") for item in artifacts]
-if purls.count("pkg:cargo/ordinary-production@1.0.0") != 1 or "pkg:cargo/template-only@1.0.0" in purls:
+if (purls.count("pkg:cargo/ordinary-production@1.0.0") != 1
+        or "pkg:cargo/template-only@1.0.0" in purls
+        or any(purl.startswith("pkg:github/") for purl in purls if isinstance(purl, str))):
     print("supply-chain: Syft scope fixture isolation failed", file=sys.stderr); raise SystemExit(2)
 PY
   then
@@ -508,8 +538,14 @@ if not any(purl.startswith("pkg:cargo/") for purl in purls) or not any(purl.star
     print("supply-chain: SBOM ecosystem coverage incomplete", file=sys.stderr); raise SystemExit(2)
 
 findings = vulnerability_findings
-if base_secrets or range_secrets or dir_secrets:
-    findings.append(f"secrets:{len(base_secrets) + len(range_secrets) + len(dir_secrets)}")
+accepted_secret_fingerprints = set(lock["accepted_historical_secret_false_positives"])
+unexpected_base_secrets = [
+    item for item in base_secrets if item.get("Fingerprint") not in accepted_secret_fingerprints
+]
+if unexpected_base_secrets or range_secrets or dir_secrets:
+    findings.append(
+        f"secrets:{len(unexpected_base_secrets) + len(range_secrets) + len(dir_secrets)}"
+    )
 if findings:
     print("supply-chain: blocking findings: " + ", ".join(findings), file=sys.stderr)
     raise SystemExit(1)
@@ -655,6 +691,7 @@ cp "$cache/db/PyPI-all.zip" "$db_root/osv-scanner/PyPI/all.zip"
 cp "$cache/db/npm-all.zip" "$db_root/osv-scanner/npm/all.zip"
 
 "$cache/bin/syft" scan "dir:$release_root" \
+  --exclude './.github/**' \
   -o "syft-json=$output/packages.syft.json" -o "cyclonedx-json=$output/sbom.cdx.json" || die 'Syft scan failed'
 
 (cd "$release_root" && cargo tree --locked --all-features --target all --prefix none --format '{p}' | sort -u) >"$output/cargo-resolved-tree.txt" || die 'Cargo resolved graph failed'

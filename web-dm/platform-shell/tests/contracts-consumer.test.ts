@@ -132,7 +132,7 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
         displayName: "consumer Subject",
         owner: subjectOwner,
       }),
-      idempotencyKey: "subject-consumer-v1",
+      idempotencyKey: "fixture",
     });
     const subjectStateRequest = create(RegisterSubjectStateRequestSchema, {
       snapshot: create(SubjectStateSnapshotSchema, { owner: subjectOwner }),
@@ -353,7 +353,7 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
     );
     expect(PlatformService.typeName).toBe("ficant.app.v1.PlatformService");
     expect(subjectRequest.subject?.owner).toEqual(subjectOwner);
-    expect(subjectRequest.idempotencyKey).toBe("subject-consumer-v1");
+    expect(subjectRequest.idempotencyKey).toBe("fixture");
     expect(subjectStateRequest.snapshot?.owner).toEqual(subjectOwner);
     expect(subjectStateRequest.idempotencyKey).toBe(
       "subject-state-consumer-v1",
