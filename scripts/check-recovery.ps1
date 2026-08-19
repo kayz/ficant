@@ -268,10 +268,10 @@ function Invoke-RecoveryCompose {
         [string[]]$Arguments
     )
 
-    Invoke-Native -FilePath 'docker' -ArgumentList @(
-        'compose', '--project-directory', (Split-Path -Parent $ComposeFile),
-        '--file', $ComposeFile, '--project-name', $Project
-    ) + $Arguments
+    Invoke-Native -FilePath 'docker' -ArgumentList (@(
+            'compose', '--project-directory', (Split-Path -Parent $ComposeFile),
+            '--file', $ComposeFile, '--project-name', $Project
+        ) + $Arguments)
 }
 
 function Stop-RecoveryProject {
