@@ -32,17 +32,34 @@ $arguments = @(
     '--remove-orphans'
 )
 
-# Compose interpolates every service before processing `down`. The two deployment identities are
-# derived transiently by dev-up and are intentionally not persisted beside local credentials, so
-# provide syntax-valid non-secret placeholders only for this non-starting operation.
-$previousRuntimeDigest = $env:FICANT_WORKER_RUNTIME_IMAGE_DIGEST
-$previousSourceDigest = $env:FICANT_WORKER_NATIVE_SOURCE_DIGEST
+# Compose interpolates every service before processing `down`. Deployment identities are derived
+# transiently by dev-up and are intentionally not persisted beside local credentials, so provide
+# syntax-valid non-secret placeholders only for this non-starting operation. The bootstrap identity
+# placeholders also let down clean an older local environment file created before those fields were
+# required; none of these values are used to start a service.
+$placeholderEnvironment = @{
+    FICANT_CODE_COMMIT_SHA = '0' * 40
+    FICANT_CODE_TREE_SHA = '0' * 40
+    FICANT_SERVER_RUNTIME_IMAGE_DIGEST = "sha256:$('00' * 32)"
+    FICANT_SERVER_ENVIRONMENT_ATTESTATION = "sha256:$('00' * 32)"
+    FICANT_WORKER_RUNTIME_IMAGE_DIGEST = "sha256:$('00' * 32)"
+    FICANT_WORKER_NATIVE_SOURCE_DIGEST = "sha256:$('00' * 32)"
+    FICANT_BOOTSTRAP_ACTOR_ID = '01J00000000000000000000012'
+    FICANT_BOOTSTRAP_TENANT_ID = '01J00000000000000000000010'
+    FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS = '01J00000000000000000000011'
+    FICANT_BOOTSTRAP_ACTIVE_ROLE = 'PLATFORM_ADMIN'
+}
+$previousEnvironment = @{}
 try {
-    if ([string]::IsNullOrWhiteSpace($env:FICANT_WORKER_RUNTIME_IMAGE_DIGEST)) {
-        $env:FICANT_WORKER_RUNTIME_IMAGE_DIGEST = "sha256:$('00' * 32)"
-    }
-    if ([string]::IsNullOrWhiteSpace($env:FICANT_WORKER_NATIVE_SOURCE_DIGEST)) {
-        $env:FICANT_WORKER_NATIVE_SOURCE_DIGEST = "sha256:$('00' * 32)"
+    foreach ($name in $placeholderEnvironment.Keys) {
+        $previousEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
+        if ([string]::IsNullOrWhiteSpace($previousEnvironment[$name])) {
+            [Environment]::SetEnvironmentVariable(
+                $name,
+                $placeholderEnvironment[$name],
+                [EnvironmentVariableTarget]::Process
+            )
+        }
     }
     & docker @arguments
     if ($LASTEXITCODE -ne 0) {
@@ -50,8 +67,13 @@ try {
     }
 }
 finally {
-    $env:FICANT_WORKER_RUNTIME_IMAGE_DIGEST = $previousRuntimeDigest
-    $env:FICANT_WORKER_NATIVE_SOURCE_DIGEST = $previousSourceDigest
+    foreach ($name in $previousEnvironment.Keys) {
+        [Environment]::SetEnvironmentVariable(
+            $name,
+            $previousEnvironment[$name],
+            [EnvironmentVariableTarget]::Process
+        )
+    }
 }
 
 Write-Output 'FICANT development containers stopped. Named PostgreSQL and Ceph volumes were preserved.'
