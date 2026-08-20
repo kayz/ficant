@@ -20,6 +20,10 @@ $requiredEnvironment = @(
     'FICANT_EXPERIMENT_CURSOR_KEY_HEX',
     'FICANT_BOOTSTRAP_SUBJECT',
     'FICANT_BOOTSTRAP_BEARER_TOKEN',
+    'FICANT_BOOTSTRAP_ACTOR_ID',
+    'FICANT_BOOTSTRAP_TENANT_ID',
+    'FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS',
+    'FICANT_BOOTSTRAP_ACTIVE_ROLE',
     'FICANT_BOOTSTRAP_SCOPES'
 )
 
@@ -300,6 +304,10 @@ if (-not (Test-Path -LiteralPath $environmentFile -PathType Leaf)) {
         "FICANT_EXPERIMENT_CURSOR_KEY_HEX=$(New-RandomHex -ByteCount 32)",
         'FICANT_BOOTSTRAP_SUBJECT=local-platform-user',
         "FICANT_BOOTSTRAP_BEARER_TOKEN=$(New-RandomHex -ByteCount 32)",
+        'FICANT_BOOTSTRAP_ACTOR_ID=01J00000000000000000000012',
+        'FICANT_BOOTSTRAP_TENANT_ID=01J00000000000000000000010',
+        'FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS=01J00000000000000000000011',
+        'FICANT_BOOTSTRAP_ACTIVE_ROLE=PLATFORM_ADMIN',
         'FICANT_BOOTSTRAP_SCOPES=apps:read,experiment:read,experiment:write,rates:analyze,registry:read,registry:write'
     )
     [System.IO.File]::WriteAllLines(
