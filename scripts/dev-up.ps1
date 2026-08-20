@@ -367,7 +367,9 @@ $composeArguments = @(
 )
 Invoke-Native -FilePath 'docker' -ArgumentList $composeArguments
 
-$uiPort = if ($localEnvironment.ContainsKey('FICANT_UI_PORT')) {
+$uiPort = if (-not [string]::IsNullOrWhiteSpace($env:FICANT_UI_PORT)) {
+    [int]$env:FICANT_UI_PORT
+} elseif ($localEnvironment.ContainsKey('FICANT_UI_PORT')) {
     [int]$localEnvironment['FICANT_UI_PORT']
 } else {
     18083
