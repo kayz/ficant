@@ -71,6 +71,41 @@ function Get-NativeOutput {
     return ($output -join "`n").Trim()
 }
 
+function Initialize-WebDependencies {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Checkout
+    )
+
+    $webDirectory = Join-Path $Checkout 'web-dm'
+    $lockFile = Join-Path $webDirectory 'pnpm-lock.yaml'
+    if (-not (Test-Path -LiteralPath $lockFile -PathType Leaf)) {
+        throw "Web lock file is missing from the clean checkout: '$lockFile'."
+    }
+
+    $previousCorepackNetwork = $env:COREPACK_ENABLE_NETWORK
+    try {
+        $env:COREPACK_ENABLE_NETWORK = '0'
+        Write-Host 'Prepare frozen Web dependencies from the local pnpm store.'
+        Invoke-Native -FilePath 'corepack' -ArgumentList @(
+            'pnpm@10.12.4',
+            'install',
+            '--offline',
+            '--frozen-lockfile'
+        ) -WorkingDirectory $webDirectory
+    }
+    finally {
+        $env:COREPACK_ENABLE_NETWORK = $previousCorepackNetwork
+    }
+
+    $status = Get-NativeOutput -FilePath 'git' -ArgumentList @(
+        '-C', $Checkout, 'status', '--porcelain', '--untracked-files=all'
+    )
+    if (-not [string]::IsNullOrEmpty($status)) {
+        throw 'Frozen Web dependency preparation changed the clean checkout.'
+    }
+}
+
 function Assert-AuthoritySnapshot {
     param(
         [Parameter(Mandatory)]
@@ -384,6 +419,7 @@ try {
         '-C', $repositoryRoot, 'worktree', 'add', '--detach', $checkout, $ExpectedPublicCommit
     )
     $worktreeAdded = $true
+    Initialize-WebDependencies -Checkout $checkout
 
     foreach ($name in @(
         'COMPOSE_PROJECT_NAME',
