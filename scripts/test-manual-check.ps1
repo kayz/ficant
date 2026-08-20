@@ -185,7 +185,10 @@ try {
     Assert-Pass -Name 'exact marker set' -Fixture $good
 
     $unmarked = New-AuthorityFixture -Name 'unmarked' -Manual (
-        $validManual.Replace("<!-- ficant-manual-literal: dev-up -->`n", '')
+        $validManual -replace (
+            '(?m)^<!-- ficant-manual-literal: dev-up -->\r?\n',
+            ''
+        )
     )
     Assert-Fail -Name 'unmarked PowerShell block' -Fixture $unmarked
 
