@@ -232,10 +232,46 @@ Human 明确批准追加 `crates/ficant-acceptance/tests/phase1_business_loop.rs
 
 **受保护事实：** private authority commit 与三件套只读；R7A 的 47-file core manifest、所有 Golden/Oracle/expected/容差、C/C++/FFI/native 数值实现、RulePack 内容、tax/funding/cross-Clang fixtures、`.github/workflows/**`、`cicd.yml`、`deploy/test/**`、远端 GitHub 设置、版本/tag/镜像/部署均不修改。公共根目录 ignored authority 与原 `C:\git\ficant` 未跟踪审计报告不读写。
 
-本节以下位置只在最终 R7B 候选完成后追加实际命令、exit code、test count、生成树/descriptor/backup manifest digest、crash matrix、clean-checkout identity 与候选 Git identity。计划命令不得写成通过。
+本节以下证据全部来自同一个最终代码候选，不把计划命令、早期候选或文档提交写成代码已通过。**最终代码候选：** commit `6d6c5d887011a69cc30d67b7164c9d2f3a44ec27`，tree `05020b19189be7ba7f5d19b51f4d7e9fe0a1026b`；其父链线性落在冻结 execution base `34402344c7d2c9238dc171af52ac4db77eb6b462` / tree `f66e03c55703837d6f2aee9959eba482612272f1` 上。最终 Human brief 的后续子提交只修改本文件；该文档提交不冒充重新执行完整 MANUAL 的代码候选。
+
+### 6.1 Authority、clean checkout 与 MANUAL
+
+最终执行使用 Node `v22.17.0`，设置 `PYTHONDONTWRITEBYTECODE=1`，并实际运行：
+
+```powershell
+pwsh -NoProfile -NonInteractive -File scripts/check-manual.ps1 `
+  -AuthorityRoot 'C:\git\ficant-authority-r5d' `
+  -ExpectedAuthorityCommit '3e028bcadd9fe973450d35b092e03a7485a54881' `
+  -ExpectedPublicCommit '6d6c5d887011a69cc30d67b7164c9d2f3a44ec27'
+```
+
+命令 exit `0`，并输出 `FICANT MANUAL literal clean-checkout execution passed.`。runner 验证 private authority 工作树 clean、HEAD 精确等于批准 SHA、三件套 manifest 完整；随后创建 exact public commit/tree 的临时 clean checkout，按 private MANUAL 顺序原文执行六个 literal block：`dev-up`、`dev-down`、`check-fast`、`check-full`、`check-integration`、`recovery-proof`。Web 依赖准备使用 `corepack pnpm@10.12.4 install --offline --frozen-lockfile`，结果为 178 个包 reused、0 downloaded；依赖准备后 checkout 仍无 tracked/untracked drift。隔离开发拓扑中的 PostgreSQL、Ceph RGW、Server、Worker、UI 均健康，UI 使用动态隔离端口 `57337`，Platform Shell 与真实 gRPC-Web session 验证通过；literal `dev-down` 删除容器且按合同保留命名卷，runner 最终删除隔离容器、卷、网络与临时 checkout。清理过程曾输出一次延迟目录删除警告，但进程 exit `0` 后复核临时根目录不存在、Git worktree 无残项、相关 Docker 容器/卷均为 0。
+
+### 6.2 本地检查与测试计数
+
+| 实际入口/证据 | 结果 |
+|---|---|
+| `scripts/check-fast.ps1`（由 literal runner 原文执行） | exit `0`；descriptor coverage 68 个 reachable arms；coverage fixture 7 个真实负例加既有 6 个负例；MANUAL fixture 1 positive / 6 negative；recovery fixture 1 positive / 5 negative；R5D layering 3/3、R7A 2/2、R7B formal contract 2/2、R6B topology 3/3、storage lib 7/7、data 6/6 + snapshot codec 3/3，以及全部非环境门控 workspace tests/doc-tests通过。 |
+| `scripts/check.ps1` | exit `0`；layering 51 个 fixture assertions；strict Clippy、workspace build 与全部非环境门控 tests/doc-tests通过；descriptor 20/20、R5D 3/3、R7A 2/2、R7B 2/2；C++ 9/9；Cross-Clang 71 行逐位相同，manifest SHA-256 `9d8699f60ab92943f8339ec2485f09396794c602b23d1835eae31eecb718929b`；Q001–Q036 36/36、Phase 2B 16/16、Phase 2C 18/18、Phase 2D 18/18；Decimal Oracles 3/3 + 3/3 + 3/3 + 13/13；license binding digest `081e05c91d8d1d458cf058c79997fbfb91b4ca14f281b81d31243c3c94472fdd`；Python generated consumer 1 passed / 1 environment-gated skipped，独立 Phase 2E live SDK 1/1；Web build 181 modules、tests 35/35。 |
+| `scripts/check.ps1 -IncludeIntegration` | exit `0`；PostgreSQL migrations 7/7、lease 1/1、execution closure 3/3、production Worker 1/1、Phase 1 业务闭环 1/1、negative invariants 13/13；Carry/Delivery/Hedge、DataSource、双源一致性、immutable snapshot、R6A、R6B 各 1/1；集成内 recovery source/restore required-read 共 4 次 1/1，manifest SHA-256 `FB6D8A5789DBBEA4A8FAD69371A434A91D07C386D3C8272B22BF6F7A99112D13`。 |
+| 独立 literal `recovery-proof` | exit `0`；source 基线 required-read 两次、销毁 source 容器/数据库卷/Ceph 卷与 bucket、在不同 fresh restore project 恢复后 required-read 两次，四次均 1/1；Graph Artifact 与同步 Analytics 输出 bytes/evidence/identity 逐位一致；最终 manifest SHA-256 `482FE692CC596B10D8B1FC57EAA416D74E1753CCB343A972CEEBE463B282570D`。 |
+
+Crash matrix 与生产清理器证据包含 before-stage、after-stage、after-promote/before-complete、complete rollback、after-commit/before-ack、lease expiry/restart；每个恢复路径都核对最终仅一个可见 Artifact、一个 terminal result，以及与不中断基线相同的 bytes/hash/formal identity。篡改 blob、漂移 intent/fence、错误 schema/identity 和缺失对象均在 required-read 或完成事务前失败关闭；active intent、正式引用、宽限期内对象以及数据库判据失败时不执行 orphan 删除。
+
+### 6.3 契约生成与候选范围
+
+在上述代码 commit 上实际运行 `.github/scripts/verify-contract-generation.sh`，exit `0`。两个 fresh generation tree、当前 Rust/Python/TypeScript consumers 与 descriptor 校验通过；生成基线摘要为 `6c805930f201b3d82bbcbee9030b791e48fb08e7`，descriptor SHA-256 为 `01f938418b6d3649a71952051173f56dc635994c5515c9700eec5173f446c428`。Rust consumer 20/20 + 3/3 + 2/2 + 2/2、Python focused consumer 1/1、固定 Node/pnpm TypeScript focused consumer 1/1 均通过。
+
+最终范围审计相对 execution base 统计 117 个变更路径：117 个均命中本节冻结闭集或 §5 的 Human 批准扩展，unexpected `0`；protected paths `0`，其中 `.github/workflows/**`、`cicd.yml`、`deploy/test/**`、Golden/Oracle/expected/容差、C/C++/FFI/native 数值实现和 R7A core manifest 均无差异。`git diff --check` exit `0`，代码候选工作树 clean，generated Python `__pycache__`/`.pyc` 数量 `0`，MANUAL/recovery 临时 worktree、容器和卷残留均为 `0`。
+
+### 6.4 实施期失败证据与 forward-only 修复
+
+实施期真实暴露并修复了六类问题：Rust service image 未包含 first-party domain packs；开发拓扑缺 bootstrap/input 配置且 `dev-down` 依赖未保留的瞬态变量；UI 健康探针使用固定端口而隔离 runner 分配动态端口；一次 Docker Desktop engine 基础设施中断；MANUAL fixture 受 CRLF 影响；clean checkout 没有 `node_modules` 且原入口未定义离线依赖准备。对应修复分别补齐镜像构建上下文、完整本地拓扑参数与 compose 绑定、按实际隔离端口探测、基础设施恢复后在同一候选重跑、让 fixture 对行尾稳定，以及提交 lockfile 并强制离线 frozen install。最终测试没有降低 validator、Golden、Oracle、expected、容差、负向断言或正式 evidence 要求。
 
 ## 7. 残余风险
 
 - AC30–AC33 当前仍未点亮；只有本 brief 的技术候选完成、进入公共 `main`，再由 private authority post-merge 精确绑定后才能改变 `26 / 30` 状态。
 - R7B 的 recovery 目标是可证明的 crash consistency 与本地灾备协议，不是分布式事务、生产 HA、PITR、跨地域容灾或已运营的备份服务。
-- CICD 版本候选的正式镜像构建/签名/部署身份仍由未来 Human 明确版本号后使用 `$cicd` 处理；本轮只验证本地 Docker image config digest 与 build-time Code binding。
+- 通用 Python live SDK 测试仍保留环境门控，因此完整检查显示 1 skipped；专用 Phase 2E 真实 server parity 已独立 1/1 通过，不能把前者宣传为常驻在线环境测试。
+- 契约 fresh generation 使用 BSR remote plugins，匿名配额曾在实施期短暂返回 `resource_exhausted`；最终双树/consumer/descriptor 已通过，但未来重复取证仍受远端服务与配额可用性影响。
+- CICD 版本候选的正式镜像构建、签名、发布和部署身份仍由未来 Human 明确版本号后使用 `$cicd` 处理；本轮未创建 tag、未发布镜像、未部署、未触发远端 CI/CD，也未修改 GitHub 治理设置。
