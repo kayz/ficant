@@ -15,6 +15,7 @@ COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY binaries ./binaries
 COPY crates ./crates
 COPY cpp ./cpp
+COPY domain-packs ./domain-packs
 COPY interface ./interface
 RUN --mount=type=cache,id=ficant-cargo-registry-v1,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=ficant-release-target-v1,target=/workspace/target,sharing=locked \
