@@ -1,0 +1,80 @@
+{
+  "schema_id": "ficant.portfolio360-catalog-fixture.v1",
+  "tenant_id": "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+  "owner_id": "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+  "subject": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FA0", "version": 1 },
+  "effective_from": "2026-08-20T00:00:00Z",
+  "effective_to": "2026-08-22T00:00:00Z",
+  "visible_at": "2026-08-21T03:00:00Z",
+  "market_timezone": "Asia/Shanghai",
+  "book": {
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FA3",
+    "version": 1,
+    "code": "BOOK-CGB",
+    "display_name": "CGB Book",
+    "status": "ACTIVE"
+  },
+  "group": {
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FA4",
+    "version": 1,
+    "code": "GOV",
+    "display_name": "Government",
+    "status": "ACTIVE"
+  },
+  "benchmark": {
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FA7",
+    "version": 1,
+    "code": "CGB-BENCH",
+    "display_name": "CGB Benchmark",
+    "position_snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FA6"
+  },
+  "metric_convention": {
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FA8",
+    "version": 1,
+    "schema_id": "ficant.portfolio-metric-convention.v1",
+    "freshness_limit_seconds": 86400,
+    "rounding": "TIES_TO_EVEN"
+  },
+  "analytics_authority": {
+    "authority_set_id": "01ARZ3NDEKTSV4RRFFQ69G5FAF",
+    "curve_snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FAG",
+    "data_snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FAH",
+    "tax_rule_pack": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FAJ", "version": 1 },
+    "valuation": {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAN",
+      "source_revision": 1,
+      "scenario_value_index": 0,
+      "remaining_years_value_index": 1,
+      "mode": "YIELD_IN"
+    },
+    "unit_roles": [
+      "CURRENCY_AMOUNT",
+      "PRICE_PER_100",
+      "RATE",
+      "YEARS",
+      "YEARS_SQUARED",
+      "DV01_PER_100",
+      "DV01",
+      "DIMENSIONLESS",
+      "CONTRACT_COUNT"
+    ]
+  },
+  "portfolios": [
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FA9",
+      "version": 1,
+      "code": "ALPHA",
+      "display_name": "ALPHA Portfolio",
+      "status": "ACTIVE",
+      "position_snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FA5"
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAA",
+      "version": 1,
+      "code": "ZETA",
+      "display_name": "ZETA Portfolio",
+      "status": "ACTIVE",
+      "position_snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FAB"
+    }
+  ]
+}

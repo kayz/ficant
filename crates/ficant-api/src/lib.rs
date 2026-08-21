@@ -14,7 +14,10 @@ mod governance;
 mod grpc_web;
 mod market_definition;
 mod market_fact;
+mod portfolio_aggregation;
+mod portfolio_catalog;
 mod portfolio_risk;
+mod portfolio_workbench;
 mod position_snapshot;
 mod rates;
 mod registry;
@@ -39,7 +42,18 @@ pub use grpc_web::{
 };
 pub use market_definition::MarketDefinitionGrpcService;
 pub use market_fact::MarketFactGrpcService;
+pub use portfolio_aggregation::{
+    OwnedPortfolioAggregationApplicationBackend, PortfolioAggregationBackend,
+    PortfolioAggregationBackendResult, PortfolioAggregationGrpcService,
+    RequestedNormalizedPortfolioContext,
+};
+pub use portfolio_catalog::{
+    PortfolioCatalogBackend, PortfolioCatalogBackendResult, PortfolioCatalogGrpcService,
+};
 pub use portfolio_risk::PortfolioRiskGrpcService;
+pub use portfolio_workbench::{
+    PortfolioWorkbenchBackend, PortfolioWorkbenchGrpcService, SystemPortfolioRequestIdGenerator,
+};
 pub use position_snapshot::PositionSnapshotGrpcService;
 pub use rates::{
     ParsedBondAnalyticsRequest, RatesGrpcService, analyze_bond_request,

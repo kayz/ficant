@@ -972,6 +972,14 @@ const fn formal_kind(value: FormalInputKind) -> core_pb::FormalInputKind {
         FormalInputKind::PositionSnapshot => core_pb::FormalInputKind::PositionSnapshot,
         FormalInputKind::DataHealthProfile => core_pb::FormalInputKind::DataHealthProfile,
         FormalInputKind::CurveNodeDefinition => core_pb::FormalInputKind::CurveNodeDefinition,
+        FormalInputKind::Portfolio => core_pb::FormalInputKind::Portfolio,
+        FormalInputKind::Book => core_pb::FormalInputKind::Book,
+        FormalInputKind::PortfolioGroup => core_pb::FormalInputKind::PortfolioGroup,
+        FormalInputKind::Benchmark => core_pb::FormalInputKind::Benchmark,
+        FormalInputKind::PortfolioMetricConvention => {
+            core_pb::FormalInputKind::PortfolioMetricConvention
+        }
+        FormalInputKind::Fact => core_pb::FormalInputKind::Fact,
     }
 }
 

@@ -123,6 +123,14 @@ ResearchNodeContract 与 ResearchGraph 是版本化 Definition：节点合同绑
 
 R7B 同时提供 output intent crash recovery、生产 orphan maintenance、隔离 PostgreSQL/Ceph dump + 完整 immutable-object manifest + source-destroy/fresh-restore，以及 exact private authority MANUAL 的 clean-checkout literal runner。这些能力证明本地候选的确定性和可恢复性，不等于生产 HA/PITR、已运营备份、版本发布或部署。AC30–AC33 仍需最终候选真实取证、公共合并和独立 authority 绑定后才能点亮。
 
+## 2026-08 / R8A 只读组合纵向切片（实施候选）
+
+金证FICC合同管理系统的 D01/P01/P02/P03/P04 由 FICANT 提供真实、只读、可审计的中国国债组合后台。新增最小不可变 `Book` / `PortfolioGroup` / `Portfolio` 目录、exact `PositionSnapshot` 绑定、最小 `BenchmarkRef` 与版本化 `PortfolioMetricConvention`。Book/Portfolio 只定义目录与聚合范围，不复制 Position、交易、成本、现金、NAV 或会计账簿。
+
+生产新增三个只读 service：`PortfolioCatalogService.ListBooksAndPortfolios`、`PortfolioAggregationService.GetPortfolioOverview`、`PortfolioWorkbenchService.GetDefaultContext/GetPage`。Catalog 是非正式 CRUD 读取；Aggregation 复用既有 PositionViews、Portfolio KRD、AnalyzeBond 与 MarketFact/Definition，不复制算法；Workbench 只解析六维 context、授权裁剪并投影领域 DTO，不承载 PageModel、layout 或 11 类 UI module。descriptor 与生产路由从 14 个精确扩展为 17 个。
+
+相邻 `ficant-portfolio` 以 Hybrid 消费：这五页在后台可达时只能使用真实 DTO；其余十九页由 WebApp 自己标记 demo/partial。FICANT BFF 没有 `DEMO`，真实失败返回 typed error。年化收益、波动、Sharpe/Calmar、最大回撤、Campisi、VaR、OMS/PMS 与其余页面均不在本切片。完成状态以 [R8A iteration brief](iterations/2026-08-r8a-portfolio360-p0.md) 的最终真实证据为准。
+
 ## WebApp 产品边界
 
 当前可用产品界面是 Platform Shell，不是完整 DMQuant：
@@ -151,7 +159,8 @@ WebApp 可以定义独立研究体验，但不能自建身份权限、直连外�
 ## 明确尚未实现与后续范围
 
 - 关键期限/多合约曲线风险对冲和组合层优化；Phase 2E 的 Python SDK 首版只提供同步一元调用，不承诺批量、流式或长任务调度。
-- 完整 DMQuant 业务 WebApp，包括策略生成、回测、通用 Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell 与内嵌的 Phase 5A 临时运行观测面板。
+- 完整 DMQuant 业务 WebApp，包括策略生成、回测、通用 Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell 与内嵌的 Phase 5A 临时运行观测面板。金证FICC合同管理系统的其余十九页、ListWorkspaces/ListPages/Execute 以及 PMS/OMS 不在 FICANT 本切片。
+- 年化/几何收益、波动率、Sharpe、Calmar、最大回撤、Campisi、多因子归因、VaR、完整情景、基金/非标/信用债与完整 Benchmark 发布工作流。
 - openGauss 迁移、GeneratedNode/gVisor 业务运行、OMS/EMS 和任何外部交易执行。
 - 信用债、ABS、可转债、完整利率互换生命周期、真实询价通讯与清算交割。
 - README Phase 5 的正式研究 Lab以及 Phase 6–9 的仿真、AI 基础设施、GeneratedNode 和后续发布流程仍为规划能力，不得把 Phase 5A 临时观测面板描述为当前已完成的业务体验。当前 worker 只装配 CGB 固收 NativeNode 与 Phase 4 证据化执行路径；扩充业务节点 catalog 或提供可用研究 UI 属于后续纵向切片。

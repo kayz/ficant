@@ -823,6 +823,7 @@ dependencies = [
  "tonic",
  "tonic-web",
  "tower-layer",
+ "ulid",
 ]
 
 [[package]]
@@ -831,9 +832,11 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "chrono-tz",
  "ficant-domain",
  "ficant-runtime",
  "ring",
+ "serde_json",
  "tokio",
 ]
 
@@ -970,6 +973,8 @@ name = "ficant-server"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
+ "chrono-tz",
  "ficant-api",
  "ficant-application",
  "ficant-cgb-futures-pack",
@@ -984,6 +989,7 @@ dependencies = [
  "object_store",
  "prost",
  "prost-types",
+ "serde",
  "serde_json",
  "sqlx",
  "tokio",
@@ -1004,6 +1010,7 @@ dependencies = [
  "ficant-runtime",
  "object_store",
  "prost",
+ "serde_json",
  "sqlx",
  "tokio",
 ]

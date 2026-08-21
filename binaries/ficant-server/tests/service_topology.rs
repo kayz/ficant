@@ -20,7 +20,11 @@ async fn descriptor_and_production_routes_are_exactly_equal() {
     let descriptor = descriptor_service_names();
     let routes = production_route_names();
 
-    assert_eq!(descriptor.len(), 14, "R6B freezes fourteen public services");
+    assert_eq!(
+        descriptor.len(),
+        17,
+        "R8A freezes seventeen public services"
+    );
     assert_eq!(
         topology_drift(descriptor, &routes),
         TopologyDrift::default()
@@ -244,7 +248,8 @@ fn settings() -> BTreeMap<String, String> {
         ),
         (
             "FICANT_LOOPBACK_SCOPES".to_owned(),
-            "artifacts:read,rates:read".to_owned(),
+            "portfolio:read,positions:read,rates:analyze,facts:read,definitions:read,artifacts:read"
+                .to_owned(),
         ),
     ])
 }

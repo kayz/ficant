@@ -24,6 +24,7 @@ from ficant.core.v1.governance_pb2 import (  # noqa: E402
 from ficant.core.v1.governance_pb2_grpc import (  # noqa: E402
     FoundationChangeServiceStub,
 )
+from ficant.core.v1.evidence_pb2 import FORMAL_INPUT_KIND_FACT  # noqa: E402
 from ficant.core.v1.subject_pb2 import RegisterSubjectRequest, Subject  # noqa: E402
 from ficant.core.v1.subject_state_pb2 import (  # noqa: E402
     RegisterSubjectStateRequest,
@@ -69,6 +70,9 @@ from ficant.market.v1.fact_pb2 import (  # noqa: E402
     MarketFact,
     PublishCurveSnapshotRequest,
     QueryInstrumentFactsRequest,
+    VALUATION_VALUE_ROLE_REMAINING_YEARS,
+    VALUATION_VALUE_ROLE_YIELD,
+    Valuation,
 )
 from ficant.market.v1.fact_pb2_grpc import MarketFactServiceStub  # noqa: E402
 from ficant.market.v1.instrument_pb2 import Instrument  # noqa: E402
@@ -96,6 +100,16 @@ from ficant.rates.v1.analytics_pb2 import (  # noqa: E402
     TaxAdjustedBondAnalytics,
 )
 from ficant.rates.v1.analytics_pb2_grpc import RatesAnalyticsServiceStub  # noqa: E402
+from ficant.portfolio.v1.portfolio_pb2 import (  # noqa: E402
+    PORTFOLIO_PAGE_DATA_MODE_REAL,
+    PORTFOLIO_STATUS_ACTIVE,
+    Book,
+    D01Projection,
+    PortfolioCoverage,
+    PortfolioOverview,
+    PortfolioPageEnvelope,
+)
+from ficant.portfolio.v1 import portfolio_pb2  # noqa: E402
 from ficant.research.v1.experiment_pb2 import ExperimentRun  # noqa: E402
 from ficant.research.v1 import artifact_pb2  # noqa: E402
 from ficant.research.v1.artifact_pb2_grpc import ArtifactServiceStub  # noqa: E402
@@ -143,6 +157,13 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     complete_instrument = CompleteInstrumentDefinition(instrument=instrument)
     definition = MarketDefinition(instrument=complete_instrument)
     fact = MarketFact()
+    valuation = Valuation(
+        values=[DecimalValue(), DecimalValue()],
+        value_roles=[
+            VALUATION_VALUE_ROLE_YIELD,
+            VALUATION_VALUE_ROLE_REMAINING_YEARS,
+        ],
+    )
     curve_input = CurveSnapshotInput()
     curve_publish = PublishCurveSnapshotRequest(
         points=CurvePointSet(),
@@ -259,6 +280,15 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
         position_set_state=POSITION_SET_STATE_VERIFIED_EMPTY,
         coverage=CoverageDeclaration(),
     )
+    book = Book(status=PORTFOLIO_STATUS_ACTIVE)
+    portfolio_coverage = PortfolioCoverage(participation=coverage)
+    overview = PortfolioOverview(coverage=portfolio_coverage)
+    page = PortfolioPageEnvelope(
+        schema_version="portfolio-workbench.v1",
+        data_mode=PORTFOLIO_PAGE_DATA_MODE_REAL,
+        d01=D01Projection(overview=overview),
+        coverage=portfolio_coverage,
+    )
 
     assert instrument.DESCRIPTOR.full_name == "ficant.market.v1.Instrument"
     assert decimal.DESCRIPTOR.full_name == "ficant.core.v1.DecimalValue"
@@ -274,6 +304,12 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert fact.DESCRIPTOR.full_name == "ficant.market.v1.MarketFact"
     assert Cashflow.DESCRIPTOR.fields_by_name["cashflow_type"].number == 10
     assert CASHFLOW_TYPE_COUPON == 1
+    assert FORMAL_INPUT_KIND_FACT == 21
+    assert Valuation.DESCRIPTOR.fields_by_name["value_roles"].number == 10
+    assert list(valuation.value_roles) == [
+        VALUATION_VALUE_ROLE_YIELD,
+        VALUATION_VALUE_ROLE_REMAINING_YEARS,
+    ]
     assert "content_hash" not in CurveSnapshotInput.DESCRIPTOR.fields_by_name
     assert "curve_snapshot" not in PublishCurveSnapshotRequest.DESCRIPTOR.fields_by_name
     assert curve_publish.curve.DESCRIPTOR.full_name == "ficant.market.v1.CurveSnapshotInput"
@@ -375,3 +411,27 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert health.position_set_state == POSITION_SET_STATE_VERIFIED_EMPTY
     assert health.HasField("coverage")
     assert DataHealthServiceStub.__name__ == "DataHealthServiceStub"
+    assert book.DESCRIPTOR.full_name == "ficant.portfolio.v1.Book"
+    assert page.schema_version == "portfolio-workbench.v1"
+    assert page.WhichOneof("projection") == "d01"
+    assert page.d01.overview.coverage.participation.imported_position_count == 2
+    assert page.coverage.missing_reasons == []
+    assert not hasattr(portfolio_pb2, "PORTFOLIO_PAGE_DATA_MODE_DEMO")
+    assert {
+        method.name
+        for method in portfolio_pb2.DESCRIPTOR.services_by_name[
+            "PortfolioCatalogService"
+        ].methods
+    } == {"ListBooksAndPortfolios"}
+    assert {
+        method.name
+        for method in portfolio_pb2.DESCRIPTOR.services_by_name[
+            "PortfolioAggregationService"
+        ].methods
+    } == {"GetPortfolioOverview"}
+    assert {
+        method.name
+        for method in portfolio_pb2.DESCRIPTOR.services_by_name[
+            "PortfolioWorkbenchService"
+        ].methods
+    } == {"GetDefaultContext", "GetPage"}

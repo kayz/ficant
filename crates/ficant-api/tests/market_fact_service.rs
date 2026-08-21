@@ -46,6 +46,7 @@ impl Definitions {
             DefinitionValue::Unit(unit('P', "PRICE", "price", 4)),
             DefinitionValue::Unit(unit('N', "NOTIONAL", "notional", 2)),
             DefinitionValue::Unit(unit('R', "RATE", "rate", 6)),
+            DefinitionValue::Unit(unit('Y', "YEARS", "years", 6)),
             DefinitionValue::Calendar(calendar()),
             DefinitionValue::MarketRulePack(rule_pack()),
         ]
@@ -528,6 +529,63 @@ async fn curve_publish_hashes_canonical_points_and_get_requires_verified_bytes()
 }
 
 #[tokio::test]
+async fn typed_valuation_roles_round_trip_and_invalid_roles_fail_before_write() {
+    let repository = Arc::new(Repository::default());
+    let admin = service(
+        repository.clone(),
+        Arc::new(Definitions::fixture()),
+        PlatformRole::PlatformAdmin,
+    );
+
+    let typed = typed_valuation();
+    assert_eq!(
+        append(&admin, typed.clone(), "append-typed-valuation")
+            .await
+            .unwrap(),
+        typed,
+    );
+
+    let mut unspecified = typed_valuation();
+    let Some(pb::market_fact::Fact::Valuation(value)) = unspecified.fact.as_mut() else {
+        unreachable!();
+    };
+    value.value_roles[0] = pb::ValuationValueRole::Unspecified as i32;
+    assert_append_error(
+        admin
+            .append_market_fact(Request::new(pb::AppendMarketFactRequest {
+                idempotency_key: "unspecified-valuation-role".to_owned(),
+                fact: Some(unspecified),
+                change: Some(change()),
+            }))
+            .await
+            .unwrap()
+            .into_inner(),
+        core::ErrorCode::ValidationFailed,
+    );
+
+    let mut cardinality_mismatch = typed_valuation();
+    let Some(pb::market_fact::Fact::Valuation(value)) = cardinality_mismatch.fact.as_mut() else {
+        unreachable!();
+    };
+    value.value_roles.pop();
+    assert_append_error(
+        admin
+            .append_market_fact(Request::new(pb::AppendMarketFactRequest {
+                idempotency_key: "valuation-role-cardinality".to_owned(),
+                fact: Some(cardinality_mismatch),
+                change: Some(change()),
+            }))
+            .await
+            .unwrap()
+            .into_inner(),
+        core::ErrorCode::ValidationFailed,
+    );
+
+    assert_eq!(repository.governed_appends.load(Ordering::SeqCst), 1);
+    assert_eq!(repository.legacy_writes.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn role_unknown_cashflow_and_unresolved_units_fail_before_writes_or_blob_staging() {
     let repository = Arc::new(Repository::default());
     let definitions = Arc::new(Definitions::fixture());
@@ -599,8 +657,8 @@ async fn role_unknown_cashflow_and_unresolved_units_fail_before_writes_or_blob_s
     );
     let unresolved = pb::MarketFact {
         fact: Some(pb::market_fact::Fact::Quote(pb::Quote {
-            bid: Some(decimal_with_unit("100", 2, 'Y')),
-            ..match quote('Y', None).fact.unwrap() {
+            bid: Some(decimal_with_unit("100", 2, 'Z')),
+            ..match quote('Z', None).fact.unwrap() {
                 pb::market_fact::Fact::Quote(value) => value,
                 _ => unreachable!(),
             }
@@ -749,6 +807,30 @@ fn valuation(supersedes: Option<char>) -> pb::MarketFact {
             rule_pack: Some(version_ref('K')),
             values: vec![decimal_with_unit("10002", 2, 'P')],
             supersedes_id: supersedes.map(proto_id),
+            value_roles: Vec::new(),
+        })),
+    }
+}
+
+fn typed_valuation() -> pb::MarketFact {
+    pb::MarketFact {
+        fact: Some(pb::market_fact::Fact::Valuation(pb::Valuation {
+            valuation_id: Some(proto_id('W')),
+            instrument: Some(version_ref('B')),
+            owner: Some(owner()),
+            source: Some(source("typed-valuation")),
+            valuation_at: Some(market_time(5)),
+            method: "external-yield".to_owned(),
+            rule_pack: Some(version_ref('K')),
+            values: vec![
+                decimal_with_unit("189", 4, 'R'),
+                decimal_with_unit("975", 2, 'Y'),
+            ],
+            supersedes_id: None,
+            value_roles: vec![
+                pb::ValuationValueRole::Yield as i32,
+                pb::ValuationValueRole::RemainingYears as i32,
+            ],
         })),
     }
 }

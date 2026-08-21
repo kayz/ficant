@@ -1,0 +1,182 @@
+{
+  "schema_id": "ficant.portfolio360-analytics-fixture.v1",
+  "currency_unit": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FB1", "version": 1 },
+  "price_per_100_unit": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FB8", "version": 1 },
+  "rate_unit": { "id": "01K2CGBVAT0000000000000000", "version": 1 },
+  "years_unit": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FB9", "version": 1 },
+  "years_squared_unit": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FBA", "version": 1 },
+  "dv01_per_100_unit": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FBB", "version": 1 },
+  "dv01_unit": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FBC", "version": 1 },
+  "dimensionless_unit": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FBD", "version": 1 },
+  "contract_count_unit": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FB2", "version": 1 },
+  "calendar": {
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FB6",
+    "version": 1,
+    "market": "CN",
+    "effective_from": "2020-01-01T00:00:00+08:00",
+    "effective_to": "2040-01-01T00:00:00+08:00",
+    "session_date": "2026-08-21",
+    "open_local_time": "09:00:00",
+    "close_local_time": "17:00:00"
+  },
+  "instruments": [
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FB3",
+      "version": 1,
+      "symbol": "CGB-2030-01",
+      "synthetic_yield_to_maturity": "17600000000",
+      "first_issue_date": "2020-02-13",
+      "current_issue_date": "2020-02-13",
+      "maturity_date": "2030-02-13",
+      "coupon_rate": "26800000000",
+      "coupon_frequency": "ANNUAL"
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FB4",
+      "version": 1,
+      "symbol": "CGB-2032-02",
+      "synthetic_yield_to_maturity": "18900000000",
+      "first_issue_date": "2022-05-19",
+      "current_issue_date": "2022-05-19",
+      "maturity_date": "2032-05-19",
+      "coupon_rate": "27600000000",
+      "coupon_frequency": "ANNUAL"
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FB5",
+      "version": 1,
+      "symbol": "CGB-2035-03",
+      "synthetic_yield_to_maturity": "20700000000",
+      "first_issue_date": "2025-03-15",
+      "current_issue_date": "2025-03-15",
+      "maturity_date": "2035-03-15",
+      "coupon_rate": "19300000000",
+      "coupon_frequency": "ANNUAL"
+    }
+  ],
+  "authority_set_ids": [
+    "01ARZ3NDEKTSV4RRFFQ69G5FAF",
+    "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "01ARZ3NDEKTSV4RRFFQ69G5FAW"
+  ],
+  "curve_rule_pack": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FBE", "version": 1 },
+  "curve_family_id": "cn.gov.cgb.ytm",
+  "curve_nodes": [
+    {
+      "curve_node_id": "cn.gov.cgb.ytm.02y",
+      "factor_id": "cn.gov.yield.02y",
+      "tenor": "P2Y",
+      "yield_to_maturity": "17600000000",
+      "bump": "100000000"
+    },
+    {
+      "curve_node_id": "cn.gov.cgb.ytm.05y",
+      "factor_id": "cn.gov.yield.05y",
+      "tenor": "P5Y",
+      "yield_to_maturity": "18900000000",
+      "bump": "100000000"
+    },
+    {
+      "curve_node_id": "cn.gov.cgb.ytm.10y",
+      "factor_id": "cn.gov.yield.10y",
+      "tenor": "P10Y",
+      "yield_to_maturity": "20700000000",
+      "bump": "100000000"
+    }
+  ],
+  "snapshots": [
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FA5",
+      "positions": [
+        {
+          "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FC1",
+          "instrument": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FB3", "version": 1 },
+          "valuation_id": "01ARZ3NDEKTSV4RRFFQ69G5FAN",
+          "yield_to_maturity": "17600000000",
+          "price": "101230000000000",
+          "remaining_years": "3482000000000",
+          "quantity": "100000000000000",
+          "economic_value": "101230000000000",
+          "economic_pnl": "1230000000000",
+          "accounting_pnl": "1200000000000",
+          "capital_requirement": "10123000000000"
+        },
+        {
+          "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FC2",
+          "instrument": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FB4", "version": 1 },
+          "valuation_id": "01ARZ3NDEKTSV4RRFFQ69G5FAP",
+          "yield_to_maturity": "18900000000",
+          "price": "99550000000000",
+          "remaining_years": "5739000000000",
+          "quantity": "80000000000000",
+          "economic_value": "79640000000000",
+          "economic_pnl": "-360000000000",
+          "accounting_pnl": "-320000000000",
+          "capital_requirement": "7964000000000"
+        }
+      ]
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAB",
+      "positions": [
+        {
+          "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FC3",
+          "instrument": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FB5", "version": 1 },
+          "valuation_id": "01ARZ3NDEKTSV4RRFFQ69G5FAQ",
+          "yield_to_maturity": "20700000000",
+          "price": "99200000000000",
+          "remaining_years": "8564000000000",
+          "quantity": "120000000000000",
+          "economic_value": "119040000000000",
+          "economic_pnl": "-960000000000",
+          "accounting_pnl": "-900000000000",
+          "capital_requirement": "11904000000000"
+        }
+      ]
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FA6",
+      "positions": [
+        {
+          "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FC4",
+          "instrument": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FB3", "version": 1 },
+          "valuation_id": "01ARZ3NDEKTSV4RRFFQ69G5FAR",
+          "yield_to_maturity": "17600000000",
+          "price": "101230000000000",
+          "remaining_years": "3482000000000",
+          "quantity": "90000000000000",
+          "economic_value": "91107000000000",
+          "economic_pnl": "1107000000000",
+          "accounting_pnl": "1050000000000",
+          "capital_requirement": "9110700000000"
+        },
+        {
+          "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FC5",
+          "instrument": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FB4", "version": 1 },
+          "valuation_id": "01ARZ3NDEKTSV4RRFFQ69G5FAS",
+          "yield_to_maturity": "18900000000",
+          "price": "99550000000000",
+          "remaining_years": "5739000000000",
+          "quantity": "70000000000000",
+          "economic_value": "69685000000000",
+          "economic_pnl": "-315000000000",
+          "accounting_pnl": "-280000000000",
+          "capital_requirement": "6968500000000"
+        },
+        {
+          "position_id": "01ARZ3NDEKTSV4RRFFQ69G5FC6",
+          "instrument": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FB5", "version": 1 },
+          "valuation_id": "01ARZ3NDEKTSV4RRFFQ69G5FAT",
+          "yield_to_maturity": "20700000000",
+          "price": "99200000000000",
+          "remaining_years": "8564000000000",
+          "quantity": "110000000000000",
+          "economic_value": "109120000000000",
+          "economic_pnl": "-880000000000",
+          "accounting_pnl": "-825000000000",
+          "capital_requirement": "10912000000000"
+        }
+      ]
+    }
+  ]
+}

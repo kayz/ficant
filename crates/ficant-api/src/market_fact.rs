@@ -20,7 +20,7 @@ use ficant_domain::governance::{
 use ficant_domain::market::{
     ArtifactInputKind, Cashflow, CashflowInput, CashflowType, CurveSnapshot, CurveSnapshotInput,
     FactSource, Quote, QuoteInput, Trade, TradeInput, Valuation, ValuationInput,
-    VerificationStatus,
+    ValuationValueRole, VerificationStatus,
 };
 use ficant_domain::primitives::{ContentHash, LineageRef, Ulid, Version};
 use ficant_domain::{ContentAddressed, Lineaged, VersionedDefinition};
@@ -582,21 +582,24 @@ fn parse_fact(value: Option<&pb::MarketFact>) -> Result<MarketFact, ApplicationE
         })
         .map(MarketFact::Trade)
         .map_err(map_domain_error),
-        pb::market_fact::Fact::Valuation(value) => Valuation::new(ValuationInput {
-            valuation_id: parse_ulid(value.valuation_id.as_ref())?,
-            instrument: parse_version_ref(value.instrument.as_ref())?,
-            owner: parse_owner(value.owner.as_ref())?,
-            source: parse_fact_source(value.source.as_ref())?,
-            valuation_at: parse_market_time(value.valuation_at.as_ref())?,
-            method: value.method.clone(),
-            rule_pack: parse_version_ref(value.rule_pack.as_ref())?,
-            values: value
-                .values
-                .iter()
-                .map(|value| parse_fact_decimal(Some(value)))
-                .collect::<Result<Vec<_>, _>>()?,
-            supersedes_id: parse_optional_ulid(value.supersedes_id.as_ref())?,
-        })
+        pb::market_fact::Fact::Valuation(value) => Valuation::new_with_value_roles(
+            ValuationInput {
+                valuation_id: parse_ulid(value.valuation_id.as_ref())?,
+                instrument: parse_version_ref(value.instrument.as_ref())?,
+                owner: parse_owner(value.owner.as_ref())?,
+                source: parse_fact_source(value.source.as_ref())?,
+                valuation_at: parse_market_time(value.valuation_at.as_ref())?,
+                method: value.method.clone(),
+                rule_pack: parse_version_ref(value.rule_pack.as_ref())?,
+                values: value
+                    .values
+                    .iter()
+                    .map(|value| parse_fact_decimal(Some(value)))
+                    .collect::<Result<Vec<_>, _>>()?,
+                supersedes_id: parse_optional_ulid(value.supersedes_id.as_ref())?,
+            },
+            parse_valuation_value_roles(&value.value_roles)?,
+        )
         .map(MarketFact::Valuation)
         .map_err(map_domain_error),
     }
@@ -637,6 +640,22 @@ fn parse_cashflow_type(value: i32) -> Result<CashflowType, ApplicationError> {
         pb::CashflowType::Other => Ok(CashflowType::Other),
         pb::CashflowType::Unspecified => Err(invalid()),
     }
+}
+
+fn parse_valuation_value_roles(
+    values: &[i32],
+) -> Result<Vec<ValuationValueRole>, ApplicationError> {
+    values
+        .iter()
+        .map(
+            |value| match pb::ValuationValueRole::try_from(*value).map_err(|_| invalid())? {
+                pb::ValuationValueRole::Unspecified => Err(invalid()),
+                pb::ValuationValueRole::Price => Ok(ValuationValueRole::Price),
+                pb::ValuationValueRole::Yield => Ok(ValuationValueRole::Yield),
+                pb::ValuationValueRole::RemainingYears => Ok(ValuationValueRole::RemainingYears),
+            },
+        )
+        .collect()
 }
 
 fn market_fact(value: &MarketFact) -> pb::MarketFact {
@@ -689,9 +708,26 @@ fn market_fact(value: &MarketFact) -> pb::MarketFact {
             rule_pack: Some(version_ref(value.rule_pack())),
             values: value.values().iter().map(decimal).collect(),
             supersedes_id: value.supersedes_id().map(ulid),
+            value_roles: if value.has_typed_value_roles() {
+                value
+                    .value_roles()
+                    .iter()
+                    .map(|role| proto_valuation_value_role(*role) as i32)
+                    .collect()
+            } else {
+                Vec::new()
+            },
         }),
     };
     pb::MarketFact { fact: Some(fact) }
+}
+
+const fn proto_valuation_value_role(value: ValuationValueRole) -> pb::ValuationValueRole {
+    match value {
+        ValuationValueRole::Price => pb::ValuationValueRole::Price,
+        ValuationValueRole::Yield => pb::ValuationValueRole::Yield,
+        ValuationValueRole::RemainingYears => pb::ValuationValueRole::RemainingYears,
+    }
 }
 
 fn fact_source(value: &FactSource) -> pb::FactSource {
@@ -892,4 +928,43 @@ fn forbidden() -> ApplicationError {
 
 fn not_found() -> ApplicationError {
     ApplicationError::new(ApplicationErrorCategory::NotFound, false)
+}
+
+#[cfg(test)]
+mod valuation_role_tests {
+    use super::*;
+
+    #[test]
+    fn valuation_roles_accept_legacy_and_reject_unspecified_or_unknown_values() {
+        assert!(parse_valuation_value_roles(&[]).unwrap().is_empty());
+        assert_eq!(
+            parse_valuation_value_roles(&[
+                pb::ValuationValueRole::Yield as i32,
+                pb::ValuationValueRole::RemainingYears as i32,
+            ])
+            .unwrap(),
+            vec![
+                ValuationValueRole::Yield,
+                ValuationValueRole::RemainingYears,
+            ]
+        );
+        assert!(
+            parse_valuation_value_roles(&[pb::ValuationValueRole::Unspecified as i32]).is_err()
+        );
+        assert!(parse_valuation_value_roles(&[i32::MAX]).is_err());
+    }
+
+    #[test]
+    fn all_price_is_the_legacy_canonical_transport_shape() {
+        let roles = parse_valuation_value_roles(&[
+            pb::ValuationValueRole::Price as i32,
+            pb::ValuationValueRole::Price as i32,
+        ])
+        .unwrap();
+        assert!(roles.iter().all(|role| *role == ValuationValueRole::Price));
+        assert_eq!(
+            proto_valuation_value_role(ValuationValueRole::Yield),
+            pb::ValuationValueRole::Yield
+        );
+    }
 }

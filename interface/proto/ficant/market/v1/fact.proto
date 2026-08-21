@@ -58,6 +58,16 @@ message Trade {
   ficant.core.v1.Ulid supersedes_id = 8;
 }
 
+// ValuationValueRole binds each externally supplied value to its financial
+// measure. Legacy valuations omit value_roles and canonically mean PRICE for
+// every value.
+enum ValuationValueRole {
+  VALUATION_VALUE_ROLE_UNSPECIFIED = 0;
+  VALUATION_VALUE_ROLE_PRICE = 1;
+  VALUATION_VALUE_ROLE_YIELD = 2;
+  VALUATION_VALUE_ROLE_REMAINING_YEARS = 3;
+}
+
 // Valuation records externally supplied values and their provenance only.
 message Valuation {
   ficant.core.v1.Ulid valuation_id = 1;
@@ -69,6 +79,7 @@ message Valuation {
   ficant.core.v1.VersionRef rule_pack = 7;
   repeated ficant.core.v1.DecimalValue values = 8;
   ficant.core.v1.Ulid supersedes_id = 9;
+  repeated ValuationValueRole value_roles = 10;
 }
 
 // CurveSnapshot records an immutable external fixture and never builds a curve.

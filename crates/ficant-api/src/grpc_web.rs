@@ -337,6 +337,9 @@ pub struct ProductionGrpcServices {
     pub positions: crate::position_snapshot::PositionSnapshotGrpcService,
     pub factors: crate::factor_registry::FactorRegistryGrpcService,
     pub portfolio_risk: crate::portfolio_risk::PortfolioRiskGrpcService,
+    pub portfolio_catalog: crate::portfolio_catalog::PortfolioCatalogGrpcService,
+    pub portfolio_aggregation: crate::portfolio_aggregation::PortfolioAggregationGrpcService,
+    pub portfolio_workbench: crate::portfolio_workbench::PortfolioWorkbenchGrpcService,
     pub data_sources: crate::data_source_registry::DataSourceRegistryGrpcService,
     pub data_health: crate::data_health::DataHealthGrpcService,
     pub definitions: crate::market_definition::MarketDefinitionGrpcService,
@@ -378,6 +381,9 @@ pub fn build_production_routes(
     use ficant_contracts::ficant::market::v1::data_source_registry_service_server::DataSourceRegistryServiceServer;
     use ficant_contracts::ficant::market::v1::market_definition_service_server::MarketDefinitionServiceServer;
     use ficant_contracts::ficant::market::v1::market_fact_service_server::MarketFactServiceServer;
+    use ficant_contracts::ficant::portfolio::v1::portfolio_aggregation_service_server::PortfolioAggregationServiceServer;
+    use ficant_contracts::ficant::portfolio::v1::portfolio_catalog_service_server::PortfolioCatalogServiceServer;
+    use ficant_contracts::ficant::portfolio::v1::portfolio_workbench_service_server::PortfolioWorkbenchServiceServer;
     use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsServiceServer;
     use ficant_contracts::ficant::research::v1::artifact_service_server::ArtifactServiceServer;
     use ficant_contracts::ficant::research::v1::data_health_service_server::DataHealthServiceServer;
@@ -407,6 +413,15 @@ pub fn build_production_routes(
     register!(PositionSnapshotServiceServer::new(services.positions));
     register!(FactorRegistryServiceServer::new(services.factors));
     register!(PortfolioRiskServiceServer::new(services.portfolio_risk));
+    register!(PortfolioCatalogServiceServer::new(
+        services.portfolio_catalog
+    ));
+    register!(PortfolioAggregationServiceServer::new(
+        services.portfolio_aggregation
+    ));
+    register!(PortfolioWorkbenchServiceServer::new(
+        services.portfolio_workbench
+    ));
     register!(DataSourceRegistryServiceServer::new(services.data_sources));
     register!(DataHealthServiceServer::new(services.data_health));
     register!(MarketDefinitionServiceServer::new(services.definitions));

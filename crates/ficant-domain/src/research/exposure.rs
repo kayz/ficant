@@ -92,6 +92,92 @@ pub fn key_rate_dv01(
     Ok(FixedDecimal::from_scaled(scaled_numerator / divisor))
 }
 
+/// Calculates one signed Bond-position key-rate DV01 and rounds only the final position value.
+///
+/// The frozen directional price difference, basis-point bump, signed quantity, and registered
+/// face are retained as one checked rational expression. Cross-cancellation occurs before any
+/// multiplication, and the sole rounding step is round-half-to-even at the canonical fixed scale.
+/// This leaves [`key_rate_dv01`] exact-only and does not alter the Futures scaling path.
+pub fn bond_position_key_rate_dv01(
+    base: FixedDecimal,
+    up: FixedDecimal,
+    down: FixedDecimal,
+    bump_bp: FixedDecimal,
+    direction: SensitivityDirection,
+    signed_quantity: FixedDecimal,
+    registered_face: FixedDecimal,
+) -> DomainResult<FixedDecimal> {
+    if !bump_bp.is_positive() || !registered_face.is_positive() {
+        return Err(DomainErrorCode::InvalidValue);
+    }
+    let difference = match direction {
+        SensitivityDirection::Central => down.checked_sub(up)?,
+        SensitivityDirection::Up => base.checked_sub(up)?,
+        SensitivityDirection::Down => down.checked_sub(base)?,
+    };
+    if difference == FixedDecimal::ZERO || signed_quantity == FixedDecimal::ZERO {
+        return Ok(FixedDecimal::ZERO);
+    }
+
+    let negative = (difference.scaled() < 0) != (signed_quantity.scaled() < 0);
+    let mut numerators = [
+        difference.scaled().unsigned_abs(),
+        signed_quantity.scaled().unsigned_abs(),
+    ];
+    let mut denominators = [
+        match direction {
+            SensitivityDirection::Central => 2_u128,
+            SensitivityDirection::Up | SensitivityDirection::Down => 1_u128,
+        },
+        bump_bp.scaled().unsigned_abs(),
+        registered_face.scaled().unsigned_abs(),
+    ];
+    cross_cancel(&mut numerators, &mut denominators);
+    let numerator = checked_product(&numerators)?;
+    let denominator = checked_product(&denominators)?;
+    let numerator = signed_magnitude(numerator, negative)?;
+    let denominator = i128::try_from(denominator).map_err(|_| DomainErrorCode::InvalidValue)?;
+    FixedDecimal::from_scaled(numerator)
+        .checked_div_round_ties_even(FixedDecimal::from_scaled(denominator))
+}
+
+fn cross_cancel(numerators: &mut [u128], denominators: &mut [u128]) {
+    for numerator in numerators {
+        for denominator in &mut *denominators {
+            let divisor = greatest_common_divisor(*numerator, *denominator);
+            *numerator /= divisor;
+            *denominator /= divisor;
+        }
+    }
+}
+
+fn greatest_common_divisor(mut left: u128, mut right: u128) -> u128 {
+    while right != 0 {
+        (left, right) = (right, left % right);
+    }
+    left.max(1)
+}
+
+fn checked_product(values: &[u128]) -> DomainResult<u128> {
+    values.iter().try_fold(1_u128, |product, value| {
+        product
+            .checked_mul(*value)
+            .ok_or(DomainErrorCode::InvalidValue)
+    })
+}
+
+fn signed_magnitude(magnitude: u128, negative: bool) -> DomainResult<i128> {
+    if negative && magnitude == i128::MIN.unsigned_abs() {
+        return Ok(i128::MIN);
+    }
+    let magnitude = i128::try_from(magnitude).map_err(|_| DomainErrorCode::InvalidValue)?;
+    if negative {
+        magnitude.checked_neg().ok_or(DomainErrorCode::InvalidValue)
+    } else {
+        Ok(magnitude)
+    }
+}
+
 /// Scales one fixed-CTD registered-face KRD into a signed futures-position KRD.
 ///
 /// Every intermediate operation must be exactly representable at the canonical fixed scale.

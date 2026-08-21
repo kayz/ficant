@@ -114,7 +114,11 @@ fn values(bind: &str) -> BTreeMap<String, String> {
             "FICANT_LOOPBACK_ACTIVE_ROLE".to_owned(),
             "RESEARCHER".to_owned(),
         ),
-        ("FICANT_LOOPBACK_SCOPES".to_owned(), "rates:read".to_owned()),
+        (
+            "FICANT_LOOPBACK_SCOPES".to_owned(),
+            "portfolio:read,positions:read,rates:analyze,facts:read,definitions:read,artifacts:read"
+                .to_owned(),
+        ),
     ])
 }
 

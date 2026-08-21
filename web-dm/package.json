@@ -15,6 +15,8 @@
   },
   "scripts": {
     "build": "pnpm --filter @ficant/platform-shell build",
+    "contracts:package": "pwsh -NoProfile -NonInteractive -File ../scripts/package-contracts.ps1",
+    "contracts:test-package": "pwsh -NoProfile -NonInteractive -File ../scripts/test-contract-package.ps1",
     "typecheck": "pnpm --filter @ficant/platform-shell typecheck",
     "test": "pnpm --filter @ficant/platform-shell test",
     "test:e2e": "playwright test",

@@ -1,5 +1,8 @@
 import { create } from "@bufbuild/protobuf";
 import {
+  FormalInputKind,
+} from "../../packages/contracts-generated/src/ficant/core/v1/evidence_pb";
+import {
   AppDescriptorSchema,
   PlatformService,
 } from "../../packages/contracts-generated/src/ficant/app/v1/registry_pb";
@@ -57,6 +60,8 @@ import {
   MarketFactService,
   PublishCurveSnapshotRequestSchema,
   QueryInstrumentFactsRequestSchema,
+  ValuationSchema,
+  ValuationValueRole,
 } from "../../packages/contracts-generated/src/ficant/market/v1/fact_pb";
 import { MarketRulePackSchema } from "../../packages/contracts-generated/src/ficant/market/v1/rule_pb";
 import {
@@ -91,6 +96,18 @@ import {
   SnapshotBindingSchema,
   TaxAdjustedBondAnalyticsSchema,
 } from "../../packages/contracts-generated/src/ficant/rates/v1/analytics_pb";
+import {
+  BookSchema,
+  D01ProjectionSchema,
+  PortfolioAggregationService,
+  PortfolioCatalogService,
+  PortfolioCoverageSchema,
+  PortfolioOverviewSchema,
+  PortfolioPageDataMode,
+  PortfolioPageEnvelopeSchema,
+  PortfolioStatus,
+  PortfolioWorkbenchService,
+} from "../../packages/contracts-generated/src/ficant/portfolio/v1/portfolio_pb";
 import {
   DataSnapshotSchema,
   SnapshotService,
@@ -147,6 +164,13 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
     const marketFact = create(MarketFactSchema, {});
     const cashflow = create(CashflowSchema, {
       cashflowType: CashflowType.COUPON,
+    });
+    const valuation = create(ValuationSchema, {
+      values: [create(DecimalValueSchema), create(DecimalValueSchema)],
+      valueRoles: [
+        ValuationValueRole.YIELD,
+        ValuationValueRole.REMAINING_YEARS,
+      ],
     });
     const curveInput = create(CurveSnapshotInputSchema, {});
     const curvePublish = create(PublishCurveSnapshotRequestSchema, {
@@ -326,6 +350,24 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
       deliveryArtifact: artifactBinding,
       ctdAnalyticsArtifact: artifactBinding,
     });
+    const portfolioBook = create(BookSchema, {
+      status: PortfolioStatus.ACTIVE,
+    });
+    const portfolioCoverage = create(PortfolioCoverageSchema, {
+      missingReasons: [],
+    });
+    const portfolioOverview = create(PortfolioOverviewSchema, {
+      coverage: portfolioCoverage,
+    });
+    const portfolioPage = create(PortfolioPageEnvelopeSchema, {
+      schemaVersion: "portfolio-workbench.v1",
+      dataMode: PortfolioPageDataMode.REAL,
+      coverage: portfolioCoverage,
+      projection: {
+        case: "d01",
+        value: create(D01ProjectionSchema, { overview: portfolioOverview }),
+      },
+    });
 
     expect(app.$typeName).toBe("ficant.app.v1.AppDescriptor");
     expect(session.$typeName).toBe("ficant.app.v1.Session");
@@ -334,6 +376,11 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
     expect(marketDefinition.definition.case).toBe("instrument");
     expect(marketFact.$typeName).toBe("ficant.market.v1.MarketFact");
     expect(cashflow.cashflowType).toBe(CashflowType.COUPON);
+    expect(FormalInputKind.FACT).toBe(21);
+    expect(valuation.valueRoles).toEqual([
+      ValuationValueRole.YIELD,
+      ValuationValueRole.REMAINING_YEARS,
+    ]);
     expect("contentHash" in curveInput).toBe(false);
     expect("curveSnapshot" in curvePublish).toBe(false);
     expect(curvePublish.curve?.$typeName).toBe(
@@ -445,6 +492,21 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
       "ficant.rates.v1.ArtifactBinding",
     );
     expect("targetDv01" in hedgeRequest).toBe(false);
+    expect(portfolioBook.$typeName).toBe("ficant.portfolio.v1.Book");
+    expect(portfolioPage.schemaVersion).toBe("portfolio-workbench.v1");
+    expect(portfolioPage.projection.case).toBe("d01");
+    expect(portfolioPage.coverage?.missingReasons).toEqual([]);
+    expect("DEMO" in PortfolioPageDataMode).toBe(false);
+    expect(PortfolioCatalogService.methods.map((method) => method.localName)).toEqual([
+      "listBooksAndPortfolios",
+    ]);
+    expect(PortfolioAggregationService.methods.map((method) => method.localName)).toEqual([
+      "getPortfolioOverview",
+    ]);
+    expect(PortfolioWorkbenchService.methods.map((method) => method.localName)).toEqual([
+      "getDefaultContext",
+      "getPage",
+    ]);
     const artifact = create(ArtifactSchema, { kind: ArtifactKind.GENERIC });
     const artifactResponse = create(GetArtifactResponseSchema, {
       result: { case: "artifact", value: artifact },

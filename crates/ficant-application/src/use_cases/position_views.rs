@@ -189,30 +189,7 @@ impl<'a> PositionViewsUseCase<'a> {
             .get_position_snapshot(scope, snapshot_id, knowledge_at)
             .await?
             .ok_or_else(not_found)?;
-        let positions = snapshot
-            .positions()
-            .iter()
-            .map(|position| PositionView {
-                position_id: position.id().clone(),
-                economic_value: position.economic_value().clone(),
-                economic_pnl: position.economic_pnl().clone(),
-                accounting_pnl: position.accounting_pnl().clone(),
-                included_in_position_exposure: position.includes_position_exposure(),
-                included_in_available_liquidity: position.includes_available_liquidity(),
-                collateral_fact: matches!(
-                    position.holding_form(),
-                    PositionHoldingForm::ReverseRepoCollateral
-                ),
-            })
-            .collect::<Vec<_>>();
-        let coverage = complete_coverage(&snapshot)?;
-        let content_hash = position_views_hash(&snapshot, &positions, &coverage);
-        Ok(PositionViews {
-            snapshot,
-            positions,
-            coverage,
-            content_hash,
-        })
+        project_verified_position_views(snapshot)
     }
 
     /// Aggregates imported capital requirements only after all classifications are known.
@@ -266,6 +243,41 @@ impl<'a> PositionViewsUseCase<'a> {
             content_hash,
         })
     }
+}
+
+/// Projects one already required-read and hash-verified snapshot through the existing `PositionViews`
+/// algorithm without introducing a second repository selection.
+///
+/// # Errors
+///
+/// Returns validation failure when the verified snapshot cannot form complete coverage.
+pub fn project_verified_position_views(
+    snapshot: PositionSnapshot,
+) -> ApplicationResult<PositionViews> {
+    let positions = snapshot
+        .positions()
+        .iter()
+        .map(|position| PositionView {
+            position_id: position.id().clone(),
+            economic_value: position.economic_value().clone(),
+            economic_pnl: position.economic_pnl().clone(),
+            accounting_pnl: position.accounting_pnl().clone(),
+            included_in_position_exposure: position.includes_position_exposure(),
+            included_in_available_liquidity: position.includes_available_liquidity(),
+            collateral_fact: matches!(
+                position.holding_form(),
+                PositionHoldingForm::ReverseRepoCollateral
+            ),
+        })
+        .collect::<Vec<_>>();
+    let coverage = complete_coverage(&snapshot)?;
+    let content_hash = position_views_hash(&snapshot, &positions, &coverage);
+    Ok(PositionViews {
+        snapshot,
+        positions,
+        coverage,
+        content_hash,
+    })
 }
 
 fn complete_coverage(snapshot: &PositionSnapshot) -> ApplicationResult<CoverageDeclaration> {

@@ -20,6 +20,12 @@ fn r7b_declares_one_shared_formal_output_evidence_contract() {
     for required in [
         "enum FormalInputKind",
         "FORMAL_INPUT_KIND_CURVE_NODE_DEFINITION = 15;",
+        "FORMAL_INPUT_KIND_PORTFOLIO = 16;",
+        "FORMAL_INPUT_KIND_BOOK = 17;",
+        "FORMAL_INPUT_KIND_PORTFOLIO_GROUP = 18;",
+        "FORMAL_INPUT_KIND_BENCHMARK = 19;",
+        "FORMAL_INPUT_KIND_PORTFOLIO_METRIC_CONVENTION = 20;",
+        "FORMAL_INPUT_KIND_FACT = 21;",
         "message NamedContentRef",
         "message FormalInputBinding",
         "oneof reference",
@@ -66,6 +72,9 @@ fn r7b_declares_one_shared_formal_output_evidence_contract() {
 
     let signal = proto("interface/proto/ficant/research/v1/signal.proto");
     assert!(signal.contains("ficant.core.v1.FormalOutputEvidence formal_evidence = 11;"));
+
+    let portfolio = proto("interface/proto/ficant/portfolio/v1/portfolio.proto");
+    assert!(portfolio.contains("ficant.core.v1.FormalOutputEvidence formal_evidence = 11;"));
 }
 
 #[test]

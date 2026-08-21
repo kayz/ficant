@@ -10,7 +10,8 @@ use ficant_domain::market::{
     CalendarSession, Cashflow, CashflowInput, CashflowType, CurveSnapshot, CurveSnapshotInput,
     FactSource, FuturesContract, IncomeTaxStatus, Instrument, InstrumentInput, InstrumentKind,
     MarketRulePack, MarketRulePackInput, Quote, QuoteInput, RulePackContent, Trade, TradeInput,
-    Unit, UnitInput, Valuation, ValuationInput, ValueAddedTaxStatus, VerificationStatus,
+    Unit, UnitInput, Valuation, ValuationInput, ValuationValueRole, ValueAddedTaxStatus,
+    VerificationStatus,
 };
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, EffectivePeriod, MarketTime, OwnerRef, Ulid, UnitRef, Version,
@@ -714,11 +715,17 @@ pub(crate) fn encode_fact(value: &MarketFact) -> Vec<u8> {
             encode_optional_id(&mut encoder, value.supersedes_id());
         }
         MarketFact::Valuation(value) => {
-            encoder.u8(if value.source().data_source().is_some() {
-                14
-            } else {
-                4
-            });
+            encoder.u8(
+                match (
+                    value.has_typed_value_roles(),
+                    value.source().data_source().is_some(),
+                ) {
+                    (false, false) => 4,
+                    (false, true) => 14,
+                    (true, false) => 24,
+                    (true, true) => 34,
+                },
+            );
             encoder.string(value.id().as_str());
             encode_version_ref(&mut encoder, value.instrument());
             encode_owner(&mut encoder, value.owner());
@@ -732,6 +739,12 @@ pub(crate) fn encode_fact(value: &MarketFact) -> Vec<u8> {
             encoder.len(value.values().len());
             for item in value.values() {
                 encode_decimal(&mut encoder, item);
+            }
+            if value.has_typed_value_roles() {
+                encoder.len(value.value_roles().len());
+                for role in value.value_roles() {
+                    encoder.u8(valuation_value_role_code(*role));
+                }
             }
             encode_optional_id(&mut encoder, value.supersedes_id());
         }
@@ -796,39 +809,72 @@ pub(crate) fn decode_fact(bytes: &[u8]) -> CodecResult<MarketFact> {
                 .map_err(ficant_application::map_domain_error)?,
             )
         }
-        kind @ (4 | 14) => {
-            let valuation_id = decode_ulid(&mut decoder)?;
-            let instrument = decode_version_ref(&mut decoder)?;
-            let owner = decode_owner(&mut decoder)?;
-            let source = decode_typed_source(&mut decoder, kind == 14)?;
-            let valuation_at = decode_market_time(&mut decoder)?;
-            let method = decoder.string()?;
-            let rule_pack = decode_version_ref(&mut decoder)?;
-            let value_count = decoder.len()?;
-            let mut values = Vec::with_capacity(value_count);
-            for _ in 0..value_count {
-                values.push(decode_decimal(&mut decoder)?);
-            }
-            let supersedes_id = decode_optional_id(&mut decoder)?;
-            MarketFact::Valuation(
-                Valuation::new(ValuationInput {
-                    valuation_id,
-                    instrument,
-                    owner,
-                    source,
-                    valuation_at,
-                    method,
-                    rule_pack,
-                    values,
-                    supersedes_id,
-                })
-                .map_err(ficant_application::map_domain_error)?,
-            )
-        }
+        kind @ (4 | 14 | 24 | 34) => MarketFact::Valuation(decode_valuation(&mut decoder, kind)?),
         _ => return Err(codec_error()),
     };
     decoder.end()?;
     Ok(value)
+}
+
+fn decode_valuation(decoder: &mut Decoder<'_>, kind: u8) -> CodecResult<Valuation> {
+    let valuation_id = decode_ulid(decoder)?;
+    let instrument = decode_version_ref(decoder)?;
+    let owner = decode_owner(decoder)?;
+    let source = decode_typed_source(decoder, matches!(kind, 14 | 34))?;
+    let valuation_at = decode_market_time(decoder)?;
+    let method = decoder.string()?;
+    let rule_pack = decode_version_ref(decoder)?;
+    let value_count = decoder.len()?;
+    let mut values = Vec::with_capacity(value_count);
+    for _ in 0..value_count {
+        values.push(decode_decimal(decoder)?);
+    }
+    let value_roles = if matches!(kind, 24 | 34) {
+        let role_count = decoder.len()?;
+        if role_count != value_count {
+            return Err(codec_error());
+        }
+        let mut roles = Vec::with_capacity(role_count);
+        for _ in 0..role_count {
+            roles.push(decode_valuation_value_role(decoder.u8()?)?);
+        }
+        roles
+    } else {
+        Vec::new()
+    };
+    let supersedes_id = decode_optional_id(decoder)?;
+    Valuation::new_with_value_roles(
+        ValuationInput {
+            valuation_id,
+            instrument,
+            owner,
+            source,
+            valuation_at,
+            method,
+            rule_pack,
+            values,
+            supersedes_id,
+        },
+        value_roles,
+    )
+    .map_err(ficant_application::map_domain_error)
+}
+
+const fn valuation_value_role_code(role: ValuationValueRole) -> u8 {
+    match role {
+        ValuationValueRole::Price => 1,
+        ValuationValueRole::Yield => 2,
+        ValuationValueRole::RemainingYears => 3,
+    }
+}
+
+fn decode_valuation_value_role(value: u8) -> CodecResult<ValuationValueRole> {
+    match value {
+        1 => Ok(ValuationValueRole::Price),
+        2 => Ok(ValuationValueRole::Yield),
+        3 => Ok(ValuationValueRole::RemainingYears),
+        _ => Err(codec_error()),
+    }
 }
 
 pub(crate) fn encode_curve_snapshot(value: &CurveSnapshot) -> Vec<u8> {
@@ -1769,7 +1815,8 @@ mod tests {
     use ficant_domain::market::{
         Bond, BondTaxAttributes, FactSource, IncomeTaxStatus, Instrument, InstrumentInput,
         InstrumentKind, MarketRulePack, MarketRulePackInput, Quote, QuoteInput, RulePackContent,
-        Unit, UnitInput, ValueAddedTaxStatus, VerificationStatus,
+        Unit, UnitInput, Valuation, ValuationInput, ValuationValueRole, ValueAddedTaxStatus,
+        VerificationStatus,
     };
     use ficant_domain::primitives::{
         ContentHash, DecimalValue, EffectivePeriod, MarketTime, OwnerRef, Ulid, UnitRef, Version,
@@ -1998,6 +2045,93 @@ mod tests {
         let decoded = decode_fact(&encoded).unwrap();
 
         assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn valuation_codec_preserves_legacy_bytes_and_binds_typed_roles() {
+        let input = ValuationInput {
+            valuation_id: Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F11").unwrap(),
+            instrument: VersionRef::new(
+                Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F09").unwrap(),
+                Version::new(1).unwrap(),
+            ),
+            owner: OwnerRef::new(
+                Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F01").unwrap(),
+                Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F02").unwrap(),
+            ),
+            source: FactSource::new("china-rates-fixture-v1", "VALUATION-001", 1).unwrap(),
+            valuation_at: MarketTime::new(
+                Utc.with_ymd_and_hms(2025, 1, 15, 1, 1, 0).unwrap(),
+                "Asia/Shanghai",
+                NaiveDate::from_ymd_opt(2025, 1, 15).unwrap(),
+            )
+            .unwrap(),
+            method: "external-yield".to_owned(),
+            rule_pack: VersionRef::new(
+                Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F08").unwrap(),
+                Version::new(1).unwrap(),
+            ),
+            values: vec![
+                DecimalValue::new(
+                    "2575",
+                    4,
+                    UnitRef::new(
+                        Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F04").unwrap(),
+                        Version::new(1).unwrap(),
+                    ),
+                )
+                .unwrap(),
+                DecimalValue::new(
+                    "975",
+                    2,
+                    UnitRef::new(
+                        Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5F05").unwrap(),
+                        Version::new(1).unwrap(),
+                    ),
+                )
+                .unwrap(),
+            ],
+            supersedes_id: None,
+        };
+
+        let legacy = MarketFact::Valuation(Valuation::new(input.clone()).unwrap());
+        let explicit_all_price = MarketFact::Valuation(
+            Valuation::new_with_value_roles(
+                input.clone(),
+                vec![ValuationValueRole::Price, ValuationValueRole::Price],
+            )
+            .unwrap(),
+        );
+        let legacy_bytes = encode_fact(&legacy);
+        assert_eq!(legacy_bytes, encode_fact(&explicit_all_price));
+        assert_eq!(legacy_bytes[6], 4, "legacy discriminator must not move");
+        assert_eq!(
+            ContentHash::digest(&legacy_bytes).as_bytes(),
+            &[
+                74, 158, 3, 229, 235, 217, 11, 128, 66, 41, 242, 239, 147, 158, 220, 144, 25, 105,
+                43, 72, 246, 158, 134, 47, 4, 173, 158, 181, 250, 121, 204, 143,
+            ],
+            "legacy valuation storage bytes must remain exact"
+        );
+
+        let typed = MarketFact::Valuation(
+            Valuation::new_with_value_roles(
+                input,
+                vec![
+                    ValuationValueRole::Yield,
+                    ValuationValueRole::RemainingYears,
+                ],
+            )
+            .unwrap(),
+        );
+        let encoded = encode_fact(&typed);
+        assert_eq!(encoded[6], 24, "typed role encoding must be versioned");
+        assert_eq!(decode_fact(&encoded).unwrap(), typed);
+
+        let mut unspecified_role = encoded;
+        let role_offset = unspecified_role.len() - 2;
+        unspecified_role[role_offset] = 0;
+        assert!(decode_fact(&unspecified_role).is_err());
     }
 
     #[test]

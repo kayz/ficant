@@ -8,6 +8,8 @@ version.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
 ficant-application = { path = "../../crates/ficant-application" }
 ficant-api = { path = "../../crates/ficant-api" }
 ficant-cgb-futures-pack = { path = "../../crates/ficant-cgb-futures-pack" }
@@ -19,6 +21,7 @@ ficant-runtime = { path = "../../crates/ficant-runtime" }
 ficant-storage = { path = "../../crates/ficant-storage" }
 ficant-domain = { path = "../../crates/ficant-domain" }
 serde_json = { workspace = true }
+serde = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 

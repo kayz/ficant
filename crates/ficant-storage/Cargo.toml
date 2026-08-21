@@ -25,3 +25,4 @@ workspace = true
 
 [dev-dependencies]
 ficant-fixed-income-native = { path = "../ficant-fixed-income-native" }
+serde_json = { workspace = true }

@@ -14,16 +14,17 @@ use ficant_domain::market::{
     MarketRulePack, PriceSourceType, Unit,
 };
 use ficant_domain::primitives::{
-    ContentHash, DecimalValue, LineageRef, MarketTime, Ulid, UnitRef, Version, VersionRef,
+    ContentHash, DecimalValue, LineageRef, MarketTime, OwnerRef, Ulid, UnitRef, Version, VersionRef,
 };
 use ficant_domain::research::{
     CoverageDeclaration, CurveNodeDefinition, CurveNodeRef, CurveRebuildPolicy, FactorDefinition,
     FactorDv01, FactorTarget, FactorTargetBinding, InstrumentFactorTarget,
     PortfolioKeyRateExposure, Position, PositionKeyRateExposure, PositionSnapshot,
     PriceSourceCount, PriceSourceSummary, RiskAlgorithmBinding, SecondOrderPolicy,
-    SensitivityDirection, key_rate_dv01, scale_futures_key_rate_dv01,
+    SensitivityDirection, bond_position_key_rate_dv01, key_rate_dv01, scale_futures_key_rate_dv01,
 };
 use ficant_domain::{ContentAddressed, VersionedDefinition};
+use ficant_runtime::NamedContentRef;
 
 use crate::ports::{
     AccessScope, ApplicationResult, BondAnalyticsEngine, CanonicalSnapshotDecoder,
@@ -47,6 +48,122 @@ pub const R4D_B_ALGORITHM_ID: &str = "ficant.fixed-income.portfolio-key-rate-yie
 pub const R4D_B_ALGORITHM_VERSION: u32 = 1;
 pub const R4D_B_CONVENTION_PROFILE: &str = "linear-ytm-fixed-base-ctd-v1";
 const FIXED_DECIMAL_SCALE: u32 = 12;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PortfolioRiskInputKind {
+    FactorDefinition,
+    CurveNodeDefinition,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PortfolioRiskInputEvidence {
+    kind: PortfolioRiskInputKind,
+    identity: String,
+    content_hash: ContentHash,
+}
+
+impl PortfolioRiskInputEvidence {
+    fn new(
+        kind: PortfolioRiskInputKind,
+        identity: impl Into<String>,
+        content_hash: ContentHash,
+    ) -> ApplicationResult<Self> {
+        let identity = identity.into();
+        NamedContentRef::new(identity.clone(), content_hash.clone()).map_err(map_domain_error)?;
+        Ok(Self {
+            kind,
+            identity,
+            content_hash,
+        })
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> PortfolioRiskInputKind {
+        self.kind
+    }
+
+    #[must_use]
+    pub fn identity(&self) -> &str {
+        &self.identity
+    }
+
+    #[must_use]
+    pub fn content_hash(&self) -> &ContentHash {
+        &self.content_hash
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PortfolioRiskExecution {
+    exposure: PortfolioKeyRateExposure,
+    actual_inputs: Vec<PortfolioRiskInputEvidence>,
+}
+
+impl PortfolioRiskExecution {
+    fn new(
+        exposure: PortfolioKeyRateExposure,
+        mut actual_inputs: Vec<PortfolioRiskInputEvidence>,
+    ) -> ApplicationResult<Self> {
+        actual_inputs.sort_by(|left, right| {
+            left.kind
+                .cmp(&right.kind)
+                .then_with(|| left.identity.cmp(&right.identity))
+        });
+        if actual_inputs
+            .windows(2)
+            .any(|pair| pair[0].kind == pair[1].kind && pair[0].identity == pair[1].identity)
+        {
+            return Err(lineage());
+        }
+        let factors = actual_inputs
+            .iter()
+            .filter(|input| input.kind == PortfolioRiskInputKind::FactorDefinition)
+            .collect::<Vec<_>>();
+        let node_count = actual_inputs
+            .iter()
+            .filter(|input| input.kind == PortfolioRiskInputKind::CurveNodeDefinition)
+            .count();
+        let input_hashes = exposure
+            .positions()
+            .iter()
+            .flat_map(PositionKeyRateExposure::input_evidence_hashes)
+            .collect::<BTreeSet<_>>();
+        if factors.len() != exposure.totals().len()
+            || node_count != exposure.totals().len()
+            || exposure.totals().iter().any(|total| {
+                !factors.iter().any(|input| {
+                    input.identity == total.factor_id()
+                        && input.content_hash == *total.factor_definition_hash()
+                })
+            })
+            || actual_inputs.iter().any(|input| {
+                input.kind == PortfolioRiskInputKind::CurveNodeDefinition
+                    && !input_hashes.contains(&input.content_hash)
+            })
+        {
+            return Err(lineage());
+        }
+        Ok(Self {
+            exposure,
+            actual_inputs,
+        })
+    }
+
+    #[must_use]
+    pub const fn exposure(&self) -> &PortfolioKeyRateExposure {
+        &self.exposure
+    }
+
+    #[must_use]
+    pub fn actual_inputs(&self) -> &[PortfolioRiskInputEvidence] {
+        &self.actual_inputs
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (PortfolioKeyRateExposure, Vec<PortfolioRiskInputEvidence>) {
+        (self.exposure, self.actual_inputs)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CalculateBondKeyRateDv01Command {
@@ -234,6 +351,24 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
         scope: &AccessScope,
         command: CalculateBondKeyRateDv01Command,
     ) -> ApplicationResult<PortfolioKeyRateExposure> {
+        Ok(self
+            .execute_with_evidence(scope, command)
+            .await?
+            .into_parts()
+            .0)
+    }
+
+    /// Runs the same verified KRD path while retaining its exact named definition reads.
+    ///
+    /// # Errors
+    ///
+    /// Fails under the same closed-world conditions as [`Self::execute`].
+    #[allow(clippy::too_many_lines)]
+    pub async fn execute_with_evidence(
+        &self,
+        scope: &AccessScope,
+        command: CalculateBondKeyRateDv01Command,
+    ) -> ApplicationResult<PortfolioRiskExecution> {
         let snapshot = self
             .positions
             .get_position_snapshot(
@@ -279,9 +414,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             return Err(validation());
         }
         let curve_currency = self.read_unit(scope, curve.currency()).await?;
-        if curve_currency.dimension() != "currency" || curve_currency.owner() != snapshot.owner() {
-            return Err(validation());
-        }
+        validate_curve_currency_unit(&curve_currency, snapshot.owner())?;
 
         let calendar = self.read_calendar(scope, curve.calendar()).await?;
         if calendar.owner() != snapshot.owner() {
@@ -435,7 +568,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
         let algorithm =
             RiskAlgorithmBinding::new(algorithm_id, algorithm_version, convention_profile)
                 .map_err(map_domain_error)?;
-        match command.futures_data_snapshot_id {
+        let exposure = match command.futures_data_snapshot_id {
             Some(data_snapshot_id) => PortfolioKeyRateExposure::new_with_futures_data_snapshot(
                 snapshot.id().clone(),
                 curve.id().clone(),
@@ -454,7 +587,21 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
                 lineage_refs,
             ),
         }
-        .map_err(map_domain_error)
+        .map_err(map_domain_error)?;
+        let mut actual_inputs = Vec::with_capacity(axis.len() * 2);
+        for point in &axis {
+            actual_inputs.push(PortfolioRiskInputEvidence::new(
+                PortfolioRiskInputKind::FactorDefinition,
+                point.factor.factor_id(),
+                point.factor.content_hash().clone(),
+            )?);
+            actual_inputs.push(PortfolioRiskInputEvidence::new(
+                PortfolioRiskInputKind::CurveNodeDefinition,
+                point.curve_node_id.clone(),
+                point.node_content_hash.clone(),
+            )?);
+        }
+        PortfolioRiskExecution::new(exposure, actual_inputs)
     }
 
     async fn materialize_axis(
@@ -497,6 +644,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
                 curve.owner(),
             )?;
             axis.push(AxisPoint {
+                curve_node_id: node.curve_node_id().to_owned(),
                 maturity_date: tenor_date(curve.as_of().local_trading_date(), node.tenor())?,
                 yield_to_maturity: decimal_to_fixed(point.yield_to_maturity())?,
                 bump_yield: decimal_to_fixed(factor.convention().bump())?,
@@ -583,24 +731,24 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
             return Err(validation());
         }
         let quantity_unit = self.read_unit(scope, position.quantity().unit()).await?;
-        validate_decimal_unit(
+        validate_bond_amount_unit(
             position.quantity(),
             &quantity_unit,
-            "notional",
+            curve.currency(),
             snapshot.owner(),
         )?;
         let pricing = bond.pricing_terms().ok_or_else(lineage)?;
         let tax = bond.tax_attributes().ok_or_else(lineage)?;
-        validate_decimal_unit(
+        validate_bond_amount_unit(
             bond.face_value(),
             &quantity_unit,
-            "notional",
+            curve.currency(),
             snapshot.owner(),
         )?;
-        validate_decimal_unit(
+        validate_bond_amount_unit(
             bond.cumulative_issued_amount(),
             &quantity_unit,
-            "notional",
+            curve.currency(),
             snapshot.owner(),
         )?;
         let rate_unit = &axis.first().ok_or_else(validation)?.factor_unit;
@@ -1019,6 +1167,23 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
         })
     }
 
+    fn axis_price(
+        &self,
+        position: &PreparedPosition,
+        axis: &[AxisPoint],
+        bump: Option<(usize, bool)>,
+    ) -> ApplicationResult<FixedDecimal> {
+        self.price(
+            position,
+            yield_curve_from_axis(
+                position.curve_ref.clone(),
+                axis,
+                position.valuation_at.local_trading_date(),
+                bump,
+            )?,
+        )
+    }
+
     fn calculate_position(
         &self,
         mut position: PreparedPosition,
@@ -1026,13 +1191,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
         output_unit: &UnitRef,
         output_unit_definition: &Unit,
     ) -> ApplicationResult<PositionKeyRateExposure> {
-        let base_curve = yield_curve_from_axis(
-            position.curve_ref.clone(),
-            axis,
-            position.valuation_at.local_trading_date(),
-            None,
-        )?;
-        let base_price = self.price(&position, base_curve)?;
+        let base_price = self.axis_price(&position, axis, None)?;
         let mut exposures = Vec::with_capacity(axis.len());
         let mut input_evidence_hashes = Vec::with_capacity(axis.len() * 3);
         for (index, point) in axis.iter().enumerate() {
@@ -1043,15 +1202,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
                 direction,
                 SensitivityDirection::Central | SensitivityDirection::Up
             ) {
-                self.price(
-                    &position,
-                    yield_curve_from_axis(
-                        position.curve_ref.clone(),
-                        axis,
-                        position.valuation_at.local_trading_date(),
-                        Some((index, true)),
-                    )?,
-                )?
+                self.axis_price(&position, axis, Some((index, true)))?
             } else {
                 base_price
             };
@@ -1059,15 +1210,7 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
                 direction,
                 SensitivityDirection::Central | SensitivityDirection::Down
             ) {
-                self.price(
-                    &position,
-                    yield_curve_from_axis(
-                        position.curve_ref.clone(),
-                        axis,
-                        position.valuation_at.local_trading_date(),
-                        Some((index, false)),
-                    )?,
-                )?
+                self.axis_price(&position, axis, Some((index, false)))?
             } else {
                 base_price
             };
@@ -1078,14 +1221,16 @@ impl<'a> CalculateBondKeyRateDv01<'a> {
                     .checked_mul(10_000)
                     .ok_or_else(validation)?,
             );
-            let registered_face =
-                key_rate_dv01(base_price, up_price, down_price, bump_bp, direction)
-                    .map_err(map_domain_error)?;
-            let value = scale_by_notional(
-                registered_face,
-                &position.quantity,
+            let value = bond_position_key_rate_dv01(
+                base_price,
+                up_price,
+                down_price,
+                bump_bp,
+                direction,
+                decimal_to_fixed(&position.quantity)?,
                 position.terms.face_amount(),
-            )?;
+            )
+            .map_err(map_domain_error)?;
             validate_fixed_output(value, output_unit_definition)?;
             if value != FixedDecimal::ZERO {
                 input_evidence_hashes.push(
@@ -1392,6 +1537,7 @@ struct SelectedFuturesPosition {
 struct AxisPoint {
     factor: FactorDefinition,
     factor_unit: Unit,
+    curve_node_id: String,
     maturity_date: NaiveDate,
     yield_to_maturity: FixedDecimal,
     bump_yield: FixedDecimal,
@@ -1632,6 +1778,28 @@ fn validate_decimal_unit(
     Ok(())
 }
 
+fn validate_curve_currency_unit(unit: &Unit, expected_owner: &OwnerRef) -> ApplicationResult<()> {
+    if !matches!(unit.dimension(), "currency" | "currency_amount") || unit.owner() != expected_owner
+    {
+        return Err(validation());
+    }
+    Ok(())
+}
+
+fn validate_bond_amount_unit(
+    value: &DecimalValue,
+    unit: &Unit,
+    curve_currency: &UnitRef,
+    expected_owner: &OwnerRef,
+) -> ApplicationResult<()> {
+    let expected_dimension = match unit.dimension() {
+        "notional" => "notional",
+        dimension @ ("currency" | "currency_amount") if value.unit() == curve_currency => dimension,
+        _ => return Err(validation()),
+    };
+    validate_decimal_unit(value, unit, expected_dimension, expected_owner)
+}
+
 fn validate_fixed_output(value: FixedDecimal, unit: &Unit) -> ApplicationResult<()> {
     if unit.scale() < FIXED_DECIMAL_SCALE
         || decimal_precision(&value.scaled().to_string()) > unit.precision()
@@ -1643,26 +1811,6 @@ fn validate_fixed_output(value: FixedDecimal, unit: &Unit) -> ApplicationResult<
 
 fn decimal_precision(coefficient: &str) -> u32 {
     u32::try_from(coefficient.trim_start_matches('-').len()).unwrap_or(u32::MAX)
-}
-
-fn scale_by_notional(
-    value: FixedDecimal,
-    quantity: &DecimalValue,
-    registered_face: FixedDecimal,
-) -> ApplicationResult<FixedDecimal> {
-    if !registered_face.is_positive() {
-        return Err(validation());
-    }
-    let quantity = decimal_to_fixed(quantity)?;
-    let numerator = value
-        .scaled()
-        .checked_mul(quantity.scaled())
-        .ok_or_else(validation)?;
-    let denominator = registered_face.scaled();
-    if numerator % denominator != 0 {
-        return Err(validation());
-    }
-    Ok(FixedDecimal::from_scaled(numerator / denominator))
 }
 
 fn trace_for(command: &CalculateBondKeyRateDv01Command) -> ApplicationResult<SafeTraceContext> {
@@ -1692,4 +1840,147 @@ fn lineage() -> ApplicationError {
 
 fn not_found() -> ApplicationError {
     ApplicationError::new(ApplicationErrorCategory::NotFound, false)
+}
+
+#[cfg(test)]
+mod tests {
+    use ficant_domain::market::UnitInput;
+
+    use super::*;
+
+    #[test]
+    fn curve_currency_accepts_legacy_and_currency_amount_but_rejects_drift() {
+        let expected_owner = test_owner('1', '2');
+        assert!(
+            validate_curve_currency_unit(&test_unit("currency", &expected_owner), &expected_owner)
+                .is_ok()
+        );
+        assert!(
+            validate_curve_currency_unit(
+                &test_unit("currency_amount", &expected_owner),
+                &expected_owner,
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_curve_currency_unit(
+                &test_unit("price_per_100", &expected_owner),
+                &expected_owner,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_curve_currency_unit(
+                &test_unit("currency_amount", &test_owner('1', '3')),
+                &expected_owner,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn bond_amount_accepts_exact_curve_currency_amount_and_keeps_legacy_notional() {
+        let expected_owner = test_owner('1', '2');
+        let currency_amount = test_unit("currency_amount", &expected_owner);
+        let currency_reference = UnitRef::new(test_id('4'), Version::new(1).expect("unit version"));
+        let amount = DecimalValue::new("100", 0, currency_reference.clone()).expect("amount");
+        assert!(
+            validate_bond_amount_unit(
+                &amount,
+                &currency_amount,
+                &currency_reference,
+                &expected_owner,
+            )
+            .is_ok()
+        );
+        let legacy_currency = test_unit("currency", &expected_owner);
+        assert!(
+            validate_bond_amount_unit(
+                &amount,
+                &legacy_currency,
+                &currency_reference,
+                &expected_owner,
+            )
+            .is_ok()
+        );
+
+        let legacy_notional = test_unit("notional", &expected_owner);
+        assert!(
+            validate_bond_amount_unit(
+                &amount,
+                &legacy_notional,
+                &UnitRef::new(test_id('5'), Version::new(1).expect("curve version")),
+                &expected_owner,
+            )
+            .is_ok()
+        );
+        let other_reference = UnitRef::new(test_id('5'), Version::new(1).expect("other version"));
+        assert!(
+            validate_bond_amount_unit(
+                &amount,
+                &currency_amount,
+                &other_reference,
+                &expected_owner,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_bond_amount_unit(
+                &DecimalValue::new("100", 0, other_reference).expect("drifted amount"),
+                &currency_amount,
+                &currency_reference,
+                &expected_owner,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_bond_amount_unit(
+                &amount,
+                &test_unit("price_per_100", &expected_owner),
+                &currency_reference,
+                &expected_owner,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_bond_amount_unit(
+                &amount,
+                &test_unit("currency_amount", &test_owner('1', '3')),
+                &currency_reference,
+                &expected_owner,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_bond_amount_unit(
+                &DecimalValue::new("1234567890123", 13, currency_reference.clone(),)
+                    .expect("high-scale amount"),
+                &currency_amount,
+                &currency_reference,
+                &expected_owner,
+            )
+            .is_err()
+        );
+    }
+
+    fn test_unit(dimension: &str, owner: &OwnerRef) -> Unit {
+        Unit::new(UnitInput {
+            unit_id: test_id('4'),
+            version: Version::new(1).expect("unit version"),
+            owner: owner.clone(),
+            code: "CNY".to_owned(),
+            dimension: dimension.to_owned(),
+            scale: FIXED_DECIMAL_SCALE,
+            precision: 28,
+        })
+        .expect("unit")
+    }
+
+    fn test_owner(tenant: char, owner: char) -> OwnerRef {
+        OwnerRef::new(test_id(tenant), test_id(owner))
+    }
+
+    fn test_id(suffix: char) -> Ulid {
+        Ulid::new(format!("01ARZ3NDEKTSV4RRFFQ69G5FA{suffix}")).expect("ULID")
+    }
 }

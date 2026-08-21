@@ -4,7 +4,7 @@ set -euo pipefail
 
 scripts_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 lock_file="$scripts_dir/supply-chain.lock.json"
-SUPPLY_LOCK_SHA256=01630ee02025f07d29495137c0e87694cd4b928f615f0fee3ab723bc9016d199
+SUPPLY_LOCK_SHA256=88ea2beb017d41d17b73223a3dd808ca45cfe3bbfe9fe5921f31931a6d0528b6
 
 die() {
   printf 'supply-chain: %s\n' "$1" >&2
@@ -63,7 +63,7 @@ if data.get("cargo_reachability") != {
     "command": ["tree", "--locked", "--all-features", "--target", "all", "--prefix", "none", "--format", "{p}"],
 }:
     print("supply-chain: frozen Cargo reachability contract mismatch", file=sys.stderr); raise SystemExit(2)
-if len(data.get("first_party_packages", [])) != 19 or len({item.get("purl") for item in data["first_party_packages"]}) != 19:
+if len(data.get("first_party_packages", [])) != 20 or len({item.get("purl") for item in data["first_party_packages"]}) != 20:
     print("supply-chain: exact first-party policy mismatch", file=sys.stderr); raise SystemExit(2)
 expected_vendored = [{
     "purl": "pkg:cargo/parquet@59.1.0",

@@ -26,6 +26,12 @@ pub enum FormalInputKind {
     PositionSnapshot,
     DataHealthProfile,
     CurveNodeDefinition,
+    Portfolio,
+    Book,
+    PortfolioGroup,
+    Benchmark,
+    PortfolioMetricConvention,
+    Fact,
 }
 
 impl FormalInputKind {
@@ -46,6 +52,12 @@ impl FormalInputKind {
             Self::PositionSnapshot => 13,
             Self::DataHealthProfile => 14,
             Self::CurveNodeDefinition => 15,
+            Self::Portfolio => 16,
+            Self::Book => 17,
+            Self::PortfolioGroup => 18,
+            Self::Benchmark => 19,
+            Self::PortfolioMetricConvention => 20,
+            Self::Fact => 21,
         }
     }
 
@@ -64,6 +76,12 @@ impl FormalInputKind {
                 | Self::Unit
                 | Self::DataSource
                 | Self::DataHealthProfile
+                | Self::Portfolio
+                | Self::Book
+                | Self::PortfolioGroup
+                | Self::Benchmark
+                | Self::PortfolioMetricConvention
+                | Self::Fact
         )
     }
 }

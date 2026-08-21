@@ -16,6 +16,12 @@ importers:
         specifier: 1.55.1
         version: 1.55.1
 
+  packages/contracts-generated:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.5.2
+        version: 2.5.2
+
   platform-shell:
     dependencies:
       '@bufbuild/protobuf':
