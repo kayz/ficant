@@ -947,6 +947,8 @@ pub struct Valuation {
     pub values: ::prost::alloc::vec::Vec<super::super::core::v1::DecimalValue>,
     #[prost(message, optional, tag="9")]
     pub supersedes_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(enumeration="ValuationValueRole", repeated, tag="10")]
+    pub value_roles: ::prost::alloc::vec::Vec<i32>,
 }
 /// CurveSnapshot records an immutable external fixture and never builds a curve.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1209,6 +1211,41 @@ impl CashflowType {
             "CASHFLOW_TYPE_PRINCIPAL" => Some(Self::Principal),
             "CASHFLOW_TYPE_FEE" => Some(Self::Fee),
             "CASHFLOW_TYPE_OTHER" => Some(Self::Other),
+            _ => None,
+        }
+    }
+}
+/// ValuationValueRole binds each externally supplied value to its financial
+/// measure. Legacy valuations omit value_roles and canonically mean PRICE for
+/// every value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ValuationValueRole {
+    Unspecified = 0,
+    Price = 1,
+    Yield = 2,
+    RemainingYears = 3,
+}
+impl ValuationValueRole {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "VALUATION_VALUE_ROLE_UNSPECIFIED",
+            Self::Price => "VALUATION_VALUE_ROLE_PRICE",
+            Self::Yield => "VALUATION_VALUE_ROLE_YIELD",
+            Self::RemainingYears => "VALUATION_VALUE_ROLE_REMAINING_YEARS",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VALUATION_VALUE_ROLE_UNSPECIFIED" => Some(Self::Unspecified),
+            "VALUATION_VALUE_ROLE_PRICE" => Some(Self::Price),
+            "VALUATION_VALUE_ROLE_YIELD" => Some(Self::Yield),
+            "VALUATION_VALUE_ROLE_REMAINING_YEARS" => Some(Self::RemainingYears),
             _ => None,
         }
     }

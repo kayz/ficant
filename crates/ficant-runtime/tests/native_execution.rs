@@ -1,5 +1,5 @@
 use ficant_domain::DomainErrorCode;
-use ficant_domain::primitives::{ContentHash, OwnerRef, Ulid, Version};
+use ficant_domain::primitives::{ContentHash, LineageRef, OwnerRef, Ulid, Version};
 use ficant_domain::research::{
     DeterminismClass, FilesystemPermission, GraphExternalInput, GraphExternalInputBinding,
     NodePermissions, PortType, ResearchEdge, ResearchGraph, ResearchGraphInput, ResearchNode,
@@ -7,7 +7,8 @@ use ficant_domain::research::{
 };
 use ficant_runtime::{
     ComparisonDimension, ExecutionExternalInput, ExecutionIdentity, ExecutionIdentityInput,
-    ExecutionInstanceIdentity, NativeNode, NativeNodeRequest, NativePortValue, NodeImplementation,
+    ExecutionInstanceIdentity, FormalInputBinding, FormalInputBindingInput, FormalInputKind,
+    FormalInputReference, NativeNode, NativeNodeRequest, NativePortValue, NodeImplementation,
     ReproducibilityIdentity, ReproducibilityIdentityInput, RulePackBinding, RuntimeError,
     canonical_output_bytes, compare_experiments, decode_canonical_output_bytes,
     execute_native_graph, execute_native_graph_with_external_inputs, execute_native_node,
@@ -17,6 +18,89 @@ use ficant_runtime::{
 const PREFIX: &str = "01ARZ3NDEKTSV4RRFFQ69G5FA";
 fn id(c: char) -> Ulid {
     Ulid::new(format!("{PREFIX}{c}")).unwrap()
+}
+
+#[test]
+fn portfolio_formal_input_kinds_have_frozen_codes_and_preserve_existing_identity() {
+    let cases = [
+        (FormalInputKind::Portfolio, 16),
+        (FormalInputKind::Book, 17),
+        (FormalInputKind::PortfolioGroup, 18),
+        (FormalInputKind::Benchmark, 19),
+        (FormalInputKind::PortfolioMetricConvention, 20),
+        (FormalInputKind::Fact, 21),
+    ];
+    for (kind, expected_code) in cases {
+        let binding = exact_formal_input(kind, "portfolio-authority", b"portfolio-authority");
+        assert_eq!(
+            canonical_field(&binding.canonical_bytes(), 3),
+            [expected_code]
+        );
+    }
+
+    let unversioned_fact = FormalInputBinding::new(FormalInputBindingInput {
+        role: "valuation".to_owned(),
+        kind: FormalInputKind::Fact,
+        owner: OwnerRef::new(id('T'), id('W')),
+        reference: FormalInputReference::Object(
+            LineageRef::new(id('P'), None, Some(ContentHash::digest(b"valuation"))).unwrap(),
+        ),
+        observed_at: None,
+        visible_at: None,
+        effective_from: None,
+        effective_to: None,
+    })
+    .unwrap_err();
+    assert_eq!(unversioned_fact, DomainErrorCode::BrokenLineage);
+
+    let existing = exact_formal_input(FormalInputKind::Subject, "existing-subject", b"subject");
+    assert_eq!(
+        ContentHash::digest(&existing.canonical_bytes()).as_bytes(),
+        &[
+            39, 208, 246, 112, 154, 109, 255, 161, 1, 221, 241, 116, 51, 213, 56, 34, 217, 122, 56,
+            47, 222, 225, 59, 253, 142, 224, 38, 181, 95, 85, 84, 250,
+        ]
+    );
+}
+
+fn exact_formal_input(kind: FormalInputKind, role: &str, payload: &[u8]) -> FormalInputBinding {
+    FormalInputBinding::new(FormalInputBindingInput {
+        role: role.to_owned(),
+        kind,
+        owner: OwnerRef::new(id('T'), id('W')),
+        reference: FormalInputReference::Object(
+            LineageRef::new(
+                id('P'),
+                Some(Version::new(1).unwrap()),
+                Some(ContentHash::digest(payload)),
+            )
+            .unwrap(),
+        ),
+        observed_at: None,
+        visible_at: None,
+        effective_from: None,
+        effective_to: None,
+    })
+    .unwrap()
+}
+
+fn canonical_field(bytes: &[u8], wanted_tag: u16) -> &[u8] {
+    let mut offset = b"FICANT-EVIDENCE\0".len();
+    while offset < bytes.len() {
+        let tag_end = offset + 2;
+        let length_end = tag_end + 8;
+        let tag = u16::from_be_bytes(bytes[offset..tag_end].try_into().unwrap());
+        let length = usize::try_from(u64::from_be_bytes(
+            bytes[tag_end..length_end].try_into().unwrap(),
+        ))
+        .unwrap();
+        let value_end = length_end + length;
+        if tag == wanted_tag {
+            return &bytes[length_end..value_end];
+        }
+        offset = value_end;
+    }
+    panic!("canonical field {wanted_tag} is missing")
 }
 
 fn value_type() -> TypedValue {

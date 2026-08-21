@@ -10,11 +10,13 @@ publish = false
 [dependencies]
 async-trait = { workspace = true }
 chrono = { workspace = true }
+chrono-tz = { workspace = true }
 ficant-domain = { path = "../ficant-domain" }
 ficant-runtime = { path = "../ficant-runtime" }
 ring = { workspace = true }
 
 [dev-dependencies]
+serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 
 [lints]

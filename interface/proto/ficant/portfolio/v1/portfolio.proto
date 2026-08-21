@@ -1,0 +1,396 @@
+syntax = "proto3";
+
+package ficant.portfolio.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+import "ficant/core/v1/evidence.proto";
+import "ficant/market/v1/definition.proto";
+import "ficant/market/v1/fact.proto";
+import "ficant/rates/v1/analytics.proto";
+import "ficant/research/v1/coverage.proto";
+import "ficant/research/v1/exposure.proto";
+import "ficant/research/v1/position.proto";
+import "google/protobuf/timestamp.proto";
+
+enum PortfolioStatus {
+  PORTFOLIO_STATUS_UNSPECIFIED = 0;
+  PORTFOLIO_STATUS_ACTIVE = 1;
+  PORTFOLIO_STATUS_SUSPENDED = 2;
+  PORTFOLIO_STATUS_CLOSED = 3;
+}
+
+message PortfolioSnapshotBinding {
+  ficant.core.v1.Ulid snapshot_id = 1;
+  ficant.core.v1.Sha256 content_hash = 2;
+  ficant.core.v1.MarketTime observed_at = 3;
+  ficant.core.v1.MarketTime visible_at = 4;
+}
+
+message BenchmarkRef {
+  ficant.core.v1.VersionRef benchmark = 1;
+  ficant.core.v1.Sha256 content_hash = 2;
+}
+
+message PortfolioMetricConventionRef {
+  ficant.core.v1.VersionRef convention = 1;
+  ficant.core.v1.Sha256 content_hash = 2;
+}
+
+message Book {
+  ficant.core.v1.VersionRef book = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  ficant.core.v1.VersionRef subject_ref = 3;
+  string code = 4;
+  string display_name = 5;
+  PortfolioStatus status = 6;
+  ficant.core.v1.MarketTime effective_from = 7;
+  ficant.core.v1.MarketTime effective_to = 8;
+  ficant.core.v1.Sha256 content_hash = 9;
+}
+
+message PortfolioGroup {
+  ficant.core.v1.VersionRef group = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  ficant.core.v1.VersionRef subject_ref = 3;
+  ficant.core.v1.LineageRef book = 4;
+  ficant.core.v1.LineageRef parent_group = 5;
+  string code = 6;
+  string display_name = 7;
+  PortfolioStatus status = 8;
+  ficant.core.v1.MarketTime effective_from = 9;
+  ficant.core.v1.MarketTime effective_to = 10;
+  ficant.core.v1.Sha256 content_hash = 11;
+}
+
+message Portfolio {
+  ficant.core.v1.VersionRef portfolio = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  ficant.core.v1.VersionRef subject_ref = 3;
+  ficant.core.v1.LineageRef book = 4;
+  ficant.core.v1.LineageRef group = 5;
+  string code = 6;
+  string display_name = 7;
+  PortfolioStatus status = 8;
+  PortfolioSnapshotBinding position_snapshot = 9;
+  BenchmarkRef benchmark = 10;
+  PortfolioMetricConventionRef metric_convention = 11;
+  ficant.core.v1.MarketTime effective_from = 12;
+  ficant.core.v1.MarketTime effective_to = 13;
+  ficant.core.v1.Sha256 content_hash = 14;
+}
+
+enum PortfolioMetricWeighting {
+  PORTFOLIO_METRIC_WEIGHTING_UNSPECIFIED = 0;
+  PORTFOLIO_METRIC_WEIGHTING_MARKET_VALUE = 1;
+  PORTFOLIO_METRIC_WEIGHTING_MARKET_VALUE_TIMES_MODIFIED_DURATION = 2;
+  PORTFOLIO_METRIC_WEIGHTING_NOTIONAL = 3;
+}
+
+enum PortfolioDecimalRounding {
+  PORTFOLIO_DECIMAL_ROUNDING_UNSPECIFIED = 0;
+  PORTFOLIO_DECIMAL_ROUNDING_TIES_TO_EVEN = 1;
+}
+
+message PortfolioMetricConvention {
+  ficant.core.v1.VersionRef convention = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  string schema_id = 3;
+  PortfolioMetricWeighting ytm_weighting = 4;
+  PortfolioMetricWeighting duration_weighting = 5;
+  PortfolioMetricWeighting convexity_weighting = 6;
+  PortfolioMetricWeighting coupon_weighting = 7;
+  PortfolioMetricWeighting remaining_life_weighting = 8;
+  PortfolioDecimalRounding rounding = 9;
+  uint64 freshness_limit_seconds = 10;
+  ficant.core.v1.MarketTime effective_from = 11;
+  ficant.core.v1.MarketTime effective_to = 12;
+  ficant.core.v1.Sha256 content_hash = 13;
+}
+
+message ListBooksAndPortfoliosRequest {
+  ficant.core.v1.OwnerRef owner = 1;
+  ficant.core.v1.VersionRef subject_ref = 2;
+  ficant.core.v1.MarketTime as_of = 3;
+  ficant.core.v1.MarketTime knowledge_at = 4;
+  repeated PortfolioStatus statuses = 5;
+  string search = 6;
+  ficant.core.v1.PageRequest page = 7;
+}
+
+message PortfolioCatalogPage {
+  repeated Book books = 1;
+  repeated PortfolioGroup groups = 2;
+  repeated Portfolio portfolios = 3;
+  ficant.core.v1.PageResponse page = 4;
+  NonFormalReadEvidence read_evidence = 5;
+}
+
+message ListBooksAndPortfoliosResponse {
+  oneof result {
+    PortfolioCatalogPage catalog = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message PortfolioScopeSelector {
+  oneof scope {
+    ficant.core.v1.Ulid book_id = 1;
+    ficant.core.v1.Ulid group_id = 2;
+    ficant.core.v1.Ulid portfolio_id = 3;
+  }
+}
+
+message ExactPortfolioScope {
+  oneof scope {
+    ficant.core.v1.LineageRef book = 1;
+    ficant.core.v1.LineageRef group = 2;
+    ficant.core.v1.LineageRef portfolio = 3;
+  }
+  repeated ficant.core.v1.LineageRef member_portfolios = 4;
+}
+
+enum PortfolioCurrencyMode {
+  PORTFOLIO_CURRENCY_MODE_UNSPECIFIED = 0;
+  PORTFOLIO_CURRENCY_MODE_ORIGINAL = 1;
+  PORTFOLIO_CURRENCY_MODE_CNY = 2;
+}
+
+enum PortfolioLookThroughMode {
+  PORTFOLIO_LOOK_THROUGH_MODE_UNSPECIFIED = 0;
+  PORTFOLIO_LOOK_THROUGH_MODE_NONE = 1;
+  PORTFOLIO_LOOK_THROUGH_MODE_CONSOLIDATED = 2;
+  PORTFOLIO_LOOK_THROUGH_MODE_SEPARATE = 3;
+}
+
+enum PortfolioPeriodPreset {
+  PORTFOLIO_PERIOD_PRESET_UNSPECIFIED = 0;
+  PORTFOLIO_PERIOD_PRESET_ONE_DAY = 1;
+  PORTFOLIO_PERIOD_PRESET_SEVEN_DAYS = 2;
+  PORTFOLIO_PERIOD_PRESET_THIRTY_DAYS = 3;
+  PORTFOLIO_PERIOD_PRESET_YEAR_TO_DATE = 4;
+  PORTFOLIO_PERIOD_PRESET_ONE_YEAR = 5;
+}
+
+message PortfolioContextInput {
+  PortfolioScopeSelector scope = 1;
+  ficant.core.v1.MarketTime valuation_at = 2;
+  ficant.core.v1.MarketTime knowledge_at = 3;
+  PortfolioCurrencyMode currency = 4;
+  PortfolioLookThroughMode look_through = 5;
+  ficant.core.v1.Ulid benchmark_id = 6;
+  PortfolioPeriodPreset period = 7;
+}
+
+message NormalizedPortfolioContext {
+  ExactPortfolioScope scope = 1;
+  ficant.core.v1.MarketTime valuation_at = 2;
+  ficant.core.v1.MarketTime knowledge_at = 3;
+  PortfolioCurrencyMode currency = 4;
+  ficant.core.v1.UnitRef currency_unit = 5;
+  PortfolioLookThroughMode look_through = 6;
+  BenchmarkRef benchmark = 7;
+  PortfolioPeriodPreset period = 8;
+  ficant.core.v1.MarketTime period_from = 9;
+  ficant.core.v1.MarketTime period_to = 10;
+  PortfolioMetricConventionRef metric_convention = 11;
+}
+
+message PortfolioBasicMetrics {
+  ficant.core.v1.DecimalValue market_value = 1;
+  ficant.core.v1.DecimalValue economic_pnl = 2;
+  ficant.core.v1.DecimalValue weighted_ytm = 3;
+  ficant.core.v1.DecimalValue modified_duration = 4;
+  ficant.core.v1.DecimalValue convexity = 5;
+  ficant.core.v1.DecimalValue weighted_coupon_rate = 6;
+  ficant.core.v1.DecimalValue weighted_remaining_years = 7;
+  ficant.core.v1.DecimalValue dv01 = 8;
+}
+
+message PortfolioKrdSummary {
+  repeated ficant.research.v1.FactorDv01 totals = 1;
+  ficant.core.v1.DecimalValue parallel_dv01 = 2;
+}
+
+message PortfolioMemberOverview {
+  ficant.core.v1.LineageRef portfolio = 1;
+  PortfolioSnapshotBinding position_snapshot = 2;
+  PortfolioBasicMetrics basic_metrics = 3;
+  PortfolioKrdSummary krd_summary = 4;
+}
+
+message PortfolioCoverage {
+  ficant.research.v1.CoverageDeclaration participation = 1;
+  repeated string missing_reasons = 2;
+}
+
+message PortfolioOverview {
+  ExactPortfolioScope scope = 1;
+  repeated PortfolioSnapshotBinding position_snapshots = 2;
+  PortfolioBasicMetrics basic_metrics = 3;
+  PortfolioKrdSummary krd_summary = 4;
+  PortfolioBasicMetrics benchmark_metrics = 5;
+  BenchmarkRef benchmark = 6;
+  PortfolioMetricConventionRef metric_convention = 7;
+  PortfolioCoverage coverage = 8;
+  repeated PortfolioMemberOverview members = 9;
+  ficant.core.v1.Sha256 request_fingerprint = 10;
+  ficant.core.v1.FormalOutputEvidence formal_evidence = 11;
+}
+
+message GetPortfolioOverviewRequest {
+  NormalizedPortfolioContext context = 1;
+}
+
+message GetPortfolioOverviewResponse {
+  oneof result {
+    PortfolioOverview overview = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+enum PortfolioWorkbenchPageId {
+  PORTFOLIO_WORKBENCH_PAGE_ID_UNSPECIFIED = 0;
+  PORTFOLIO_WORKBENCH_PAGE_ID_D01 = 1;
+  PORTFOLIO_WORKBENCH_PAGE_ID_P01 = 2;
+  PORTFOLIO_WORKBENCH_PAGE_ID_P02 = 3;
+  PORTFOLIO_WORKBENCH_PAGE_ID_P03 = 4;
+  PORTFOLIO_WORKBENCH_PAGE_ID_P04 = 5;
+}
+
+enum PortfolioPageDataMode {
+  PORTFOLIO_PAGE_DATA_MODE_UNSPECIFIED = 0;
+  PORTFOLIO_PAGE_DATA_MODE_REAL = 1;
+  PORTFOLIO_PAGE_DATA_MODE_PARTIAL = 2;
+  PORTFOLIO_PAGE_DATA_MODE_STALE = 3;
+  PORTFOLIO_PAGE_DATA_MODE_ERROR = 4;
+}
+
+enum PortfolioPageState {
+  PORTFOLIO_PAGE_STATE_UNSPECIFIED = 0;
+  PORTFOLIO_PAGE_STATE_READY = 1;
+  PORTFOLIO_PAGE_STATE_EMPTY = 2;
+  PORTFOLIO_PAGE_STATE_BLOCKED = 3;
+}
+
+enum PortfolioWorkbenchErrorCode {
+  PORTFOLIO_WORKBENCH_ERROR_CODE_UNSPECIFIED = 0;
+  PORTFOLIO_WORKBENCH_ERROR_CODE_UNAUTHENTICATED = 1;
+  PORTFOLIO_WORKBENCH_ERROR_CODE_FORBIDDEN = 2;
+  PORTFOLIO_WORKBENCH_ERROR_CODE_NOT_FOUND = 3;
+  PORTFOLIO_WORKBENCH_ERROR_CODE_CONFLICT = 4;
+  PORTFOLIO_WORKBENCH_ERROR_CODE_STALE = 5;
+  PORTFOLIO_WORKBENCH_ERROR_CODE_INTEGRITY = 6;
+  PORTFOLIO_WORKBENCH_ERROR_CODE_UNAVAILABLE = 7;
+}
+
+message PortfolioWorkbenchTypedError {
+  PortfolioWorkbenchErrorCode code = 1;
+  string safe_message = 2;
+  string trace_id = 3;
+  bool retryable = 4;
+}
+
+message NonFormalReadEvidence {
+  string schema_id = 1;
+  repeated ficant.core.v1.FormalInputBinding consumed_inputs = 2;
+  ficant.core.v1.Sha256 request_fingerprint = 3;
+}
+
+message PortfolioPageProvenance {
+  ficant.core.v1.OwnerRef owner = 1;
+  ficant.core.v1.VersionRef subject_ref = 2;
+  ficant.core.v1.Sha256 request_fingerprint = 3;
+  repeated ficant.core.v1.FormalOutputEvidence formal_evidence = 4;
+  repeated NonFormalReadEvidence non_formal_reads = 5;
+}
+
+message PortfolioPageSelection {
+  ficant.core.v1.VersionRef instrument = 1;
+}
+
+message GetDefaultContextRequest {
+  ficant.core.v1.OwnerRef owner = 1;
+  ficant.core.v1.VersionRef subject_ref = 2;
+  ficant.core.v1.MarketTime knowledge_at = 3;
+}
+
+message GetDefaultContextResponse {
+  oneof result {
+    NormalizedPortfolioContext context = 1;
+    PortfolioWorkbenchTypedError error = 2;
+  }
+}
+
+message GetPortfolioPageRequest {
+  PortfolioWorkbenchPageId page_id = 1;
+  PortfolioContextInput context = 2;
+  PortfolioPageSelection selection = 3;
+}
+
+message StructureMetrics {
+  uint64 book_count = 1;
+  uint64 group_count = 2;
+  uint64 portfolio_count = 3;
+}
+
+message D01Projection {
+  PortfolioOverview overview = 1;
+}
+
+message P01Projection {
+  PortfolioCatalogPage catalog = 1;
+  StructureMetrics structure = 2;
+}
+
+message P02Projection {
+  PortfolioOverview overview = 1;
+}
+
+message P03Projection {
+  repeated ficant.research.v1.PositionViews position_views = 1;
+  repeated ficant.research.v1.PortfolioKeyRateExposure key_rate_exposures = 2;
+  PortfolioCoverage coverage = 3;
+}
+
+message P04Projection {
+  ficant.market.v1.MarketDefinition definition = 1;
+  ficant.market.v1.InstrumentFacts facts = 2;
+  ficant.rates.v1.AnalyzeBondResult analysis = 3;
+}
+
+message PortfolioPageEnvelope {
+  string schema_version = 1;
+  PortfolioWorkbenchPageId page_id = 2;
+  string request_id = 3;
+  google.protobuf.Timestamp generated_at = 4;
+  PortfolioPageDataMode data_mode = 5;
+  NormalizedPortfolioContext normalized_context = 6;
+  PortfolioPageState page_state = 7;
+  repeated string permissions = 8;
+  PortfolioPageProvenance provenance = 9;
+  PortfolioCoverage coverage = 10;
+  oneof projection {
+    D01Projection d01 = 11;
+    P01Projection p01 = 12;
+    P02Projection p02 = 13;
+    P03Projection p03 = 14;
+    P04Projection p04 = 15;
+  }
+  PortfolioWorkbenchTypedError typed_error = 16;
+}
+
+service PortfolioCatalogService {
+  rpc ListBooksAndPortfolios(ListBooksAndPortfoliosRequest) returns (ListBooksAndPortfoliosResponse);
+}
+
+service PortfolioAggregationService {
+  rpc GetPortfolioOverview(GetPortfolioOverviewRequest) returns (GetPortfolioOverviewResponse);
+}
+
+service PortfolioWorkbenchService {
+  rpc GetDefaultContext(GetDefaultContextRequest) returns (GetDefaultContextResponse);
+  // buf:lint:ignore RPC_REQUEST_STANDARD_NAME
+  // buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+  rpc GetPage(GetPortfolioPageRequest) returns (PortfolioPageEnvelope);
+}

@@ -66,7 +66,7 @@ SignalSet 除承载 Artifact 自身引用外的 lineage 集合必须与持久化
 
 ## 正式输出证据与身份
 
-R7B 的 `FormalOutputEvidence` 是同步 Analytics 与异步 ResearchGraph 共用的正式输出信封，不是任意 CRUD 响应 metadata。当前范围固定为五个 Rates 结果、Portfolio KRD、PositionViews、成功 CapitalUse、DataHealthReport、Artifact 与 SignalSet。
+R7B 的 `FormalOutputEvidence` 是同步 Analytics 与异步 ResearchGraph 共用的正式输出信封，不是任意 CRUD 响应 metadata。当前范围固定为五个 Rates 结果、Portfolio KRD、PositionViews、成功 CapitalUse、DataHealthReport、Artifact、SignalSet，以及 R8A `PortfolioOverview`。Catalog、Definition 与 Fact 读取继续使用非正式 read evidence，不得伪装为正式分析。R8A 只追加 `FormalInputKind` 16..21（Portfolio、Book、PortfolioGroup、Benchmark、PortfolioMetricConvention、Fact），不重排 0..15，也不改 canonical identity 算法。
 
 | 组成 | 不变量 |
 |---|---|
@@ -92,9 +92,16 @@ Graph output 在任何 blob stage 前先写 `research.output_publication_intents
 | Quote bid / ask | `price` |
 | Trade price | `price` |
 | Trade quantity | `notional` |
-| iteration-2 Valuation values | `price` |
+| 省略 `value_roles` 的既有 Valuation | 全部 `price` |
+| 显式 `PRICE` | `price` |
+| 显式 `YIELD` | `rate` |
+| 显式 `REMAINING_YEARS` | `years` |
 
-其他 Valuation measure 在后续 Domain Pack 明确前拒绝；本轮不引入换算、汇率或价格归一化。
+省略角色的既有 Valuation 继续规范化为全部 `PRICE`，canonical bytes 与存储编码保持不变。新事实若显式携带角色，角色数必须与 `values` 完全相等且不得出现 `UNSPECIFIED`。本轮不引入换算、汇率或价格归一化。
+
+## 组合目录与只读聚合
+
+`Book`、`PortfolioGroup` 与 `Portfolio` 是 owner/Subject scoped 的不可变目录对象，不是第二套 Position 或会计账簿。`Portfolio` 通过 exact `PortfolioSnapshotBinding` 指向已有 `PositionSnapshot`。`BenchmarkRef` 与 `PortfolioMetricConvention` 都是版本化引用；P0 convention 只冻结点时加权口径，不宣称 NAV/收益序列。金额、比例、bp、久期和权重继续只走 `DecimalValue` + exact Unit。
 
 ## RulePack 生效语义
 

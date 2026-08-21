@@ -16,6 +16,7 @@ pub mod futures_delivery;
 pub mod futures_hedge;
 pub mod governance;
 pub mod market;
+pub mod portfolio;
 pub mod primitives;
 pub mod research;
 pub mod subject;

@@ -398,6 +398,12 @@ pub enum FormalInputKind {
     PositionSnapshot = 13,
     DataHealthProfile = 14,
     CurveNodeDefinition = 15,
+    Portfolio = 16,
+    Book = 17,
+    PortfolioGroup = 18,
+    Benchmark = 19,
+    PortfolioMetricConvention = 20,
+    Fact = 21,
 }
 impl FormalInputKind {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -422,6 +428,12 @@ impl FormalInputKind {
             Self::PositionSnapshot => "FORMAL_INPUT_KIND_POSITION_SNAPSHOT",
             Self::DataHealthProfile => "FORMAL_INPUT_KIND_DATA_HEALTH_PROFILE",
             Self::CurveNodeDefinition => "FORMAL_INPUT_KIND_CURVE_NODE_DEFINITION",
+            Self::Portfolio => "FORMAL_INPUT_KIND_PORTFOLIO",
+            Self::Book => "FORMAL_INPUT_KIND_BOOK",
+            Self::PortfolioGroup => "FORMAL_INPUT_KIND_PORTFOLIO_GROUP",
+            Self::Benchmark => "FORMAL_INPUT_KIND_BENCHMARK",
+            Self::PortfolioMetricConvention => "FORMAL_INPUT_KIND_PORTFOLIO_METRIC_CONVENTION",
+            Self::Fact => "FORMAL_INPUT_KIND_FACT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -443,6 +455,12 @@ impl FormalInputKind {
             "FORMAL_INPUT_KIND_POSITION_SNAPSHOT" => Some(Self::PositionSnapshot),
             "FORMAL_INPUT_KIND_DATA_HEALTH_PROFILE" => Some(Self::DataHealthProfile),
             "FORMAL_INPUT_KIND_CURVE_NODE_DEFINITION" => Some(Self::CurveNodeDefinition),
+            "FORMAL_INPUT_KIND_PORTFOLIO" => Some(Self::Portfolio),
+            "FORMAL_INPUT_KIND_BOOK" => Some(Self::Book),
+            "FORMAL_INPUT_KIND_PORTFOLIO_GROUP" => Some(Self::PortfolioGroup),
+            "FORMAL_INPUT_KIND_BENCHMARK" => Some(Self::Benchmark),
+            "FORMAL_INPUT_KIND_PORTFOLIO_METRIC_CONVENTION" => Some(Self::PortfolioMetricConvention),
+            "FORMAL_INPUT_KIND_FACT" => Some(Self::Fact),
             _ => None,
         }
     }

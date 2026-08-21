@@ -3,10 +3,13 @@ use ficant_api::{
     DataHealthGrpcService, DataSourceRegistryGrpcService, ExperimentGrpcService,
     FactorRegistryGrpcService, FormalOutputPublisher, FoundationChangeGrpcService,
     GrpcWebServeError, GrpcWebServerConfig, MarketDefinitionGrpcService, MarketFactGrpcService,
-    PlatformApplication, PlatformGrpcService, PlatformPort, PortfolioRiskGrpcService,
-    PositionSnapshotGrpcService, ProductionGrpcServices, RatesGrpcService, SessionPolicy,
-    SnapshotGrpcService, SubjectRegistryGrpcService, SystemClock, TrustedExperimentScope,
-    TrustedIdentity, TrustedNodeCatalog, build_production_routes, serve_production_routes,
+    OwnedPortfolioAggregationApplicationBackend, PlatformApplication, PlatformGrpcService,
+    PlatformPort, PortfolioAggregationGrpcService, PortfolioCatalogGrpcService,
+    PortfolioRiskGrpcService, PortfolioWorkbenchGrpcService, PositionSnapshotGrpcService,
+    ProductionGrpcServices, RatesGrpcService, SessionPolicy, SnapshotGrpcService,
+    SubjectRegistryGrpcService, SystemClock, SystemPortfolioRequestIdGenerator,
+    TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog, build_production_routes,
+    serve_production_routes,
 };
 use ficant_application::ports::{
     AccessScope, AeadCursorCodec, ArtifactRepository, BlobStore, CursorKey,
@@ -14,9 +17,22 @@ use ficant_application::ports::{
     DataSourceAuthorizationRepository, DataSourceRepository, DefinitionRepository,
     ExperimentRepository, FactorTopologyRepository, FormalOutputRepository,
     FoundationChangeRepository, IntegrityEventSink, MarketFactRepository,
-    Phase4ExecutionRepository, PositionSnapshotRepository, RunJournalRepository, SignalRepository,
-    SnapshotRepository, SnapshotVerifiedReadMetadataRepository, SubjectRepository,
-    VerifiedBlobReader,
+    Phase4ExecutionRepository, PortfolioAnalyticsAuthorityRepository, PortfolioCatalogRepository,
+    PositionSnapshotRepository, RunJournalRepository, SignalRepository, SnapshotRepository,
+    SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobReader,
+};
+use ficant_application::use_cases::portfolio_aggregation::{
+    ExistingPositionViewsHandoff, OwnedExactPortfolioBondAnalysisHandoff,
+    OwnedExistingPortfolioRiskHandoff, OwnedPortfolioAggregationBackend,
+    OwnedPortfolioAnalyticsAuthorityHandoff, OwnedPortfolioCatalogAggregationAuthority,
+    OwnedPortfolioOverviewRecordFactory, OwnedPortfolioRiskFuturesDependencies,
+    OwnedRequiredPortfolioOverviewPublisher, PortfolioFormalExecutionBinding,
+};
+use ficant_application::use_cases::portfolio_workbench::{
+    OwnedPortfolioCatalogBackend, OwnedPortfolioCatalogReadEvidenceFactory,
+    OwnedPortfolioWorkbenchBackend, OwnedPortfolioWorkbenchCatalogEvidenceFactory,
+    OwnedPortfolioWorkbenchContextResolver, OwnedPortfolioWorkbenchInstrumentHandoff,
+    OwnedPortfolioWorkbenchPageSource,
 };
 use ficant_application::{ApplicationError, map_runtime_error};
 use ficant_cgb_futures_pack::CgbFuturesDeliveryRulePackParser;
@@ -616,6 +632,9 @@ pub fn build_production_grpc_services(
     let snapshot_repository: Arc<dyn SnapshotRepository> = repository.clone();
     let position_repository: Arc<dyn PositionSnapshotRepository> = repository.clone();
     let factor_repository: Arc<dyn FactorTopologyRepository> = repository.clone();
+    let portfolio_catalog_repository: Arc<dyn PortfolioCatalogRepository> = repository.clone();
+    let portfolio_analytics_authority_repository: Arc<dyn PortfolioAnalyticsAuthorityRepository> =
+        repository.clone();
     let data_source_repository: Arc<dyn DataSourceRepository> = repository.clone();
     let data_source_authorization_repository: Arc<dyn DataSourceAuthorizationRepository> =
         repository.clone();
@@ -633,7 +652,7 @@ pub fn build_production_grpc_services(
     let blobs: Arc<dyn VerifiedBlobReader> = blob_store.clone();
     let writable_blobs: Arc<dyn BlobStore> = blob_store.clone();
     let formal_outputs = FormalOutputPublisher::new(
-        formal_output_repository,
+        formal_output_repository.clone(),
         settings.code.clone(),
         settings.server_runtime.clone(),
     );
@@ -710,7 +729,7 @@ pub fn build_production_grpc_services(
     let portfolio_risk = PortfolioRiskGrpcService::new(
         Arc::clone(&application),
         access_scope.clone(),
-        position_repository,
+        position_repository.clone(),
         curve_repository.clone(),
         definitions.clone(),
         data_source_repository.clone(),
@@ -727,7 +746,7 @@ pub fn build_production_grpc_services(
         &settings.trace_key,
     )
     .map_err(config)?
-    .with_formal_outputs(subjects, formal_outputs);
+    .with_formal_outputs(subjects.clone(), formal_outputs);
     let data_sources = DataSourceRegistryGrpcService::new(
         Arc::clone(&application),
         data_source_repository.clone(),
@@ -745,10 +764,10 @@ pub fn build_production_grpc_services(
     .map_err(config)?;
     let market_fact = MarketFactGrpcService::new(
         Arc::clone(&application),
-        market_facts,
+        market_facts.clone(),
         definitions.clone(),
         writable_blobs.clone(),
-        curve_repository,
+        curve_repository.clone(),
         blobs.clone(),
         build_integrity_event_sink(),
         Arc::clone(&cursor),
@@ -758,14 +777,14 @@ pub fn build_production_grpc_services(
     let snapshot = SnapshotGrpcService::new_production(
         Arc::clone(&application),
         data_source_authorization_repository,
-        data_source_repository,
-        definitions,
+        data_source_repository.clone(),
+        definitions.clone(),
         settings.input_file_connection_binding.clone(),
         settings.input_file_ndjson_root.clone().into(),
         settings.input_postgres_connection_binding.clone(),
         &settings.experiment_database_url,
-        snapshot_repository,
-        writable_blobs,
+        snapshot_repository.clone(),
+        writable_blobs.clone(),
         snapshots.clone(),
         blobs.clone(),
         build_integrity_event_sink(),
@@ -787,18 +806,132 @@ pub fn build_production_grpc_services(
             vec![settings.experiment_owner_id.clone()],
         )
         .map_err(|_| config("trusted factor access scope is invalid"))?,
-        factor_repository,
+        factor_repository.clone(),
         &settings.trace_key,
     )
     .map_err(config)?;
     let artifact = ArtifactGrpcService::new(
         Arc::clone(&application),
-        artifacts,
+        artifacts.clone(),
         signals,
+        snapshots.clone(),
+        blobs.clone(),
+        build_integrity_event_sink(),
+        Arc::clone(&cursor),
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+
+    let catalog_read_evidence = Arc::new(OwnedPortfolioCatalogReadEvidenceFactory::new(
+        subjects.clone(),
+    ));
+    let portfolio_catalog_backend = Arc::new(OwnedPortfolioCatalogBackend::new(
+        portfolio_catalog_repository.clone(),
+        Arc::clone(&cursor),
+        catalog_read_evidence,
+    ));
+    let portfolio_catalog = PortfolioCatalogGrpcService::new(
+        Arc::clone(&application),
+        portfolio_catalog_backend,
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+
+    let aggregation_authority = Arc::new(OwnedPortfolioCatalogAggregationAuthority::new(
+        portfolio_catalog_repository.clone(),
+        Arc::clone(&cursor),
+    ));
+    let analytics_authority = Arc::new(OwnedPortfolioAnalyticsAuthorityHandoff::new(
+        portfolio_analytics_authority_repository,
+        definitions.clone(),
+        curve_repository.clone(),
+        snapshots.clone(),
+        blobs.clone(),
+        build_integrity_event_sink(),
+    ));
+    let futures_dependencies = OwnedPortfolioRiskFuturesDependencies::new(
+        snapshots.clone(),
+        Arc::new(CanonicalSnapshotCodecAdapter),
+        data_source_repository.clone(),
+        Arc::new(CgbFuturesDeliveryRulePackParser),
+        Arc::new(NativeFuturesDeliveryEngine),
+    );
+    let portfolio_risk_handoff = Arc::new(OwnedExistingPortfolioRiskHandoff::new(
+        position_repository.clone(),
+        curve_repository.clone(),
+        definitions.clone(),
+        factor_repository,
+        blobs.clone(),
+        build_integrity_event_sink(),
+        Arc::new(CanonicalCurvePointSetDecoder),
+        Arc::new(NativeYieldCurveEngine),
+        Arc::new(NativeBondAnalyticsEngine),
+        Some(futures_dependencies),
+    ));
+    let portfolio_bond_analysis = Arc::new(OwnedExactPortfolioBondAnalysisHandoff::new(
+        definitions.clone(),
+        subjects.clone(),
         snapshots,
         blobs,
         build_integrity_event_sink(),
+        Arc::new(TaxRulePackV2Parser),
+        Arc::new(NativeBondAnalyticsEngine),
+    ));
+    let overview_factory = Arc::new(OwnedPortfolioOverviewRecordFactory::new(
+        subjects.clone(),
+        PortfolioFormalExecutionBinding::new(
+            settings.code.clone(),
+            settings.server_runtime.clone(),
+        ),
+    ));
+    let overview_publisher = Arc::new(OwnedRequiredPortfolioOverviewPublisher::new(
+        formal_output_repository,
+        overview_factory,
+    ));
+    let portfolio_aggregation_backend = Arc::new(OwnedPortfolioAggregationBackend::new(
+        aggregation_authority,
+        analytics_authority,
+        position_repository,
+        Arc::new(ExistingPositionViewsHandoff),
+        portfolio_risk_handoff,
+        portfolio_bond_analysis,
+        overview_publisher,
+    ));
+    let portfolio_aggregation = PortfolioAggregationGrpcService::new(
+        Arc::clone(&application),
+        Arc::new(OwnedPortfolioAggregationApplicationBackend::new(
+            portfolio_catalog_repository.clone(),
+            Arc::clone(&cursor),
+            portfolio_aggregation_backend.clone(),
+        )),
+        &settings.trace_key,
+    )
+    .map_err(config)?;
+
+    let workbench_contexts = Arc::new(OwnedPortfolioWorkbenchContextResolver::new(
+        portfolio_catalog_repository.clone(),
+        Arc::clone(&cursor),
+    ));
+    let workbench_instrument = Arc::new(OwnedPortfolioWorkbenchInstrumentHandoff::new(
+        portfolio_aggregation_backend.clone(),
+        definitions,
+        market_facts,
+    ));
+    let workbench_pages = Arc::new(OwnedPortfolioWorkbenchPageSource::new(
+        portfolio_catalog_repository,
         cursor,
+        portfolio_aggregation_backend,
+        Arc::new(OwnedPortfolioWorkbenchCatalogEvidenceFactory::new(subjects)),
+        workbench_instrument,
+    ));
+    let portfolio_workbench = PortfolioWorkbenchGrpcService::new(
+        Arc::clone(&application),
+        Arc::new(OwnedPortfolioWorkbenchBackend::new(
+            workbench_contexts,
+            workbench_pages,
+            Arc::new(SystemClock),
+            Arc::new(SystemPortfolioRequestIdGenerator::default()),
+        )),
         &settings.trace_key,
     )
     .map_err(config)?;
@@ -817,6 +950,9 @@ pub fn build_production_grpc_services(
         snapshots: snapshot,
         governance: foundation_change,
         artifacts: artifact,
+        portfolio_catalog,
+        portfolio_aggregation,
+        portfolio_workbench,
     })
 }
 

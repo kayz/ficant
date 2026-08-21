@@ -832,7 +832,8 @@ async fn connect_postgres() -> PgPool {
 
 async fn reset_and_migrate(pool: &PgPool) {
     sqlx::raw_sql(
-        "DROP SCHEMA IF EXISTS analytics CASCADE;
+        "DROP SCHEMA IF EXISTS portfolio CASCADE;
+         DROP SCHEMA IF EXISTS analytics CASCADE;
          DROP SCHEMA IF EXISTS data CASCADE;
          DROP SCHEMA IF EXISTS storage CASCADE;
          DROP SCHEMA IF EXISTS research CASCADE;

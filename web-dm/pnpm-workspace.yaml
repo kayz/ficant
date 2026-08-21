@@ -1,2 +1,3 @@
 packages:
   - platform-shell
+  - packages/contracts-generated

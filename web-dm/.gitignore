@@ -1,4 +1,5 @@
 platform-shell/dist/
 platform-shell/tsconfig.tsbuildinfo
+packages/contracts-generated/dist/
 playwright-report/
 test-results/

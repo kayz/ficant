@@ -12,8 +12,8 @@ use prost_types::{
 
 use ficant_contracts::ficant::app::v1::AppRegistry;
 use ficant_contracts::ficant::core::v1::{
-    ChangeJustification, DecimalValue, FoundationChangeRecord, PlatformRole, Subject,
-    SubjectStateSnapshot, SubjectVersion,
+    ChangeJustification, DecimalValue, FormalInputKind, FoundationChangeRecord, PlatformRole,
+    Subject, SubjectStateSnapshot, SubjectVersion,
 };
 use ficant_contracts::ficant::market::v1::{
     BondCouponTaxRule, BondCouponTaxTreatmentRule, BondTaxAttributes, CgbFuturesDeliveryRulePack,
@@ -21,6 +21,9 @@ use ficant_contracts::ficant::market::v1::{
     DataSourceAuthorization, FundingRulePack, FundingTierRate, GrossCouponTaxBasis, Instrument,
     InstrumentKind, InstrumentMapping, MarketDefinition, MarketFact, MarketRulePack,
     SubjectCouponTaxRate, SubjectCouponTaxTreatment, TaxRoundingMode, TaxRulePack, TaxRulePackV2,
+};
+use ficant_contracts::ficant::portfolio::v1::{
+    Book as PortfolioBook, PortfolioCoverage, PortfolioOverview, PortfolioPageEnvelope,
 };
 use ficant_contracts::ficant::rates::v1::{
     AnalysisInputBinding, AnalysisInputRole, AnalyzeBondRequest, AnalyzeFuturesDeliveryRequest,
@@ -101,6 +104,10 @@ fn generated_rust_consumer_exports_representative_contracts() {
     let authorization = DataSourceAuthorization::default();
     let data_snapshot = DataSnapshot::default();
     let mapping = InstrumentMapping::default();
+    let portfolio_book = PortfolioBook::default();
+    let portfolio_coverage = PortfolioCoverage::default();
+    let portfolio_overview = PortfolioOverview::default();
+    let portfolio_page = PortfolioPageEnvelope::default();
 
     assert!(instrument.instrument_id.is_none());
     assert_eq!(instrument.kind, InstrumentKind::Unspecified as i32);
@@ -159,6 +166,14 @@ fn generated_rust_consumer_exports_representative_contracts() {
     assert!(authorization.r#ref.is_none());
     assert!(data_snapshot.authorization_ref.is_none());
     assert!(mapping.mapping_id.is_none());
+    assert!(portfolio_book.book.is_none());
+    assert!(portfolio_coverage.participation.is_none());
+    assert!(portfolio_coverage.missing_reasons.is_empty());
+    assert!(portfolio_overview.coverage.is_none());
+    assert!(portfolio_page.coverage.is_none());
+    assert_eq!(FormalInputKind::Portfolio as i32, 16);
+    assert_eq!(FormalInputKind::PortfolioMetricConvention as i32, 20);
+    assert_eq!(FormalInputKind::Fact as i32, 21);
 }
 
 #[derive(Clone, Copy)]
@@ -217,6 +232,16 @@ impl ExpectedField {
             field_type: Type::Enum,
             type_name: Some(type_name),
             repeated: false,
+            oneof: None,
+        }
+    }
+
+    const fn repeated_enum(name: &'static str, type_name: &'static str) -> Self {
+        Self {
+            name,
+            field_type: Type::Enum,
+            type_name: Some(type_name),
+            repeated: true,
             oneof: None,
         }
     }
@@ -1087,7 +1112,7 @@ fn composition_level_outputs_have_coverage() {
         })
         .sum::<usize>();
     assert_eq!(
-        classified_non_composition_count, 60,
+        classified_non_composition_count, 62,
         "every non-composition success arm must select one of the three closed reasons"
     );
     let expected_keys = expected.keys().cloned().collect::<BTreeSet<_>>();
@@ -1112,17 +1137,45 @@ fn composition_level_outputs_have_coverage() {
         BTreeSet::from([
             "ficant.research.v1.CapitalUse".to_owned(),
             "ficant.research.v1.DataHealthReport".to_owned(),
+            "ficant.portfolio.v1.PortfolioOverview".to_owned(),
+            "ficant.portfolio.v1.PortfolioPageEnvelope".to_owned(),
             "ficant.research.v1.PortfolioKeyRateExposure".to_owned(),
             "ficant.research.v1.PositionViews".to_owned(),
         ]),
         "the explicitly classified composition carrier set must remain exact"
     );
 
-    for (carrier, tag) in [
-        ("ficant.research.v1.PortfolioKeyRateExposure", 10),
-        ("ficant.research.v1.PositionViews", 5),
-        ("ficant.research.v1.CapitalUse", 5),
-        ("ficant.research.v1.DataHealthReport", 14),
+    for (carrier, tag, coverage_type) in [
+        (
+            "ficant.research.v1.PortfolioKeyRateExposure",
+            10,
+            ".ficant.research.v1.CoverageDeclaration",
+        ),
+        (
+            "ficant.research.v1.PositionViews",
+            5,
+            ".ficant.research.v1.CoverageDeclaration",
+        ),
+        (
+            "ficant.research.v1.CapitalUse",
+            5,
+            ".ficant.research.v1.CoverageDeclaration",
+        ),
+        (
+            "ficant.research.v1.DataHealthReport",
+            14,
+            ".ficant.research.v1.CoverageDeclaration",
+        ),
+        (
+            "ficant.portfolio.v1.PortfolioOverview",
+            8,
+            ".ficant.portfolio.v1.PortfolioCoverage",
+        ),
+        (
+            "ficant.portfolio.v1.PortfolioPageEnvelope",
+            10,
+            ".ficant.portfolio.v1.PortfolioCoverage",
+        ),
     ] {
         let message = messages
             .get(carrier)
@@ -1131,13 +1184,13 @@ fn composition_level_outputs_have_coverage() {
             .field
             .iter()
             .find(|field| field.name() == "coverage")
-            .unwrap_or_else(|| panic!("{carrier} must carry CoverageDeclaration"));
+            .unwrap_or_else(|| panic!("{carrier} must carry coverage"));
         assert_eq!(coverage.number(), tag, "{carrier}.coverage tag changed");
         assert_eq!(coverage.r#type(), Type::Message);
         assert_eq!(
             coverage.type_name(),
-            ".ficant.research.v1.CoverageDeclaration",
-            "{carrier}.coverage must use the shared declaration"
+            coverage_type,
+            "{carrier}.coverage must use its frozen coverage type"
         );
         assert_ne!(coverage.label(), Label::Repeated);
     }
@@ -1176,10 +1229,16 @@ fn reachable_success_arms(
             let response = messages
                 .get(response_name)
                 .unwrap_or_else(|| panic!("missing RPC response message {response_name}"));
+            let result_oneof_index = response
+                .oneof_decl
+                .iter()
+                .position(|oneof| oneof.name() == "result")
+                .map(|index| index as i32);
             let oneof_fields = response
                 .field
                 .iter()
-                .filter(|field| field.oneof_index.is_some())
+                .filter(|field| field.oneof_index == result_oneof_index)
+                .filter(|_| result_oneof_index.is_some())
                 .collect::<Vec<_>>();
             if oneof_fields.is_empty() {
                 let arm = format!("{service_name}/{method_name}:response->{response_name}");
@@ -1190,7 +1249,9 @@ fn reachable_success_arms(
                     .filter(|field| {
                         !matches!(
                             field.type_name(),
-                            ".ficant.core.v1.ErrorDetail" | ".ficant.app.v1.SafeError"
+                            ".ficant.core.v1.ErrorDetail"
+                                | ".ficant.app.v1.SafeError"
+                                | ".ficant.portfolio.v1.PortfolioWorkbenchTypedError"
                         )
                     })
                     .collect::<Vec<_>>();
@@ -1250,6 +1311,10 @@ fn expected_success_arms() -> BTreeMap<String, SuccessArmClass> {
         ("ficant.market.v1.MarketFactService/GetCurveSnapshot:curve->ficant.market.v1.CurveSnapshotPayload", NonComposition(NoNumericAggregate)),
         ("ficant.market.v1.MarketFactService/PublishCurveSnapshot:curve_snapshot->ficant.market.v1.CurveSnapshot", NonComposition(AckOrEcho)),
         ("ficant.market.v1.MarketFactService/QueryInstrumentFacts:instrument_facts->ficant.market.v1.InstrumentFacts", NonComposition(NoNumericAggregate)),
+        ("ficant.portfolio.v1.PortfolioAggregationService/GetPortfolioOverview:overview->ficant.portfolio.v1.PortfolioOverview", SuccessArmClass::Composition),
+        ("ficant.portfolio.v1.PortfolioCatalogService/ListBooksAndPortfolios:catalog->ficant.portfolio.v1.PortfolioCatalogPage", NonComposition(RegistryMetadata)),
+        ("ficant.portfolio.v1.PortfolioWorkbenchService/GetDefaultContext:context->ficant.portfolio.v1.NormalizedPortfolioContext", NonComposition(RegistryMetadata)),
+        ("ficant.portfolio.v1.PortfolioWorkbenchService/GetPage:response->ficant.portfolio.v1.PortfolioPageEnvelope", SuccessArmClass::Composition),
         ("ficant.rates.v1.RatesAnalyticsService/AnalyzeBond:analysis->ficant.rates.v1.AnalyzeBondResult", NonComposition(NoNumericAggregate)),
         ("ficant.rates.v1.RatesAnalyticsService/AnalyzeCarryRoll:analysis->ficant.rates.v1.AnalyzeCarryRollResult", NonComposition(NoNumericAggregate)),
         ("ficant.rates.v1.RatesAnalyticsService/AnalyzeFuturesDelivery:analysis->ficant.rates.v1.AnalyzeFuturesDeliveryResult", NonComposition(NoNumericAggregate)),
@@ -1370,6 +1435,7 @@ fn assert_allowed_packages(descriptor_set: &FileDescriptorSet) {
         "ficant.research.v1",
         "ficant.app.v1",
         "ficant.rates.v1",
+        "ficant.portfolio.v1",
     ]);
     for file in &descriptor_set.file {
         let Some(name) = file.name.as_deref() else {
@@ -1601,6 +1667,12 @@ fn assert_r7b_formal_evidence_contracts(
             ("FORMAL_INPUT_KIND_POSITION_SNAPSHOT", 13),
             ("FORMAL_INPUT_KIND_DATA_HEALTH_PROFILE", 14),
             ("FORMAL_INPUT_KIND_CURVE_NODE_DEFINITION", 15),
+            ("FORMAL_INPUT_KIND_PORTFOLIO", 16),
+            ("FORMAL_INPUT_KIND_BOOK", 17),
+            ("FORMAL_INPUT_KIND_PORTFOLIO_GROUP", 18),
+            ("FORMAL_INPUT_KIND_BENCHMARK", 19),
+            ("FORMAL_INPUT_KIND_PORTFOLIO_METRIC_CONVENTION", 20),
+            ("FORMAL_INPUT_KIND_FACT", 21),
         ],
     );
 
@@ -1777,6 +1849,357 @@ fn assert_r7b_formal_evidence_contracts(
         Some(".ficant.core.v1.FormalOutputEvidence"),
         true,
         false,
+    );
+}
+
+#[test]
+fn r8a_portfolio_contracts_have_exact_messages_enums_and_services() {
+    let descriptor_set = descriptor_set();
+    let messages = top_level_messages(descriptor_set);
+    let enums = top_level_enums(descriptor_set);
+
+    assert_enum(
+        &enums,
+        "ficant.portfolio.v1.PortfolioStatus",
+        &[
+            ("PORTFOLIO_STATUS_UNSPECIFIED", 0),
+            ("PORTFOLIO_STATUS_ACTIVE", 1),
+            ("PORTFOLIO_STATUS_SUSPENDED", 2),
+            ("PORTFOLIO_STATUS_CLOSED", 3),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.portfolio.v1.PortfolioMetricWeighting",
+        &[
+            ("PORTFOLIO_METRIC_WEIGHTING_UNSPECIFIED", 0),
+            ("PORTFOLIO_METRIC_WEIGHTING_MARKET_VALUE", 1),
+            (
+                "PORTFOLIO_METRIC_WEIGHTING_MARKET_VALUE_TIMES_MODIFIED_DURATION",
+                2,
+            ),
+            ("PORTFOLIO_METRIC_WEIGHTING_NOTIONAL", 3),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.portfolio.v1.PortfolioDecimalRounding",
+        &[
+            ("PORTFOLIO_DECIMAL_ROUNDING_UNSPECIFIED", 0),
+            ("PORTFOLIO_DECIMAL_ROUNDING_TIES_TO_EVEN", 1),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.portfolio.v1.PortfolioCurrencyMode",
+        &[
+            ("PORTFOLIO_CURRENCY_MODE_UNSPECIFIED", 0),
+            ("PORTFOLIO_CURRENCY_MODE_ORIGINAL", 1),
+            ("PORTFOLIO_CURRENCY_MODE_CNY", 2),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.portfolio.v1.PortfolioLookThroughMode",
+        &[
+            ("PORTFOLIO_LOOK_THROUGH_MODE_UNSPECIFIED", 0),
+            ("PORTFOLIO_LOOK_THROUGH_MODE_NONE", 1),
+            ("PORTFOLIO_LOOK_THROUGH_MODE_CONSOLIDATED", 2),
+            ("PORTFOLIO_LOOK_THROUGH_MODE_SEPARATE", 3),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.portfolio.v1.PortfolioPeriodPreset",
+        &[
+            ("PORTFOLIO_PERIOD_PRESET_UNSPECIFIED", 0),
+            ("PORTFOLIO_PERIOD_PRESET_ONE_DAY", 1),
+            ("PORTFOLIO_PERIOD_PRESET_SEVEN_DAYS", 2),
+            ("PORTFOLIO_PERIOD_PRESET_THIRTY_DAYS", 3),
+            ("PORTFOLIO_PERIOD_PRESET_YEAR_TO_DATE", 4),
+            ("PORTFOLIO_PERIOD_PRESET_ONE_YEAR", 5),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.portfolio.v1.PortfolioWorkbenchPageId",
+        &[
+            ("PORTFOLIO_WORKBENCH_PAGE_ID_UNSPECIFIED", 0),
+            ("PORTFOLIO_WORKBENCH_PAGE_ID_D01", 1),
+            ("PORTFOLIO_WORKBENCH_PAGE_ID_P01", 2),
+            ("PORTFOLIO_WORKBENCH_PAGE_ID_P02", 3),
+            ("PORTFOLIO_WORKBENCH_PAGE_ID_P03", 4),
+            ("PORTFOLIO_WORKBENCH_PAGE_ID_P04", 5),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.portfolio.v1.PortfolioPageDataMode",
+        &[
+            ("PORTFOLIO_PAGE_DATA_MODE_UNSPECIFIED", 0),
+            ("PORTFOLIO_PAGE_DATA_MODE_REAL", 1),
+            ("PORTFOLIO_PAGE_DATA_MODE_PARTIAL", 2),
+            ("PORTFOLIO_PAGE_DATA_MODE_STALE", 3),
+            ("PORTFOLIO_PAGE_DATA_MODE_ERROR", 4),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.portfolio.v1.PortfolioPageState",
+        &[
+            ("PORTFOLIO_PAGE_STATE_UNSPECIFIED", 0),
+            ("PORTFOLIO_PAGE_STATE_READY", 1),
+            ("PORTFOLIO_PAGE_STATE_EMPTY", 2),
+            ("PORTFOLIO_PAGE_STATE_BLOCKED", 3),
+        ],
+    );
+    assert_enum(
+        &enums,
+        "ficant.portfolio.v1.PortfolioWorkbenchErrorCode",
+        &[
+            ("PORTFOLIO_WORKBENCH_ERROR_CODE_UNSPECIFIED", 0),
+            ("PORTFOLIO_WORKBENCH_ERROR_CODE_UNAUTHENTICATED", 1),
+            ("PORTFOLIO_WORKBENCH_ERROR_CODE_FORBIDDEN", 2),
+            ("PORTFOLIO_WORKBENCH_ERROR_CODE_NOT_FOUND", 3),
+            ("PORTFOLIO_WORKBENCH_ERROR_CODE_CONFLICT", 4),
+            ("PORTFOLIO_WORKBENCH_ERROR_CODE_STALE", 5),
+            ("PORTFOLIO_WORKBENCH_ERROR_CODE_INTEGRITY", 6),
+            ("PORTFOLIO_WORKBENCH_ERROR_CODE_UNAVAILABLE", 7),
+        ],
+    );
+
+    assert_fields(
+        &messages,
+        "ficant.portfolio.v1.PortfolioSnapshotBinding",
+        &[
+            ExpectedField::message("snapshot_id", ".ficant.core.v1.Ulid"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("observed_at", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("visible_at", ".ficant.core.v1.MarketTime"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.portfolio.v1.BenchmarkRef",
+        &[
+            ExpectedField::message("benchmark", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.portfolio.v1.PortfolioMetricConventionRef",
+        &[
+            ExpectedField::message("convention", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.portfolio.v1.Book",
+        &[
+            ExpectedField::message("book", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::message("subject_ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::scalar("code", Type::String),
+            ExpectedField::scalar("display_name", Type::String),
+            ExpectedField::enumeration("status", ".ficant.portfolio.v1.PortfolioStatus"),
+            ExpectedField::message("effective_from", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("effective_to", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.portfolio.v1.PortfolioGroup",
+        &[
+            ExpectedField::message("group", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::message("subject_ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("book", ".ficant.core.v1.LineageRef"),
+            ExpectedField::message("parent_group", ".ficant.core.v1.LineageRef"),
+            ExpectedField::scalar("code", Type::String),
+            ExpectedField::scalar("display_name", Type::String),
+            ExpectedField::enumeration("status", ".ficant.portfolio.v1.PortfolioStatus"),
+            ExpectedField::message("effective_from", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("effective_to", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.portfolio.v1.Portfolio",
+        &[
+            ExpectedField::message("portfolio", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::message("subject_ref", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("book", ".ficant.core.v1.LineageRef"),
+            ExpectedField::message("group", ".ficant.core.v1.LineageRef"),
+            ExpectedField::scalar("code", Type::String),
+            ExpectedField::scalar("display_name", Type::String),
+            ExpectedField::enumeration("status", ".ficant.portfolio.v1.PortfolioStatus"),
+            ExpectedField::message(
+                "position_snapshot",
+                ".ficant.portfolio.v1.PortfolioSnapshotBinding",
+            ),
+            ExpectedField::message("benchmark", ".ficant.portfolio.v1.BenchmarkRef"),
+            ExpectedField::message(
+                "metric_convention",
+                ".ficant.portfolio.v1.PortfolioMetricConventionRef",
+            ),
+            ExpectedField::message("effective_from", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("effective_to", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.portfolio.v1.PortfolioMetricConvention",
+        &[
+            ExpectedField::message("convention", ".ficant.core.v1.VersionRef"),
+            ExpectedField::message("owner", ".ficant.core.v1.OwnerRef"),
+            ExpectedField::scalar("schema_id", Type::String),
+            ExpectedField::enumeration(
+                "ytm_weighting",
+                ".ficant.portfolio.v1.PortfolioMetricWeighting",
+            ),
+            ExpectedField::enumeration(
+                "duration_weighting",
+                ".ficant.portfolio.v1.PortfolioMetricWeighting",
+            ),
+            ExpectedField::enumeration(
+                "convexity_weighting",
+                ".ficant.portfolio.v1.PortfolioMetricWeighting",
+            ),
+            ExpectedField::enumeration(
+                "coupon_weighting",
+                ".ficant.portfolio.v1.PortfolioMetricWeighting",
+            ),
+            ExpectedField::enumeration(
+                "remaining_life_weighting",
+                ".ficant.portfolio.v1.PortfolioMetricWeighting",
+            ),
+            ExpectedField::enumeration("rounding", ".ficant.portfolio.v1.PortfolioDecimalRounding"),
+            ExpectedField::scalar("freshness_limit_seconds", Type::Uint64),
+            ExpectedField::message("effective_from", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("effective_to", ".ficant.core.v1.MarketTime"),
+            ExpectedField::message("content_hash", ".ficant.core.v1.Sha256"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.portfolio.v1.PortfolioCoverage",
+        &[
+            ExpectedField::message("participation", ".ficant.research.v1.CoverageDeclaration"),
+            ExpectedField::repeated_scalar("missing_reasons", Type::String),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.portfolio.v1.PortfolioOverview",
+        &[
+            ExpectedField::message("scope", ".ficant.portfolio.v1.ExactPortfolioScope"),
+            ExpectedField::repeated_message(
+                "position_snapshots",
+                ".ficant.portfolio.v1.PortfolioSnapshotBinding",
+            ),
+            ExpectedField::message(
+                "basic_metrics",
+                ".ficant.portfolio.v1.PortfolioBasicMetrics",
+            ),
+            ExpectedField::message("krd_summary", ".ficant.portfolio.v1.PortfolioKrdSummary"),
+            ExpectedField::message(
+                "benchmark_metrics",
+                ".ficant.portfolio.v1.PortfolioBasicMetrics",
+            ),
+            ExpectedField::message("benchmark", ".ficant.portfolio.v1.BenchmarkRef"),
+            ExpectedField::message(
+                "metric_convention",
+                ".ficant.portfolio.v1.PortfolioMetricConventionRef",
+            ),
+            ExpectedField::message("coverage", ".ficant.portfolio.v1.PortfolioCoverage"),
+            ExpectedField::repeated_message(
+                "members",
+                ".ficant.portfolio.v1.PortfolioMemberOverview",
+            ),
+            ExpectedField::message("request_fingerprint", ".ficant.core.v1.Sha256"),
+            ExpectedField::message("formal_evidence", ".ficant.core.v1.FormalOutputEvidence"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.portfolio.v1.P03Projection",
+        &[
+            ExpectedField::repeated_message("position_views", ".ficant.research.v1.PositionViews"),
+            ExpectedField::repeated_message(
+                "key_rate_exposures",
+                ".ficant.research.v1.PortfolioKeyRateExposure",
+            ),
+            ExpectedField::message("coverage", ".ficant.portfolio.v1.PortfolioCoverage"),
+        ],
+    );
+    assert_fields(
+        &messages,
+        "ficant.portfolio.v1.PortfolioPageEnvelope",
+        &[
+            ExpectedField::scalar("schema_version", Type::String),
+            ExpectedField::enumeration("page_id", ".ficant.portfolio.v1.PortfolioWorkbenchPageId"),
+            ExpectedField::scalar("request_id", Type::String),
+            ExpectedField::message("generated_at", ".google.protobuf.Timestamp"),
+            ExpectedField::enumeration("data_mode", ".ficant.portfolio.v1.PortfolioPageDataMode"),
+            ExpectedField::message(
+                "normalized_context",
+                ".ficant.portfolio.v1.NormalizedPortfolioContext",
+            ),
+            ExpectedField::enumeration("page_state", ".ficant.portfolio.v1.PortfolioPageState"),
+            ExpectedField::repeated_scalar("permissions", Type::String),
+            ExpectedField::message("provenance", ".ficant.portfolio.v1.PortfolioPageProvenance"),
+            ExpectedField::message("coverage", ".ficant.portfolio.v1.PortfolioCoverage"),
+            ExpectedField::oneof_message("d01", ".ficant.portfolio.v1.D01Projection", "projection"),
+            ExpectedField::oneof_message("p01", ".ficant.portfolio.v1.P01Projection", "projection"),
+            ExpectedField::oneof_message("p02", ".ficant.portfolio.v1.P02Projection", "projection"),
+            ExpectedField::oneof_message("p03", ".ficant.portfolio.v1.P03Projection", "projection"),
+            ExpectedField::oneof_message("p04", ".ficant.portfolio.v1.P04Projection", "projection"),
+            ExpectedField::message(
+                "typed_error",
+                ".ficant.portfolio.v1.PortfolioWorkbenchTypedError",
+            ),
+        ],
+    );
+
+    assert_exact_service(
+        descriptor_set,
+        "ficant.portfolio.v1.PortfolioCatalogService",
+        &[ExpectedMethod::new(
+            "ListBooksAndPortfolios",
+            ".ficant.portfolio.v1.ListBooksAndPortfoliosRequest",
+            ".ficant.portfolio.v1.ListBooksAndPortfoliosResponse",
+        )],
+    );
+    assert_exact_service(
+        descriptor_set,
+        "ficant.portfolio.v1.PortfolioAggregationService",
+        &[ExpectedMethod::new(
+            "GetPortfolioOverview",
+            ".ficant.portfolio.v1.GetPortfolioOverviewRequest",
+            ".ficant.portfolio.v1.GetPortfolioOverviewResponse",
+        )],
+    );
+    assert_exact_service(
+        descriptor_set,
+        "ficant.portfolio.v1.PortfolioWorkbenchService",
+        &[
+            ExpectedMethod::new(
+                "GetDefaultContext",
+                ".ficant.portfolio.v1.GetDefaultContextRequest",
+                ".ficant.portfolio.v1.GetDefaultContextResponse",
+            ),
+            ExpectedMethod::new(
+                "GetPage",
+                ".ficant.portfolio.v1.GetPortfolioPageRequest",
+                ".ficant.portfolio.v1.PortfolioPageEnvelope",
+            ),
+        ],
     );
 }
 
@@ -2503,6 +2926,7 @@ fn assert_phase1_objects(messages: &BTreeMap<String, &DescriptorProto>) {
                 ExpectedField::message("rule_pack", version),
                 ExpectedField::repeated_message("values", decimal),
                 ExpectedField::message("supersedes_id", id),
+                ExpectedField::repeated_enum("value_roles", ".ficant.market.v1.ValuationValueRole"),
             ],
         ),
         (
@@ -4324,6 +4748,16 @@ fn assert_domain_enums(enums: &BTreeMap<String, &EnumDescriptorProto>) {
     );
     assert_enum(
         enums,
+        "ficant.market.v1.ValuationValueRole",
+        &[
+            ("VALUATION_VALUE_ROLE_UNSPECIFIED", 0),
+            ("VALUATION_VALUE_ROLE_PRICE", 1),
+            ("VALUATION_VALUE_ROLE_YIELD", 2),
+            ("VALUATION_VALUE_ROLE_REMAINING_YEARS", 3),
+        ],
+    );
+    assert_enum(
+        enums,
         "ficant.market.v1.VerificationStatus",
         &[
             ("VERIFICATION_STATUS_UNSPECIFIED", 0),
@@ -5183,6 +5617,9 @@ fn expected_service_fqns() -> BTreeSet<String> {
         "ficant.research.v1.DataHealthService".to_owned(),
         "ficant.app.v1.PlatformService".to_owned(),
         "ficant.rates.v1.RatesAnalyticsService".to_owned(),
+        "ficant.portfolio.v1.PortfolioCatalogService".to_owned(),
+        "ficant.portfolio.v1.PortfolioAggregationService".to_owned(),
+        "ficant.portfolio.v1.PortfolioWorkbenchService".to_owned(),
     ])
 }
 

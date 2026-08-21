@@ -133,6 +133,7 @@ async fn file_and_real_postgres_produce_one_canonical_schema_and_equal_business_
 async fn reset_and_migrate(pool: &sqlx::PgPool) {
     sqlx::raw_sql(
         "DROP SCHEMA IF EXISTS external_data CASCADE;
+         DROP SCHEMA IF EXISTS portfolio CASCADE;
          DROP SCHEMA IF EXISTS analytics CASCADE;
          DROP SCHEMA IF EXISTS data CASCADE;
          DROP SCHEMA IF EXISTS storage CASCADE;

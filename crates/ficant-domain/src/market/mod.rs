@@ -33,7 +33,7 @@ pub use market_rule_pack::{
 pub use quote::{Quote, QuoteInput};
 pub use trade::{Trade, TradeInput};
 pub use unit::{Unit, UnitInput};
-pub use valuation::{Valuation, ValuationInput};
+pub use valuation::{Valuation, ValuationInput, ValuationValueRole};
 
 use crate::{DomainErrorCode, DomainResult};
 

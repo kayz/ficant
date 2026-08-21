@@ -1,4 +1,5 @@
 use ficant_domain::VersionedDefinition;
+use ficant_domain::market::ValuationValueRole;
 use ficant_domain::primitives::{ContentHash, DecimalValue, Ulid, UnitRef};
 
 use super::definitions::{DefinitionRepository, DefinitionValue};
@@ -21,6 +22,8 @@ pub enum MarketFactFieldRole {
     Currency,
     Price,
     Notional,
+    Rate,
+    Years,
 }
 
 impl MarketFactFieldRole {
@@ -29,6 +32,8 @@ impl MarketFactFieldRole {
             Self::Currency => "currency",
             Self::Price => "price",
             Self::Notional => "notional",
+            Self::Rate => "rate",
+            Self::Years => "years",
         }
     }
 
@@ -37,6 +42,8 @@ impl MarketFactFieldRole {
             Self::Currency => 1,
             Self::Price => 2,
             Self::Notional => 3,
+            Self::Rate => 4,
+            Self::Years => 5,
         }
     }
 }
@@ -312,10 +319,11 @@ fn fact_fields(fact: &MarketFact) -> ApplicationResult<Vec<FactField>> {
         MarketFact::Valuation(value) => value
             .values()
             .iter()
+            .zip(value.value_roles())
             .enumerate()
-            .map(|(ordinal, value)| {
+            .map(|(ordinal, (value, role))| {
                 let ordinal = u32::try_from(ordinal).map_err(|_| invalid_unit())?;
-                Ok(field(MarketFactFieldRole::Price, ordinal, value))
+                Ok(field(valuation_field_role(*role), ordinal, value))
             })
             .collect::<ApplicationResult<Vec<_>>>()?,
     };
@@ -323,6 +331,14 @@ fn fact_fields(fact: &MarketFact) -> ApplicationResult<Vec<FactField>> {
         return Err(invalid_unit());
     }
     Ok(fields)
+}
+
+const fn valuation_field_role(role: ValuationValueRole) -> MarketFactFieldRole {
+    match role {
+        ValuationValueRole::Price => MarketFactFieldRole::Price,
+        ValuationValueRole::Yield => MarketFactFieldRole::Rate,
+        ValuationValueRole::RemainingYears => MarketFactFieldRole::Years,
+    }
 }
 
 fn field(role: MarketFactFieldRole, ordinal: u32, decimal: &DecimalValue) -> FactField {
@@ -400,7 +416,9 @@ fn invalid_unit() -> crate::ApplicationError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ficant_domain::market::{FactSource, Quote, QuoteInput};
+    use ficant_domain::market::{
+        FactSource, Quote, QuoteInput, Valuation, ValuationInput, ValuationValueRole,
+    };
     use ficant_domain::primitives::{MarketTime, OwnerRef, Version, VersionRef};
 
     #[test]
@@ -428,6 +446,40 @@ mod tests {
             proof: original_proof,
         };
         assert_invalid(&swapped.validate().unwrap_err());
+    }
+
+    #[test]
+    fn valuation_roles_map_to_exact_unit_dimensions_without_ordinal_guessing() {
+        let valuation = Valuation::new_with_value_roles(
+            ValuationInput {
+                valuation_id: id('V'),
+                instrument: VersionRef::new(id('K'), version(1)),
+                owner: owner(),
+                source: FactSource::new("internal", "valuation", 1).unwrap(),
+                valuation_at: time(1),
+                method: "external-yield".to_owned(),
+                rule_pack: VersionRef::new(id('R'), version(1)),
+                values: vec![
+                    DecimalValue::new("189", 4, UnitRef::new(id('A'), version(1))).unwrap(),
+                    DecimalValue::new("975", 2, UnitRef::new(id('B'), version(1))).unwrap(),
+                ],
+                supersedes_id: None,
+            },
+            vec![
+                ValuationValueRole::Yield,
+                ValuationValueRole::RemainingYears,
+            ],
+        )
+        .unwrap();
+
+        let fields = fact_fields(&MarketFact::Valuation(valuation)).unwrap();
+        assert_eq!(fields.len(), 2);
+        assert_eq!(fields[0].role, MarketFactFieldRole::Rate);
+        assert_eq!(fields[0].role.expected_dimension(), "rate");
+        assert_eq!(fields[0].ordinal, 0);
+        assert_eq!(fields[1].role, MarketFactFieldRole::Years);
+        assert_eq!(fields[1].role.expected_dimension(), "years");
+        assert_eq!(fields[1].ordinal, 1);
     }
 
     fn validated_with_bindings(

@@ -1,8 +1,10 @@
+use std::cmp::Ordering;
+
 use ficant_domain::market::{
     ArtifactInputKind, Bond, BondBusinessDayConvention, BondCouponFrequency,
     BondDayCountConvention, BondTaxAttributes, Calendar, Cashflow, CashflowType, CurveSnapshot,
     FactSource, FuturesContract, IncomeTaxStatus, Instrument, InstrumentKind, MarketRulePack,
-    Quote, Trade, Unit, Valuation, ValueAddedTaxStatus, VerificationStatus,
+    Quote, Trade, Unit, Valuation, ValuationValueRole, ValueAddedTaxStatus, VerificationStatus,
 };
 use ficant_domain::primitives::ContentHash;
 use ficant_domain::primitives::{
@@ -468,7 +470,11 @@ fn trade_bytes(fact: &Trade) -> Vec<u8> {
 }
 
 fn valuation_bytes(fact: &Valuation) -> Vec<u8> {
-    let mut value = FingerprintBuilder::new("fact/valuation/v1");
+    let mut value = FingerprintBuilder::new(if fact.has_typed_value_roles() {
+        "fact/valuation/v2"
+    } else {
+        "fact/valuation/v1"
+    });
     value.field(2, fact.id().as_str().as_bytes());
     value.field(3, &version_ref_bytes(fact.instrument()));
     value.field(4, &owner_bytes(fact.owner()));
@@ -484,7 +490,20 @@ fn valuation_bytes(fact: &Valuation) -> Vec<u8> {
         value.field(10, &decimal_bytes(decimal));
     }
     value.field(11, &optional_id_bytes(fact.supersedes_id()));
+    if fact.has_typed_value_roles() {
+        for role in fact.value_roles() {
+            value.field(12, &[valuation_value_role_code(*role)]);
+        }
+    }
     value.into_bytes()
+}
+
+const fn valuation_value_role_code(role: ValuationValueRole) -> u8 {
+    match role {
+        ValuationValueRole::Price => 1,
+        ValuationValueRole::Yield => 2,
+        ValuationValueRole::RemainingYears => 3,
+    }
 }
 
 pub(crate) fn snapshot_bytes(snapshot: &SnapshotValue) -> Vec<u8> {
@@ -673,4 +692,84 @@ const fn artifact_input_kind_code(value: ArtifactInputKind) -> u8 {
         ArtifactInputKind::ExternalFixture => 1,
     }
 }
-use std::cmp::Ordering;
+
+#[cfg(test)]
+mod tests {
+    use chrono::{NaiveDate, TimeZone, Utc};
+
+    use super::*;
+    use ficant_domain::market::{FactSource, ValuationInput};
+    use ficant_domain::primitives::{Ulid, Version};
+
+    #[test]
+    fn valuation_v1_is_exact_for_legacy_and_all_price_while_typed_roles_use_v2() {
+        let input = valuation_input();
+        let legacy = Valuation::new(input.clone()).unwrap();
+        let explicit_all_price = Valuation::new_with_value_roles(
+            input.clone(),
+            vec![ValuationValueRole::Price, ValuationValueRole::Price],
+        )
+        .unwrap();
+        let yield_years = Valuation::new_with_value_roles(
+            input.clone(),
+            vec![
+                ValuationValueRole::Yield,
+                ValuationValueRole::RemainingYears,
+            ],
+        )
+        .unwrap();
+        let price_years = Valuation::new_with_value_roles(
+            input,
+            vec![
+                ValuationValueRole::Price,
+                ValuationValueRole::RemainingYears,
+            ],
+        )
+        .unwrap();
+
+        let legacy_bytes = valuation_bytes(&legacy);
+        assert_eq!(legacy_bytes, valuation_bytes(&explicit_all_price));
+        assert_eq!(
+            ContentHash::digest(&legacy_bytes).as_bytes(),
+            &[
+                214, 254, 80, 208, 97, 115, 128, 57, 71, 38, 139, 85, 109, 110, 143, 76, 170, 56,
+                48, 78, 203, 203, 238, 77, 34, 62, 216, 226, 73, 80, 140, 146,
+            ],
+            "legacy valuation v1 fingerprint must remain byte-exact"
+        );
+        assert_ne!(legacy_bytes, valuation_bytes(&yield_years));
+        assert_ne!(valuation_bytes(&yield_years), valuation_bytes(&price_years));
+    }
+
+    fn valuation_input() -> ValuationInput {
+        ValuationInput {
+            valuation_id: id('V'),
+            instrument: VersionRef::new(id('K'), Version::new(1).unwrap()),
+            owner: OwnerRef::new(id('T'), id('Y')),
+            source: FactSource::new("test-source", "valuation", 1).unwrap(),
+            valuation_at: MarketTime::new(
+                Utc.with_ymd_and_hms(2026, 8, 21, 1, 0, 0).unwrap(),
+                "Asia/Shanghai",
+                NaiveDate::from_ymd_opt(2026, 8, 21).unwrap(),
+            )
+            .unwrap(),
+            method: "external".to_owned(),
+            rule_pack: VersionRef::new(id('R'), Version::new(1).unwrap()),
+            values: vec![decimal("189", 4, 'A'), decimal("975", 2, 'B')],
+            supersedes_id: None,
+        }
+    }
+
+    fn decimal(coefficient: &str, scale: u32, unit: char) -> DecimalValue {
+        DecimalValue::new(
+            coefficient,
+            scale,
+            UnitRef::new(id(unit), Version::new(1).unwrap()),
+        )
+        .unwrap()
+    }
+
+    fn id(suffix: char) -> Ulid {
+        Ulid::new(format!("01ARZ3NDEKTSV4RRFFQ69G5FA{suffix}")).unwrap()
+    }
+}

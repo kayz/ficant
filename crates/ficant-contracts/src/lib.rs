@@ -25,6 +25,13 @@ pub mod ficant {
         }
     }
 
+    pub mod portfolio {
+        pub mod v1 {
+            include!("generated/ficant.portfolio.v1.rs");
+            include!("generated/ficant.portfolio.v1.tonic.rs");
+        }
+    }
+
     pub mod rates {
         pub mod v1 {
             include!("generated/ficant.rates.v1.rs");

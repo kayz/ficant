@@ -49,6 +49,9 @@ pub use use_cases::phase1_business_loop::{
     Phase1BusinessInput, Phase1BusinessLoop, Phase1BusinessResult, StagedArtifact, StagedSnapshot,
     replay_collected_journal,
 };
+pub use use_cases::portfolio_catalog::{
+    ListPortfolioCatalog, ListPortfolioCatalogCommand, ResolvePortfolioAnalyticsAuthority,
+};
 pub use use_cases::portfolio_risk::{
     CalculateBondKeyRateDv01, CalculateBondKeyRateDv01Command, R4D_A_ALGORITHM_ID,
     R4D_A_ALGORITHM_VERSION, R4D_A_CONVENTION_PROFILE,

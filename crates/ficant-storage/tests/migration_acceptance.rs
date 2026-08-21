@@ -39,7 +39,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
 
-    let expected_migration_versions = (1_i64..=25).collect::<Vec<_>>();
+    let expected_migration_versions = (1_i64..=26).collect::<Vec<_>>();
     let applied_before_repeat: Vec<(i64, bool)> =
         sqlx::query_as("SELECT version, success FROM public._sqlx_migrations ORDER BY version")
             .fetch_all(&pool)
@@ -128,11 +128,20 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         1,
         "0025 must be recorded exactly once after its successful application"
     );
+    assert_eq!(
+        applied_before_repeat
+            .iter()
+            .filter(|(version, success)| *version == 26 && *success)
+            .count(),
+        1,
+        "0026 must be recorded exactly once after its successful application"
+    );
 
     let rows = sqlx::query(
         "SELECT schemaname, tablename
          FROM pg_catalog.pg_tables
-         WHERE schemaname IN ('analytics', 'core', 'data', 'market', 'research', 'storage')",
+         WHERE schemaname IN
+             ('analytics', 'core', 'data', 'market', 'portfolio', 'research', 'storage')",
     )
     .fetch_all(&pool)
     .await
@@ -193,11 +202,54 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         "research.universe_members",
         "research.universe_snapshots",
         "storage.blobs",
+        "portfolio.books",
+        "portfolio.groups",
+        "portfolio.portfolios",
+        "portfolio.benchmarks",
+        "portfolio.metric_conventions",
+        "portfolio.analytics_authority_sets",
+        "portfolio.analytics_authority_units",
+        "portfolio.bond_rates_authorities",
     ]
     .into_iter()
     .map(str::to_owned)
     .collect::<BTreeSet<_>>();
     assert_eq!(actual.intersection(&required).count(), required.len());
+
+    let r8a_immutable_triggers: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)
+         FROM information_schema.triggers
+         WHERE trigger_schema='portfolio'
+           AND trigger_name = ANY($1)",
+    )
+    .bind([
+        "books_immutable",
+        "groups_immutable",
+        "portfolios_immutable",
+        "benchmarks_immutable",
+        "metric_conventions_immutable",
+        "analytics_authority_sets_immutable",
+        "analytics_authority_units_immutable",
+        "bond_rates_authorities_immutable",
+    ])
+    .fetch_one(&pool)
+    .await
+    .expect("R8A immutable catalog triggers must be observable");
+    assert_eq!(
+        r8a_immutable_triggers, 16,
+        "each of eight UPDATE OR DELETE triggers is exposed once per event"
+    );
+    let parallel_position_tables: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pg_catalog.pg_tables
+         WHERE schemaname='portfolio' AND tablename ILIKE '%position%'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("R8A schema inventory must remain queryable");
+    assert_eq!(
+        parallel_position_tables, 0,
+        "R8A must bind research.position_snapshots instead of creating a second position table"
+    );
 
     support::migrate(&pool).await;
     let applied_after_repeat: Vec<(i64, bool)> =

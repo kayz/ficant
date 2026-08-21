@@ -174,6 +174,7 @@ R5b 在 R5a 之后建立 `CoverageDeclaration`，R5c 在 R5a 之后建立 `DataH
 | **R6B** | **Artifact 服务与拓扑闭合** | 实现 verified Artifact 查询面并保留既有 server-owned publish use case；建立“声明即生产可达”门禁；收敛为单一 gRPC/gRPC-Web route builder，并删除 `ficant-web` 逻辑孤儿 | —（服务拓扑闭合） |
 | **R7A** | **分层与双时间重取证** | 虚构市场零核心改动；重取证双时间与不可变性；跨 clang 原始数值比对；按 AC04 实证决定是否拆分 domain crates | AC04 AC11–AC13 |
 | **R7B** | **一期证据与恢复收口** | 全部正式输出共用 typed `FormalOutputEvidence` 与单一 identity；Graph exact Subject/Code、13 维比较、stage 前 intent、fenced recovery 和 orphan maintenance；隔离 PG/Ceph source-destroy/fresh-restore；exact authority MANUAL clean-checkout runner | AC30–AC33 |
+| **R8A** | **Portfolio360 P0 只读组合纵切** | 最小 Book/Portfolio 目录、exact PositionSnapshot 绑定、点时聚合与五页 Workbench BFF；复用既有 PositionViews/KRD/AnalyzeBond；descriptor 14→17；不把 UI module 写入 proto，不进入 PMS/OMS | — |
 | **独立治理轮** | **远端仓库与发布治理** | 由 Human/CICD 决定轻量 PR 检查、CODEOWNERS/审批/status checks、Dependabot、secret scanning、push protection、Release 对齐和签名策略；不进入 OPAID 产品迭代 | — |
 
 ### 2026-08 系统完整性重排
@@ -184,7 +185,9 @@ R5b 在 R5a 之后建立 `CoverageDeclaration`，R5c 在 R5a 之后建立 `DataH
 
 Python node runtime、DMQuant、Policy / Constraint、完整 DataHealth 扩展和 AI / GeneratedNode 沙箱继续明确顺延至 v0.2；它们不得作为 v0.1 已实现能力宣传。后续不预建 R5E / R6 / R7 brief，占位文件只会制造第二状态源；每轮开始时再冻结其唯一 Human brief。
 
-R7B 的正式输出边界不扩大产品域：Definition、Fact、Snapshot CRUD 仍是输入事实，不因 required-read 而成为分析输出；Portfolio360/COGA WebApp 仍在本轮非目标。同步 Analytics 与异步 ResearchGraph 只共用证据/身份不变量，不合并执行生命周期：前者无 Run/lease，但按 identity 持久化 immutable result；后者用 durable publication intent、lease fence 与原子完成事务恢复。
+R7B 的正式输出边界不扩大产品域：Definition、Fact、Snapshot CRUD 仍是输入事实，不因 required-read 而成为分析输出；当时 Portfolio360/COGA WebApp 仍在 R7B 非目标。同步 Analytics 与异步 ResearchGraph 只共用证据/身份不变量，不合并执行生命周期：前者无 Run/lease，但按 identity 持久化 immutable result；后者用 durable publication intent、lease fence 与原子完成事务恢复。
+
+R8A 在不改 R7B identity 的前提下新增 L1 目录对象与只读聚合：Workbench UI、PageModel 和 11 类 module 仍不得进入 proto 或 Domain；点时加权 convention 留在 L1/Application，不得写入 L2 C++ 内核。相邻 WebApp 继续独立实现，FICANT 只发布锁定的生成契约包。
 
 ### R1 为什么这么小
 

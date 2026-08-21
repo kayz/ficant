@@ -17,11 +17,16 @@ $steps = @(
     New-FicantCheckStep -Name 'R5D layer dependency gate' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-contract-tests', '--test', 'r5d_layer_dependencies')
     New-FicantCheckStep -Name 'R7A zero-core-change extension gate' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-contract-tests', '--test', 'r7a_core_extension')
     New-FicantCheckStep -Name 'R7B formal evidence contract gate' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-contract-tests', '--test', 'r7b_formal_evidence')
-    New-FicantCheckStep -Name 'R6B descriptor-to-production topology gate' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-server', '--test', 'service_topology')
+    New-FicantCheckStep -Name 'R8A Portfolio contract gate' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-contract-tests', '--test', 'r8a_portfolio_contract')
+    New-FicantCheckStep -Name 'R8A deterministic local contract package' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-contract-package.ps1')
+    New-FicantCheckStep -Name 'R8A descriptor-to-production topology gate' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-server', '--test', 'service_topology')
     New-FicantCheckStep -Name 'Rust non-environment tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--workspace', '--locked', '--exclude', 'ficant-acceptance', '--exclude', 'ficant-data', '--exclude', 'ficant-storage', '--exclude', 'ficant-contract-tests')
     New-FicantCheckStep -Name 'Rust storage library tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--lib')
     New-FicantCheckStep -Name 'Phase 3A canonical data tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-data', '--test', 'canonical_ingestion')
     New-FicantCheckStep -Name 'Phase 3B deterministic snapshot codec' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-data', '--test', 'snapshot_codec')
+    New-FicantCheckStep -Name 'R8A Portfolio Catalog API' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-api', '--test', 'portfolio_catalog_service')
+    New-FicantCheckStep -Name 'R8A Portfolio Aggregation API' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-api', '--test', 'portfolio_aggregation_service')
+    New-FicantCheckStep -Name 'R8A Portfolio Workbench API' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-api', '--test', 'portfolio_workbench_service')
 )
 
 try {

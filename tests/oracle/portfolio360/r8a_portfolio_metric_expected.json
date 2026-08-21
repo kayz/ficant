@@ -1,0 +1,313 @@
+{
+  "schema_id": "ficant.portfolio360.metric-oracle-expected.v1",
+  "input_schema_id": "ficant.portfolio360.metric-oracle-input.v1",
+  "owner": "owner:portfolio360-r8a-fixture",
+  "valuation_at": "2026-08-20T15:00:00+08:00",
+  "knowledge_at": "2026-08-20T16:00:00+08:00",
+  "currency_unit": "CNY",
+  "metric_convention_ref": {
+    "convention_id": "portfolio-metric-convention:cgb-v1",
+    "version": "1",
+    "content_hash": "sha256:2102020202020202020202020202020202020202020202020202020202020202"
+  },
+  "rounding": "TIES_TO_EVEN",
+  "output_scale": 6,
+  "factors": [
+    "CGB-2Y",
+    "CGB-5Y",
+    "CGB-10Y"
+  ],
+  "portfolios": [
+    {
+      "aggregate_id": "portfolio:cgb-core",
+      "portfolio_ids": [
+        "portfolio:cgb-core"
+      ],
+      "position_count": 2,
+      "data_mode": "REAL",
+      "coverage": {
+        "weighted_average_participating_position_count": 2,
+        "missing_reasons": []
+      },
+      "basic_metrics": {
+        "market_value": "2078.332000",
+        "economic_pnl": "12.666640",
+        "weighted_ytm": "0.020227",
+        "modified_duration": "2.907234",
+        "convexity": "14.253766",
+        "weighted_coupon_rate": "0.022561",
+        "weighted_remaining_years": "3.031707",
+        "dv01": "0.598500"
+      },
+      "krd_summary": {
+        "factor_totals": [
+          {
+            "factor_id": "CGB-2Y",
+            "dv01": "0.215000"
+          },
+          {
+            "factor_id": "CGB-5Y",
+            "dv01": "0.322000"
+          },
+          {
+            "factor_id": "CGB-10Y",
+            "dv01": "0.061500"
+          }
+        ],
+        "parallel_dv01": "0.598500"
+      }
+    },
+    {
+      "aggregate_id": "portfolio:cgb-duration",
+      "portfolio_ids": [
+        "portfolio:cgb-duration"
+      ],
+      "position_count": 1,
+      "data_mode": "REAL",
+      "coverage": {
+        "weighted_average_participating_position_count": 1,
+        "missing_reasons": []
+      },
+      "basic_metrics": {
+        "market_value": "1011.111000",
+        "economic_pnl": "8.765400",
+        "weighted_ytm": "0.024750",
+        "modified_duration": "8.350000",
+        "convexity": "82.100000",
+        "weighted_coupon_rate": "0.027500",
+        "weighted_remaining_years": "8.700000",
+        "dv01": "0.838750"
+      },
+      "krd_summary": {
+        "factor_totals": [
+          {
+            "factor_id": "CGB-2Y",
+            "dv01": "0.008750"
+          },
+          {
+            "factor_id": "CGB-5Y",
+            "dv01": "0.150000"
+          },
+          {
+            "factor_id": "CGB-10Y",
+            "dv01": "0.680000"
+          }
+        ],
+        "parallel_dv01": "0.838750"
+      }
+    }
+  ],
+  "scope": {
+    "aggregate_id": "scope:portfolio:cgb-core,portfolio:cgb-duration",
+    "portfolio_ids": [
+      "portfolio:cgb-core",
+      "portfolio:cgb-duration"
+    ],
+    "position_count": 3,
+    "data_mode": "REAL",
+    "coverage": {
+      "weighted_average_participating_position_count": 3,
+      "missing_reasons": []
+    },
+    "basic_metrics": {
+      "market_value": "3089.443000",
+      "economic_pnl": "21.432040",
+      "weighted_ytm": "0.022863",
+      "modified_duration": "4.688539",
+      "convexity": "36.458440",
+      "weighted_coupon_rate": "0.024180",
+      "weighted_remaining_years": "4.890164",
+      "dv01": "1.437250"
+    },
+    "krd_summary": {
+      "factor_totals": [
+        {
+          "factor_id": "CGB-2Y",
+          "dv01": "0.223750"
+        },
+        {
+          "factor_id": "CGB-5Y",
+          "dv01": "0.472000"
+        },
+        {
+          "factor_id": "CGB-10Y",
+          "dv01": "0.741500"
+        }
+      ],
+      "parallel_dv01": "1.437250"
+    }
+  },
+  "benchmark": {
+    "aggregate_id": "benchmark:cgb-composite",
+    "portfolio_ids": [],
+    "position_count": 3,
+    "data_mode": "REAL",
+    "coverage": {
+      "weighted_average_participating_position_count": 3,
+      "missing_reasons": []
+    },
+    "basic_metrics": {
+      "market_value": "2120.863400",
+      "economic_pnl": "11.641970",
+      "weighted_ytm": "0.023338",
+      "modified_duration": "5.545486",
+      "convexity": "45.958699",
+      "weighted_coupon_rate": "0.025119",
+      "weighted_remaining_years": "5.780952",
+      "dv01": "1.166225"
+    },
+    "krd_summary": {
+      "factor_totals": [
+        {
+          "factor_id": "CGB-2Y",
+          "dv01": "0.112875"
+        },
+        {
+          "factor_id": "CGB-5Y",
+          "dv01": "0.393000"
+        },
+        {
+          "factor_id": "CGB-10Y",
+          "dv01": "0.660350"
+        }
+      ],
+      "parallel_dv01": "1.166225"
+    }
+  },
+  "benchmark_differences": [
+    {
+      "portfolio_id": "portfolio:cgb-core",
+      "basic_metrics": {
+        "market_value": "-42.531400",
+        "economic_pnl": "1.024670",
+        "weighted_ytm": "-0.003111",
+        "modified_duration": "-2.638252",
+        "convexity": "-31.704933",
+        "weighted_coupon_rate": "-0.002558",
+        "weighted_remaining_years": "-2.749245",
+        "dv01": "-0.567725"
+      },
+      "krd_factor_differences": [
+        {
+          "factor_id": "CGB-2Y",
+          "dv01": "0.102125"
+        },
+        {
+          "factor_id": "CGB-5Y",
+          "dv01": "-0.071000"
+        },
+        {
+          "factor_id": "CGB-10Y",
+          "dv01": "-0.598850"
+        }
+      ]
+    },
+    {
+      "portfolio_id": "portfolio:cgb-duration",
+      "basic_metrics": {
+        "market_value": "-1109.752400",
+        "economic_pnl": "-2.876570",
+        "weighted_ytm": "0.001412",
+        "modified_duration": "2.804514",
+        "convexity": "36.141301",
+        "weighted_coupon_rate": "0.002381",
+        "weighted_remaining_years": "2.919048",
+        "dv01": "-0.327475"
+      },
+      "krd_factor_differences": [
+        {
+          "factor_id": "CGB-2Y",
+          "dv01": "-0.104125"
+        },
+        {
+          "factor_id": "CGB-5Y",
+          "dv01": "-0.243000"
+        },
+        {
+          "factor_id": "CGB-10Y",
+          "dv01": "0.019650"
+        }
+      ]
+    }
+  ],
+  "metamorphic_witness": {
+    "quantity_multiplier": "3",
+    "scaled_scope": {
+      "aggregate_id": "scope:portfolio:cgb-core,portfolio:cgb-duration",
+      "portfolio_ids": [
+        "portfolio:cgb-core",
+        "portfolio:cgb-duration"
+      ],
+      "position_count": 3,
+      "data_mode": "REAL",
+      "coverage": {
+        "weighted_average_participating_position_count": 3,
+        "missing_reasons": []
+      },
+      "basic_metrics": {
+        "market_value": "9268.329000",
+        "economic_pnl": "64.296120",
+        "weighted_ytm": "0.022863",
+        "modified_duration": "4.688539",
+        "convexity": "36.458440",
+        "weighted_coupon_rate": "0.024180",
+        "weighted_remaining_years": "4.890164",
+        "dv01": "4.311750"
+      },
+      "krd_summary": {
+        "factor_totals": [
+          {
+            "factor_id": "CGB-2Y",
+            "dv01": "0.671250"
+          },
+          {
+            "factor_id": "CGB-5Y",
+            "dv01": "1.416000"
+          },
+          {
+            "factor_id": "CGB-10Y",
+            "dv01": "2.224500"
+          }
+        ],
+        "parallel_dv01": "4.311750"
+      }
+    },
+    "inverse_scope": {
+      "aggregate_id": "scope:portfolio:cgb-core,portfolio:cgb-duration",
+      "portfolio_ids": [
+        "portfolio:cgb-core",
+        "portfolio:cgb-duration"
+      ],
+      "position_count": 3,
+      "data_mode": "PARTIAL",
+      "coverage": {
+        "weighted_average_participating_position_count": 0,
+        "missing_reasons": [
+          "short_or_non_positive_position_excluded_from_weighted_averages"
+        ]
+      },
+      "basic_metrics": {
+        "market_value": "-3089.443000",
+        "economic_pnl": "-21.432040",
+        "dv01": "-1.437250"
+      },
+      "krd_summary": {
+        "factor_totals": [
+          {
+            "factor_id": "CGB-2Y",
+            "dv01": "-0.223750"
+          },
+          {
+            "factor_id": "CGB-5Y",
+            "dv01": "-0.472000"
+          },
+          {
+            "factor_id": "CGB-10Y",
+            "dv01": "-0.741500"
+          }
+        ],
+        "parallel_dv01": "-1.437250"
+      }
+    }
+  }
+}

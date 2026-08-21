@@ -31,11 +31,13 @@ function Remove-CoverageField {
     param(
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$Message,
-        [Parameter(Mandatory)][int]$Tag
+        [Parameter(Mandatory)][int]$Tag,
+        [string]$TypeName = 'CoverageDeclaration'
     )
 
     $text = [System.IO.File]::ReadAllText($Path)
-    $pattern = "(?s)(message\s+$([regex]::Escape($Message))\s*\{.*?)(\r?\n\s*CoverageDeclaration\s+coverage\s*=\s*$Tag;)(.*?\r?\n\})"
+    $escapedTypeName = [regex]::Escape($TypeName)
+    $pattern = "(?s)(message\s+$([regex]::Escape($Message))\s*\{.*?)(\r?\n\s*$escapedTypeName\s+coverage\s*=\s*$Tag;)(.*?\r?\n\})"
     $updated = [regex]::Replace($text, $pattern, '$1$3', 1)
     if ($updated -eq $text) {
         throw "Fixture could not remove $Message.coverage = $Tag from $Path."
@@ -149,6 +151,14 @@ try {
     Remove-CoverageField -Path (Join-Path $healthMissing 'proto\ficant\research\v1\health.proto') -Message 'DataHealthReport' -Tag 14
     Invoke-CoverageFixture -Name 'data health coverage removed' -InterfaceRoot $healthMissing -ShouldPass $false
 
+    $portfolioOverviewMissing = New-CoverageFixture -Name 'portfolio-overview-missing'
+    Remove-CoverageField -Path (Join-Path $portfolioOverviewMissing 'proto\ficant\portfolio\v1\portfolio.proto') -Message 'PortfolioOverview' -Tag 8 -TypeName 'PortfolioCoverage'
+    Invoke-CoverageFixture -Name 'PortfolioOverview coverage removed' -InterfaceRoot $portfolioOverviewMissing -ShouldPass $false
+
+    $pageEnvelopeMissing = New-CoverageFixture -Name 'portfolio-page-envelope-missing'
+    Remove-CoverageField -Path (Join-Path $pageEnvelopeMissing 'proto\ficant\portfolio\v1\portfolio.proto') -Message 'PortfolioPageEnvelope' -Tag 10 -TypeName 'PortfolioCoverage'
+    Invoke-CoverageFixture -Name 'PortfolioPageEnvelope coverage removed' -InterfaceRoot $pageEnvelopeMissing -ShouldPass $false
+
     $bareComposition = New-CoverageFixture -Name 'bare-composition'
     Add-ReachableFixture -Path (Join-Path $bareComposition 'proto\ficant\research\v1\position.proto') -Kind 'Composition'
     Invoke-CoverageFixture -Name 'new reachable bare composition output' -InterfaceRoot $bareComposition -ShouldPass $false
@@ -163,7 +173,7 @@ try {
 
     Invoke-CoverageFixture -Name 'all explicitly classified success arms' -InterfaceRoot $sourceInterface -ShouldPass $true
 
-    Write-Host 'Coverage gate fixture tests passed: 7 real violations fail, all 6 pre-R5c negative fixtures still fail, and the explicitly classified base inventory passes.'
+    Write-Host 'Coverage gate fixture tests passed: 9 real violations fail, including both R8A composition carriers, and the explicitly classified 68/6/62 base inventory passes.'
     exit 0
 }
 finally {

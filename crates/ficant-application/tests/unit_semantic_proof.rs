@@ -387,6 +387,8 @@ fn expected_dimension(role: MarketFactFieldRole) -> &'static str {
         MarketFactFieldRole::Currency => "currency",
         MarketFactFieldRole::Price => "price",
         MarketFactFieldRole::Notional => "notional",
+        MarketFactFieldRole::Rate => "rate",
+        MarketFactFieldRole::Years => "years",
     }
 }
 

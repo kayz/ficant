@@ -383,7 +383,8 @@ async fn reset_and_migrate(database_url: &str) {
         .await
         .expect("integration PostgreSQL is reachable");
     sqlx::raw_sql(
-        "DROP SCHEMA IF EXISTS analytics CASCADE;
+        "DROP SCHEMA IF EXISTS portfolio CASCADE;
+         DROP SCHEMA IF EXISTS analytics CASCADE;
          DROP SCHEMA IF EXISTS data CASCADE;
          DROP SCHEMA IF EXISTS storage CASCADE;
          DROP SCHEMA IF EXISTS research CASCADE;

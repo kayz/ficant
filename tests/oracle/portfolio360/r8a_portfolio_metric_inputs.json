@@ -1,0 +1,232 @@
+{
+  "schema_id": "ficant.portfolio360.metric-oracle-input.v1",
+  "output_scale": 6,
+  "authority": {
+    "owner": "owner:portfolio360-r8a-fixture",
+    "subject_ref": {
+      "subject_id": "subject:cgb-research",
+      "version": "1",
+      "content_hash": "sha256:2101010101010101010101010101010101010101010101010101010101010101"
+    },
+    "valuation_at": "2026-08-20T15:00:00+08:00",
+    "knowledge_at": "2026-08-20T16:00:00+08:00",
+    "currency_unit": "CNY",
+    "metric_convention_ref": {
+      "convention_id": "portfolio-metric-convention:cgb-v1",
+      "version": "1",
+      "content_hash": "sha256:2102020202020202020202020202020202020202020202020202020202020202"
+    },
+    "metric_convention": {
+      "schema_id": "ficant.portfolio-metric-convention.v1",
+      "content_hash": "sha256:2102020202020202020202020202020202020202020202020202020202020202",
+      "ytm_weighting": "MARKET_VALUE_TIMES_MODIFIED_DURATION",
+      "duration_weighting": "MARKET_VALUE",
+      "convexity_weighting": "MARKET_VALUE",
+      "coupon_weighting": "NOTIONAL",
+      "remaining_life_weighting": "NOTIONAL",
+      "rounding": "TIES_TO_EVEN",
+      "freshness_limit_seconds": "86400"
+    }
+  },
+  "factors": [
+    {
+      "factor_id": "CGB-2Y"
+    },
+    {
+      "factor_id": "CGB-5Y"
+    },
+    {
+      "factor_id": "CGB-10Y"
+    }
+  ],
+  "bonds": [
+    {
+      "instrument_id": "CGB-240013",
+      "instrument_type": "CGB",
+      "version": "1",
+      "content_hash": "sha256:2113131313131313131313131313131313131313131313131313131313131313",
+      "currency_unit": "CNY",
+      "notional_per_quantity": "100",
+      "market_value_per_quantity": "102.3456",
+      "economic_pnl_per_quantity": "1.23456",
+      "ytm": "0.01825",
+      "modified_duration": "1.85",
+      "convexity": "5.20",
+      "coupon_rate": "0.0210",
+      "remaining_years": "1.90",
+      "dv01_per_quantity": "0.018920",
+      "krd_per_quantity": {
+        "CGB-2Y": "0.014000",
+        "CGB-5Y": "0.004000",
+        "CGB-10Y": "0.000920"
+      },
+      "analyze_bond_result_ref": {
+        "result_id": "rates-result:cgb-240013",
+        "content_hash": "sha256:2114141414141414141414141414141414141414141414141414141414141414"
+      },
+      "portfolio_risk_result_ref": {
+        "result_id": "risk-result:cgb-240013",
+        "content_hash": "sha256:2115151515151515151515151515151515151515151515151515151515151515"
+      }
+    },
+    {
+      "instrument_id": "CGB-240008",
+      "instrument_type": "CGB",
+      "version": "1",
+      "content_hash": "sha256:2123232323232323232323232323232323232323232323232323232323232323",
+      "currency_unit": "CNY",
+      "notional_per_quantity": "100",
+      "market_value_per_quantity": "99.8765",
+      "economic_pnl_per_quantity": "-0.34567",
+      "ytm": "0.02150",
+      "modified_duration": "4.60",
+      "convexity": "28.75",
+      "coupon_rate": "0.0250",
+      "remaining_years": "4.80",
+      "dv01_per_quantity": "0.045250",
+      "krd_per_quantity": {
+        "CGB-2Y": "0.005000",
+        "CGB-5Y": "0.034000",
+        "CGB-10Y": "0.006250"
+      },
+      "analyze_bond_result_ref": {
+        "result_id": "rates-result:cgb-240008",
+        "content_hash": "sha256:2124242424242424242424242424242424242424242424242424242424242424"
+      },
+      "portfolio_risk_result_ref": {
+        "result_id": "risk-result:cgb-240008",
+        "content_hash": "sha256:2125252525252525252525252525252525252525252525252525252525252525"
+      }
+    },
+    {
+      "instrument_id": "CGB-240011",
+      "instrument_type": "CGB",
+      "version": "1",
+      "content_hash": "sha256:2131313131313131313131313131313131313131313131313131313131313131",
+      "currency_unit": "CNY",
+      "notional_per_quantity": "100",
+      "market_value_per_quantity": "101.1111",
+      "economic_pnl_per_quantity": "0.87654",
+      "ytm": "0.02475",
+      "modified_duration": "8.35",
+      "convexity": "82.10",
+      "coupon_rate": "0.0275",
+      "remaining_years": "8.70",
+      "dv01_per_quantity": "0.083875",
+      "krd_per_quantity": {
+        "CGB-2Y": "0.000875",
+        "CGB-5Y": "0.015000",
+        "CGB-10Y": "0.068000"
+      },
+      "analyze_bond_result_ref": {
+        "result_id": "rates-result:cgb-240011",
+        "content_hash": "sha256:2131414141414141414141414141414141414141414141414141414141414141"
+      },
+      "portfolio_risk_result_ref": {
+        "result_id": "risk-result:cgb-240011",
+        "content_hash": "sha256:2131515151515151515151515151515151515151515151515151515151515151"
+      }
+    }
+  ],
+  "portfolios": [
+    {
+      "portfolio_id": "portfolio:cgb-core",
+      "portfolio_ref": {
+        "version": "1",
+        "content_hash": "sha256:2141414141414141414141414141414141414141414141414141414141414141"
+      },
+      "position_snapshot_ref": {
+        "snapshot_id": "position-snapshot:cgb-core:2026-08-20",
+        "content_hash": "sha256:2142424242424242424242424242424242424242424242424242424242424242",
+        "observed_at": "2026-08-20T15:00:00+08:00",
+        "visible_at": "2026-08-20T16:00:00+08:00"
+      },
+      "positions": [
+        {
+          "position_id": "position:cgb-core:240013",
+          "instrument_id": "CGB-240013",
+          "instrument_ref": {
+            "version": "1",
+            "content_hash": "sha256:2113131313131313131313131313131313131313131313131313131313131313"
+          },
+          "quantity": "12.5"
+        },
+        {
+          "position_id": "position:cgb-core:240008",
+          "instrument_id": "CGB-240008",
+          "instrument_ref": {
+            "version": "1",
+            "content_hash": "sha256:2123232323232323232323232323232323232323232323232323232323232323"
+          },
+          "quantity": "8"
+        }
+      ]
+    },
+    {
+      "portfolio_id": "portfolio:cgb-duration",
+      "portfolio_ref": {
+        "version": "1",
+        "content_hash": "sha256:2151515151515151515151515151515151515151515151515151515151515151"
+      },
+      "position_snapshot_ref": {
+        "snapshot_id": "position-snapshot:cgb-duration:2026-08-20",
+        "content_hash": "sha256:2152525252525252525252525252525252525252525252525252525252525252",
+        "observed_at": "2026-08-20T15:00:00+08:00",
+        "visible_at": "2026-08-20T16:00:00+08:00"
+      },
+      "positions": [
+        {
+          "position_id": "position:cgb-duration:240011",
+          "instrument_id": "CGB-240011",
+          "instrument_ref": {
+            "version": "1",
+            "content_hash": "sha256:2131313131313131313131313131313131313131313131313131313131313131"
+          },
+          "quantity": "10"
+        }
+      ]
+    }
+  ],
+  "benchmark": {
+    "benchmark_id": "benchmark:cgb-composite",
+    "benchmark_ref": {
+      "version": "1",
+      "content_hash": "sha256:2161616161616161616161616161616161616161616161616161616161616161"
+    },
+    "position_snapshot_ref": {
+      "snapshot_id": "position-snapshot:cgb-composite:2026-08-20",
+      "content_hash": "sha256:2162626262626262626262626262626262626262626262626262626262626262",
+      "observed_at": "2026-08-20T15:00:00+08:00",
+      "visible_at": "2026-08-20T16:00:00+08:00"
+    },
+    "positions": [
+      {
+        "position_id": "position:benchmark:240013",
+        "instrument_id": "CGB-240013",
+        "instrument_ref": {
+          "version": "1",
+          "content_hash": "sha256:2113131313131313131313131313131313131313131313131313131313131313"
+        },
+        "quantity": "5"
+      },
+      {
+        "position_id": "position:benchmark:240008",
+        "instrument_id": "CGB-240008",
+        "instrument_ref": {
+          "version": "1",
+          "content_hash": "sha256:2123232323232323232323232323232323232323232323232323232323232323"
+        },
+        "quantity": "7"
+      },
+      {
+        "position_id": "position:benchmark:240011",
+        "instrument_id": "CGB-240011",
+        "instrument_ref": {
+          "version": "1",
+          "content_hash": "sha256:2131313131313131313131313131313131313131313131313131313131313131"
+        },
+        "quantity": "9"
+      }
+    ]
+  }
+}

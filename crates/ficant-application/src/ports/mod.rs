@@ -21,6 +21,7 @@ mod governance;
 mod ingestion;
 mod journal;
 mod phase4_execution;
+mod portfolio;
 mod positions;
 mod required_reads;
 mod rule_pack_parser;
@@ -94,6 +95,22 @@ pub use phase4_execution::{
     PrepareOutputPublication, ReproducibilityIdentity, ReproducibilityIdentityInput,
     RulePackBinding, StoredExecutionIdentity, StoredNodeManifest, SubmitGraphRun,
     compare_graph_run_dimensions, replay_graph_execution, stable_node_artifact_id,
+};
+pub use portfolio::{
+    ExactCatalogRead, ExactPortfolioScope, ExactPortfolioScopeKind, NormalizedPortfolioContext,
+    NormalizedPortfolioContextResolution, PORTFOLIO_CATALOG_MAX_PAGE_SIZE, PORTFOLIO_READ_SCOPE,
+    PortfolioAnalyticsAuthorityCandidate, PortfolioAnalyticsAuthorityQuery,
+    PortfolioAnalyticsAuthorityRepository, PortfolioAnalyticsEvidenceBinding,
+    PortfolioAnalyticsEvidenceKind, PortfolioBondRatesAuthority,
+    PortfolioBondRatesAuthorityCandidate, PortfolioBondRatesAuthorityResolution,
+    PortfolioCatalogEntry, PortfolioCatalogEvidenceBinding, PortfolioCatalogEvidenceRole,
+    PortfolioCatalogFilter, PortfolioCatalogPage, PortfolioCatalogRepository,
+    PortfolioCatalogSnapshot, PortfolioCatalogSortKey, PortfolioCatalogTemporalScope,
+    PortfolioContextInput, PortfolioCurrencyMode, PortfolioImmutableSnapshotAuthority,
+    PortfolioLookThroughMode, PortfolioPeriodPreset, PortfolioRatesUnitAuthority,
+    PortfolioRatesUnitRole, PortfolioRiskAuthority, PortfolioScopeAuthority,
+    PortfolioScopeSelector, PortfolioUnitAuthorityBinding, PortfolioValuationAuthorityBinding,
+    ResolvedPortfolioAggregationInputs, ResolvedPortfolioAnalyticsAuthority, VisibleCatalogRecord,
 };
 pub use positions::PositionSnapshotRepository;
 pub(crate) use required_reads::SnapshotVerifiedReadMetadataParts;

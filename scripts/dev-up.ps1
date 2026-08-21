@@ -84,21 +84,23 @@ function Assert-LocalEnvironment {
             throw "$name must be exactly 32 bytes encoded as lowercase hexadecimal."
         }
     }
-    $scopes = $Values['FICANT_BOOTSTRAP_SCOPES'].Split(
+    if ($Values['FICANT_BOOTSTRAP_ACTIVE_ROLE'] -ne 'RESEARCHER') {
+        throw 'FICANT_BOOTSTRAP_ACTIVE_ROLE must be RESEARCHER for the Portfolio360 P0 fixture.'
+    }
+    $scopes = @($Values['FICANT_BOOTSTRAP_SCOPES'].Split(
         ',',
         [System.StringSplitOptions]::RemoveEmptyEntries
-    )
-    foreach ($scope in @(
-        'apps:read',
-        'experiment:read',
-        'experiment:write',
-        'rates:analyze',
-        'registry:read',
-        'registry:write'
-    )) {
-        if ($scopes -notcontains $scope) {
-            throw "FICANT_BOOTSTRAP_SCOPES must include $scope."
-        }
+    ) | Sort-Object -Unique)
+    $requiredScopes = @(
+        'artifacts:read',
+        'definitions:read',
+        'facts:read',
+        'portfolio:read',
+        'positions:read',
+        'rates:analyze'
+    ) | Sort-Object
+    if (($scopes -join ',') -ne ($requiredScopes -join ',')) {
+        throw "FICANT_BOOTSTRAP_SCOPES must be exactly $($requiredScopes -join ',')."
     }
 }
 
@@ -307,8 +309,8 @@ if (-not (Test-Path -LiteralPath $environmentFile -PathType Leaf)) {
         'FICANT_BOOTSTRAP_ACTOR_ID=01J00000000000000000000012',
         'FICANT_BOOTSTRAP_TENANT_ID=01J00000000000000000000010',
         'FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS=01J00000000000000000000011',
-        'FICANT_BOOTSTRAP_ACTIVE_ROLE=PLATFORM_ADMIN',
-        'FICANT_BOOTSTRAP_SCOPES=apps:read,experiment:read,experiment:write,rates:analyze,registry:read,registry:write'
+        'FICANT_BOOTSTRAP_ACTIVE_ROLE=RESEARCHER',
+        'FICANT_BOOTSTRAP_SCOPES=portfolio:read,positions:read,rates:analyze,facts:read,definitions:read,artifacts:read'
     )
     [System.IO.File]::WriteAllLines(
         $environmentFile,
@@ -375,5 +377,16 @@ $uiPort = if (-not [string]::IsNullOrWhiteSpace($env:FICANT_UI_PORT)) {
     18083
 }
 $uiBaseUri = [uri]"http://127.0.0.1:$uiPort"
+$serverPort = if (-not [string]::IsNullOrWhiteSpace($env:FICANT_SERVER_PORT)) {
+    [int]$env:FICANT_SERVER_PORT
+} elseif ($localEnvironment.ContainsKey('FICANT_SERVER_PORT')) {
+    [int]$localEnvironment['FICANT_SERVER_PORT']
+} else {
+    18080
+}
 Test-GrpcWebSession -BaseUri $uiBaseUri
 Write-Output "FICANT development environment is ready: $uiBaseUri/ficant/"
+Write-Output "Portfolio360 P0 gRPC-Web endpoint: http://127.0.0.1:$serverPort (allowed development origin http://127.0.0.1:5173)."
+Write-Output 'Native gRPC bind 127.0.0.1:50051 is only for direct local server processes; WebApp must use the gRPC-Web endpoint above.'
+Write-Output 'Fixture Researcher scopes: portfolio:read,positions:read,rates:analyze,facts:read,definitions:read,artifacts:read.'
+Write-Output 'Run scripts\bootstrap-portfolio360-p0.ps1 after the migration service is healthy to seed the idempotent fixture.'

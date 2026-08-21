@@ -89,6 +89,12 @@ DMQuant 的登录后研究流程仍以 `web-dm/webapps/dmquant/design.md` 为唯
 
 Phase 2 固定收益算法也不属于当前页面能力。界面不得展示看似真实但没有后台合同与业务闭环的定价、DV01、基差、IRR 或 CTD 结果。
 
+## 相邻 Portfolio WebApp 接线
+
+金证FICC合同管理系统的 24 页工作台不在 `web-dm/webapps/`。FICANT 只提供 `ficant.portfolio.v1` 只读 RPC 与 `portfolio-workbench.v1` PageEnvelope；相邻仓库安装本地 `@ficant/contracts-generated@0.0.0` artifact，不得继续 alias 到本树 `web-dm/packages/contracts-generated/src`。
+
+Docker 开发 gRPC-Web 默认 `http://127.0.0.1:18080`，允许 origin 精确包含 `http://127.0.0.1:5173`。`127.0.0.1:50051` 只用于本机 native gRPC。Hybrid 范围是 D01/P01/P02/P03/P04 走真实 DTO，其余页面由 WebApp 自己标 demo/partial；BFF 失败必须呈现 typed error，不得用 mock 冒充 backend success。
+
 ## Validity
 
 Valid: long-term until superseded

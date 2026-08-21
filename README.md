@@ -1254,6 +1254,8 @@ PostgreSQL 16 schema
 
 R7B 为五个 Rates RPC、Portfolio KRD、PositionViews、成功 CapitalUse、DataHealthReport、Experiment Artifact/SignalSet 统一增加 `FormalOutputEvidence`。它绑定稳定排序的 typed actual inputs、exact Subject、公共 Code、实际 Runtime/environment、实现、参数/seed 与 result bytes，并用同一个 domain-separated canonical v1 算法得到 output identity；同步 Analytics 在成功应答前按 identity 持久化 payload/evidence，Graph Artifact/SignalSet 在完成事务中交叉核对同一证据。最终点亮状态仍以 [R7B iteration brief](docs/iterations/2026-08-r7b-evidence-recovery.md) 的最终真实证据与后续 authority 绑定为准，本段不宣称已经发布 AC30–AC33。
 
+**R8A 当前候选（2026-08-21）：** 金证FICC合同管理系统新增只读 Portfolio/Book 目录、exact PositionSnapshot 绑定、点时组合聚合与最小 Workbench BFF。生产路由从 14 个精确扩展为 17 个：`PortfolioCatalogService`、`PortfolioAggregationService`、`PortfolioWorkbenchService`。D01/P01/P02/P03/P04 由后台投影真实领域 DTO；BFF 不返回 demo，也不把 Web UI module 写入 proto。完成状态以 [R8A iteration brief](docs/iterations/2026-08-r8a-portfolio360-p0.md) 的最终真实证据为准；本轮不包含 OMS/PMS、其余十九页或收益序列口径。
+
 ### Phase 5：Rates Research Lab
 
 **目标：** 交付第一条可用的国债现券研究体验。

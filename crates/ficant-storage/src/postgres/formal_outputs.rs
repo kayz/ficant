@@ -384,6 +384,14 @@ const fn proto_kind(value: FormalInputKind) -> pb::FormalInputKind {
         FormalInputKind::PositionSnapshot => pb::FormalInputKind::PositionSnapshot,
         FormalInputKind::DataHealthProfile => pb::FormalInputKind::DataHealthProfile,
         FormalInputKind::CurveNodeDefinition => pb::FormalInputKind::CurveNodeDefinition,
+        FormalInputKind::Portfolio => pb::FormalInputKind::Portfolio,
+        FormalInputKind::Book => pb::FormalInputKind::Book,
+        FormalInputKind::PortfolioGroup => pb::FormalInputKind::PortfolioGroup,
+        FormalInputKind::Benchmark => pb::FormalInputKind::Benchmark,
+        FormalInputKind::PortfolioMetricConvention => {
+            pb::FormalInputKind::PortfolioMetricConvention
+        }
+        FormalInputKind::Fact => pb::FormalInputKind::Fact,
     }
 }
 
@@ -405,6 +413,14 @@ fn domain_kind(value: pb::FormalInputKind) -> ApplicationResult<FormalInputKind>
         pb::FormalInputKind::PositionSnapshot => FormalInputKind::PositionSnapshot,
         pb::FormalInputKind::DataHealthProfile => FormalInputKind::DataHealthProfile,
         pb::FormalInputKind::CurveNodeDefinition => FormalInputKind::CurveNodeDefinition,
+        pb::FormalInputKind::Portfolio => FormalInputKind::Portfolio,
+        pb::FormalInputKind::Book => FormalInputKind::Book,
+        pb::FormalInputKind::PortfolioGroup => FormalInputKind::PortfolioGroup,
+        pb::FormalInputKind::Benchmark => FormalInputKind::Benchmark,
+        pb::FormalInputKind::PortfolioMetricConvention => {
+            FormalInputKind::PortfolioMetricConvention
+        }
+        pb::FormalInputKind::Fact => FormalInputKind::Fact,
     })
 }
 
