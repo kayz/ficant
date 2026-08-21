@@ -1,8 +1,8 @@
 # R8A 迭代 brief — Portfolio360 P0 只读组合纵向切片
 
-**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R8A / Portfolio360-P0 · **execution base：** `11015f41b3f58e82017e85a834f2ba227b702ca2` · **base tree：** `b5afe57f443cae36b47216ffd9e4ba518650aa12` · **状态：** Human 已于 2026-08-21 批准，实施中
+**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R8A / Portfolio360-P0 · **execution base：** `11015f41b3f58e82017e85a834f2ba227b702ca2` · **base tree：** `b5afe57f443cae36b47216ffd9e4ba518650aa12` · **状态：** 本地自测候选已形成，待 Human 验收
 
-本 brief 是 R8A 面向 Human 的唯一设计、权限边界与最终证据载体。它只在 `C:\git\ficant` 建设 Portfolio360 的后端纵向切片；`C:\git\ficant-portfolio`、COGA、Web UI、发布、部署和远端治理均不在本轮写入范围。Human 已于 2026-08-21 批准本 brief；实施必须保持 execution base、公共契约、公式、允许路径和非目标不变，计划命令仍不得写成通过。
+本 brief 是 R8A 面向 Human 的唯一设计、权限边界与最终证据载体。它只在 `C:\git\ficant` 建设 Portfolio360 的后端纵向切片；`C:\git\ficant-portfolio`、COGA、Web UI、发布、部署和远端治理均不在本轮写入范围。Human 已于 2026-08-21 批准本 brief。§6 以下证据来自同一最终代码候选，不把计划命令写成通过。
 
 ## 1. 目标
 
@@ -140,7 +140,7 @@ Human 于 2026-08-21 对本 brief 的“批准”同时冻结下表的 R8A 选�
 | D17 · 机械 consumer 闭合 | Human 于 2026-08-21 补充批准仅修改 `crates/ficant-application/tests/unit_semantic_proof.rs`、`crates/ficant-api/tests/market_fact_service.rs` 与 `binaries/ficant-worker/src/production.rs`，分别接纳 typed Valuation Unit roles、追加字段的 legacy/negative transport fixture，以及 `FormalInputKind` 16..21 的精确 worker 映射。 | 不扩大生产语义，不改变旧 Valuation、金融公式、摘要、Oracle、expected 或 tolerance。 |
 | D18 · 债券仓位 KRD 最终舍入 | Human 于 2026-08-21 补充批准新增单一 Domain helper，把冻结的方向价差、bump、signed quantity 与 registered face 作为同一有理式约分，只在最终仓位 DV01 的 12 位固定尺度执行 ties-to-even；Application 债券仓位路径改为调用该 helper。 | 不改变既有 `key_rate_dv01`、期货 KRD、方向公式、输入选择、算法身份、Unit/owner/ref 校验、容差、任何既有 Oracle/expected，也不以调票息或持仓数量换取测试通过。 |
 | D19 · R7A 哈希闭合 | Human 于 2026-08-21 批准只更新 `crates/ficant-contract-tests/tests/fixtures/r7a-core-extension/core-source-sha256.tsv` 中 D18 已授权的两行：`research/exposure.rs` → `5164c871bfbb1428e47bbfc4f62e499ba809f2fba72e8d7801a4905845c9eb83`，`research/mod.rs` → `7cc50ece586e1ae0311dd3d990414aefb950bfe82823a1640f098b61524e45ff`。47 文件集合不变。原 §6 清单不改。 | 不增删 47 文件，不改 C++/native/其余 45 个源，不改变 R7A「不拆 crate」裁决，不把其他哈希或 Oracle/expected 一并改写。 |
-| D20 · 共享库 SIT reset | IncludeIntegration 真实失败：`phase4_worker_sit` 在已应用 0026 的库上 reset 时未 DROP `portfolio`，随后 `CREATE SCHEMA portfolio` 报 `42P06`。待 Human 批准后，只机械补齐与已批准 `ficant-storage/tests/support` 相同的 `DROP SCHEMA IF EXISTS portfolio CASCADE`，仅限这些共享库 reset 副本：`binaries/ficant-worker/tests/support/mod.rs`、`binaries/ficant-server/tests/r6a_governed_input_sit.rs`、`binaries/ficant-server/tests/r6b_artifact_service_sit.rs`、`crates/ficant-acceptance/tests/phase1_business_loop.rs`、`crates/ficant-acceptance/tests/negative_invariants.rs`、`crates/ficant-data/tests/snapshot_publication_sit.rs`、`crates/ficant-data/tests/dual_source_sit.rs`。原 §6 清单不改。 | 不改 migration 0026、生产 schema 语义、Oracle/expected，也不把其他 SIT 逻辑或 fixture 一并改写。 |
+| D20 · 共享库 SIT reset | IncludeIntegration 真实失败：`phase4_worker_sit` 在已应用 0026 的库上 reset 时未 DROP `portfolio`，随后 `CREATE SCHEMA portfolio` 报 `42P06`。已机械补齐与已批准 `ficant-storage/tests/support` 相同的 `DROP SCHEMA IF EXISTS portfolio CASCADE`，仅限这些共享库 reset 副本：`binaries/ficant-worker/tests/support/mod.rs`、`binaries/ficant-server/tests/r6a_governed_input_sit.rs`、`binaries/ficant-server/tests/r6b_artifact_service_sit.rs`、`crates/ficant-acceptance/tests/phase1_business_loop.rs`、`crates/ficant-acceptance/tests/negative_invariants.rs`、`crates/ficant-data/tests/snapshot_publication_sit.rs`、`crates/ficant-data/tests/dual_source_sit.rs`。原 §6 清单不改。 | 不改 migration 0026、生产 schema 语义、Oracle/expected，也不把其他 SIT 逻辑或 fixture 一并改写。 |
 
 先前资料建议的“252 交易日、对外几何/并列算术、样本标准差、无风险利率 0、共有日期内连接、峰谷回撤”不在 R8A 冻结公式中：当前 FICANT 没有可证明的 Portfolio NAV/return series、现金流调整或 Benchmark return authority。若未来 Human 选择新增该输入面，必须新开迭代并用独立数值样例重新批准，不能回填到本轮 convention。
 
@@ -257,14 +257,27 @@ Human 于 2026-08-21 对本 brief 的“批准”同时冻结下表的 R8A 选�
 
 **受保护事实：** `C:\git\ficant-portfolio/**`、`C:\git\cogawork/**`、`SPEC.md`/`ACCEPTANCE.md`/`MANUAL.md`、两份未跟踪审计报告、R5D AnalyzeBond proto/物化、R7A 47-file core manifest、R7B identity/recovery、十四个既有 service 与生产 route、所有既有 Golden/Oracle/expected/容差、C/C++/FFI/native 数值实现、RulePack 内容、`.github/workflows/**`、`cicd.yml`、`deploy/test/**`、远端 GitHub 设置、版本/tag/镜像/部署均不修改。新增 migration/fixture 不得改写已有 `0001..0025` 或已有 fixture 事实。
 
-**计划的最终命令（尚未执行，不构成通过证据）：** fixed Buf format/lint 与双 fresh tree；`cargo test` 的 R8A contract/domain/application/storage/API/server focused targets；Python Decimal Oracle；17-service topology与反例；三语言 consumer；双本地 `.tgz` 字节一致；P01/P03/P04 native gRPC SIT；真实 `GetCurrentSession -> GetPage` gRPC-Web；`.\scripts\check-fast.ps1`、`.\scripts\check.ps1`、`.\scripts\check.ps1 -IncludeIntegration`；`git diff --check`、允许路径和 protected fact audit。§6 只有在完成实施后，才能追加同一最终候选的命令、exit code、test count、descriptor/package digest 与 candidate identity。
+本节以下证据全部来自同一个最终代码候选，不把计划命令、早期脏工作树或文档提交写成代码已通过。**最终代码候选：** commit `ff0af1575eae6042315955e0ec992877dbffaa8a`，tree `563d144731bda596dd4c32ddf49e7c0c172ab251`；父提交为冻结 execution base `11015f41b3f58e82017e85a834f2ba227b702ca2` / tree `b5afe57f443cae36b47216ffd9e4ba518650aa12`。后续若只修改本文件，该文档提交不冒充重新执行完整检查的代码候选。取证时 Node 为 `v22.17.0`。两份未跟踪审计报告在 recovery 期间暂时移出工作树，取证结束后已放回，未纳入候选。
+
+### 6.1 本地检查与测试计数
+
+| 实际入口/证据 | 结果 |
+|---|---|
+| `.\scripts\check.ps1 -IncludeIntegration`（在干净 `ff0af1575eae6042315955e0ec992877dbffaa8a` 上） | exit `0`，约 19.7 分钟，输出 `FICANT complete local checks passed.` Coverage 68 reachable arms / 6 composition carriers / 62 具名非组合 arm。R8A Oracle 11/11；license digest `a9e3c6923d3b73ce8894e5a075db661ce5b35b60547fdb19f0ca8094aa3a09e4`；Python generated consumer 1 passed / 1 environment-gated skipped；本地契约包 tests 6，`@ficant/contracts-generated@0.0.0`，descriptor SHA-256 `3c97ce22d4ced6e9f082e4f684a5a507096a968bf8ef02a6da651f120bb2cc68`，source-tree SHA-256 `2c24c4e06b4c732887284497dd919a3dd2bee9d8278003c726528603354f1f06`，source_file_count 30，package SHA-256 `4d6b12bd212d97040ea0f99049cc48d004bc69cbc15f1def95fd9b4da68c2917`；Web tests 35/35。PostgreSQL migrations 7/7、lease 1/1、execution 3/3、Worker 1/1、Phase 1 1/1、negative invariants 13/13；R8A Postgres 5/5；R8A production gRPC/gRPC-Web SIT 1/1（P01/P03/P04 native 与 session→GetPage）；R7B recovery proof passed，manifest SHA-256 `7EB8D0A9CE1C6808F13BE9FAD7448ECBF0ED3CE6E14B36EE74B77BAA43BDEABA`。 |
+| `git diff --check`（相对该代码候选 HEAD） | exit `0` |
+
+Windows 本机 `check.ps1` 不运行 Linux/BSR 双 fresh Buf generation；descriptor SHA 由契约包门禁记录，不能代替 `.github/scripts/verify-contract-generation.sh` 的双树证明。
+
+### 6.2 实施期失败与就地修复
+
+同一候选上真实失败并修复、未降低 Oracle/expected/容差：Docker Desktop 停机导致 `PoolTimedOut`；共享库 SIT reset 未 DROP `portfolio`（`42P06`，D20）；license first-party binding 因测试 reset 源变化失配后用既有 `refresh-bindings` 刷新；生产 Aggregation 把 R5D AnalyzeBond Subject hash 与 `subject_record_content_hash` 当成同一摘要而误报完整性错误，改为只核对同一 `VersionRef`。
 
 ## 7. 残余风险
 
-- R8A 已获 Human 批准但仍在实施中；在 §6 记录同一最终候选的完整真实证据前，不能被宣传为已实现能力。
 - 现有 PositionSnapshot 没有 NAV、外部现金流调整或日收益权威，因此本轮诚实边界是点时持仓/收益率/风险研究，不是绩效、会计或完整 Portfolio360。
 - fixture 只证明 CNY、中国国债、正 long bond 与最小目录层级；short/非债/多币种会显式 partial/error，不代表完整资产覆盖。
-- Workbench 是最小读 BFF，不是 WebApp PageModel；`C:\git\ficant-portfolio` 仍需后续独立任务安装锁定 `.tgz`、移除源码 alias并完成 Hybrid UI 接线，本轮不触碰该仓库。
+- Workbench 是最小读 BFF，不是 WebApp PageModel；`C:\git\ficant-portfolio` 仍需后续独立任务安装锁定 `.tgz`、移除源码 alias 并完成 Hybrid UI 接线，本轮不触碰该仓库。
 - 本地 `.tgz` 没有 registry、长期版本或远端分发保证；它只为相邻 WebApp 的下一次独立迭代提供可校验输入。
-- fresh contract generation 仍依赖 BSR remote plugins，最终取证可能受匿名配额/网络可用性影响；不能用旧生成树或跳过双树证明代替。
+- fresh contract generation 仍依赖 BSR remote plugins；本候选未在 Windows 上取得双 fresh tree 命令证据，不能用旧生成树代替。
 - Docker gRPC-Web origin 固定为开发 POC 值，不是生产 CORS、身份、UAT 或部署批准。
+- 本轮未 push、未创建 tag、未发布镜像、未部署、未触发远端 CI/CD。
