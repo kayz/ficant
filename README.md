@@ -1203,7 +1203,7 @@ PostgreSQL 16 schema
 
 **当前状态（2026-07-20）：** Phase 3A 已交付版本化 DataSource、文件 NDJSON 与 PostgreSQL 双源接入、精确版本映射、双时间点时过滤、失败关闭的数据质量规则和固定 16 列 Canonical Quote Arrow Schema。Phase 3B 已把该 RecordBatch 编码为参数冻结的确定性 Parquet 与 canonical Manifest，并复用 Phase 1 双 blob proof 发布为真实 `DataSnapshot`。正式重读先完成 PostgreSQL metadata、Ceph RGW 两个 required payload 和内容摘要校验，再校验 Snapshot/Manifest/Parquet 三方绑定后解码；真实验收在销毁外部 source adapter、重建存储 adapter 后仍只按 Snapshot ID 得到相同 RecordBatch，外源调用次数保持一次。因此 Phase 3 已正式退出；最终证据与残余风险见 [Phase 3B iteration brief](docs/history/iterations/2026-07-phase3b-immutable-parquet-snapshot.md)。
 
-**R6A 当前候选（2026-08-13）：** 输入面新增 Platform Admin / Researcher 单 active-role principal、精确 DataSource authorization 与 FoundationChange 证据；完整 Definition、Fact、Snapshot 已进入同一生产 native gRPC / gRPC-Web composition。研究用户只可经管理员批准的 exact source version、mapping、schema、接口与有效期执行 server-side canonical import；未授权漂移在 adapter、blob 和 repository 前失败关闭，成功结果可在外源移除及 server 重启后从 PostgreSQL/Ceph 验证读回。R6A 不包含 Portfolio360、PMS、业务 UI 或 R6B Artifact service；完成状态以 [R6A iteration brief](docs/iterations/2026-08-r6a-governed-input-plane.md) 的最终真实证据为准。
+**R6A 当前候选（2026-08-13）：** 输入面新增 Platform Admin / Researcher 单 active-role principal、精确 DataSource authorization 与 FoundationChange 证据；完整 Definition、Fact、Snapshot 已进入同一生产 native gRPC / gRPC-Web composition。研究用户只可经管理员批准的 exact source version、mapping、schema、接口与有效期执行 server-side canonical import；未授权漂移在 adapter、blob 和 repository 前失败关闭，成功结果可在外源移除及 server 重启后从 PostgreSQL/Ceph 验证读回。R6A 不包含组合投研 WebApp、PMS、业务 UI 或 R6B Artifact service；完成状态以 [R6A iteration brief](docs/iterations/2026-08-r6a-governed-input-plane.md) 的最终真实证据为准。
 
 优先实现：
 
@@ -1254,7 +1254,7 @@ PostgreSQL 16 schema
 
 R7B 为五个 Rates RPC、Portfolio KRD、PositionViews、成功 CapitalUse、DataHealthReport、Experiment Artifact/SignalSet 统一增加 `FormalOutputEvidence`。它绑定稳定排序的 typed actual inputs、exact Subject、公共 Code、实际 Runtime/environment、实现、参数/seed 与 result bytes，并用同一个 domain-separated canonical v1 算法得到 output identity；同步 Analytics 在成功应答前按 identity 持久化 payload/evidence，Graph Artifact/SignalSet 在完成事务中交叉核对同一证据。最终点亮状态仍以 [R7B iteration brief](docs/iterations/2026-08-r7b-evidence-recovery.md) 的最终真实证据与后续 authority 绑定为准，本段不宣称已经发布 AC30–AC33。
 
-**R8A 当前候选（2026-08-21）：** 金证FICC合同管理系统新增只读 Portfolio/Book 目录、exact PositionSnapshot 绑定、点时组合聚合与最小 Workbench BFF。生产路由从 14 个精确扩展为 17 个：`PortfolioCatalogService`、`PortfolioAggregationService`、`PortfolioWorkbenchService`。D01/P01/P02/P03/P04 由后台投影真实领域 DTO；BFF 不返回 demo，也不把 Web UI module 写入 proto。完成状态以 [R8A iteration brief](docs/iterations/2026-08-r8a-portfolio360-p0.md) 的最终真实证据为准；本轮不包含 OMS/PMS、其余十九页或收益序列口径。
+**R8A 当前候选（2026-08-21）：** 金证FICC合同管理系统新增只读 Portfolio/Book 目录、exact PositionSnapshot 绑定、点时组合聚合与最小 Workbench BFF。生产路由从 14 个精确扩展为 17 个：`PortfolioCatalogService`、`PortfolioAggregationService`、`PortfolioWorkbenchService`。D01/P01/P02/P03/P04 由后台投影真实领域 DTO；BFF 不返回 demo，也不把 Web UI module 写入 proto。完成状态以 [R8A iteration brief](docs/iterations/2026-08-r8a-portfolio-p0.md) 的最终真实证据为准；本轮不包含 OMS/PMS、其余十九页或收益序列口径。
 
 ### Phase 5：Rates Research Lab
 

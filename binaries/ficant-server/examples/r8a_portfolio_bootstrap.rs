@@ -76,8 +76,8 @@ use sqlx::{PgPool, Postgres, Transaction};
 
 type AnyError = Box<dyn Error + Send + Sync>;
 
-const CATALOG_SCHEMA: &str = "ficant.portfolio360-catalog-fixture.v1";
-const ANALYTICS_SCHEMA: &str = "ficant.portfolio360-analytics-fixture.v1";
+const CATALOG_SCHEMA: &str = "ficant.portfolio-catalog-fixture.v1";
+const ANALYTICS_SCHEMA: &str = "ficant.portfolio-analytics-fixture.v1";
 const ADMIN_ACTOR_ID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FD0";
 const SUBJECT_CHANGE_ID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FD1";
 const POSITION_CHANGE_IDS: [&str; 3] = [
@@ -421,7 +421,7 @@ async fn main() -> Result<(), AnyError> {
         verify_analytics_authorities(repository.as_ref(), &principal, &fixture).await,
     )?;
     println!(
-        "Portfolio360 P0 fixture ready: owner={} portfolios={} snapshots={} factors={} valuations={} authorities={} curve={} data={}",
+        "R8A fixture ready: owner={} portfolios={} snapshots={} factors={} valuations={} authorities={} curve={} data={}",
         fixture.owner.owner_id(),
         fixture.portfolios.len(),
         fixture.snapshots.len(),
@@ -480,7 +480,7 @@ fn build_fixture(
         || analytics.authority_set_ids.len() != 3
         || analytics.curve_nodes.len() != 3
     {
-        return Err("Portfolio360 fixture schema/count invariant failed".into());
+        return Err("R8A fixture schema/count invariant failed".into());
     }
     let expected_unit_roles = [
         "CURRENCY_AMOUNT",
@@ -524,11 +524,11 @@ fn build_fixture(
         Subject::new_owned(
             subject_ref.id().clone(),
             owner.clone(),
-            "Portfolio360 P0 Research Subject",
+            "R8A Research Subject",
         )?,
         SubjectVersion::new(
             subject_ref.clone(),
-            AccessSet::new(["CGB", "CN"], ["bond-analytics", "portfolio360", "rates"])?,
+            AccessSet::new(["CGB", "CN"], ["bond-analytics", "portfolio", "rates"])?,
             FundingTier::DrAvailable,
             TaxTreatment::new("cn-vat-general-taxpayer", "cn-cgb-interest-cit-exempt")?,
             "direct",
@@ -667,7 +667,7 @@ fn build_fixture(
         })
         .collect::<Result<Vec<_>, _>>()?;
     let curve_rule_payload =
-        b"ficant.portfolio360.curve-rule.v1\ncurve=cn.gov.cgb.ytm\ninterpolation=linear-zero\n"
+        b"ficant.portfolio.curve-rule.v1\ncurve=cn.gov.cgb.ytm\ninterpolation=linear-zero\n"
             .to_vec();
     let curve_rule_pack = MarketRulePack::new_with_content(
         MarketRulePackInput {
@@ -676,7 +676,7 @@ fn build_fixture(
             owner: owner.clone(),
             market: analytics.calendar.market.clone(),
             rule_type: "yield-curve-construction".to_owned(),
-            source: "ficant-authority/portfolio360-curve/v1".to_owned(),
+            source: "ficant-authority/portfolio-curve/v1".to_owned(),
             effective: EffectivePeriod::new(effective_from.clone(), effective_to.clone())?,
             verification_status: VerificationStatus::Verified,
             content_hash: ContentHash::digest(&curve_rule_payload),
@@ -787,16 +787,16 @@ fn build_fixture(
     })?
     .with_knowledge_time(visible_at.clone(), analytics.curve_family_id.clone())?;
     let data_parquet =
-        b"PAR1ficant.portfolio360.market-input.v1\nCGB-2030-01\nCGB-2032-02\nCGB-2035-03\nPAR1"
+        b"PAR1ficant.portfolio.market-input.v1\nCGB-2030-01\nCGB-2032-02\nCGB-2035-03\nPAR1"
             .to_vec();
-    let data_manifest = b"ficant.portfolio360.market-input-manifest.v1\nschema=prices-and-reference-data\nrows=3\nas_of=2026-08-21T02:00:00Z\n"
+    let data_manifest = b"ficant.portfolio.market-input-manifest.v1\nschema=prices-and-reference-data\nrows=3\nas_of=2026-08-21T02:00:00Z\n"
         .to_vec();
     let data_snapshot = DataSnapshot::new(DataSnapshotInput {
         data_snapshot_id: ulid(&catalog.analytics_authority.data_snapshot_id)?,
         owner: owner.clone(),
         visible_at: visible_at.clone(),
         as_of: observed_at.clone(),
-        schema_hash: ContentHash::digest(b"ficant.portfolio360.market-input-schema.v1"),
+        schema_hash: ContentHash::digest(b"ficant.portfolio.market-input-schema.v1"),
         manifest_hash: ContentHash::digest(&data_manifest),
         blob_content_hash: ContentHash::digest(&data_parquet),
         lineage: instruments
@@ -1052,7 +1052,7 @@ fn build_analytics_authorities(
                     owner: owner.clone(),
                     source: FactSource::new(
                         "r8a-synthetic-fixture",
-                        format!("portfolio360-yield-{}", source_position.valuation_id),
+                        format!("portfolio-yield-{}", source_position.valuation_id),
                         catalog.analytics_authority.valuation.source_revision,
                     )?,
                     valuation_at: valuation_at.clone(),
@@ -1211,7 +1211,7 @@ fn position_snapshot(
 
 fn administrator(owner: &OwnerRef) -> Result<AuthorizedPrincipal, AnyError> {
     app(AuthorizedPrincipal::new(
-        "portfolio360-bootstrap".to_owned(),
+        "portfolio-bootstrap".to_owned(),
         ulid(ADMIN_ACTOR_ID)?,
         owner.tenant_id().clone(),
         vec![owner.owner_id().clone()],
@@ -1222,7 +1222,7 @@ fn administrator(owner: &OwnerRef) -> Result<AuthorizedPrincipal, AnyError> {
             "positions:write".to_owned(),
             "registry:write".to_owned(),
         ],
-        ContentHash::digest(b"portfolio360-bootstrap-local-principal"),
+        ContentHash::digest(b"portfolio-bootstrap-local-principal"),
     ))
 }
 
@@ -1236,24 +1236,24 @@ async fn publish_subject(
         .await)?
     {
         if existing != fixture.subject {
-            return Err("existing Portfolio360 Subject differs from the fixture".into());
+            return Err("existing Portfolio Subject differs from the fixture".into());
         }
         return Ok(());
     }
     let context = change_context(
         principal,
         SUBJECT_CHANGE_ID,
-        "bootstrap Portfolio360 P0 Subject",
+        "bootstrap R8A Subject",
         &fixture.visible_at,
     )?;
     let command = app(GovernedRegisterSubject::new(
         context,
         fixture.subject.clone(),
-        app(IdempotencyKey::new("r8a-portfolio360-subject-v1"))?,
+        app(IdempotencyKey::new("r8a-portfolio-subject-v1"))?,
     ))?;
     let stored = app(repository.register_governed_subject(command).await)?;
     if stored != fixture.subject {
-        return Err("existing Portfolio360 Subject differs from the fixture".into());
+        return Err("existing Portfolio Subject differs from the fixture".into());
     }
     Ok(())
 }
@@ -1269,11 +1269,7 @@ async fn publish_units(
             principal,
             &fixture.visible_at,
             UNIT_CHANGE_IDS[index],
-            &format!(
-                "r8a-portfolio360-unit-{}-v{}",
-                unit.identity(),
-                unit.version()
-            ),
+            &format!("r8a-portfolio-unit-{}-v{}", unit.identity(), unit.version()),
             DefinitionValue::Unit(unit.clone()),
         )
         .await?;
@@ -1291,7 +1287,7 @@ async fn publish_calendar(
         principal,
         &fixture.visible_at,
         CALENDAR_CHANGE_ID,
-        "r8a-portfolio360-calendar-v1",
+        "r8a-portfolio-calendar-v1",
         DefinitionValue::Calendar(fixture.calendar.clone()),
     )
     .await
@@ -1308,7 +1304,7 @@ async fn publish_instruments(
             principal,
             &fixture.visible_at,
             INSTRUMENT_CHANGE_IDS[index],
-            &format!("r8a-portfolio360-instrument-{}", instrument.identity()),
+            &format!("r8a-portfolio-instrument-{}", instrument.identity()),
             DefinitionValue::Instrument(instrument.clone()),
         )
         .await?;
@@ -1326,7 +1322,7 @@ async fn publish_rule_packs(
         principal,
         &fixture.visible_at,
         CURVE_RULE_CHANGE_ID,
-        "r8a-portfolio360-curve-rule-v1",
+        "r8a-portfolio-curve-rule-v1",
         DefinitionValue::MarketRulePack(fixture.curve_rule_pack.clone()),
     )
     .await?;
@@ -1335,7 +1331,7 @@ async fn publish_rule_packs(
         principal,
         &fixture.visible_at,
         TAX_RULE_CHANGE_ID,
-        "r8a-portfolio360-tax-rule-v1",
+        "r8a-portfolio-tax-rule-v1",
         DefinitionValue::MarketRulePack(fixture.tax_rule_pack.clone()),
     )
     .await
@@ -1353,7 +1349,7 @@ async fn publish_factor_topology(
                 principal.access_scope(),
                 factor.clone(),
                 app(IdempotencyKey::new(format!(
-                    "r8a-portfolio360-factor-{}",
+                    "r8a-portfolio-factor-{}",
                     factor.factor_id()
                 )))?,
             )
@@ -1368,7 +1364,7 @@ async fn publish_factor_topology(
                 principal.access_scope(),
                 node.clone(),
                 app(IdempotencyKey::new(format!(
-                    "r8a-portfolio360-curve-node-{}",
+                    "r8a-portfolio-curve-node-{}",
                     node.curve_node_id()
                 )))?,
             )
@@ -1406,7 +1402,7 @@ async fn bind_factor(
     binding: FactorTargetBinding,
 ) -> Result<(), AnyError> {
     let key = format!(
-        "r8a-portfolio360-factor-binding-{}-{}",
+        "r8a-portfolio-factor-binding-{}-{}",
         binding.factor_id(),
         hash_hex(binding.content_hash())
     );
@@ -1447,7 +1443,7 @@ async fn publish_curve_snapshot(
             principal.access_scope().clone(),
             fixture.owner.clone(),
             size,
-            app(IdempotencyKey::new("r8a-portfolio360-curve-points-stage"))?,
+            app(IdempotencyKey::new("r8a-portfolio-curve-points-stage"))?,
         ))?)
         .await)?;
     app(blob_store
@@ -1469,13 +1465,13 @@ async fn publish_curve_snapshot(
         change_context(
             principal,
             CURVE_CHANGE_ID,
-            "bootstrap Portfolio360 P0 CurveSnapshot",
+            "bootstrap R8A CurveSnapshot",
             &fixture.visible_at,
         )?,
         fixture.curve_snapshot.clone(),
         size,
         verified,
-        app(IdempotencyKey::new("r8a-portfolio360-curve-snapshot-v1"))?,
+        app(IdempotencyKey::new("r8a-portfolio-curve-snapshot-v1"))?,
     ))?;
     let stored = app(MarketFactUseCase::new(repository)
         .publish_curve_governed(command)
@@ -1510,7 +1506,7 @@ async fn publish_data_snapshot(
         fixture.data_snapshot.clone(),
         fixture.data_parquet.clone(),
         fixture.data_manifest.clone(),
-        app(IdempotencyKey::new("r8a-portfolio360-data-snapshot-v1"))?,
+        app(IdempotencyKey::new("r8a-portfolio-data-snapshot-v1"))?,
     ))?;
     let stored = app(PublishDataSnapshot::new(blob_store, repository)
         .execute(principal.access_scope(), payloads)
@@ -1546,7 +1542,7 @@ async fn publish_valuations(
             )?,
             fully_validated,
             app(IdempotencyKey::new(format!(
-                "r8a-portfolio360-yield-valuation-{}-v{}",
+                "r8a-portfolio-yield-valuation-{}-v{}",
                 valuation.id(),
                 valuation.source().source_revision()
             )))?,
@@ -1584,7 +1580,7 @@ async fn publish_definition(
     let context = change_context(
         principal,
         change_id,
-        "bootstrap Portfolio360 P0 immutable market definition",
+        "bootstrap R8A immutable market definition",
         visible_at,
     )?;
     let command = app(GovernedAppendDefinitionVersion::new(
@@ -1629,13 +1625,13 @@ async fn publish_position_snapshots(
         let context = change_context(
             principal,
             POSITION_CHANGE_IDS[index],
-            "bootstrap Portfolio360 P0 PositionSnapshot",
+            "bootstrap R8A PositionSnapshot",
             &fixture.visible_at,
         )?;
         let payload = app(PositionSnapshotPayload::new(
             snapshot.clone(),
             app(IdempotencyKey::new(format!(
-                "r8a-portfolio360-position-{}",
+                "r8a-portfolio-position-{}",
                 snapshot.id()
             )))?,
         ))?;
@@ -1658,8 +1654,8 @@ fn change_context(
         ChangeJustification::new(
             reason,
             vec![SourceDocumentRef::new(
-                "urn:ficant:r8a:portfolio360-p0-fixture",
-                ContentHash::digest(b"ficant.portfolio360.fixture.v1"),
+                "urn:ficant:r8a:portfolio-p0-fixture",
+                ContentHash::digest(b"ficant.portfolio.fixture.v1"),
             )?],
         )?,
         ulid(record_id)?,

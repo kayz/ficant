@@ -2,13 +2,13 @@
 
 **迭代：** R6A · **点亮目标：** AC37 · **planning base：** `e5c5f34c1418c87f3e97cf84e394617876ead5ff` · **authority base：** `dea6eafe4fcccf364fd19f00f23f7dde900e0513`
 
-本 brief 是 R6A 面向 Human 的唯一设计与后续最终证据载体。它把 2026-08-13 Portfolio360 / COGA 讨论只作为一次外部需求压力测试：讨论确认 FICANT 需要先闭合受治理的后台输入面，但不授权接入该 WebApp、引入 COGA 或扩张为 PMS。2026-08-13 Human 已批准 §5 的 D1–D6 并授权启动；本文据此冻结公共契约、execution base、代码允许路径和受保护事实，按 RED-first 实施。
+本 brief 是 R6A 面向 Human 的唯一设计与后续最终证据载体。它把 2026-08-13 组合投研 / COGA 讨论只作为一次外部需求压力测试：讨论确认 FICANT 需要先闭合受治理的后台输入面，但不授权接入该 WebApp、引入 COGA 或扩张为 PMS。2026-08-13 Human 已批准 §5 的 D1–D6 并授权启动；本文据此冻结公共契约、execution base、代码允许路径和受保护事实，按 RED-first 实施。
 
 ## 1. 目标
 
 R6A 只交付一个平台结果：建立一个生产可达、角色不可绕过、输入可验证且变更可追责的受治理输入平面。平台管理员能够登记并版本化基础 Definition、DataSource、Fact 与 Snapshot 权威；研究用户只能通过平台管理员对“精确数据源版本 + 精确导入接口”的授权执行规范化数据导入。Definition、Fact、Snapshot 三个已声明但尚未组合的公共服务在真实生产 server 中闭合；每次基础数据变更记录服务端确定的 actor、active role、原因、来源证据和前后内容身份。
 
-本轮是后续投研 WebApp 的后台前置条件，不是 Portfolio360 产品迭代。它不新增 Portfolio、Book、NAV、P&L、Benchmark、归因、VaR、模拟组合或 UI，也不让 COGA 进入 FICANT 的构建、部署或运行链。
+本轮是后续投研 WebApp 的后台前置条件，不是组合投研产品迭代。它不新增 Portfolio、Book、NAV、P&L、Benchmark、归因、VaR、模拟组合或 UI，也不让 COGA 进入 FICANT 的构建、部署或运行链。
 
 **Acceptance sentence：**
 
@@ -42,7 +42,7 @@ RED-first 子循环拟按以下顺序执行；首次真实非零命令、exit co
 
 ## 3. 非目标
 
-- 不接入、生成、托管或修改 Portfolio360 WebApp；不新增任何 React 页面、App Registry entry、Playwright journey、Excel 上传或业务导出。
+- 不接入、生成、托管或修改组合投研 WebApp；不新增任何 React 页面、App Registry entry、Playwright journey、Excel 上传或业务导出。
 - 不接入或修改 `cogawork` / COGA Core，不建设 COGA Instance、Domain Harness、React recipe、coding-agent adapter、worktree/PR adapter 或 descriptor-lock 工厂流程。未来工厂可以消费 R6A/R6B 完成后的 public commit 与 descriptor，但不是运行依赖。
 - 不新增 Portfolio、Book、PortfolioGroup、Benchmark、Mandate、交易、批次成本、现金、负债、NAV/P&L、收益率、归因、VaR、跟踪误差、穿透、模拟组合、优化器或 Black-Litterman。
 - 不扩展美国国债、基金、广义人民币债、多币种、FX、指数或跨资产估值；不把 FICANT 变成正式 PMS、总账、会计分录、监管报表、OMS/EMS、报单、清算或结算系统。
@@ -207,7 +207,7 @@ authority base 已冻结以下不可选边界：Platform Admin 与 Researcher �
 
 ## 7. 残余风险
 
-- R6A闭合的是可信输入控制面，不是完整业务数据目录。即使AC37成立，Portfolio360仍缺Portfolio/Book、交易/现金/负债、NAV/P&L、历史收益、Benchmark、归因、VaR、穿透与业务UI；这些需要独立authority、产品模型和后续迭代，不能从R6A能力外推。
+- R6A闭合的是可信输入控制面，不是完整业务数据目录。即使AC37成立，组合投研仍缺Portfolio/Book、交易/现金/负债、NAV/P&L、历史收益、Benchmark、归因、VaR、穿透与业务UI；这些需要独立authority、产品模型和后续迭代，不能从R6A能力外推。
 - 当前本地bootstrap identity模型不是企业OIDC/组织目录。R6A推荐的active-role principal可证明平台边界，但真实多租户身份生命周期、credential rotation、SCIM/SSO与集中密钥治理仍需独立安全设计。
 - server-side ingest只能安全使用已实现且可确定重放的adapter。File NDJSON与PostgreSQL之外的数据源、复杂credential broker、流式/增量导入及第三方行情授权不在本轮；不得以通用connection string临时绕过registry。
 - migration `0023` 对已有、但没有 tenant/owner 证据的 pre-R6A Subject/SubjectState 行刻意失败关闭，不猜测归属。升级这类数据库前，operator 必须通过独立、可审核的数据治理步骤建立 exact tenant/owner 映射后再迁移或重导；本轮只验证了拒绝与事务原子性。

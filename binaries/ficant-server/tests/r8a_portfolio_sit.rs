@@ -54,7 +54,7 @@ const SERVER_TEST_ENVIRONMENT: &str =
 #[allow(clippy::too_many_lines)]
 fn synthetic_bond_terms_are_executable_by_the_native_engine() {
     let fixture: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/portfolio360/analytics-p0.json"
+        "../../../tests/fixtures/portfolio/analytics-p0.json"
     ))
     .expect("analytics fixture is valid JSON");
     let owner = OwnerRef::new(
@@ -229,7 +229,7 @@ fn synthetic_bond_terms_are_executable_by_the_native_engine() {
 #[ignore = "requires the explicit check.ps1 -IncludeIntegration environment"]
 async fn production_p01_p03_p04_and_session_to_get_page_use_real_postgres_s3_and_routes() {
     let Some(environment) = IntegrationEnvironment::load() else {
-        eprintln!("skipping R8A Portfolio360 production SIT: integration environment is absent");
+        eprintln!("skipping R8A Portfolio production SIT: integration environment is absent");
         return;
     };
     reset_and_migrate(&environment.database_url).await;
@@ -568,8 +568,8 @@ async fn assert_grpc_web_session_then_p01(address: SocketAddr) {
     assert_grpc_web_headers(&session);
     assert!(
         session
-            .windows("portfolio360-researcher".len())
-            .any(|value| value == b"portfolio360-researcher"),
+            .windows("portfolio-researcher".len())
+            .any(|value| value == b"portfolio-researcher"),
         "gRPC-Web session must use the real configured Researcher"
     );
 
@@ -687,7 +687,7 @@ fn proto_time(hour: u32) -> core::MarketTime {
 
 async fn run_bootstrap(environment: &IntegrationEnvironment) {
     let repository = repository_root();
-    let script = repository.join("scripts/bootstrap-portfolio360-p0.ps1");
+    let script = repository.join("scripts/bootstrap-portfolio-p0.ps1");
     let output = tokio::task::spawn_blocking({
         let environment = environment.clone();
         move || {
@@ -707,14 +707,14 @@ async fn run_bootstrap(environment: &IntegrationEnvironment) {
                     &environment.s3_secret_key,
                 )
                 .output()
-                .expect("Portfolio360 bootstrap process starts")
+                .expect("Portfolio bootstrap process starts")
         }
     })
     .await
-    .expect("Portfolio360 bootstrap process joins");
+    .expect("Portfolio bootstrap process joins");
     assert!(
         output.status.success(),
-        "Portfolio360 bootstrap failed: stdout={} stderr={}",
+        "Portfolio bootstrap failed: stdout={} stderr={}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
@@ -750,7 +750,7 @@ struct RunningServer {
 impl RunningServer {
     async fn start(address: SocketAddr, environment: &IntegrationEnvironment) -> Self {
         let settings = ServerSettings::try_from_values(&server_values(address, environment))
-            .expect("R8A Portfolio360 SIT settings are valid");
+            .expect("R8A Portfolio SIT settings are valid");
         let services =
             build_production_grpc_services(&settings).expect("production services compose");
         let routes = build_production_routes(services).expect("production routes are unique");
@@ -887,7 +887,7 @@ fn server_values(
         ),
         (
             "FICANT_LOOPBACK_SUBJECT".to_owned(),
-            "portfolio360-researcher".to_owned(),
+            "portfolio-researcher".to_owned(),
         ),
         ("FICANT_LOOPBACK_ACTOR_ID".to_owned(), ACTOR_ID.to_owned()),
         ("FICANT_LOOPBACK_TENANT_ID".to_owned(), TENANT_ID.to_owned()),

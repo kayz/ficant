@@ -1,4 +1,4 @@
-"""Independent Decimal witness for the frozen R8A Portfolio360 point-in-time metrics.
+"""Independent Decimal witness for the frozen R8A Portfolio point-in-time metrics.
 
 The witness consumes only the public fixture schema and Python's Decimal primitives. It does
 not import FICANT, a generated contract, or a production aggregation helper. Position-level
@@ -100,7 +100,7 @@ def _validate_ref(
 
 def _validate_authority(inputs: dict[str, Any]) -> tuple[int, str]:
     if _required(inputs, "schema_id", "inputs") != (
-        "ficant.portfolio360.metric-oracle-input.v1"
+        "ficant.portfolio.metric-oracle-input.v1"
     ):
         raise ValueError("unsupported input schema_id")
     scale = _required(inputs, "output_scale", "inputs")
@@ -581,7 +581,7 @@ def build_expected(inputs: dict[str, Any]) -> dict[str, Any]:
     inverse_scope = aggregate_scope(scaled_inputs(inputs, Decimal("-1")))
     authority = inputs["authority"]
     return {
-        "schema_id": "ficant.portfolio360.metric-oracle-expected.v1",
+        "schema_id": "ficant.portfolio.metric-oracle-expected.v1",
         "input_schema_id": inputs["schema_id"],
         "owner": authority["owner"],
         "valuation_at": authority["valuation_at"],

@@ -1,5 +1,5 @@
 {
-  "schema_id": "ficant.portfolio360-analytics-fixture.v1",
+  "schema_id": "ficant.portfolio-analytics-fixture.v1",
   "currency_unit": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FB1", "version": 1 },
   "price_per_100_unit": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FB8", "version": 1 },
   "rate_unit": { "id": "01K2CGBVAT0000000000000000", "version": 1 },

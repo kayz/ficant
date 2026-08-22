@@ -1,8 +1,8 @@
 {
-  "schema_id": "ficant.portfolio360.metric-oracle-input.v1",
+  "schema_id": "ficant.portfolio.metric-oracle-input.v1",
   "output_scale": 6,
   "authority": {
-    "owner": "owner:portfolio360-r8a-fixture",
+    "owner": "owner:portfolio-r8a-fixture",
     "subject_ref": {
       "subject_id": "subject:cgb-research",
       "version": "1",

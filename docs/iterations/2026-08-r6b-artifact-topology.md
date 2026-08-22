@@ -2,7 +2,7 @@
 
 **迭代：** R6B · **点亮目标：** 无新增 AC（服务拓扑闭合） · **execution base：** `0ccd079f8a575b82b3f107e506e3d8e6dcc215f6` · **authority commit：** `368a90cbf27cb42667d38e289fda1cc657013a17`
 
-本 brief 是 R6B 面向 Human 的唯一设计与后续最终证据载体。R6A 已由公共 PR #60 以 rebase merge 进入 `main`；合并后的 Git tree 与取得完整本地、集成证据的 R6A 候选完全相同。R6B 只处理 Artifact 的诚实服务边界、公共服务生产可达性和冗余 Web 进程，不接入 Portfolio360、COGA 或任何新 WebApp。2026-08-19 Human 在审阅准备结果后指令“完成 R6B”，明确批准 §5 的推荐 D1–D6；R6A/AC37 后绑定已先由 private authority PR #21 独立完成。本文据此冻结公共契约、execution base、实施闭集与受保护事实并授权代码实施。
+本 brief 是 R6B 面向 Human 的唯一设计与后续最终证据载体。R6A 已由公共 PR #60 以 rebase merge 进入 `main`；合并后的 Git tree 与取得完整本地、集成证据的 R6A 候选完全相同。R6B 只处理 Artifact 的诚实服务边界、公共服务生产可达性和冗余 Web 进程，不接入组合投研 WebApp、COGA 或任何新 WebApp。2026-08-19 Human 在审阅准备结果后指令“完成 R6B”，明确批准 §5 的推荐 D1–D6；R6A/AC37 后绑定已先由 private authority PR #21 独立完成。本文据此冻结公共契约、execution base、实施闭集与受保护事实并授权代码实施。
 
 ## 1. 目标
 
@@ -43,7 +43,7 @@ RED-first 子循环拟按以下顺序执行；首次真实非零命令、exit co
 
 ## 3. 非目标
 
-- 不接入、生成、托管或修改 Portfolio360 WebApp；不新增 React 页面、App Registry entry、Excel 导入、Playwright journey 或业务导出。
+- 不接入、生成、托管或修改组合投研 WebApp；不新增 React 页面、App Registry entry、Excel 导入、Playwright journey 或业务导出。
 - 不接入或修改 `cogawork` / COGA Core，不建设 COGA Instance、Domain Harness、React recipe、coding-agent/Git adapter 或 descriptor-lock 工厂流程。
 - 不建设通用外部 Artifact 上传协议、presigned URL、对象下载 API、client-streaming 或任意 URI import。若 Human 不接受 §5 D1 的 server-owned publish 推荐项，这些能力必须重新拆轮并冻结安全、配额、重放和 owner 语义，不能塞入当前边界。
 - 不新增 Portfolio/Book、交易、现金、负债、NAV/P&L、Benchmark、归因、VaR、穿透、模拟组合、优化器或正式 PMS/OMS/会计能力。
@@ -179,4 +179,4 @@ Human 已于 2026-08-19 批准下列 D1–D6，实施不得自行改选。任何
 - topology gate 证明“声明的 service 已注册并可被 transport 到达”，不证明每个业务分支都正确；Artifact focused/production SIT 与既有每服务测试仍是必需的独立证据。
 - private authority 已把 AC37 独立绑定到合并后的 R6A；R6B 不新增 AC，也不再次修改 authority。未来若要把 Artifact 查询、外部上传或恢复语义升级为新的产品承诺，必须另行取得 Human authority，而不能从本轮拓扑闭合自动外推。
 - 单一 production route builder 会消除大部分 `grpc_web.rs` 手工嵌套，但不会顺带拆分 `rates.rs`、`portfolio_risk.rs` 或其他大文件；这些维护性债务不得借 R6B 无行为见证地扩张。
-- R6B 完成后，FICANT 仍不是 Portfolio360/PMS，也仍缺 R7A/R7B 的 AC04、AC11–AC13、AC30–AC33 全量证据；不得把“服务拓扑闭合”宣传为一期发布完成。
+- R6B 完成后，FICANT 仍不是组合投研系统/PMS，也仍缺 R7A/R7B 的 AC04、AC11–AC13、AC30–AC33 全量证据；不得把“服务拓扑闭合”宣传为一期发布完成。

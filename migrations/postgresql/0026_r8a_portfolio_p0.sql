@@ -325,7 +325,7 @@ CREATE INDEX analytics_authority_lookup_idx ON portfolio.analytics_authority_set
 CREATE FUNCTION portfolio.reject_catalog_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-    RAISE EXCEPTION 'Portfolio360 catalog records are immutable';
+    RAISE EXCEPTION 'Portfolio catalog records are immutable';
 END
 $$;
 

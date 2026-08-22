@@ -1203,10 +1203,10 @@ fn bind_time<'q>(
 fn assert_fixture_source() {
     let value: serde_json::Value = serde_json::from_str(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../tests/fixtures/portfolio360/catalog-p0.json"
+        "/../../tests/fixtures/portfolio/catalog-p0.json"
     )))
     .unwrap();
-    assert_eq!(value["schema_id"], "ficant.portfolio360-catalog-fixture.v1");
+    assert_eq!(value["schema_id"], "ficant.portfolio-catalog-fixture.v1");
     assert_eq!(value["portfolios"].as_array().unwrap().len(), 2);
     assert_eq!(
         value["metric_convention"]["freshness_limit_seconds"],

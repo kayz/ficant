@@ -1,8 +1,8 @@
-# R8A 迭代 brief — Portfolio360 P0 只读组合纵向切片
+# R8A 迭代 brief — 只读组合纵向切片
 
-**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R8A / Portfolio360-P0 · **execution base：** `11015f41b3f58e82017e85a834f2ba227b702ca2` · **base tree：** `b5afe57f443cae36b47216ffd9e4ba518650aa12` · **状态：** 本地自测候选已形成，待 Human 验收
+**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R8A · **execution base：** `11015f41b3f58e82017e85a834f2ba227b702ca2` · **base tree：** `b5afe57f443cae36b47216ffd9e4ba518650aa12` · **状态：** 本地自测候选已形成，待 Human 验收
 
-本 brief 是 R8A 面向 Human 的唯一设计、权限边界与最终证据载体。它只在 `C:\git\ficant` 建设 Portfolio360 的后端纵向切片；`C:\git\ficant-portfolio`、COGA、Web UI、发布、部署和远端治理均不在本轮写入范围。Human 已于 2026-08-21 批准本 brief。§6 以下证据来自同一最终代码候选，不把计划命令写成通过。
+本 brief 是 R8A 面向 Human 的唯一设计、权限边界与最终证据载体。它只在 `C:\git\ficant` 建设只读组合后台纵向切片；`C:\git\ficant-portfolio`、COGA、Web UI、发布、部署和远端治理均不在本轮写入范围。Human 已于 2026-08-21 批准本 brief。§6 以下证据来自同一最终代码候选，不把计划命令写成通过。
 
 ## 1. 目标
 
@@ -150,7 +150,7 @@ Human 于 2026-08-21 对本 brief 的“批准”同时冻结下表的 R8A 选�
 
 **实施允许写路径（Human 已批准并冻结的闭集）：**
 
-- `docs/iterations/2026-08-r8a-portfolio360-p0.md`（本文件；实施后只在本节追加同一最终候选的真实证据，并更新第 7 节风险）
+- `docs/iterations/2026-08-r8a-portfolio-p0.md`（本文件；实施后只在本节追加同一最终候选的真实证据，并更新第 7 节风险）
 - `docs/iterations/README.md`
 - `README.md`
 - `docs/development.md`
@@ -214,7 +214,7 @@ Human 于 2026-08-21 对本 brief 的“批准”同时冻结下表的 R8A 选�
 - `crates/ficant-application/tests/r8a_portfolio_aggregation.rs`（新建）
 - `crates/ficant-application/tests/r8a_portfolio_workbench.rs`（新建）
 - `crates/ficant-application/tests/unit_semantic_proof.rs`（Human 补充批准只补 `Rate`/`Years` 的 exact dimension consumer）
-- `migrations/postgresql/0026_r8a_portfolio360_p0.sql`（新建）
+- `migrations/postgresql/0026_r8a_portfolio_p0.sql`（新建）
 - `crates/ficant-storage/Cargo.toml`
 - `crates/ficant-storage/src/postgres/mod.rs`
 - `crates/ficant-storage/src/postgres/codec.rs`（Human 补充批准只为 typed Valuation role 增加新编码；旧 Valuation bytes 不变）
@@ -240,20 +240,20 @@ Human 于 2026-08-21 对本 brief 的“批准”同时冻结下表的 R8A 选�
 - `binaries/ficant-server/src/lib.rs`
 - `binaries/ficant-server/tests/composition.rs`
 - `binaries/ficant-server/tests/service_topology.rs`
-- `binaries/ficant-server/tests/r8a_portfolio360_sit.rs`（新建）
-- `binaries/ficant-server/examples/r8a_portfolio360_bootstrap.rs`（新建，fixture-only）
+- `binaries/ficant-server/tests/r8a_portfolio_sit.rs`（新建）
+- `binaries/ficant-server/examples/r8a_portfolio_bootstrap.rs`（新建，fixture-only）
 - `deploy/dev/docker-compose.yml`（只增加 exact Portfolio scopes/origin 与 fixture接线，不改变生产默认拓扑）
 - `scripts/dev-up.ps1`（只增加 exact Portfolio scopes/origin 与 bootstrap提示）
-- `scripts/bootstrap-portfolio360-p0.ps1`（新建）
+- `scripts/bootstrap-portfolio-p0.ps1`（新建）
 - `scripts/check-coverage.ps1`（只更新冻结 68/6/62 inventory 文案/判据）
 - `scripts/test-coverage-check.ps1`（只增加新 carrier 的真实负例）
 - `scripts/check-fast.ps1`（只加入 R8A contract/package focused gate）
 - `scripts/check.ps1`（只加入 R8A Oracle/package/integration gate）
-- `tests/fixtures/portfolio360/**`（仅新建 R8A bootstrap 数据，不复用或修改既有 Golden/Oracle）
-- `tests/oracle/portfolio360/r8a_portfolio_metric_inputs.json`（新建）
-- `tests/oracle/portfolio360/r8a_portfolio_metric_expected.json`（新建）
-- `tests/oracle/portfolio360/r8a_portfolio_metric_decimal_oracle.py`（新建）
-- `tests/oracle/portfolio360/test_r8a_portfolio_metric_decimal_oracle.py`（新建）
+- `tests/fixtures/portfolio/**`（仅新建 R8A bootstrap 数据，不复用或修改既有 Golden/Oracle）
+- `tests/oracle/portfolio/r8a_portfolio_metric_inputs.json`（新建）
+- `tests/oracle/portfolio/r8a_portfolio_metric_expected.json`（新建）
+- `tests/oracle/portfolio/r8a_portfolio_metric_decimal_oracle.py`（新建）
+- `tests/oracle/portfolio/test_r8a_portfolio_metric_decimal_oracle.py`（新建）
 
 **受保护事实：** `C:\git\ficant-portfolio/**`、`C:\git\cogawork/**`、`SPEC.md`/`ACCEPTANCE.md`/`MANUAL.md`、两份未跟踪审计报告、R5D AnalyzeBond proto/物化、R7A 47-file core manifest、R7B identity/recovery、十四个既有 service 与生产 route、所有既有 Golden/Oracle/expected/容差、C/C++/FFI/native 数值实现、RulePack 内容、`.github/workflows/**`、`cicd.yml`、`deploy/test/**`、远端 GitHub 设置、版本/tag/镜像/部署均不修改。新增 migration/fixture 不得改写已有 `0001..0025` 或已有 fixture 事实。
 
@@ -274,7 +274,7 @@ Windows 本机 `check.ps1` 不运行 Linux/BSR 双 fresh Buf generation；descri
 
 ## 7. 残余风险
 
-- 现有 PositionSnapshot 没有 NAV、外部现金流调整或日收益权威，因此本轮诚实边界是点时持仓/收益率/风险研究，不是绩效、会计或完整 Portfolio360。
+- 现有 PositionSnapshot 没有 NAV、外部现金流调整或日收益权威，因此本轮诚实边界是点时持仓/收益率/风险研究，不是绩效、会计或完整组合投研产品。
 - fixture 只证明 CNY、中国国债、正 long bond 与最小目录层级；short/非债/多币种会显式 partial/error，不代表完整资产覆盖。
 - Workbench 是最小读 BFF，不是 WebApp PageModel；`C:\git\ficant-portfolio` 仍需后续独立任务安装锁定 `.tgz`、移除源码 alias 并完成 Hybrid UI 接线，本轮不触碰该仓库。
 - 本地 `.tgz` 没有 registry、长期版本或远端分发保证；它只为相邻 WebApp 的下一次独立迭代提供可校验输入。
