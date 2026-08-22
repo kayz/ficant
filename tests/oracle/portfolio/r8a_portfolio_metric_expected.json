@@ -1,7 +1,7 @@
 {
-  "schema_id": "ficant.portfolio360.metric-oracle-expected.v1",
-  "input_schema_id": "ficant.portfolio360.metric-oracle-input.v1",
-  "owner": "owner:portfolio360-r8a-fixture",
+  "schema_id": "ficant.portfolio.metric-oracle-expected.v1",
+  "input_schema_id": "ficant.portfolio.metric-oracle-input.v1",
+  "owner": "owner:portfolio-r8a-fixture",
   "valuation_at": "2026-08-20T15:00:00+08:00",
   "knowledge_at": "2026-08-20T16:00:00+08:00",
   "currency_unit": "CNY",

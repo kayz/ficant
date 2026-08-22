@@ -1,4 +1,4 @@
-//! Immutable Portfolio360 P0 catalog definitions.
+//! Immutable Portfolio catalog definitions.
 //!
 //! These objects define scope and exact snapshot/convention bindings only. They
 //! deliberately contain no positions, transactions, NAV, cash, or pricing

@@ -69,9 +69,9 @@ use ficant_runtime::{
 use serde_json::Value;
 
 const INPUTS: &str =
-    include_str!("../../../tests/oracle/portfolio360/r8a_portfolio_metric_inputs.json");
+    include_str!("../../../tests/oracle/portfolio/r8a_portfolio_metric_inputs.json");
 const EXPECTED: &str =
-    include_str!("../../../tests/oracle/portfolio360/r8a_portfolio_metric_expected.json");
+    include_str!("../../../tests/oracle/portfolio/r8a_portfolio_metric_expected.json");
 
 #[test]
 fn production_aggregation_matches_the_frozen_independent_decimal_expected() {
@@ -2254,11 +2254,11 @@ fn aggregation_subject() -> VersionRef {
 }
 
 fn aggregation_subject_record() -> SubjectRecord {
-    let subject = Subject::new_owned(id(4), aggregation_owner(), "Portfolio360 Subject")
-        .expect("owned subject");
+    let subject =
+        Subject::new_owned(id(4), aggregation_owner(), "Portfolio Subject").expect("owned subject");
     let version = SubjectVersion::new(
         aggregation_subject(),
-        AccessSet::new(["CN"], ["portfolio360"]).expect("subject access"),
+        AccessSet::new(["CN"], ["portfolio"]).expect("subject access"),
         FundingTier::ROnly,
         TaxTreatment::new("fixture-vat", "fixture-income").expect("tax treatment"),
         "fixture-assessment",

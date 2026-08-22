@@ -14,8 +14,8 @@ from r8a_portfolio_metric_decimal_oracle import (
 
 
 ROOT = Path(__file__).resolve().parents[3]
-INPUTS = ROOT / "tests/oracle/portfolio360/r8a_portfolio_metric_inputs.json"
-EXPECTED = ROOT / "tests/oracle/portfolio360/r8a_portfolio_metric_expected.json"
+INPUTS = ROOT / "tests/oracle/portfolio/r8a_portfolio_metric_inputs.json"
+EXPECTED = ROOT / "tests/oracle/portfolio/r8a_portfolio_metric_expected.json"
 ORACLE = Path(__file__).with_name("r8a_portfolio_metric_decimal_oracle.py")
 
 

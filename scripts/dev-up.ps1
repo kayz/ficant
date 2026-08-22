@@ -85,7 +85,7 @@ function Assert-LocalEnvironment {
         }
     }
     if ($Values['FICANT_BOOTSTRAP_ACTIVE_ROLE'] -ne 'RESEARCHER') {
-        throw 'FICANT_BOOTSTRAP_ACTIVE_ROLE must be RESEARCHER for the Portfolio360 P0 fixture.'
+        throw 'FICANT_BOOTSTRAP_ACTIVE_ROLE must be RESEARCHER for the Portfolio fixture.'
     }
     $scopes = @($Values['FICANT_BOOTSTRAP_SCOPES'].Split(
         ',',
@@ -386,7 +386,7 @@ $serverPort = if (-not [string]::IsNullOrWhiteSpace($env:FICANT_SERVER_PORT)) {
 }
 Test-GrpcWebSession -BaseUri $uiBaseUri
 Write-Output "FICANT development environment is ready: $uiBaseUri/ficant/"
-Write-Output "Portfolio360 P0 gRPC-Web endpoint: http://127.0.0.1:$serverPort (allowed development origin http://127.0.0.1:5173)."
+Write-Output "Portfolio gRPC-Web endpoint: http://127.0.0.1:$serverPort (allowed development origin http://127.0.0.1:5173)."
 Write-Output 'Native gRPC bind 127.0.0.1:50051 is only for direct local server processes; WebApp must use the gRPC-Web endpoint above.'
 Write-Output 'Fixture Researcher scopes: portfolio:read,positions:read,rates:analyze,facts:read,definitions:read,artifacts:read.'
-Write-Output 'Run scripts\bootstrap-portfolio360-p0.ps1 after the migration service is healthy to seed the idempotent fixture.'
+Write-Output 'Run scripts\bootstrap-portfolio-p0.ps1 after the migration service is healthy to seed the idempotent fixture.'

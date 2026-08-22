@@ -38,7 +38,7 @@ RED-first 子循环按以下顺序执行；首次真实非零命令、exit code�
 ## 3. 非目标
 
 - 不实施 R7B 的 AC30–AC33、完整递归血缘、部署镜像身份、outbox/crash recovery、灾备、MANUAL 或全量运行手册重写。
-- 不创建 Portfolio360/COGA WebApp，不接入 `cogawork`，不增加 Portfolio/Book/NAV/P&L/归因/VaR/优化等产品域。
+- 不创建组合投研 WebApp/COGA WebApp，不接入 `cogawork`，不增加 Portfolio/Book/NAV/P&L/归因/VaR/优化等产品域。
 - 不新增 generic Artifact payload upload/download、presigned URL、client streaming 或第二 Snapshot authority；AC13 只走内部 required verified-reader。
 - 不补 FundingRulePack Decimal Oracle、DataHealth property suite、平行 convention enum、`rates.rs` 拆分、DMQuant、AI/GeneratedNode、Python node runtime、Policy/Constraint 或 v0.2 范围。
 - 不预防性拆分 `ficant-domain`、`ficant-application` 或 native crates；AC04 硬门禁通过时本轮结论就是保持现有 crate 边界。

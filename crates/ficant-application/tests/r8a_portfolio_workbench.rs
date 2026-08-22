@@ -921,11 +921,11 @@ impl SubjectRepository for SubjectFixture {
 }
 
 fn subject_record() -> SubjectRecord {
-    let subject_value = Subject::new_owned(subject().id().clone(), owner(), "Portfolio360 Subject")
+    let subject_value = Subject::new_owned(subject().id().clone(), owner(), "Portfolio Subject")
         .expect("owned subject");
     let version_value = SubjectVersion::new(
         subject(),
-        AccessSet::new(["CN"], ["portfolio360"]).expect("subject access"),
+        AccessSet::new(["CN"], ["portfolio"]).expect("subject access"),
         FundingTier::ROnly,
         TaxTreatment::new("fixture-vat", "fixture-income").expect("tax treatment"),
         "fixture-assessment",

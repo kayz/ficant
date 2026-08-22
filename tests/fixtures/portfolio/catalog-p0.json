@@ -1,5 +1,5 @@
 {
-  "schema_id": "ficant.portfolio360-catalog-fixture.v1",
+  "schema_id": "ficant.portfolio-catalog-fixture.v1",
   "tenant_id": "01ARZ3NDEKTSV4RRFFQ69G5FA1",
   "owner_id": "01ARZ3NDEKTSV4RRFFQ69G5FA2",
   "subject": { "id": "01ARZ3NDEKTSV4RRFFQ69G5FA0", "version": 1 },

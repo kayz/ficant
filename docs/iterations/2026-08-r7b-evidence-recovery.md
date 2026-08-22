@@ -45,7 +45,7 @@ RED-first 子循环按以下顺序执行，实施期保留首次真实非零命�
 
 ## 3. 非目标
 
-- 不创建或接入 Portfolio360/COGA WebApp；不增加 Portfolio/Book/NAV/P&L/归因/VaR/优化等新产品域。
+- 不创建或接入组合投研 WebApp/COGA WebApp；不增加 Portfolio/Book/NAV/P&L/归因/VaR/优化等新产品域。
 - 不实施 v0.2 Policy/Constraint、GeneratedNode、AI 沙箱、Python node runtime、DMQuant、完整 DataHealth 扩展或新的金融模型。
 - 不把 Definition、Fact、Snapshot CRUD 读取包装成分析正式输出；不新增客户端任意 Artifact/SignalSet payload publish、presigned upload/download 或第二数据权威。
 - 不宣称 PostgreSQL 与 Ceph 构成分布式事务；不建立生产 HA、PITR、跨地域容灾、定时备份运营、RPO/RTO、目标服务器操作或远程恢复。
@@ -76,7 +76,7 @@ Human 已以两次“批准”确认 private authority 的 R7B 合同；下列�
 
 | 决策 | 冻结选择 | 排除边界 |
 |---|---|---|
-| D1 · 正式输出范围 | 五 Rates、Portfolio KRD、PositionViews/成功 CapitalUse、DataHealthReport、Experiment Artifact/SignalSet。 | 不把 CRUD 读取或未来 Portfolio360 输出纳入。 |
+| D1 · 正式输出范围 | 五 Rates、Portfolio KRD、PositionViews/成功 CapitalUse、DataHealthReport、Experiment Artifact/SignalSet。 | 不把 CRUD 读取或未来组合投研输出纳入。 |
 | D2 · 证据与身份 | typed role + exact Subject/input + Code commit/tree + actual Runtime + environment/implementation + parameters/seed + result hash；单一 canonical v1 identity。 | 不接受自由文本 lineage、客户端自报 code/image、只含 request fingerprint 或运行 id。 |
 | D3 · Graph 对齐 | Submission required-read Subject；Reproducibility 加 Subject/Code；比较固定 13 维；Artifact/SignalSet正式 evidence 持久化。 | 不保留“Analytics 严格、Graph 只有旧 11 维”的双重标准。 |
 | D4 · 同步持久化 | 正式 Analytics 成功前先以 identity 幂等持久化 canonical payload/evidence；失败不返回成功。 | 不以日志、trace 或仅内存 metadata 代替可恢复事实。 |

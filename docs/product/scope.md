@@ -129,7 +129,7 @@ R7B 同时提供 output intent crash recovery、生产 orphan maintenance、隔�
 
 生产新增三个只读 service：`PortfolioCatalogService.ListBooksAndPortfolios`、`PortfolioAggregationService.GetPortfolioOverview`、`PortfolioWorkbenchService.GetDefaultContext/GetPage`。Catalog 是非正式 CRUD 读取；Aggregation 复用既有 PositionViews、Portfolio KRD、AnalyzeBond 与 MarketFact/Definition，不复制算法；Workbench 只解析六维 context、授权裁剪并投影领域 DTO，不承载 PageModel、layout 或 11 类 UI module。descriptor 与生产路由从 14 个精确扩展为 17 个。
 
-相邻 `ficant-portfolio` 以 Hybrid 消费：这五页在后台可达时只能使用真实 DTO；其余十九页由 WebApp 自己标记 demo/partial。FICANT BFF 没有 `DEMO`，真实失败返回 typed error。年化收益、波动、Sharpe/Calmar、最大回撤、Campisi、VaR、OMS/PMS 与其余页面均不在本切片。完成状态以 [R8A iteration brief](iterations/2026-08-r8a-portfolio360-p0.md) 的最终真实证据为准。
+相邻 `ficant-portfolio` 以 Hybrid 消费：这五页在后台可达时只能使用真实 DTO；其余十九页由 WebApp 自己标记 demo/partial。FICANT BFF 没有 `DEMO`，真实失败返回 typed error。年化收益、波动、Sharpe/Calmar、最大回撤、Campisi、VaR、OMS/PMS 与其余页面均不在本切片。完成状态以 [R8A iteration brief](iterations/2026-08-r8a-portfolio-p0.md) 的最终真实证据为准。
 
 ## WebApp 产品边界
 

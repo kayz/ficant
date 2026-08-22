@@ -5,7 +5,7 @@ param(
     [string]$S3Bucket = $env:FICANT_EXPERIMENT_S3_BUCKET,
     [string]$S3AccessKey = $env:FICANT_EXPERIMENT_S3_ACCESS_KEY,
     [string]$S3SecretKey = $env:FICANT_EXPERIMENT_S3_SECRET_KEY,
-    [string]$FixturePath = (Join-Path $PSScriptRoot '..\tests\fixtures\portfolio360\catalog-p0.json')
+    [string]$FixturePath = (Join-Path $PSScriptRoot '..\tests\fixtures\portfolio\catalog-p0.json')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -86,10 +86,10 @@ $env:FICANT_BOOTSTRAP_S3_SECRET_KEY = $S3SecretKey
 
 Push-Location -LiteralPath $repositoryRoot
 try {
-    & cargo run --locked --offline -p ficant-server --example r8a_portfolio360_bootstrap -- `
+    & cargo run --locked --offline -p ficant-server --example r8a_portfolio_bootstrap -- `
         --fixture $resolvedFixture
     if ($LASTEXITCODE -ne 0) {
-        throw "Portfolio360 P0 bootstrap failed with exit code $LASTEXITCODE."
+        throw "Portfolio bootstrap failed with exit code $LASTEXITCODE."
     }
 }
 finally {
