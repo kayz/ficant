@@ -39,7 +39,7 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     support::reset_postgres(&pool).await;
     support::migrate(&pool).await;
 
-    let expected_migration_versions = (1_i64..=26).collect::<Vec<_>>();
+    let expected_migration_versions = (1_i64..=27).collect::<Vec<_>>();
     let applied_before_repeat: Vec<(i64, bool)> =
         sqlx::query_as("SELECT version, success FROM public._sqlx_migrations ORDER BY version")
             .fetch_all(&pool)
@@ -136,6 +136,14 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         1,
         "0026 must be recorded exactly once after its successful application"
     );
+    assert_eq!(
+        applied_before_repeat
+            .iter()
+            .filter(|(version, success)| *version == 27 && *success)
+            .count(),
+        1,
+        "0027 must be recorded exactly once after its successful application"
+    );
 
     let rows = sqlx::query(
         "SELECT schemaname, tablename
@@ -207,6 +215,9 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
         "portfolio.portfolios",
         "portfolio.benchmarks",
         "portfolio.metric_conventions",
+        "portfolio.performance_conventions",
+        "portfolio.valuation_snapshots",
+        "portfolio.benchmark_level_snapshots",
         "portfolio.analytics_authority_sets",
         "portfolio.analytics_authority_units",
         "portfolio.bond_rates_authorities",
@@ -238,6 +249,24 @@ async fn forward_migrations_cover_phase1_and_are_repeatable_and_atomic() {
     assert_eq!(
         r8a_immutable_triggers, 16,
         "each of eight UPDATE OR DELETE triggers is exposed once per event"
+    );
+    let r8b_input_trigger_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)
+         FROM information_schema.triggers
+         WHERE trigger_schema='portfolio'
+           AND trigger_name = ANY($1)",
+    )
+    .bind([
+        "performance_conventions_immutable",
+        "valuation_snapshots_immutable",
+        "benchmark_level_snapshots_immutable",
+    ])
+    .fetch_one(&pool)
+    .await
+    .expect("R8B immutable input triggers must be observable");
+    assert_eq!(
+        r8b_input_trigger_count, 6,
+        "each of three UPDATE OR DELETE triggers is exposed once per event"
     );
     let parallel_position_tables: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM pg_catalog.pg_tables

@@ -52,6 +52,12 @@ pub use use_cases::phase1_business_loop::{
 pub use use_cases::portfolio_catalog::{
     ListPortfolioCatalog, ListPortfolioCatalogCommand, ResolvePortfolioAnalyticsAuthority,
 };
+pub use use_cases::portfolio_performance::{
+    FixedDecimalPortfolioPerformanceEngine, OwnedPortfolioPerformanceBackend,
+    OwnedPortfolioPerformanceCatalogAuthority, PortfolioPerformanceCatalogAuthority,
+    PortfolioPerformanceCoverage, PortfolioPerformanceDraft, PortfolioPerformanceEngine,
+    PortfolioPerformanceEvidenceBinding, PortfolioPerformanceEvidenceKind,
+};
 pub use use_cases::portfolio_risk::{
     CalculateBondKeyRateDv01, CalculateBondKeyRateDv01Command, R4D_A_ALGORITHM_ID,
     R4D_A_ALGORITHM_VERSION, R4D_A_CONVENTION_PROFILE,

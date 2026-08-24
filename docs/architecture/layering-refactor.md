@@ -175,6 +175,7 @@ R5b 在 R5a 之后建立 `CoverageDeclaration`，R5c 在 R5a 之后建立 `DataH
 | **R7A** | **分层与双时间重取证** | 虚构市场零核心改动；重取证双时间与不可变性；跨 clang 原始数值比对；按 AC04 实证决定是否拆分 domain crates | AC04 AC11–AC13 |
 | **R7B** | **一期证据与恢复收口** | 全部正式输出共用 typed `FormalOutputEvidence` 与单一 identity；Graph exact Subject/Code、13 维比较、stage 前 intent、fenced recovery 和 orphan maintenance；隔离 PG/Ceph source-destroy/fresh-restore；exact authority MANUAL clean-checkout runner | AC30–AC33 |
 | **R8A** | **只读组合纵切** | 最小 Book/Portfolio 目录、exact PositionSnapshot 绑定、点时聚合与五页 Workbench BFF；复用既有 PositionViews/KRD/AnalyzeBond；descriptor 14→17；不把 UI module 写入 proto，不进入 PMS/OMS | — |
+| **R8B** | **组合日度计量与收益序列** | 不可变 PortfolioValuationSnapshot/BenchmarkLevelSnapshot、版本化 PerformanceConvention、Calendar 全 session/full-member required-read；scale-12 日度 TWR/P&L/active/几何累计；正式证据响应前持久化；descriptor 17→18；不接 WebApp，不进入正式会计 NAV/PMS/OMS | — |
 | **独立治理轮** | **远端仓库与发布治理** | 由 Human/CICD 决定轻量 PR 检查、CODEOWNERS/审批/status checks、Dependabot、secret scanning、push protection、Release 对齐和签名策略；不进入 OPAID 产品迭代 | — |
 
 ### 2026-08 系统完整性重排
@@ -188,6 +189,8 @@ Python node runtime、DMQuant、Policy / Constraint、完整 DataHealth 扩展�
 R7B 的正式输出边界不扩大产品域：Definition、Fact、Snapshot CRUD 仍是输入事实，不因 required-read 而成为分析输出；当时组合投研 WebApp/COGA 仍在 R7B 非目标。同步 Analytics 与异步 ResearchGraph 只共用证据/身份不变量，不合并执行生命周期：前者无 Run/lease，但按 identity 持久化 immutable result；后者用 durable publication intent、lease fence 与原子完成事务恢复。
 
 R8A 在不改 R7B identity 的前提下新增 L1 目录对象与只读聚合：Workbench UI、PageModel 和 11 类 module 仍不得进入 proto 或 Domain；点时加权 convention 留在 L1/Application，不得写入 L2 C++ 内核。相邻 WebApp 继续独立实现，FICANT 只发布锁定的生成契约包。
+
+R8B 继续复用 R7B identity 与 R8A exact scope，只在 L1/Application 增加日度计量物化和 `FixedDecimal` 公式。Calendar、Portfolio/PositionSnapshot、Benchmark、Unit、PerformanceConvention 与全部快照在首次算术前 required-read；Group/Book 必须先按稳定成员集合聚合 NAV/Flow，禁止平均成员收益。三类新输入只追加 `FormalInputKind` 22..24，正式 `PortfolioPerformanceSeries` 在成功响应前持久化。WebApp、正式会计关账、交易流水和高级绩效/风险统计仍在边界外。
 
 ### R1 为什么这么小
 

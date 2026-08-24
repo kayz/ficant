@@ -88,6 +88,12 @@ R7B 正在以 [`../iterations/2026-08-r7b-evidence-recovery.md`](../iterations/2
 
 R7B 的灾备证据明确限于本地隔离 source-destroy/fresh-restore：PG dump 与全部 immutable object key/size/SHA-256 同时绑定公共 Code 和实际 Runtime，恢复后 required-read Graph Artifact 与同步 Analytics record。它不构成生产 HA、PITR、RPO/RTO 或版本交付证据。
 
+### R8B 候选证据边界（2026-08-25）
+
+R8B 以 [`../iterations/2026-08-r8b-portfolio-performance.md`](../iterations/2026-08-r8b-portfolio-performance.md) 为唯一 Human brief。证据必须在同一最终候选上覆盖：18-service descriptor/生产 route、69/7/62 coverage inventory、FormalInputKind 22..24、独立 Python Decimal Oracle 与 Rust 生产公式逐字段对照、PostgreSQL 0027 不可变/双时间/租户负例、幂等 bootstrap、native gRPC/gRPC-Web 真实组合，以及正式证据先持久化后返回和进程重启读回。
+
+本页只声明证据责任，不把实施中的 focused 通过冒充最终 verdict。最终命令、exit code、可得 test count、descriptor/生成树摘要、Git identity 与允许路径核对只写入 R8B brief §6。R8B 是研究计量输入与收益序列，不构成正式会计 NAV、PMS/OMS、版本发布或 WebApp 已接入证据。
+
 | ID | 验收 | 当前状态 | 证据位置 |
 |---|---|---|---|
 | QG-01 | 当前迭代、总体目标和有效期明确 | collected | `.proqaid/orchestrator/current-iteration.md` |

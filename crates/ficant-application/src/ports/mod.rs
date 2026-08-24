@@ -22,6 +22,7 @@ mod ingestion;
 mod journal;
 mod phase4_execution;
 mod portfolio;
+mod portfolio_performance;
 mod positions;
 mod required_reads;
 mod rule_pack_parser;
@@ -111,6 +112,10 @@ pub use portfolio::{
     PortfolioRatesUnitRole, PortfolioRiskAuthority, PortfolioScopeAuthority,
     PortfolioScopeSelector, PortfolioUnitAuthorityBinding, PortfolioValuationAuthorityBinding,
     ResolvedPortfolioAggregationInputs, ResolvedPortfolioAnalyticsAuthority, VisibleCatalogRecord,
+};
+pub use portfolio_performance::{
+    PortfolioPerformanceReadQuery, PortfolioPerformanceRepository,
+    VisiblePortfolioPerformanceConvention,
 };
 pub use positions::PositionSnapshotRepository;
 pub(crate) use required_reads::SnapshotVerifiedReadMetadataParts;

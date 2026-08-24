@@ -37,6 +37,11 @@ message PortfolioMetricConventionRef {
   ficant.core.v1.Sha256 content_hash = 2;
 }
 
+message PortfolioPerformanceConventionRef {
+  ficant.core.v1.VersionRef convention = 1;
+  ficant.core.v1.Sha256 content_hash = 2;
+}
+
 message Book {
   ficant.core.v1.VersionRef book = 1;
   ficant.core.v1.OwnerRef owner = 2;
@@ -106,6 +111,64 @@ message PortfolioMetricConvention {
   ficant.core.v1.MarketTime effective_from = 11;
   ficant.core.v1.MarketTime effective_to = 12;
   ficant.core.v1.Sha256 content_hash = 13;
+}
+
+enum PortfolioPerformanceReturnMethod {
+  PORTFOLIO_PERFORMANCE_RETURN_METHOD_UNSPECIFIED = 0;
+  PORTFOLIO_PERFORMANCE_RETURN_METHOD_DAILY_TIME_WEIGHTED = 1;
+}
+
+enum PortfolioExternalFlowTiming {
+  PORTFOLIO_EXTERNAL_FLOW_TIMING_UNSPECIFIED = 0;
+  PORTFOLIO_EXTERNAL_FLOW_TIMING_END_OF_DAY = 1;
+}
+
+enum PortfolioValuationFrequency {
+  PORTFOLIO_VALUATION_FREQUENCY_UNSPECIFIED = 0;
+  PORTFOLIO_VALUATION_FREQUENCY_CALENDAR_SESSION_CLOSE = 1;
+}
+
+message PortfolioPerformanceConvention {
+  ficant.core.v1.VersionRef convention = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  string schema_id = 3;
+  ficant.core.v1.LineageRef calendar = 4;
+  PortfolioPerformanceReturnMethod return_method = 5;
+  PortfolioExternalFlowTiming flow_timing = 6;
+  PortfolioValuationFrequency valuation_frequency = 7;
+  PortfolioDecimalRounding rounding = 8;
+  ficant.core.v1.MarketTime effective_from = 9;
+  ficant.core.v1.MarketTime effective_to = 10;
+  ficant.core.v1.Sha256 content_hash = 11;
+}
+
+message PortfolioValuationSnapshot {
+  ficant.core.v1.Ulid snapshot_id = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  ficant.core.v1.VersionRef subject_ref = 3;
+  ficant.core.v1.LineageRef portfolio = 4;
+  PortfolioSnapshotBinding position_snapshot = 5;
+  PortfolioPerformanceConventionRef performance_convention = 6;
+  ficant.core.v1.MarketTime valuation_at = 7;
+  ficant.core.v1.MarketTime visible_at = 8;
+  ficant.core.v1.UnitRef currency_unit = 9;
+  ficant.core.v1.DecimalValue gross_assets = 10;
+  ficant.core.v1.DecimalValue liabilities = 11;
+  ficant.core.v1.DecimalValue net_asset_value = 12;
+  ficant.core.v1.DecimalValue net_external_flow = 13;
+  ficant.core.v1.Sha256 content_hash = 14;
+}
+
+message BenchmarkLevelSnapshot {
+  ficant.core.v1.Ulid snapshot_id = 1;
+  ficant.core.v1.OwnerRef owner = 2;
+  ficant.core.v1.VersionRef subject_ref = 3;
+  ficant.core.v1.LineageRef benchmark = 4;
+  ficant.core.v1.MarketTime valuation_at = 5;
+  ficant.core.v1.MarketTime visible_at = 6;
+  ficant.core.v1.UnitRef level_unit = 7;
+  ficant.core.v1.DecimalValue level = 8;
+  ficant.core.v1.Sha256 content_hash = 9;
 }
 
 message ListBooksAndPortfoliosRequest {
@@ -249,6 +312,54 @@ message GetPortfolioOverviewResponse {
   }
 }
 
+message PortfolioDailyPerformancePoint {
+  ficant.core.v1.MarketTime valuation_at = 1;
+  ficant.core.v1.DecimalValue opening_nav = 2;
+  ficant.core.v1.DecimalValue ending_nav = 3;
+  ficant.core.v1.DecimalValue net_external_flow = 4;
+  ficant.core.v1.DecimalValue economic_pnl = 5;
+  ficant.core.v1.DecimalValue daily_return = 6;
+  ficant.core.v1.DecimalValue benchmark_return = 7;
+  ficant.core.v1.DecimalValue active_return = 8;
+  ficant.core.v1.DecimalValue cumulative_return = 9;
+  ficant.core.v1.DecimalValue benchmark_cumulative_return = 10;
+  ficant.core.v1.DecimalValue active_cumulative_return = 11;
+}
+
+message PortfolioPerformanceCoverage {
+  uint64 expected_session_count = 1;
+  uint64 observed_session_count = 2;
+  uint64 expected_portfolio_observation_count = 3;
+  uint64 observed_portfolio_observation_count = 4;
+  uint64 expected_benchmark_observation_count = 5;
+  uint64 observed_benchmark_observation_count = 6;
+  repeated ficant.core.v1.MarketTime missing_sessions = 7;
+}
+
+message PortfolioPerformanceSeries {
+  ExactPortfolioScope scope = 1;
+  PortfolioPerformanceConventionRef performance_convention = 2;
+  BenchmarkRef benchmark = 3;
+  ficant.core.v1.UnitRef currency_unit = 4;
+  ficant.core.v1.MarketTime period_from = 5;
+  ficant.core.v1.MarketTime period_to = 6;
+  repeated PortfolioDailyPerformancePoint points = 7;
+  PortfolioPerformanceCoverage coverage = 8;
+  ficant.core.v1.Sha256 request_fingerprint = 9;
+  ficant.core.v1.FormalOutputEvidence formal_evidence = 10;
+}
+
+message GetPortfolioPerformanceRequest {
+  NormalizedPortfolioContext context = 1;
+}
+
+message GetPortfolioPerformanceResponse {
+  oneof result {
+    PortfolioPerformanceSeries series = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
 enum PortfolioWorkbenchPageId {
   PORTFOLIO_WORKBENCH_PAGE_ID_UNSPECIFIED = 0;
   PORTFOLIO_WORKBENCH_PAGE_ID_D01 = 1;
@@ -386,6 +497,10 @@ service PortfolioCatalogService {
 
 service PortfolioAggregationService {
   rpc GetPortfolioOverview(GetPortfolioOverviewRequest) returns (GetPortfolioOverviewResponse);
+}
+
+service PortfolioPerformanceService {
+  rpc GetPortfolioPerformance(GetPortfolioPerformanceRequest) returns (GetPortfolioPerformanceResponse);
 }
 
 service PortfolioWorkbenchService {

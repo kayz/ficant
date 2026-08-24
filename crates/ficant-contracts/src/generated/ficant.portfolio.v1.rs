@@ -26,6 +26,13 @@ pub struct PortfolioMetricConventionRef {
     pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PortfolioPerformanceConventionRef {
+    #[prost(message, optional, tag="1")]
+    pub convention: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="2")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Book {
     #[prost(message, optional, tag="1")]
     pub book: ::core::option::Option<super::super::core::v1::VersionRef>,
@@ -129,6 +136,83 @@ pub struct PortfolioMetricConvention {
     #[prost(message, optional, tag="12")]
     pub effective_to: ::core::option::Option<super::super::core::v1::MarketTime>,
     #[prost(message, optional, tag="13")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PortfolioPerformanceConvention {
+    #[prost(message, optional, tag="1")]
+    pub convention: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="2")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(string, tag="3")]
+    pub schema_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="4")]
+    pub calendar: ::core::option::Option<super::super::core::v1::LineageRef>,
+    #[prost(enumeration="PortfolioPerformanceReturnMethod", tag="5")]
+    pub return_method: i32,
+    #[prost(enumeration="PortfolioExternalFlowTiming", tag="6")]
+    pub flow_timing: i32,
+    #[prost(enumeration="PortfolioValuationFrequency", tag="7")]
+    pub valuation_frequency: i32,
+    #[prost(enumeration="PortfolioDecimalRounding", tag="8")]
+    pub rounding: i32,
+    #[prost(message, optional, tag="9")]
+    pub effective_from: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="10")]
+    pub effective_to: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="11")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PortfolioValuationSnapshot {
+    #[prost(message, optional, tag="1")]
+    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, optional, tag="3")]
+    pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="4")]
+    pub portfolio: ::core::option::Option<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="5")]
+    pub position_snapshot: ::core::option::Option<PortfolioSnapshotBinding>,
+    #[prost(message, optional, tag="6")]
+    pub performance_convention: ::core::option::Option<PortfolioPerformanceConventionRef>,
+    #[prost(message, optional, tag="7")]
+    pub valuation_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="8")]
+    pub visible_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="9")]
+    pub currency_unit: ::core::option::Option<super::super::core::v1::UnitRef>,
+    #[prost(message, optional, tag="10")]
+    pub gross_assets: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="11")]
+    pub liabilities: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="12")]
+    pub net_asset_value: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="13")]
+    pub net_external_flow: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="14")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct BenchmarkLevelSnapshot {
+    #[prost(message, optional, tag="1")]
+    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    #[prost(message, optional, tag="2")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, optional, tag="3")]
+    pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
+    #[prost(message, optional, tag="4")]
+    pub benchmark: ::core::option::Option<super::super::core::v1::LineageRef>,
+    #[prost(message, optional, tag="5")]
+    pub valuation_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="6")]
+    pub visible_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="7")]
+    pub level_unit: ::core::option::Option<super::super::core::v1::UnitRef>,
+    #[prost(message, optional, tag="8")]
+    pub level: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="9")]
     pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -339,6 +423,91 @@ pub mod get_portfolio_overview_response {
     pub enum Result {
         #[prost(message, tag="1")]
         Overview(super::PortfolioOverview),
+        #[prost(message, tag="2")]
+        Error(super::super::super::core::v1::ErrorDetail),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PortfolioDailyPerformancePoint {
+    #[prost(message, optional, tag="1")]
+    pub valuation_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="2")]
+    pub opening_nav: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="3")]
+    pub ending_nav: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="4")]
+    pub net_external_flow: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="5")]
+    pub economic_pnl: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="6")]
+    pub daily_return: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="7")]
+    pub benchmark_return: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="8")]
+    pub active_return: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="9")]
+    pub cumulative_return: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="10")]
+    pub benchmark_cumulative_return: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(message, optional, tag="11")]
+    pub active_cumulative_return: ::core::option::Option<super::super::core::v1::DecimalValue>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PortfolioPerformanceCoverage {
+    #[prost(uint64, tag="1")]
+    pub expected_session_count: u64,
+    #[prost(uint64, tag="2")]
+    pub observed_session_count: u64,
+    #[prost(uint64, tag="3")]
+    pub expected_portfolio_observation_count: u64,
+    #[prost(uint64, tag="4")]
+    pub observed_portfolio_observation_count: u64,
+    #[prost(uint64, tag="5")]
+    pub expected_benchmark_observation_count: u64,
+    #[prost(uint64, tag="6")]
+    pub observed_benchmark_observation_count: u64,
+    #[prost(message, repeated, tag="7")]
+    pub missing_sessions: ::prost::alloc::vec::Vec<super::super::core::v1::MarketTime>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PortfolioPerformanceSeries {
+    #[prost(message, optional, tag="1")]
+    pub scope: ::core::option::Option<ExactPortfolioScope>,
+    #[prost(message, optional, tag="2")]
+    pub performance_convention: ::core::option::Option<PortfolioPerformanceConventionRef>,
+    #[prost(message, optional, tag="3")]
+    pub benchmark: ::core::option::Option<BenchmarkRef>,
+    #[prost(message, optional, tag="4")]
+    pub currency_unit: ::core::option::Option<super::super::core::v1::UnitRef>,
+    #[prost(message, optional, tag="5")]
+    pub period_from: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, optional, tag="6")]
+    pub period_to: ::core::option::Option<super::super::core::v1::MarketTime>,
+    #[prost(message, repeated, tag="7")]
+    pub points: ::prost::alloc::vec::Vec<PortfolioDailyPerformancePoint>,
+    #[prost(message, optional, tag="8")]
+    pub coverage: ::core::option::Option<PortfolioPerformanceCoverage>,
+    #[prost(message, optional, tag="9")]
+    pub request_fingerprint: ::core::option::Option<super::super::core::v1::Sha256>,
+    #[prost(message, optional, tag="10")]
+    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetPortfolioPerformanceRequest {
+    #[prost(message, optional, tag="1")]
+    pub context: ::core::option::Option<NormalizedPortfolioContext>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetPortfolioPerformanceResponse {
+    #[prost(oneof="get_portfolio_performance_response::Result", tags="1, 2")]
+    pub result: ::core::option::Option<get_portfolio_performance_response::Result>,
+}
+/// Nested message and enum types in `GetPortfolioPerformanceResponse`.
+pub mod get_portfolio_performance_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag="1")]
+        Series(super::PortfolioPerformanceSeries),
         #[prost(message, tag="2")]
         Error(super::super::super::core::v1::ErrorDetail),
     }
@@ -587,6 +756,84 @@ impl PortfolioDecimalRounding {
         match value {
             "PORTFOLIO_DECIMAL_ROUNDING_UNSPECIFIED" => Some(Self::Unspecified),
             "PORTFOLIO_DECIMAL_ROUNDING_TIES_TO_EVEN" => Some(Self::TiesToEven),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PortfolioPerformanceReturnMethod {
+    Unspecified = 0,
+    DailyTimeWeighted = 1,
+}
+impl PortfolioPerformanceReturnMethod {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PORTFOLIO_PERFORMANCE_RETURN_METHOD_UNSPECIFIED",
+            Self::DailyTimeWeighted => "PORTFOLIO_PERFORMANCE_RETURN_METHOD_DAILY_TIME_WEIGHTED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PORTFOLIO_PERFORMANCE_RETURN_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
+            "PORTFOLIO_PERFORMANCE_RETURN_METHOD_DAILY_TIME_WEIGHTED" => Some(Self::DailyTimeWeighted),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PortfolioExternalFlowTiming {
+    Unspecified = 0,
+    EndOfDay = 1,
+}
+impl PortfolioExternalFlowTiming {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PORTFOLIO_EXTERNAL_FLOW_TIMING_UNSPECIFIED",
+            Self::EndOfDay => "PORTFOLIO_EXTERNAL_FLOW_TIMING_END_OF_DAY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PORTFOLIO_EXTERNAL_FLOW_TIMING_UNSPECIFIED" => Some(Self::Unspecified),
+            "PORTFOLIO_EXTERNAL_FLOW_TIMING_END_OF_DAY" => Some(Self::EndOfDay),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PortfolioValuationFrequency {
+    Unspecified = 0,
+    CalendarSessionClose = 1,
+}
+impl PortfolioValuationFrequency {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PORTFOLIO_VALUATION_FREQUENCY_UNSPECIFIED",
+            Self::CalendarSessionClose => "PORTFOLIO_VALUATION_FREQUENCY_CALENDAR_SESSION_CLOSE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PORTFOLIO_VALUATION_FREQUENCY_UNSPECIFIED" => Some(Self::Unspecified),
+            "PORTFOLIO_VALUATION_FREQUENCY_CALENDAR_SESSION_CLOSE" => Some(Self::CalendarSessionClose),
             _ => None,
         }
     }

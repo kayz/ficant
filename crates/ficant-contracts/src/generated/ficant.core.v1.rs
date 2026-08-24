@@ -404,6 +404,9 @@ pub enum FormalInputKind {
     Benchmark = 19,
     PortfolioMetricConvention = 20,
     Fact = 21,
+    PortfolioValuationSnapshot = 22,
+    BenchmarkLevelSnapshot = 23,
+    PortfolioPerformanceConvention = 24,
 }
 impl FormalInputKind {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -434,6 +437,9 @@ impl FormalInputKind {
             Self::Benchmark => "FORMAL_INPUT_KIND_BENCHMARK",
             Self::PortfolioMetricConvention => "FORMAL_INPUT_KIND_PORTFOLIO_METRIC_CONVENTION",
             Self::Fact => "FORMAL_INPUT_KIND_FACT",
+            Self::PortfolioValuationSnapshot => "FORMAL_INPUT_KIND_PORTFOLIO_VALUATION_SNAPSHOT",
+            Self::BenchmarkLevelSnapshot => "FORMAL_INPUT_KIND_BENCHMARK_LEVEL_SNAPSHOT",
+            Self::PortfolioPerformanceConvention => "FORMAL_INPUT_KIND_PORTFOLIO_PERFORMANCE_CONVENTION",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -461,6 +467,9 @@ impl FormalInputKind {
             "FORMAL_INPUT_KIND_BENCHMARK" => Some(Self::Benchmark),
             "FORMAL_INPUT_KIND_PORTFOLIO_METRIC_CONVENTION" => Some(Self::PortfolioMetricConvention),
             "FORMAL_INPUT_KIND_FACT" => Some(Self::Fact),
+            "FORMAL_INPUT_KIND_PORTFOLIO_VALUATION_SNAPSHOT" => Some(Self::PortfolioValuationSnapshot),
+            "FORMAL_INPUT_KIND_BENCHMARK_LEVEL_SNAPSHOT" => Some(Self::BenchmarkLevelSnapshot),
+            "FORMAL_INPUT_KIND_PORTFOLIO_PERFORMANCE_CONVENTION" => Some(Self::PortfolioPerformanceConvention),
             _ => None,
         }
     }

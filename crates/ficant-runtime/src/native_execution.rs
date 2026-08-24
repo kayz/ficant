@@ -32,6 +32,9 @@ pub enum FormalInputKind {
     Benchmark,
     PortfolioMetricConvention,
     Fact,
+    PortfolioValuationSnapshot,
+    BenchmarkLevelSnapshot,
+    PortfolioPerformanceConvention,
 }
 
 impl FormalInputKind {
@@ -58,6 +61,9 @@ impl FormalInputKind {
             Self::Benchmark => 19,
             Self::PortfolioMetricConvention => 20,
             Self::Fact => 21,
+            Self::PortfolioValuationSnapshot => 22,
+            Self::BenchmarkLevelSnapshot => 23,
+            Self::PortfolioPerformanceConvention => 24,
         }
     }
 
@@ -81,6 +87,7 @@ impl FormalInputKind {
                 | Self::PortfolioGroup
                 | Self::Benchmark
                 | Self::PortfolioMetricConvention
+                | Self::PortfolioPerformanceConvention
                 | Self::Fact
         )
     }

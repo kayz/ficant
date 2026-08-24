@@ -1,0 +1,113 @@
+{
+  "schema_id": "ficant.portfolio-performance-fixture.v1",
+  "tenant_id": "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+  "owner_id": "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+  "subject": {
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FA0",
+    "version": 1
+  },
+  "as_of": "2026-08-21T17:00:00+08:00",
+  "knowledge_at": "2026-08-21T20:00:00+08:00",
+  "market_timezone": "Asia/Shanghai",
+  "calendar": {
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FB6",
+    "version": 2,
+    "market": "CN",
+    "effective_from": "2020-01-01T00:00:00+08:00",
+    "effective_to": "2040-01-01T00:00:00+08:00",
+    "sessions": [
+      {
+        "local_date": "2026-08-20",
+        "open_local_time": "09:00:00",
+        "close_local_time": "17:00:00"
+      },
+      {
+        "local_date": "2026-08-21",
+        "open_local_time": "09:00:00",
+        "close_local_time": "17:00:00"
+      }
+    ]
+  },
+  "performance_convention": {
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FC0",
+    "version": 1,
+    "visible_at": "2026-08-21T12:00:00+08:00",
+    "effective_from": "2020-01-01T00:00:00+08:00",
+    "effective_to": "2040-01-01T00:00:00+08:00"
+  },
+  "currency_unit": {
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+    "version": 1
+  },
+  "dimensionless_unit": {
+    "id": "01ARZ3NDEKTSV4RRFFQ69G5FBD",
+    "version": 1
+  },
+  "benchmark_id": "01ARZ3NDEKTSV4RRFFQ69G5FA7",
+  "portfolios": [
+    {
+      "portfolio_id": "01ARZ3NDEKTSV4RRFFQ69G5FA9",
+      "current_position_snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FA5",
+      "historical_position_snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FC1",
+      "valuations": [
+        {
+          "snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FC3",
+          "session_index": 0,
+          "visible_at": "2026-08-21T13:00:00+08:00",
+          "gross_assets": "110.000000000000",
+          "liabilities": "10.000000000000",
+          "net_asset_value": "100.000000000000",
+          "net_external_flow": "0.000000000000"
+        },
+        {
+          "snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FC4",
+          "session_index": 1,
+          "visible_at": "2026-08-21T18:00:00+08:00",
+          "gross_assets": "118.000000000000",
+          "liabilities": "10.000000000000",
+          "net_asset_value": "108.000000000000",
+          "net_external_flow": "10.000000000000"
+        }
+      ]
+    },
+    {
+      "portfolio_id": "01ARZ3NDEKTSV4RRFFQ69G5FAA",
+      "current_position_snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FAB",
+      "historical_position_snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FC2",
+      "valuations": [
+        {
+          "snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FC5",
+          "session_index": 0,
+          "visible_at": "2026-08-21T13:00:00+08:00",
+          "gross_assets": "220.000000000000",
+          "liabilities": "20.000000000000",
+          "net_asset_value": "200.000000000000",
+          "net_external_flow": "0.000000000000"
+        },
+        {
+          "snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FC6",
+          "session_index": 1,
+          "visible_at": "2026-08-21T18:00:00+08:00",
+          "gross_assets": "230.000000000000",
+          "liabilities": "20.000000000000",
+          "net_asset_value": "210.000000000000",
+          "net_external_flow": "0.000000000000"
+        }
+      ]
+    }
+  ],
+  "benchmark_levels": [
+    {
+      "snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FC7",
+      "session_index": 0,
+      "visible_at": "2026-08-21T13:00:00+08:00",
+      "level": "100.000000000000"
+    },
+    {
+      "snapshot_id": "01ARZ3NDEKTSV4RRFFQ69G5FC8",
+      "session_index": 1,
+      "visible_at": "2026-08-21T18:00:00+08:00",
+      "level": "101.000000000000"
+    }
+  ]
+}

@@ -29,6 +29,9 @@ fn portfolio_formal_input_kinds_have_frozen_codes_and_preserve_existing_identity
         (FormalInputKind::Benchmark, 19),
         (FormalInputKind::PortfolioMetricConvention, 20),
         (FormalInputKind::Fact, 21),
+        (FormalInputKind::PortfolioValuationSnapshot, 22),
+        (FormalInputKind::BenchmarkLevelSnapshot, 23),
+        (FormalInputKind::PortfolioPerformanceConvention, 24),
     ];
     for (kind, expected_code) in cases {
         let binding = exact_formal_input(kind, "portfolio-authority", b"portfolio-authority");
@@ -64,18 +67,20 @@ fn portfolio_formal_input_kinds_have_frozen_codes_and_preserve_existing_identity
 }
 
 fn exact_formal_input(kind: FormalInputKind, role: &str, payload: &[u8]) -> FormalInputBinding {
+    let content_hash = ContentHash::digest(payload);
+    let reference = if matches!(
+        kind,
+        FormalInputKind::PortfolioValuationSnapshot | FormalInputKind::BenchmarkLevelSnapshot
+    ) {
+        LineageRef::content_addressed(id('P'), content_hash)
+    } else {
+        LineageRef::new(id('P'), Some(Version::new(1).unwrap()), Some(content_hash)).unwrap()
+    };
     FormalInputBinding::new(FormalInputBindingInput {
         role: role.to_owned(),
         kind,
         owner: OwnerRef::new(id('T'), id('W')),
-        reference: FormalInputReference::Object(
-            LineageRef::new(
-                id('P'),
-                Some(Version::new(1).unwrap()),
-                Some(ContentHash::digest(payload)),
-            )
-            .unwrap(),
-        ),
+        reference: FormalInputReference::Object(reference),
         observed_at: None,
         visible_at: None,
         effective_from: None,

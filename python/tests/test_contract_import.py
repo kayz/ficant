@@ -24,7 +24,12 @@ from ficant.core.v1.governance_pb2 import (  # noqa: E402
 from ficant.core.v1.governance_pb2_grpc import (  # noqa: E402
     FoundationChangeServiceStub,
 )
-from ficant.core.v1.evidence_pb2 import FORMAL_INPUT_KIND_FACT  # noqa: E402
+from ficant.core.v1.evidence_pb2 import (  # noqa: E402
+    FORMAL_INPUT_KIND_BENCHMARK_LEVEL_SNAPSHOT,
+    FORMAL_INPUT_KIND_FACT,
+    FORMAL_INPUT_KIND_PORTFOLIO_PERFORMANCE_CONVENTION,
+    FORMAL_INPUT_KIND_PORTFOLIO_VALUATION_SNAPSHOT,
+)
 from ficant.core.v1.subject_pb2 import RegisterSubjectRequest, Subject  # noqa: E402
 from ficant.core.v1.subject_state_pb2 import (  # noqa: E402
     RegisterSubjectStateRequest,
@@ -108,6 +113,8 @@ from ficant.portfolio.v1.portfolio_pb2 import (  # noqa: E402
     PortfolioCoverage,
     PortfolioOverview,
     PortfolioPageEnvelope,
+    PortfolioPerformanceCoverage,
+    PortfolioPerformanceSeries,
 )
 from ficant.portfolio.v1 import portfolio_pb2  # noqa: E402
 from ficant.research.v1.experiment_pb2 import ExperimentRun  # noqa: E402
@@ -289,6 +296,15 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
         d01=D01Projection(overview=overview),
         coverage=portfolio_coverage,
     )
+    performance_coverage = PortfolioPerformanceCoverage(
+        expected_session_count=2,
+        observed_session_count=2,
+        expected_portfolio_observation_count=4,
+        observed_portfolio_observation_count=4,
+        expected_benchmark_observation_count=2,
+        observed_benchmark_observation_count=2,
+    )
+    performance_series = PortfolioPerformanceSeries(coverage=performance_coverage)
 
     assert instrument.DESCRIPTOR.full_name == "ficant.market.v1.Instrument"
     assert decimal.DESCRIPTOR.full_name == "ficant.core.v1.DecimalValue"
@@ -305,6 +321,9 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert Cashflow.DESCRIPTOR.fields_by_name["cashflow_type"].number == 10
     assert CASHFLOW_TYPE_COUPON == 1
     assert FORMAL_INPUT_KIND_FACT == 21
+    assert FORMAL_INPUT_KIND_PORTFOLIO_VALUATION_SNAPSHOT == 22
+    assert FORMAL_INPUT_KIND_BENCHMARK_LEVEL_SNAPSHOT == 23
+    assert FORMAL_INPUT_KIND_PORTFOLIO_PERFORMANCE_CONVENTION == 24
     assert Valuation.DESCRIPTOR.fields_by_name["value_roles"].number == 10
     assert list(valuation.value_roles) == [
         VALUATION_VALUE_ROLE_YIELD,
@@ -416,6 +435,10 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
     assert page.WhichOneof("projection") == "d01"
     assert page.d01.overview.coverage.participation.imported_position_count == 2
     assert page.coverage.missing_reasons == []
+    assert performance_series.DESCRIPTOR.full_name == (
+        "ficant.portfolio.v1.PortfolioPerformanceSeries"
+    )
+    assert performance_series.coverage.expected_portfolio_observation_count == 4
     assert not hasattr(portfolio_pb2, "PORTFOLIO_PAGE_DATA_MODE_DEMO")
     assert {
         method.name
@@ -429,6 +452,12 @@ def test_representative_generated_messages_import_from_one_descriptor() -> None:
             "PortfolioAggregationService"
         ].methods
     } == {"GetPortfolioOverview"}
+    assert {
+        method.name
+        for method in portfolio_pb2.DESCRIPTOR.services_by_name[
+            "PortfolioPerformanceService"
+        ].methods
+    } == {"GetPortfolioPerformance"}
     assert {
         method.name
         for method in portfolio_pb2.DESCRIPTOR.services_by_name[

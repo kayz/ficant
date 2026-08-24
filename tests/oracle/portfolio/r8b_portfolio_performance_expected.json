@@ -1,0 +1,128 @@
+{
+  "schema_id": "ficant.portfolio.performance-oracle-expected.v1",
+  "scale": 12,
+  "point_local_dates": [
+    "2026-08-21",
+    "2026-08-22"
+  ],
+  "portfolio_a_opening_nav": [
+    "100.000000000000",
+    "108.000000000000"
+  ],
+  "portfolio_a_ending_nav": [
+    "108.000000000000",
+    "102.000000000000"
+  ],
+  "portfolio_a_net_external_flow": [
+    "10.000000000000",
+    "-8.000000000000"
+  ],
+  "portfolio_a_economic_pnl": [
+    "-2.000000000000",
+    "2.000000000000"
+  ],
+  "portfolio_a_daily_return": [
+    "-0.020000000000",
+    "0.018518518519"
+  ],
+  "portfolio_a_benchmark_return": [
+    "0.010000000000",
+    "-0.004950495050"
+  ],
+  "portfolio_a_active_return": [
+    "-0.030000000000",
+    "0.023469013569"
+  ],
+  "portfolio_a_cumulative_return": [
+    "-0.020000000000",
+    "-0.001851851851"
+  ],
+  "portfolio_a_benchmark_cumulative_return": [
+    "0.010000000000",
+    "0.005000000000"
+  ],
+  "portfolio_a_active_cumulative_return": [
+    "-0.030000000000",
+    "-0.006851851851"
+  ],
+  "portfolio_b_opening_nav": [
+    "200.000000000000",
+    "210.000000000000"
+  ],
+  "portfolio_b_ending_nav": [
+    "210.000000000000",
+    "198.000000000000"
+  ],
+  "portfolio_b_net_external_flow": [
+    "0.000000000000",
+    "-12.000000000000"
+  ],
+  "portfolio_b_economic_pnl": [
+    "10.000000000000",
+    "0.000000000000"
+  ],
+  "portfolio_b_daily_return": [
+    "0.050000000000",
+    "0.000000000000"
+  ],
+  "portfolio_b_benchmark_return": [
+    "0.010000000000",
+    "-0.004950495050"
+  ],
+  "portfolio_b_active_return": [
+    "0.040000000000",
+    "0.004950495050"
+  ],
+  "portfolio_b_cumulative_return": [
+    "0.050000000000",
+    "0.050000000000"
+  ],
+  "portfolio_b_benchmark_cumulative_return": [
+    "0.010000000000",
+    "0.005000000000"
+  ],
+  "portfolio_b_active_cumulative_return": [
+    "0.040000000000",
+    "0.045000000000"
+  ],
+  "group_opening_nav": [
+    "300.000000000000",
+    "318.000000000000"
+  ],
+  "group_ending_nav": [
+    "318.000000000000",
+    "300.000000000000"
+  ],
+  "group_net_external_flow": [
+    "10.000000000000",
+    "-20.000000000000"
+  ],
+  "group_economic_pnl": [
+    "8.000000000000",
+    "2.000000000000"
+  ],
+  "group_daily_return": [
+    "0.026666666667",
+    "0.006289308176"
+  ],
+  "group_benchmark_return": [
+    "0.010000000000",
+    "-0.004950495050"
+  ],
+  "group_active_return": [
+    "0.016666666667",
+    "0.011239803226"
+  ],
+  "group_cumulative_return": [
+    "0.026666666667",
+    "0.033123689728"
+  ],
+  "group_benchmark_cumulative_return": [
+    "0.010000000000",
+    "0.005000000000"
+  ],
+  "group_active_cumulative_return": [
+    "0.016666666667",
+    "0.028123689728"
+  ]
+}

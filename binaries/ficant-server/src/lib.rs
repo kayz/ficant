@@ -3,13 +3,13 @@ use ficant_api::{
     DataHealthGrpcService, DataSourceRegistryGrpcService, ExperimentGrpcService,
     FactorRegistryGrpcService, FormalOutputPublisher, FoundationChangeGrpcService,
     GrpcWebServeError, GrpcWebServerConfig, MarketDefinitionGrpcService, MarketFactGrpcService,
-    OwnedPortfolioAggregationApplicationBackend, PlatformApplication, PlatformGrpcService,
-    PlatformPort, PortfolioAggregationGrpcService, PortfolioCatalogGrpcService,
-    PortfolioRiskGrpcService, PortfolioWorkbenchGrpcService, PositionSnapshotGrpcService,
-    ProductionGrpcServices, RatesGrpcService, SessionPolicy, SnapshotGrpcService,
-    SubjectRegistryGrpcService, SystemClock, SystemPortfolioRequestIdGenerator,
-    TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog, build_production_routes,
-    serve_production_routes,
+    OwnedPortfolioAggregationApplicationBackend, OwnedPortfolioPerformanceApplicationBackend,
+    PlatformApplication, PlatformGrpcService, PlatformPort, PortfolioAggregationGrpcService,
+    PortfolioCatalogGrpcService, PortfolioPerformanceGrpcService, PortfolioRiskGrpcService,
+    PortfolioWorkbenchGrpcService, PositionSnapshotGrpcService, ProductionGrpcServices,
+    RatesGrpcService, SessionPolicy, SnapshotGrpcService, SubjectRegistryGrpcService, SystemClock,
+    SystemPortfolioRequestIdGenerator, TrustedExperimentScope, TrustedIdentity, TrustedNodeCatalog,
+    build_production_routes, serve_production_routes,
 };
 use ficant_application::ports::{
     AccessScope, AeadCursorCodec, ArtifactRepository, BlobStore, CursorKey,
@@ -18,8 +18,9 @@ use ficant_application::ports::{
     ExperimentRepository, FactorTopologyRepository, FormalOutputRepository,
     FoundationChangeRepository, IntegrityEventSink, MarketFactRepository,
     Phase4ExecutionRepository, PortfolioAnalyticsAuthorityRepository, PortfolioCatalogRepository,
-    PositionSnapshotRepository, RunJournalRepository, SignalRepository, SnapshotRepository,
-    SnapshotVerifiedReadMetadataRepository, SubjectRepository, VerifiedBlobReader,
+    PortfolioPerformanceRepository, PositionSnapshotRepository, RunJournalRepository,
+    SignalRepository, SnapshotRepository, SnapshotVerifiedReadMetadataRepository,
+    SubjectRepository, VerifiedBlobReader,
 };
 use ficant_application::use_cases::portfolio_aggregation::{
     ExistingPositionViewsHandoff, OwnedExactPortfolioBondAnalysisHandoff,
@@ -34,7 +35,10 @@ use ficant_application::use_cases::portfolio_workbench::{
     OwnedPortfolioWorkbenchContextResolver, OwnedPortfolioWorkbenchInstrumentHandoff,
     OwnedPortfolioWorkbenchPageSource,
 };
-use ficant_application::{ApplicationError, map_runtime_error};
+use ficant_application::{
+    ApplicationError, FixedDecimalPortfolioPerformanceEngine, OwnedPortfolioPerformanceBackend,
+    OwnedPortfolioPerformanceCatalogAuthority, map_runtime_error,
+};
 use ficant_cgb_futures_pack::CgbFuturesDeliveryRulePackParser;
 use ficant_domain::governance::PlatformRole;
 use ficant_domain::primitives::{ContentHash, Ulid};
@@ -633,6 +637,8 @@ pub fn build_production_grpc_services(
     let position_repository: Arc<dyn PositionSnapshotRepository> = repository.clone();
     let factor_repository: Arc<dyn FactorTopologyRepository> = repository.clone();
     let portfolio_catalog_repository: Arc<dyn PortfolioCatalogRepository> = repository.clone();
+    let portfolio_performance_repository: Arc<dyn PortfolioPerformanceRepository> =
+        repository.clone();
     let portfolio_analytics_authority_repository: Arc<dyn PortfolioAnalyticsAuthorityRepository> =
         repository.clone();
     let data_source_repository: Arc<dyn DataSourceRepository> = repository.clone();
@@ -746,7 +752,7 @@ pub fn build_production_grpc_services(
         &settings.trace_key,
     )
     .map_err(config)?
-    .with_formal_outputs(subjects.clone(), formal_outputs);
+    .with_formal_outputs(subjects.clone(), formal_outputs.clone());
     let data_sources = DataSourceRegistryGrpcService::new(
         Arc::clone(&application),
         data_source_repository.clone(),
@@ -841,6 +847,29 @@ pub fn build_production_grpc_services(
         portfolio_catalog_repository.clone(),
         Arc::clone(&cursor),
     ));
+    let performance_authority = Arc::new(OwnedPortfolioPerformanceCatalogAuthority::new(
+        portfolio_catalog_repository.clone(),
+        Arc::clone(&cursor),
+    ));
+    let performance_application = Arc::new(OwnedPortfolioPerformanceBackend::new(
+        performance_authority,
+        portfolio_performance_repository,
+        definitions.clone(),
+        position_repository.clone(),
+        Arc::new(FixedDecimalPortfolioPerformanceEngine),
+    ));
+    let portfolio_performance = PortfolioPerformanceGrpcService::new(
+        Arc::clone(&application),
+        Arc::new(OwnedPortfolioPerformanceApplicationBackend::new(
+            portfolio_catalog_repository.clone(),
+            Arc::clone(&cursor),
+            performance_application,
+            subjects.clone(),
+            formal_outputs.clone(),
+        )),
+        &settings.trace_key,
+    )
+    .map_err(config)?;
     let analytics_authority = Arc::new(OwnedPortfolioAnalyticsAuthorityHandoff::new(
         portfolio_analytics_authority_repository,
         definitions.clone(),
@@ -885,13 +914,13 @@ pub fn build_production_grpc_services(
         ),
     ));
     let overview_publisher = Arc::new(OwnedRequiredPortfolioOverviewPublisher::new(
-        formal_output_repository,
+        formal_output_repository.clone(),
         overview_factory,
     ));
     let portfolio_aggregation_backend = Arc::new(OwnedPortfolioAggregationBackend::new(
         aggregation_authority,
         analytics_authority,
-        position_repository,
+        position_repository.clone(),
         Arc::new(ExistingPositionViewsHandoff),
         portfolio_risk_handoff,
         portfolio_bond_analysis,
@@ -952,6 +981,7 @@ pub fn build_production_grpc_services(
         artifacts: artifact,
         portfolio_catalog,
         portfolio_aggregation,
+        portfolio_performance,
         portfolio_workbench,
     })
 }
