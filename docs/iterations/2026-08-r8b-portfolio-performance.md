@@ -1,6 +1,6 @@
 # R8B 迭代 brief — 组合日度计量与收益序列
 
-**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R8B · **execution base：** `a66f780c949614ab050a625667b93b129653588f` · **base tree：** `01d41c2cc2a14065bce91d555d43e9c6d0d7c1ee` · **状态：** Human 已于 2026-08-25 批准按建议实施；契约、口径、测试和写入边界已冻结
+**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R8B · **execution base：** `a66f780c949614ab050a625667b93b129653588f` · **base tree：** `01d41c2cc2a14065bce91d555d43e9c6d0d7c1ee` · **状态：** 本地实施与同候选全量取证已完成；代码候选 `7d9c737031914ec9a23d49f09fd5487cac86c2fc`，未推送、未发布
 
 本 brief 是 R8B 面向 Human 的唯一设计、权限边界和最终证据载体。本轮只在 `C:\git\ficant` 建设后端组合日度计量与收益序列；不接入 `C:\git\ficant-portfolio`，不创建版本、tag、镜像或部署，也不触发远端 CI/CD。
 
@@ -152,6 +152,20 @@ Human 已批准以下冻结项；实施中若要改变，必须先停下并取�
 
 本节以下只允许记录同一最终候选上的真实命令、exit code 与可得 test count；计划命令不得写成通过。
 
+**最终代码候选（本地、未推送）：** commit `7d9c737031914ec9a23d49f09fd5487cac86c2fc`，tree `664c7c8cbe2ec5dec35f8109d17364d1ff248297`，唯一父提交 `a66f780c949614ab050a625667b93b129653588f`。代码候选相对 execution base 共 66 个变化路径，全部落入 65 条允许路径规则，unexpected=0。随后只更新本 brief 与迭代指针的证据提交不是代码候选，不改变以下取证对象。
+
+| 真实命令 | Exit code | 同一代码候选上的结果 |
+|---|---:|---|
+| `C:\Program Files\Git\bin\bash.exe .github/scripts/verify-contract-generation.sh`（固定 Node 22.17.0，并以 CPython 3.13 hardlink 提供 `python3`） | 0 | 两棵 fresh 临时树逐文件一致；baseline `6c805930f201b3d82bbcbee9030b791e48fb08e7`；descriptor SHA-256 `0de1176f3e1332c4b46575984eee702ec8cc5112c8c2e97bfe26e86ae13b12b1`；Rust 契约套件 `21+3+2+2+4+2`、Python consumer 1、TypeScript consumer 1 全部通过。 |
+| `pwsh -NoLogo -NoProfile -File scripts/check-fast.ps1` | 0 | 69/7/62 coverage、10 个真实 coverage 反例、R7A zero-core-change、R7B formal evidence、18-service topology 3、R8B Domain 4、Application 2、API 3、本地契约包 6 及全部非环境回归通过。 |
+| `pwsh -NoLogo -NoProfile -File scripts/check.ps1` | 0 | strict Clippy、全 Rust/Doc tests、C++ 9/9、跨 Clang 71 行原始数值逐行一致（manifest `9d8699f60ab92943f8339ec2485f09396794c602b23d1835eae31eecb718929b`）、R5D 3、R5E 13、R8A 11、R8B 4 个独立 Oracle、Python 1 passed/1 skipped、Web 35/35 全部通过。 |
+| `pwsh -NoLogo -NoProfile -File scripts/check.ps1 -IncludeIntegration`（从健康的本地 PostgreSQL 16、Ceph RGW 与内容寻址 runtime image 注入测试环境） | 0 | 完整非集成链再次通过；migration 7/7；R8B PostgreSQL 1/1；R8B production native gRPC/gRPC-Web SIT 1/1（83.56s），覆盖精确结果、响应前正式发布、重启幂等和负向失败关闭；R8A PostgreSQL 5/5 与 production SIT 1/1；隔离备份/全新恢复证明通过，manifest SHA-256 `6C9D05B47958231C69B75B9E65C4C73777497C7FD4A45D2720AD4297B3B6196B`。 |
+| `.github/scripts/verify-supply-chain.sh` | 0 | Syft 649 个 release artifacts、CycloneDX 653 个 components；candidate range 与 release tree secret finding 均为 0，published base history 的 3 个既有 finding 未增加；accepted-unfixed 为空；license inventory digest `7c485b3fb0b4e858f52a5455a42ba12a9816ddfdc2b00baf8319296c689c512c`；provenance SHA-256 `a9567550767e4167e696ea2775c9892acf7a530435137d31f02c600cec6fbd22`。 |
+| `uv run --offline --locked --project python python .github/scripts/verify-license-inventory.py verify-bindings ...` | 0 | 删除 ignored 本地生成包后，release-tree binding 再次返回 `7c485b3fb0b4e858f52a5455a42ba12a9816ddfdc2b00baf8319296c689c512c`。 |
+| `git diff --check origin/main...7d9c737031914ec9a23d49f09fd5487cac86c2fc` 与允许路径/受保护事实核对 | 0 | whitespace clean；66/66 变化路径获准；`.github/workflows/**`、`cicd.yml`、`deploy/test/**`、0001..0026、既有 Oracle/expected/tolerance、C/C++/FFI/native 数值实现、RulePack 与 WebApp repo 均未改变。 |
+
+**RED-first 与修复记录：** 实施中先后由 descriptor/service inventory、coverage carrier、runtime snapshot ref 形状、canonical evidence role/ULID、strict Clippy 和 license binding 暴露真实 RED；均在对应层修正。供应链最终门禁还发现 Syft 默认 JavaScript catalog 未选择本地交付包、两个私有 workspace manifest 不属于交付面，以及 ignored `contracts-generated/dist` 会污染工作目录式 release tree；现由显式 JavaScript catalog、精确交付排除夹具和删除 ignored 生成物闭合。未修改任何既有金融 Oracle、expected 或 tolerance，R8B expected 只由本轮独立 Decimal Oracle 新增。
+
 ## 7. 残余风险
 
 - R8B 的估值/NAV/Flow 是不可变研究快照，不含交易、批次成本、应计、正式会计关账或估值锁定流程。
@@ -159,3 +173,4 @@ Human 已批准以下冻结项；实施中若要改变，必须先停下并取�
 - 严格完整覆盖会在数据缺日时返回错误，优先保证结果可信，不承诺“尽量出数”。
 - 本地契约包仍是未发布 `0.0.0`；不构成 WebApp 已接入或可部署产品。
 - 无版本发布授权，因此本轮不运行版本候选镜像入口、不创建 tag、不部署、不触发远端 CI/CD。
+- 代码候选与证据提交均只保留在本地；未推送 GitHub，远端主线仍停留在 execution base。
