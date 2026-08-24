@@ -10,7 +10,7 @@
 - 如确需新增写路径，Root 必须在首次写入前停止并取得 Human 明确授权；扩权只能作为新的 §5 条目记录精确路径、理由与边界，原 §6 清单保持不变。事后发现的越界必须如实记录为偏差，不得用修改 §6 追认。
 - 被约束的实施者不得单方改写用来判断其是否越界的约束。这一原则同样适用于允许写路径、guarded 集合、预期值、Oracle、断言与其他自管门禁；需要变更时必须由独立授权或独立可审阅证据承载。
 
-**当前迭代：** [`2026-08-r8b-portfolio-performance.md`](2026-08-r8b-portfolio-performance.md)（Human 已于 2026-08-25 批准按建议实施；以公共 `a66f780c949614ab050a625667b93b129653588f` / tree `01d41c2cc2a14065bce91d555d43e9c6d0d7c1ee` 为冻结 execution base，建设后端组合日度计量与收益序列，不接入新 WebApp，无版本发布授权。R8A 已合入主线并完成当前 main 重取证）
+**当前迭代：** [`2026-08-r8b-portfolio-performance.md`](2026-08-r8b-portfolio-performance.md)（本地实施与同候选全量取证已完成；代码候选 `7d9c737031914ec9a23d49f09fd5487cac86c2fc` / tree `664c7c8cbe2ec5dec35f8109d17364d1ff248297`，以公共 `a66f780c949614ab050a625667b93b129653588f` 为 execution base；后端组合日度计量与收益序列已闭合，不接入新 WebApp，无版本发布授权，未推送 GitHub）
 
 ## 归档说明（2026-07-26）
 
