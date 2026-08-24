@@ -13,6 +13,7 @@ pub mod phase1_business_loop;
 pub mod phase4_submission;
 pub mod portfolio_aggregation;
 pub mod portfolio_catalog;
+pub mod portfolio_performance;
 pub mod portfolio_risk;
 pub mod portfolio_workbench;
 pub mod position_views;

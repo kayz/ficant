@@ -20,11 +20,7 @@ async fn descriptor_and_production_routes_are_exactly_equal() {
     let descriptor = descriptor_service_names();
     let routes = production_route_names();
 
-    assert_eq!(
-        descriptor.len(),
-        17,
-        "R8A freezes seventeen public services"
-    );
+    assert_eq!(descriptor.len(), 18, "R8B freezes eighteen public services");
     assert_eq!(
         topology_drift(descriptor, &routes),
         TopologyDrift::default()

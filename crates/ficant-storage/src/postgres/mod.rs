@@ -13,6 +13,7 @@ mod ingestion;
 pub mod journal;
 pub mod phase4_execution;
 pub mod portfolio;
+pub mod portfolio_performance;
 pub mod positions;
 pub mod runs;
 pub mod signals;

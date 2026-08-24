@@ -58,6 +58,32 @@ impl FixedDecimal {
         Ok(Self(product / FIXED_DECIMAL_FACTOR))
     }
 
+    /// Multiplies two fixed decimals and rounds the result to the fixed scale using
+    /// round-half-to-even.
+    ///
+    /// This is the explicit multiplication rule for compounded portfolio returns. Existing
+    /// callers that require exact multiplication continue to use [`Self::checked_mul`].
+    pub fn checked_mul_round_ties_even(self, other: Self) -> DomainResult<Self> {
+        let negative = (self.0 < 0) != (other.0 < 0);
+        let product = self
+            .0
+            .unsigned_abs()
+            .checked_mul(other.0.unsigned_abs())
+            .ok_or(DomainErrorCode::InvalidValue)?;
+        let divisor = FIXED_DECIMAL_FACTOR as u128;
+        let mut magnitude = product / divisor;
+        let remainder = product % divisor;
+        let distance_to_divisor = divisor - remainder;
+        if remainder > distance_to_divisor
+            || (remainder == distance_to_divisor && magnitude % 2 == 1)
+        {
+            magnitude = magnitude
+                .checked_add(1)
+                .ok_or(DomainErrorCode::InvalidValue)?;
+        }
+        signed_magnitude(magnitude, negative).map(Self)
+    }
+
     /// Multiplies the represented value by an integer without changing scale.
     pub fn checked_mul_integer(self, multiplier: i128) -> DomainResult<Self> {
         self.0

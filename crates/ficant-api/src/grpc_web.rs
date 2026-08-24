@@ -339,6 +339,7 @@ pub struct ProductionGrpcServices {
     pub portfolio_risk: crate::portfolio_risk::PortfolioRiskGrpcService,
     pub portfolio_catalog: crate::portfolio_catalog::PortfolioCatalogGrpcService,
     pub portfolio_aggregation: crate::portfolio_aggregation::PortfolioAggregationGrpcService,
+    pub portfolio_performance: crate::portfolio_performance::PortfolioPerformanceGrpcService,
     pub portfolio_workbench: crate::portfolio_workbench::PortfolioWorkbenchGrpcService,
     pub data_sources: crate::data_source_registry::DataSourceRegistryGrpcService,
     pub data_health: crate::data_health::DataHealthGrpcService,
@@ -383,6 +384,7 @@ pub fn build_production_routes(
     use ficant_contracts::ficant::market::v1::market_fact_service_server::MarketFactServiceServer;
     use ficant_contracts::ficant::portfolio::v1::portfolio_aggregation_service_server::PortfolioAggregationServiceServer;
     use ficant_contracts::ficant::portfolio::v1::portfolio_catalog_service_server::PortfolioCatalogServiceServer;
+    use ficant_contracts::ficant::portfolio::v1::portfolio_performance_service_server::PortfolioPerformanceServiceServer;
     use ficant_contracts::ficant::portfolio::v1::portfolio_workbench_service_server::PortfolioWorkbenchServiceServer;
     use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsServiceServer;
     use ficant_contracts::ficant::research::v1::artifact_service_server::ArtifactServiceServer;
@@ -418,6 +420,9 @@ pub fn build_production_routes(
     ));
     register!(PortfolioAggregationServiceServer::new(
         services.portfolio_aggregation
+    ));
+    register!(PortfolioPerformanceServiceServer::new(
+        services.portfolio_performance
     ));
     register!(PortfolioWorkbenchServiceServer::new(
         services.portfolio_workbench

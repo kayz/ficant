@@ -131,6 +131,14 @@ R7B 同时提供 output intent crash recovery、生产 orphan maintenance、隔�
 
 相邻 `ficant-portfolio` 以 Hybrid 消费：这五页在后台可达时只能使用真实 DTO；其余十九页由 WebApp 自己标记 demo/partial。FICANT BFF 没有 `DEMO`，真实失败返回 typed error。年化收益、波动、Sharpe/Calmar、最大回撤、Campisi、VaR、OMS/PMS 与其余页面均不在本切片。完成状态以 [R8A iteration brief](iterations/2026-08-r8a-portfolio-p0.md) 的最终真实证据为准。
 
+## 2026-08 / R8B 组合日度计量与收益序列（实施候选）
+
+R8B 只扩展 FICANT 后台研究计量，不接入相邻 WebApp。新增不可变 `PortfolioValuationSnapshot`、`BenchmarkLevelSnapshot`、版本化 `PortfolioPerformanceConvention`，以及只读 `PortfolioPerformanceService.GetPortfolioPerformance`；descriptor 与生产路由从 17 个精确扩展为 18 个。请求只接受 R8A 已规范化的 exact context，不接受 NAV、Flow、Benchmark level、Calendar 内容或公式参数副本。
+
+Application 按 exact owner/Subject/scope/knowledge-at required-read Calendar 开市 session、全部成员 Portfolio/PositionSnapshot/估值快照、Benchmark/level、Unit 与 Convention。每个 session 先聚合成员 NAV 和期末外部 Flow，再用 scale-12 `FixedDecimal` ties-to-even 计算经济 P&L、日度 TWR、Benchmark/active return 与逐步几何累计；缺日、重复或任何 identity/time/Unit/session 漂移均失败关闭。成功 `PortfolioPerformanceSeries` 携完整 coverage、请求指纹和 R7B 正式证据，并在响应前写入 immutable formal-output repository。
+
+这些快照是可审计的研究输入，不是正式估值关账或会计 NAV。R8B 不提供交易、批次成本、现金/负债生产引擎、外部流水导入、年化/波动/回撤/Sharpe、归因、VaR、动态基准、多币种、PMS/OMS 或清算。完成状态以 [R8B iteration brief](iterations/2026-08-r8b-portfolio-performance.md) 的最终真实证据为准。
+
 ## WebApp 产品边界
 
 当前可用产品界面是 Platform Shell，不是完整 DMQuant：
@@ -160,7 +168,7 @@ WebApp 可以定义独立研究体验，但不能自建身份权限、直连外�
 
 - 关键期限/多合约曲线风险对冲和组合层优化；Phase 2E 的 Python SDK 首版只提供同步一元调用，不承诺批量、流式或长任务调度。
 - 完整 DMQuant 业务 WebApp，包括策略生成、回测、通用 Artifact 浏览、多 run 比较及静态原型中的高级分析页面；当前 UI 仍仅为 Platform Shell 与内嵌的 Phase 5A 临时运行观测面板。金证FICC合同管理系统的其余十九页、ListWorkspaces/ListPages/Execute 以及 PMS/OMS 不在 FICANT 本切片。
-- 年化/几何收益、波动率、Sharpe、Calmar、最大回撤、Campisi、多因子归因、VaR、完整情景、基金/非标/信用债与完整 Benchmark 发布工作流。
+- 年化收益、长期绩效统计、波动率、Sharpe、Calmar、最大回撤、Campisi、多因子归因、VaR、完整情景、基金/非标/信用债与完整 Benchmark 发布工作流；当前只实现 R8B 严格日度 TWR 与区间几何累计。
 - openGauss 迁移、GeneratedNode/gVisor 业务运行、OMS/EMS 和任何外部交易执行。
 - 信用债、ABS、可转债、完整利率互换生命周期、真实询价通讯与清算交割。
 - README Phase 5 的正式研究 Lab以及 Phase 6–9 的仿真、AI 基础设施、GeneratedNode 和后续发布流程仍为规划能力，不得把 Phase 5A 临时观测面板描述为当前已完成的业务体验。当前 worker 只装配 CGB 固收 NativeNode 与 Phase 4 证据化执行路径；扩充业务节点 catalog 或提供可用研究 UI 属于后续纵向切片。

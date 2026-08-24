@@ -1,0 +1,45 @@
+{
+  "schema_id": "ficant.portfolio.performance-oracle-input.v1",
+  "scale": 12,
+  "convention": {
+    "return_method": "DAILY_TIME_WEIGHTED",
+    "flow_timing": "END_OF_DAY",
+    "valuation_frequency": "CALENDAR_SESSION_CLOSE",
+    "rounding": "TIES_TO_EVEN",
+    "cumulative_method": "GEOMETRIC_STEPWISE"
+  },
+  "session_local_dates": [
+    "2026-08-20",
+    "2026-08-21",
+    "2026-08-22"
+  ],
+  "portfolio_ids": [
+    "PORTFOLIO-A",
+    "PORTFOLIO-B"
+  ],
+  "portfolio_a_nav": [
+    "100.000000000000",
+    "108.000000000000",
+    "102.000000000000"
+  ],
+  "portfolio_a_flow": [
+    "0.000000000000",
+    "10.000000000000",
+    "-8.000000000000"
+  ],
+  "portfolio_b_nav": [
+    "200.000000000000",
+    "210.000000000000",
+    "198.000000000000"
+  ],
+  "portfolio_b_flow": [
+    "0.000000000000",
+    "0.000000000000",
+    "-12.000000000000"
+  ],
+  "benchmark_levels": [
+    "100.000000000000",
+    "101.000000000000",
+    "100.500000000000"
+  ]
+}

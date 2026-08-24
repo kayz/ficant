@@ -66,7 +66,7 @@ SignalSet 除承载 Artifact 自身引用外的 lineage 集合必须与持久化
 
 ## 正式输出证据与身份
 
-R7B 的 `FormalOutputEvidence` 是同步 Analytics 与异步 ResearchGraph 共用的正式输出信封，不是任意 CRUD 响应 metadata。当前范围固定为五个 Rates 结果、Portfolio KRD、PositionViews、成功 CapitalUse、DataHealthReport、Artifact、SignalSet，以及 R8A `PortfolioOverview`。Catalog、Definition 与 Fact 读取继续使用非正式 read evidence，不得伪装为正式分析。R8A 只追加 `FormalInputKind` 16..21（Portfolio、Book、PortfolioGroup、Benchmark、PortfolioMetricConvention、Fact），不重排 0..15，也不改 canonical identity 算法。
+R7B 的 `FormalOutputEvidence` 是同步 Analytics 与异步 ResearchGraph 共用的正式输出信封，不是任意 CRUD 响应 metadata。当前范围固定为五个 Rates 结果、Portfolio KRD、PositionViews、成功 CapitalUse、DataHealthReport、Artifact、SignalSet、R8A `PortfolioOverview`，以及 R8B `PortfolioPerformanceSeries`。Catalog、Definition 与 Fact 读取继续使用非正式 read evidence，不得伪装为正式分析。R8A 追加 `FormalInputKind` 16..21（Portfolio、Book、PortfolioGroup、Benchmark、PortfolioMetricConvention、Fact）；R8B 追加 22..24（PortfolioValuationSnapshot、BenchmarkLevelSnapshot、PortfolioPerformanceConvention）。0..21 不重排，canonical identity 算法不变。
 
 | 组成 | 不变量 |
 |---|---|
@@ -101,7 +101,18 @@ Graph output 在任何 blob stage 前先写 `research.output_publication_intents
 
 ## 组合目录与只读聚合
 
-`Book`、`PortfolioGroup` 与 `Portfolio` 是 owner/Subject scoped 的不可变目录对象，不是第二套 Position 或会计账簿。`Portfolio` 通过 exact `PortfolioSnapshotBinding` 指向已有 `PositionSnapshot`。`BenchmarkRef` 与 `PortfolioMetricConvention` 都是版本化引用；P0 convention 只冻结点时加权口径，不宣称 NAV/收益序列。金额、比例、bp、久期和权重继续只走 `DecimalValue` + exact Unit。
+`Book`、`PortfolioGroup` 与 `Portfolio` 是 owner/Subject scoped 的不可变目录对象，不是第二套 Position 或会计账簿。`Portfolio` 通过 exact `PortfolioSnapshotBinding` 指向已有 `PositionSnapshot`。`BenchmarkRef` 与 `PortfolioMetricConvention` 都是版本化引用；R8A convention 只冻结点时加权口径。金额、比例、bp、久期和权重继续只走 `DecimalValue` + exact Unit。
+
+## 组合日度计量与收益序列
+
+| 对象 | 身份与时间 | 关键不变量 |
+|---|---|---|
+| `PortfolioPerformanceConvention` | owner scoped 的正整数 version + content hash；带 visible/effective time | exact Calendar；`DAILY_TIME_WEIGHTED`、`END_OF_DAY`、`CALENDAR_SESSION_CLOSE`、`TIES_TO_EVEN` |
+| `PortfolioValuationSnapshot` | content-addressed snapshot；owner/Subject；valuation/visible time | exact Portfolio、PositionSnapshot、PerformanceConvention、currency Unit；`NAV = gross assets - liabilities`；只追加 |
+| `BenchmarkLevelSnapshot` | content-addressed snapshot；owner/Subject；valuation/visible time | exact Benchmark、dimensionless Unit、正 level；只追加 |
+| `PortfolioPerformanceSeries` | exact normalized scope、period、request fingerprint 与正式 output identity | Calendar 全 session/full-member required-read；先聚合 NAV/Flow 再计算；coverage expected=observed 且 missing 为空 |
+
+相邻 session 的研究口径固定为 `P&L_t = NAV_t - Flow_t - NAV_{t-1}` 与 `R_t = P&L_t / NAV_{t-1}`；Flow 为期末外部现金流，累计收益逐步执行 `Π(1+R_t)-1`。金额、level 和比例均只用 scale-12 `FixedDecimal`/`DecimalValue` ties-to-even，不允许 float。它不代表正式估值关账、会计总账或交易流水生产链。
 
 ## RulePack 生效语义
 

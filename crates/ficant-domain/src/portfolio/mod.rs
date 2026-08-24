@@ -1,8 +1,13 @@
-//! Immutable Portfolio catalog definitions.
+//! Immutable Portfolio catalog and research measurement definitions.
 //!
 //! These objects define scope and exact snapshot/convention bindings only. They
-//! deliberately contain no positions, transactions, NAV, cash, or pricing
-//! algorithms.
+//! deliberately contain no positions, transactions, accounting ledger, cash, or pricing
+//! algorithms. R8B research valuation snapshots and their pure return formula live in the
+//! [`performance`] child module.
+
+mod performance;
+
+pub use performance::*;
 
 use crate::primitives::{ContentHash, LineageRef, MarketTime, OwnerRef, Ulid, Version, VersionRef};
 use crate::{ContentAddressed, DomainErrorCode, DomainResult, VersionedDefinition};

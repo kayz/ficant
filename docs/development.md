@@ -50,7 +50,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 .\scripts\check-fast.ps1
 ```
 
-它运行 `cargo fmt`、离线 workspace check、R5D 精确 crate 邻接表与 L1→L2 语法依赖门禁、R7B MANUAL/恢复清单负向 fixture、R8A Portfolio 契约/本地契约包/17-service 拓扑、非环境 Rust 测试、Storage library 测试以及三个 Portfolio API focused tests；不会连接 PostgreSQL、Ceph RGW、GitHub 或目标服务器。R6A 真实输入平面 SIT、R7B 真实 source-destroy/fresh-restore 与 R8A Portfolio PostgreSQL/gRPC SIT 被显式标记为 integration-only；未知 workspace package/依赖边，以及 `research/**` 对 analytics/curves/futures 模块的直接或 façade 引用，都会默认失败。
+它运行 `cargo fmt`、离线 workspace check、R5D 精确 crate 邻接表与 L1→L2 语法依赖门禁、R7B MANUAL/恢复清单负向 fixture、R8A/R8B Portfolio 契约、本地契约包、18-service 拓扑、R8B domain/application/API focused tests、非环境 Rust 测试和 Storage library 测试；不会连接 PostgreSQL、Ceph RGW、GitHub 或目标服务器。R6A 真实输入平面 SIT、R7B 真实 source-destroy/fresh-restore 与 R8A/R8B Portfolio PostgreSQL/gRPC SIT 被显式标记为 integration-only；未知 workspace package/依赖边，以及 `research/**` 对 analytics/curves/futures 模块的直接或 façade 引用，都会默认失败。
 
 完整本地回归：
 
@@ -59,7 +59,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 .\scripts\check.ps1
 ```
 
-它在不依赖目标服务器的前提下运行：严格 Rust format/Clippy/build/test、生成契约与 R5D 结构门禁、冻结 `cgb-futures` 与 R5E `cgb-interest-tax` RulePack 的确定性 payload 漂移检查、C++ Release build 与当前 CMake/CTest catalog 中登记的全部测试、既有 acceptance matrix/独立 Oracle/确定性 Artifact 回归、R5D 独立 Decimal KRD Oracle、R5E 税收调整 Decimal Oracle、R8A Portfolio Decimal Oracle、20 个一方包的许可证绑定、Python 契约测试、可重复本地 `@ficant/contracts-generated@0.0.0` 包，以及 Web typecheck/build/Vitest。默认不运行需要持久化服务的测试。CTest 数量由当前 catalog 决定，文档不另行硬编码一个会漂移的计数。
+它在不依赖目标服务器的前提下运行：严格 Rust format/Clippy/build/test、生成契约与 R5D 结构门禁、冻结 `cgb-futures` 与 R5E `cgb-interest-tax` RulePack 的确定性 payload 漂移检查、C++ Release build 与当前 CMake/CTest catalog 中登记的全部测试、既有 acceptance matrix/独立 Oracle/确定性 Artifact 回归、R5D 独立 Decimal KRD Oracle、R5E 税收调整 Decimal Oracle、R8A Portfolio Decimal Oracle、R8B Portfolio Performance Decimal Oracle、20 个一方包的许可证绑定、Python 契约测试、可重复本地 `@ficant/contracts-generated@0.0.0` 包，以及冻结 Node 22.17.0 下的 Web typecheck/build/Vitest。默认不运行需要持久化服务的测试。CTest 数量由当前 catalog 决定，文档不另行硬编码一个会漂移的计数。
 
 可选本地集成回归：
 
@@ -77,7 +77,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 - `FICANT_TEST_S3_SECRET_KEY`
 - `FICANT_TEST_RUNTIME_IMAGE_DIGEST`
 
-脚本不会连接或清理目标服务器，也不会打印这些值。调用者提供的数据库必须可安全重置，不得指向共享、测试发布或生产数据库。集成计划依次覆盖 migration、Phase 1 正向业务闭环、13 项负向不变量、Phase 2B Carry/Roll-down、Phase 2C 国债期货交割、Phase 2D 套保、Phase 3A/3B 数据与快照、R6A 生产输入平面、R8A Portfolio PostgreSQL 与生产 gRPC/gRPC-Web，以及 R7B 自建隔离 PostgreSQL/Ceph source 与 restore project 的真实销毁恢复证明。R7B runner 只删除其名称受限的临时 project/volume；细节见 [`operations/recovery.md`](operations/recovery.md)。
+脚本不会连接或清理目标服务器，也不会打印这些值。调用者提供的数据库必须可安全重置，不得指向共享、测试发布或生产数据库。集成计划依次覆盖 migration、Phase 1 正向业务闭环、13 项负向不变量、Phase 2B Carry/Roll-down、Phase 2C 国债期货交割、Phase 2D 套保、Phase 3A/3B 数据与快照、R6A 生产输入平面、R8A Portfolio PostgreSQL/生产 gRPC，以及 R8B Portfolio Performance PostgreSQL/生产 native gRPC/gRPC-Web，最后执行 R7B 自建隔离 PostgreSQL/Ceph source 与 restore project 的真实销毁恢复证明。R7B runner 只删除其名称受限的临时 project/volume；细节见 [`operations/recovery.md`](operations/recovery.md)。
 
 仓库内 `deploy/dev/docker-compose.yml` 是当前唯一的本地 Compose 拓扑，提供锁定基础镜像摘要的 PostgreSQL、单节点 Ceph RGW、migration、三个 Rust 服务和 React Platform Shell；它不是生产 Ceph 部署模板。日常开发只调用下面的包装脚本：
 
@@ -88,7 +88,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 
 首次启动会生成 ignored 的 `deploy/dev/.env.local`；后续启动复用它。该文件包含一次性本地 PostgreSQL、S3、Platform、cursor 和 bootstrap 身份凭据，不进入 Git，也不应复用共享、测试发布或生产凭据。脚本先用正式 Dockerfile 构建完整拓扑，从实际 `ficant/worker:dev` 镜像取得 OCI image ID 和内嵌 native source digest，再以这些受信值启动服务；最后经 UI `/ficant-api` 调用真实 `GetCurrentSession` gRPC-Web，必须同时取得已认证 Session 和成功 trailer。可选端口仍可在启动前通过 `FICANT_POSTGRES_PORT`、`FICANT_S3_PORT`、`FICANT_SERVER_PORT`、`FICANT_WORKER_PORT` 与 `FICANT_UI_PORT` 覆盖。
 
-### R8A 本地接线
+### R8A/R8B 本地接线
 
 相邻 `ficant-portfolio` WebApp 不进入本仓库构建。金证FICC合同管理系统的 D01/P01/P02/P03/P04 只读页通过 gRPC-Web 调用本仓库生产 server；其余十九页由 WebApp 自己标记 demo/partial。FICANT BFF 永不返回 `demo`。
 
@@ -106,6 +106,14 @@ fixture Researcher 必须同时具备精确 scopes：`portfolio:read,positions:r
 ```
 
 它幂等写入 1 Book、1 Group、2 Portfolio、各自 exact PositionSnapshot、中国国债/曲线/市场事实、Benchmark 与 Convention v1，不制造重复可见对象。包本身用 `.\scripts\package-contracts.ps1` 生成，摘要由 `.\scripts\test-contract-package.ps1` 复核。
+
+需要 R8B 日度收益夹具时运行：
+
+```powershell
+.\scripts\bootstrap-portfolio-performance.ps1
+```
+
+该入口先幂等保证 R8A 基础对象存在，再追加 Calendar v2、1 个 exact PerformanceConvention、两个交易日 × 两个成员的 4 个 PortfolioValuationSnapshot，以及两个 BenchmarkLevelSnapshot；随后从正式 PostgreSQL repository 读回核对。它不修改 R8A 现有记录，也不提供公共写 RPC。
 
 停止容器和网络但保留 `postgres-data`、`ceph-data` 命名卷：
 

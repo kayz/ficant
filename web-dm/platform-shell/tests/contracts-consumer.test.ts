@@ -105,6 +105,9 @@ import {
   PortfolioOverviewSchema,
   PortfolioPageDataMode,
   PortfolioPageEnvelopeSchema,
+  PortfolioPerformanceCoverageSchema,
+  PortfolioPerformanceSeriesSchema,
+  PortfolioPerformanceService,
   PortfolioStatus,
   PortfolioWorkbenchService,
 } from "../../packages/contracts-generated/src/ficant/portfolio/v1/portfolio_pb";
@@ -368,6 +371,17 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
         value: create(D01ProjectionSchema, { overview: portfolioOverview }),
       },
     });
+    const performanceCoverage = create(PortfolioPerformanceCoverageSchema, {
+      expectedSessionCount: 2n,
+      observedSessionCount: 2n,
+      expectedPortfolioObservationCount: 4n,
+      observedPortfolioObservationCount: 4n,
+      expectedBenchmarkObservationCount: 2n,
+      observedBenchmarkObservationCount: 2n,
+    });
+    const performanceSeries = create(PortfolioPerformanceSeriesSchema, {
+      coverage: performanceCoverage,
+    });
 
     expect(app.$typeName).toBe("ficant.app.v1.AppDescriptor");
     expect(session.$typeName).toBe("ficant.app.v1.Session");
@@ -377,6 +391,9 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
     expect(marketFact.$typeName).toBe("ficant.market.v1.MarketFact");
     expect(cashflow.cashflowType).toBe(CashflowType.COUPON);
     expect(FormalInputKind.FACT).toBe(21);
+    expect(FormalInputKind.PORTFOLIO_VALUATION_SNAPSHOT).toBe(22);
+    expect(FormalInputKind.BENCHMARK_LEVEL_SNAPSHOT).toBe(23);
+    expect(FormalInputKind.PORTFOLIO_PERFORMANCE_CONVENTION).toBe(24);
     expect(valuation.valueRoles).toEqual([
       ValuationValueRole.YIELD,
       ValuationValueRole.REMAINING_YEARS,
@@ -496,12 +513,19 @@ describe("Q2-CTR-03 TypeScript 生成契约消费", () => {
     expect(portfolioPage.schemaVersion).toBe("portfolio-workbench.v1");
     expect(portfolioPage.projection.case).toBe("d01");
     expect(portfolioPage.coverage?.missingReasons).toEqual([]);
+    expect(performanceSeries.$typeName).toBe(
+      "ficant.portfolio.v1.PortfolioPerformanceSeries",
+    );
+    expect(performanceSeries.coverage?.expectedPortfolioObservationCount).toBe(4n);
     expect("DEMO" in PortfolioPageDataMode).toBe(false);
     expect(PortfolioCatalogService.methods.map((method) => method.localName)).toEqual([
       "listBooksAndPortfolios",
     ]);
     expect(PortfolioAggregationService.methods.map((method) => method.localName)).toEqual([
       "getPortfolioOverview",
+    ]);
+    expect(PortfolioPerformanceService.methods.map((method) => method.localName)).toEqual([
+      "getPortfolioPerformance",
     ]);
     expect(PortfolioWorkbenchService.methods.map((method) => method.localName)).toEqual([
       "getDefaultContext",

@@ -16,6 +16,7 @@ mod market_definition;
 mod market_fact;
 mod portfolio_aggregation;
 mod portfolio_catalog;
+mod portfolio_performance;
 mod portfolio_risk;
 mod portfolio_workbench;
 mod position_snapshot;
@@ -49,6 +50,10 @@ pub use portfolio_aggregation::{
 };
 pub use portfolio_catalog::{
     PortfolioCatalogBackend, PortfolioCatalogBackendResult, PortfolioCatalogGrpcService,
+};
+pub use portfolio_performance::{
+    OwnedPortfolioPerformanceApplicationBackend, PortfolioPerformanceBackend,
+    PortfolioPerformanceBackendResult, PortfolioPerformanceGrpcService,
 };
 pub use portfolio_risk::PortfolioRiskGrpcService;
 pub use portfolio_workbench::{

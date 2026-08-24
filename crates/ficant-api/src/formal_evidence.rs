@@ -454,6 +454,13 @@ fn parse_kind(value: i32) -> Result<FormalInputKind, ApplicationError> {
             FormalInputKind::PortfolioMetricConvention
         }
         pb::FormalInputKind::Fact => FormalInputKind::Fact,
+        pb::FormalInputKind::PortfolioValuationSnapshot => {
+            FormalInputKind::PortfolioValuationSnapshot
+        }
+        pb::FormalInputKind::BenchmarkLevelSnapshot => FormalInputKind::BenchmarkLevelSnapshot,
+        pb::FormalInputKind::PortfolioPerformanceConvention => {
+            FormalInputKind::PortfolioPerformanceConvention
+        }
     })
 }
 
@@ -501,6 +508,13 @@ const fn proto_kind(value: FormalInputKind) -> pb::FormalInputKind {
             pb::FormalInputKind::PortfolioMetricConvention
         }
         FormalInputKind::Fact => pb::FormalInputKind::Fact,
+        FormalInputKind::PortfolioValuationSnapshot => {
+            pb::FormalInputKind::PortfolioValuationSnapshot
+        }
+        FormalInputKind::BenchmarkLevelSnapshot => pb::FormalInputKind::BenchmarkLevelSnapshot,
+        FormalInputKind::PortfolioPerformanceConvention => {
+            pb::FormalInputKind::PortfolioPerformanceConvention
+        }
     }
 }
 

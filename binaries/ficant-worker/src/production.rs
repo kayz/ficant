@@ -980,6 +980,13 @@ const fn formal_kind(value: FormalInputKind) -> core_pb::FormalInputKind {
             core_pb::FormalInputKind::PortfolioMetricConvention
         }
         FormalInputKind::Fact => core_pb::FormalInputKind::Fact,
+        FormalInputKind::PortfolioValuationSnapshot => {
+            core_pb::FormalInputKind::PortfolioValuationSnapshot
+        }
+        FormalInputKind::BenchmarkLevelSnapshot => core_pb::FormalInputKind::BenchmarkLevelSnapshot,
+        FormalInputKind::PortfolioPerformanceConvention => {
+            core_pb::FormalInputKind::PortfolioPerformanceConvention
+        }
     }
 }
 

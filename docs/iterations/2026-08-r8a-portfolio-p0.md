@@ -1,6 +1,6 @@
 # R8A 迭代 brief — 只读组合纵向切片
 
-**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R8A · **execution base：** `11015f41b3f58e82017e85a834f2ba227b702ca2` · **base tree：** `b5afe57f443cae36b47216ffd9e4ba518650aa12` · **状态：** 本地自测候选已形成，待 Human 验收
+**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R8A · **execution base：** `11015f41b3f58e82017e85a834f2ba227b702ca2` · **base tree：** `b5afe57f443cae36b47216ffd9e4ba518650aa12` · **状态：** 已合入公共主线，并于 2026-08-25 在当前 `main` 完成重取证；无版本发布授权
 
 本 brief 是 R8A 面向 Human 的唯一设计、权限边界与最终证据载体。它只在 `C:\git\ficant` 建设只读组合后台纵向切片；`C:\git\ficant-portfolio`、COGA、Web UI、发布、部署和远端治理均不在本轮写入范围。Human 已于 2026-08-21 批准本 brief。§6 以下证据来自同一最终代码候选，不把计划命令写成通过。
 
@@ -272,12 +272,23 @@ Windows 本机 `check.ps1` 不运行 Linux/BSR 双 fresh Buf generation；descri
 
 同一候选上真实失败并修复、未降低 Oracle/expected/容差：Docker Desktop 停机导致 `PoolTimedOut`；共享库 SIT reset 未 DROP `portfolio`（`42P06`，D20）；license first-party binding 因测试 reset 源变化失配后用既有 `refresh-bindings` 刷新；生产 Aggregation 把 R5D AnalyzeBond Subject hash 与 `subject_record_content_hash` 当成同一摘要而误报完整性错误，改为只核对同一 `VersionRef`。
 
+### 6.3 当前公共主线重取证（2026-08-25）
+
+为避免把 R8A 最终代码候选之后的内部命名重构当作未验证变化，Root 在 tracked-clean、`main == origin/main` 的公共提交 `a66f780c949614ab050a625667b93b129653588f`、tree `01d41c2cc2a14065bce91d555d43e9c6d0d7c1ee` 上重新执行完整本地证据链。以下命令均使用 Node `v22.17.0`；最初由系统 Node `v24.18.0` 触发的版本门禁按设计失败，不计为通过。
+
+| 实际入口/证据 | 结果 |
+|---|---|
+| `.\scripts\check-fast.ps1` | exit `0`，输出 `FICANT fast local checks passed.`；coverage `68/6/62`，本地契约包 tests 6，descriptor SHA-256 `3c97ce22d4ced6e9f082e4f684a5a507096a968bf8ef02a6da651f120bb2cc68`。 |
+| `.\scripts\check.ps1` | exit `0`，输出 `FICANT complete local checks passed.`；C++ 9/9，跨 clang 71 行，R8A Oracle 11/11，Python 1 passed / 1 environment-gated skipped，Web 35/35，license binding digest `3fd280c01b492c8d7a53c87546d93b6e7f4e70cd1ca8c038913687a8e73dc327`。 |
+| `.\scripts\check.ps1 -IncludeIntegration` | exit `0`，输出 `FICANT complete local checks passed.`；PostgreSQL migrations 7/7、negative invariants 13/13、R8A Postgres 5/5、R8A production native gRPC/gRPC-Web SIT 1/1、R7B source-destroy/fresh-restore 通过。 |
+| `.github/scripts/verify-contract-generation.sh`（Git Bash，固定 Buf/Python/Node/pnpm/cargo） | exit `0`，双临时树一致，tracked generated consumer 一致；baseline `6c805930f201b3d82bbcbee9030b791e48fb08e7`，descriptor SHA-256 `3c97ce22d4ced6e9f082e4f684a5a507096a968bf8ef02a6da651f120bb2cc68`。首次运行只发现生成树内 6 个 ignored `__pycache__`，精确删除后原脚本不改即通过。 |
+
 ## 7. 残余风险
 
 - 现有 PositionSnapshot 没有 NAV、外部现金流调整或日收益权威，因此本轮诚实边界是点时持仓/收益率/风险研究，不是绩效、会计或完整组合投研产品。
 - fixture 只证明 CNY、中国国债、正 long bond 与最小目录层级；short/非债/多币种会显式 partial/error，不代表完整资产覆盖。
 - Workbench 是最小读 BFF，不是 WebApp PageModel；`C:\git\ficant-portfolio` 仍需后续独立任务安装锁定 `.tgz`、移除源码 alias 并完成 Hybrid UI 接线，本轮不触碰该仓库。
 - 本地 `.tgz` 没有 registry、长期版本或远端分发保证；它只为相邻 WebApp 的下一次独立迭代提供可校验输入。
-- fresh contract generation 仍依赖 BSR remote plugins；本候选未在 Windows 上取得双 fresh tree 命令证据，不能用旧生成树代替。
+- fresh contract generation 仍依赖 BSR remote plugins；2026-08-25 已在当前主线上取得双 fresh tree 证据，但离线环境无法独立重放远端插件下载。
 - Docker gRPC-Web origin 固定为开发 POC 值，不是生产 CORS、身份、UAT 或部署批准。
 - 本轮未 push、未创建 tag、未发布镜像、未部署、未触发远端 CI/CD。

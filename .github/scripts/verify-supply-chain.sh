@@ -266,11 +266,24 @@ verify_release_fixture() {
   return "$rc"
 }
 
+scan_release_packages() {
+  [[ $# -ge 2 ]] || die 'scan_release_packages requires Syft, release root, and output arguments'
+  local syft=$1 root=$2
+  shift 2
+  "$syft" scan "dir:$root" \
+    --exclude './.github/**' \
+    --select-catalogers '+javascript-package-cataloger' \
+    --exclude './web-dm/package.json' \
+    --exclude './web-dm/platform-shell/package.json' \
+    "$@"
+}
+
 verify_syft_scope_fixture() {
   [[ $# -eq 1 ]] || die '--verify-syft-scope-fixture requires Syft'
   local syft=$1 root
   root=$(mktemp -d)
-  mkdir -p "$root/production" "$root/test-fixtures" "$root/.github/workflows"
+  mkdir -p "$root/production" "$root/test-fixtures" "$root/.github/workflows" \
+    "$root/web-dm/packages/contracts-generated" "$root/web-dm/platform-shell"
   cat >"$root/production/Cargo.lock" <<'EOF'
 version = 4
 
@@ -293,12 +306,25 @@ EOF
 steps:
   - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 EOF
-  "$syft" scan "dir:$root" --exclude './.github/**' -o "syft-json=$root/packages.json" >/dev/null || { rm -rf "$root"; die 'Syft scope fixture scan failed'; }
+  cat >"$root/web-dm/package.json" <<'EOF'
+{"name":"@ficant/web-dm","version":"0.0.0"}
+EOF
+  cat >"$root/web-dm/platform-shell/package.json" <<'EOF'
+{"name":"@ficant/platform-shell","version":"0.0.0"}
+EOF
+  cat >"$root/web-dm/packages/contracts-generated/package.json" <<'EOF'
+{"name":"@ficant/contracts-generated","version":"0.0.0"}
+EOF
+  scan_release_packages "$syft" "$root" -o "syft-json=$root/packages.json" >/dev/null \
+    || { rm -rf "$root"; die 'Syft scope fixture scan failed'; }
   if ! python3 - "$root/packages.json" <<'PY'
 import json, pathlib, sys
 artifacts=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")).get("artifacts", [])
 purls=[item.get("purl") for item in artifacts]
 if (purls.count("pkg:cargo/ordinary-production@1.0.0") != 1
+        or purls.count("pkg:npm/%40ficant/contracts-generated@0.0.0") != 1
+        or "pkg:npm/%40ficant/web-dm@0.0.0" in purls
+        or "pkg:npm/%40ficant/platform-shell@0.0.0" in purls
         or "pkg:cargo/template-only@1.0.0" in purls
         or any(purl.startswith("pkg:github/") for purl in purls if isinstance(purl, str))):
     print("supply-chain: Syft scope fixture isolation failed", file=sys.stderr); raise SystemExit(2)
@@ -690,8 +716,7 @@ cp "$cache/db/crates.io-all.zip" "$db_root/osv-scanner/crates.io/all.zip"
 cp "$cache/db/PyPI-all.zip" "$db_root/osv-scanner/PyPI/all.zip"
 cp "$cache/db/npm-all.zip" "$db_root/osv-scanner/npm/all.zip"
 
-"$cache/bin/syft" scan "dir:$release_root" \
-  --exclude './.github/**' \
+scan_release_packages "$cache/bin/syft" "$release_root" \
   -o "syft-json=$output/packages.syft.json" -o "cyclonedx-json=$output/sbom.cdx.json" || die 'Syft scan failed'
 
 (cd "$release_root" && cargo tree --locked --all-features --target all --prefix none --format '{p}' | sort -u) >"$output/cargo-resolved-tree.txt" || die 'Cargo resolved graph failed'

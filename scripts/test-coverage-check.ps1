@@ -159,6 +159,10 @@ try {
     Remove-CoverageField -Path (Join-Path $pageEnvelopeMissing 'proto\ficant\portfolio\v1\portfolio.proto') -Message 'PortfolioPageEnvelope' -Tag 10 -TypeName 'PortfolioCoverage'
     Invoke-CoverageFixture -Name 'PortfolioPageEnvelope coverage removed' -InterfaceRoot $pageEnvelopeMissing -ShouldPass $false
 
+    $performanceMissing = New-CoverageFixture -Name 'portfolio-performance-missing'
+    Remove-CoverageField -Path (Join-Path $performanceMissing 'proto\ficant\portfolio\v1\portfolio.proto') -Message 'PortfolioPerformanceSeries' -Tag 8 -TypeName 'PortfolioPerformanceCoverage'
+    Invoke-CoverageFixture -Name 'PortfolioPerformanceSeries coverage removed' -InterfaceRoot $performanceMissing -ShouldPass $false
+
     $bareComposition = New-CoverageFixture -Name 'bare-composition'
     Add-ReachableFixture -Path (Join-Path $bareComposition 'proto\ficant\research\v1\position.proto') -Kind 'Composition'
     Invoke-CoverageFixture -Name 'new reachable bare composition output' -InterfaceRoot $bareComposition -ShouldPass $false
@@ -173,7 +177,7 @@ try {
 
     Invoke-CoverageFixture -Name 'all explicitly classified success arms' -InterfaceRoot $sourceInterface -ShouldPass $true
 
-    Write-Host 'Coverage gate fixture tests passed: 9 real violations fail, including both R8A composition carriers, and the explicitly classified 68/6/62 base inventory passes.'
+    Write-Host 'Coverage gate fixture tests passed: 10 real violations fail, including R8A/R8B composition carriers, and the explicitly classified 69/7/62 inventory passes.'
     exit 0
 }
 finally {

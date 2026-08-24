@@ -24,6 +24,7 @@ use ficant_contracts::ficant::market::v1::{
 };
 use ficant_contracts::ficant::portfolio::v1::{
     Book as PortfolioBook, PortfolioCoverage, PortfolioOverview, PortfolioPageEnvelope,
+    PortfolioPerformanceSeries,
 };
 use ficant_contracts::ficant::rates::v1::{
     AnalysisInputBinding, AnalysisInputRole, AnalyzeBondRequest, AnalyzeFuturesDeliveryRequest,
@@ -108,6 +109,7 @@ fn generated_rust_consumer_exports_representative_contracts() {
     let portfolio_coverage = PortfolioCoverage::default();
     let portfolio_overview = PortfolioOverview::default();
     let portfolio_page = PortfolioPageEnvelope::default();
+    let portfolio_performance = PortfolioPerformanceSeries::default();
 
     assert!(instrument.instrument_id.is_none());
     assert_eq!(instrument.kind, InstrumentKind::Unspecified as i32);
@@ -171,9 +173,13 @@ fn generated_rust_consumer_exports_representative_contracts() {
     assert!(portfolio_coverage.missing_reasons.is_empty());
     assert!(portfolio_overview.coverage.is_none());
     assert!(portfolio_page.coverage.is_none());
+    assert!(portfolio_performance.coverage.is_none());
     assert_eq!(FormalInputKind::Portfolio as i32, 16);
     assert_eq!(FormalInputKind::PortfolioMetricConvention as i32, 20);
     assert_eq!(FormalInputKind::Fact as i32, 21);
+    assert_eq!(FormalInputKind::PortfolioValuationSnapshot as i32, 22);
+    assert_eq!(FormalInputKind::BenchmarkLevelSnapshot as i32, 23);
+    assert_eq!(FormalInputKind::PortfolioPerformanceConvention as i32, 24);
 }
 
 #[derive(Clone, Copy)]
@@ -1139,6 +1145,7 @@ fn composition_level_outputs_have_coverage() {
             "ficant.research.v1.DataHealthReport".to_owned(),
             "ficant.portfolio.v1.PortfolioOverview".to_owned(),
             "ficant.portfolio.v1.PortfolioPageEnvelope".to_owned(),
+            "ficant.portfolio.v1.PortfolioPerformanceSeries".to_owned(),
             "ficant.research.v1.PortfolioKeyRateExposure".to_owned(),
             "ficant.research.v1.PositionViews".to_owned(),
         ]),
@@ -1175,6 +1182,11 @@ fn composition_level_outputs_have_coverage() {
             "ficant.portfolio.v1.PortfolioPageEnvelope",
             10,
             ".ficant.portfolio.v1.PortfolioCoverage",
+        ),
+        (
+            "ficant.portfolio.v1.PortfolioPerformanceSeries",
+            8,
+            ".ficant.portfolio.v1.PortfolioPerformanceCoverage",
         ),
     ] {
         let message = messages
@@ -1312,6 +1324,7 @@ fn expected_success_arms() -> BTreeMap<String, SuccessArmClass> {
         ("ficant.market.v1.MarketFactService/PublishCurveSnapshot:curve_snapshot->ficant.market.v1.CurveSnapshot", NonComposition(AckOrEcho)),
         ("ficant.market.v1.MarketFactService/QueryInstrumentFacts:instrument_facts->ficant.market.v1.InstrumentFacts", NonComposition(NoNumericAggregate)),
         ("ficant.portfolio.v1.PortfolioAggregationService/GetPortfolioOverview:overview->ficant.portfolio.v1.PortfolioOverview", SuccessArmClass::Composition),
+        ("ficant.portfolio.v1.PortfolioPerformanceService/GetPortfolioPerformance:series->ficant.portfolio.v1.PortfolioPerformanceSeries", SuccessArmClass::Composition),
         ("ficant.portfolio.v1.PortfolioCatalogService/ListBooksAndPortfolios:catalog->ficant.portfolio.v1.PortfolioCatalogPage", NonComposition(RegistryMetadata)),
         ("ficant.portfolio.v1.PortfolioWorkbenchService/GetDefaultContext:context->ficant.portfolio.v1.NormalizedPortfolioContext", NonComposition(RegistryMetadata)),
         ("ficant.portfolio.v1.PortfolioWorkbenchService/GetPage:response->ficant.portfolio.v1.PortfolioPageEnvelope", SuccessArmClass::Composition),
@@ -1673,6 +1686,9 @@ fn assert_r7b_formal_evidence_contracts(
             ("FORMAL_INPUT_KIND_BENCHMARK", 19),
             ("FORMAL_INPUT_KIND_PORTFOLIO_METRIC_CONVENTION", 20),
             ("FORMAL_INPUT_KIND_FACT", 21),
+            ("FORMAL_INPUT_KIND_PORTFOLIO_VALUATION_SNAPSHOT", 22),
+            ("FORMAL_INPUT_KIND_BENCHMARK_LEVEL_SNAPSHOT", 23),
+            ("FORMAL_INPUT_KIND_PORTFOLIO_PERFORMANCE_CONVENTION", 24),
         ],
     );
 
@@ -2183,6 +2199,15 @@ fn r8a_portfolio_contracts_have_exact_messages_enums_and_services() {
             "GetPortfolioOverview",
             ".ficant.portfolio.v1.GetPortfolioOverviewRequest",
             ".ficant.portfolio.v1.GetPortfolioOverviewResponse",
+        )],
+    );
+    assert_exact_service(
+        descriptor_set,
+        "ficant.portfolio.v1.PortfolioPerformanceService",
+        &[ExpectedMethod::new(
+            "GetPortfolioPerformance",
+            ".ficant.portfolio.v1.GetPortfolioPerformanceRequest",
+            ".ficant.portfolio.v1.GetPortfolioPerformanceResponse",
         )],
     );
     assert_exact_service(
@@ -5620,6 +5645,7 @@ fn expected_service_fqns() -> BTreeSet<String> {
         "ficant.portfolio.v1.PortfolioCatalogService".to_owned(),
         "ficant.portfolio.v1.PortfolioAggregationService".to_owned(),
         "ficant.portfolio.v1.PortfolioWorkbenchService".to_owned(),
+        "ficant.portfolio.v1.PortfolioPerformanceService".to_owned(),
     ])
 }
 
