@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-CONTRACT_BASE_SHA=6c805930f201b3d82bbcbee9030b791e48fb08e7
+CONTRACT_BASE_SHA=01123c02291310bbe6fb90071b2512ec444a8a3d
 DESCRIPTOR_SHA256=0de1176f3e1332c4b46575984eee702ec8cc5112c8c2e97bfe26e86ae13b12b1
 
 die() {
@@ -105,7 +105,7 @@ done
 read -r uv_name uv_version _ < <(uv --version)
 [[ $uv_name == uv && $uv_version == 0.7.13 ]] || die 'uv must be 0.7.13'
 [[ $(corepack pnpm@10.12.4 --version) == '10.12.4' ]] || die 'pnpm must be 10.12.4'
-git cat-file -e "${CONTRACT_BASE_SHA}^{commit}" || die 'missing exact contract baseline commit'
+git merge-base --is-ancestor "$CONTRACT_BASE_SHA" HEAD || die 'exact contract baseline must be an ancestor of HEAD'
 
 gate_run_native finding 'Buf format drift' buf format --diff --exit-code interface || exit $?
 gate_run_native finding 'Buf lint violation' buf lint interface || exit $?

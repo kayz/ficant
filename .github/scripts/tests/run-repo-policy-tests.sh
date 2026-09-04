@@ -120,7 +120,8 @@ if authorize is None:
 for marker in (
     '[[ "${{ github.ref_type }}" == tag ]]',
     '^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$',
-    '[[ "$GITHUB_SHA" == $(git rev-parse "refs/tags/$version^{commit}") ]]',
+    'sha=$(git rev-parse "refs/tags/$version^{commit}")',
+    '[[ "$GITHUB_SHA" == "$sha" ]]',
     '[[ "$GITHUB_SHA" == $(git rev-parse origin/main) ]]',
 ):
     if marker not in authorize.group(0):
@@ -133,6 +134,119 @@ for job in (
     match = re.search(rf"(?ms)^  {re.escape(job)}:\n(.*?)(?=^  [a-z0-9-]+:\n|\Z)", jobs)
     if match is None or not re.search(r"(?m)^    needs: authorize-version$", match.group(0)):
         raise SystemExit(1)
+PY
+}
+
+check_ci_source_identity_contract() {
+  local candidate=$1
+  "$python" - "$candidate" <<'PY'
+import pathlib
+import re
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+
+
+def job(name: str) -> str:
+    matches = list(
+        re.finditer(
+            rf"(?ms)^  {re.escape(name)}:\n.*?(?=^  [a-z0-9-]+:\n|\Z)",
+            text,
+        )
+    )
+    if len(matches) != 1:
+        raise SystemExit(f"expected one {name} job")
+    return matches[0].group(0)
+
+
+authorize = job("authorize-version")
+output_block = """    outputs:
+      sha: ${{ steps.candidate.outputs.sha }}
+      tree: ${{ steps.candidate.outputs.tree }}
+    steps:
+"""
+if authorize.count(output_block) != 1:
+    raise SystemExit("authorize-version must expose candidate sha/tree outputs")
+
+candidate_matches = list(
+    re.finditer(r"(?ms)^      - id: candidate\n.*?(?=^      - |\Z)", authorize)
+)
+if len(candidate_matches) != 1:
+    raise SystemExit("authorize-version must have one candidate output step")
+candidate = candidate_matches[0].group(0)
+candidate_lines = (
+    '          sha=$(git rev-parse "refs/tags/$version^{commit}")',
+    '          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]',
+    '          tree=$(git rev-parse "refs/tags/$version^{tree}")',
+    '          [[ "$tree" =~ ^[0-9a-f]{40}$ ]]',
+    '          [[ "$GITHUB_SHA" == "$sha" ]]',
+    '          [[ "$GITHUB_SHA" == $(git rev-parse origin/main) ]]',
+    '          printf \'sha=%s\\n\' "$sha" >> "$GITHUB_OUTPUT"',
+    '          printf \'tree=%s\\n\' "$tree" >> "$GITHUB_OUTPUT"',
+)
+positions = []
+for line in candidate_lines:
+    if candidate.splitlines().count(line) != 1:
+        raise SystemExit(f"missing or duplicate candidate identity line: {line}")
+    positions.append(candidate.index(line))
+if positions != sorted(positions):
+    raise SystemExit("candidate identity must be resolved, validated, authorized, then emitted")
+github_output_lines = [line for line in candidate.splitlines() if "GITHUB_OUTPUT" in line]
+if github_output_lines != list(candidate_lines[-2:]):
+    raise SystemExit("candidate must emit only the validated sha/tree identities")
+
+commit_env = "--env FICANT_CODE_COMMIT_SHA=${{ needs['authorize-version'].outputs.sha }}"
+tree_env = "--env FICANT_CODE_TREE_SHA=${{ needs['authorize-version'].outputs.tree }}"
+rust_image = "rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663"
+
+
+def require_container_identity(label: str, command: str) -> None:
+    for marker in (commit_env, tree_env):
+        if command.count(marker) != 1:
+            raise SystemExit(f"{label} must receive {marker}")
+        if command.index(marker) > command.index(rust_image):
+            raise SystemExit(f"{label} identity must be passed to the Rust container")
+
+
+rust = job("rust")
+require_container_identity("rust", rust[rust.index("          docker run --rm\n") :])
+if rust.count(commit_env) != 1 or rust.count(tree_env) != 1:
+    raise SystemExit("rust identity must not be supplied by a decoy")
+
+web = job("web")
+worker_start = web.index("          native_source_digest=$(docker run --rm --network host \\\n")
+worker_end = web.index('          [[ "$native_source_digest" =~', worker_start)
+server_start = web.index(
+    "          docker run --detach --rm --name ficant-ci-grpc --network host \\\n"
+)
+server_end = web.index("          trap 'docker rm -f", server_start)
+require_container_identity("web worker", web[worker_start:worker_end])
+require_container_identity("web server", web[server_start:server_end])
+if web.count(commit_env) != 2 or web.count(tree_env) != 2:
+    raise SystemExit("web worker/server identities must not be supplied by a decoy")
+
+business = job("business-loop")
+runtime = business.index("          export FICANT_TEST_RUNTIME_IMAGE_DIGEST=")
+business_start = business.index("          docker run --rm --network host \\\n", runtime)
+require_container_identity("business-loop", business[business_start:])
+if business.count(commit_env) != 1 or business.count(tree_env) != 1:
+    raise SystemExit("business-loop identity must not be supplied by a decoy")
+
+reproducibility = job("reproducibility")
+host_env = """    runs-on: ubuntu-24.04
+    env:
+      FICANT_CODE_COMMIT_SHA: ${{ needs['authorize-version'].outputs.sha }}
+      FICANT_CODE_TREE_SHA: ${{ needs['authorize-version'].outputs.tree }}
+    steps:
+"""
+if reproducibility.count(host_env) != 1:
+    raise SystemExit("reproducibility must inherit candidate sha/tree in its job environment")
+for marker in host_env.splitlines()[2:4]:
+    if reproducibility.splitlines().count(marker) != 1:
+        raise SystemExit("reproducibility identity must not be supplied by a decoy")
+
+if "safe.directory" in text:
+    raise SystemExit("CI source identity must not weaken Git safe-directory checks")
 PY
 }
 
@@ -203,6 +317,10 @@ check_version_trigger_contract "$workflow" || {
   printf 'repo-policy-tests: full CI must require an immutable version tag on current main\n' >&2
   exit 1
 }
+check_ci_source_identity_contract "$workflow" || {
+  printf 'repo-policy-tests: CI source identity authorization/consumer contract missing\n' >&2
+  exit 1
+}
 check_ci_recovery_contracts "$workflow" || {
   printf 'repo-policy-tests: CI recovery ownership/evidence contract missing\n' >&2
   exit 1
@@ -266,6 +384,66 @@ for name, (old, new) in mutations.items():
 PY
 for candidate in "$tmp"/version-trigger/*.yml; do
   expect_fail "version trigger mutation $(basename "$candidate")" check_version_trigger_contract "$candidate"
+done
+
+"$python" - "$workflow" "$tmp/source-identity" <<'PY'
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+root = pathlib.Path(sys.argv[2])
+root.mkdir()
+
+
+def remove_line(name: str, line: str, occurrence: int = 0, expected: int = 1) -> None:
+    lines = source.splitlines(keepends=True)
+    matches = [index for index, value in enumerate(lines) if value.rstrip("\r\n") == line]
+    if len(matches) != expected:
+        raise SystemExit(
+            f"identity fixture marker count mismatch for {name}: "
+            f"expected {expected}, got {len(matches)}"
+        )
+    del lines[matches[occurrence]]
+    (root / f"{name}.yml").write_text("".join(lines), encoding="utf-8")
+
+
+unique_lines = {
+    "authorize-step-id": "      - id: candidate",
+    "authorize-sha-job-output": "      sha: ${{ steps.candidate.outputs.sha }}",
+    "authorize-tree-job-output": "      tree: ${{ steps.candidate.outputs.tree }}",
+    "authorize-sha-resolution": '          sha=$(git rev-parse "refs/tags/$version^{commit}")',
+    "authorize-tree-resolution": '          tree=$(git rev-parse "refs/tags/$version^{tree}")',
+    "authorize-sha-validation": '          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]',
+    "authorize-tree-validation": '          [[ "$tree" =~ ^[0-9a-f]{40}$ ]]',
+    "authorize-tag-head-check": '          [[ "$GITHUB_SHA" == "$sha" ]]',
+    "authorize-current-main-check": '          [[ "$GITHUB_SHA" == $(git rev-parse origin/main) ]]',
+    "authorize-sha-emission": '          printf \'sha=%s\\n\' "$sha" >> "$GITHUB_OUTPUT"',
+    "authorize-tree-emission": '          printf \'tree=%s\\n\' "$tree" >> "$GITHUB_OUTPUT"',
+    "rust-sha-consumer": "          --env FICANT_CODE_COMMIT_SHA=${{ needs['authorize-version'].outputs.sha }}",
+    "rust-tree-consumer": "          --env FICANT_CODE_TREE_SHA=${{ needs['authorize-version'].outputs.tree }}",
+    "reproducibility-sha-consumer": "      FICANT_CODE_COMMIT_SHA: ${{ needs['authorize-version'].outputs.sha }}",
+    "reproducibility-tree-consumer": "      FICANT_CODE_TREE_SHA: ${{ needs['authorize-version'].outputs.tree }}",
+}
+for name, line in unique_lines.items():
+    remove_line(name, line)
+
+container_lines = {
+    "sha": "            --env FICANT_CODE_COMMIT_SHA=${{ needs['authorize-version'].outputs.sha }} \\",
+    "tree": "            --env FICANT_CODE_TREE_SHA=${{ needs['authorize-version'].outputs.tree }} \\",
+}
+consumer_names = ("web-worker", "web-server", "business-loop")
+for identity, line in container_lines.items():
+    for occurrence, consumer in enumerate(consumer_names):
+        remove_line(
+            f"{consumer}-{identity}-consumer",
+            line,
+            occurrence=occurrence,
+            expected=len(consumer_names),
+        )
+PY
+for candidate in "$tmp"/source-identity/*.yml; do
+  expect_fail "CI source identity mutation $(basename "$candidate")" \
+    check_ci_source_identity_contract "$candidate"
 done
 
 "$python" - "$workflow" "$toolchain_lock" "$tmp/node-toolchain" <<'PY'

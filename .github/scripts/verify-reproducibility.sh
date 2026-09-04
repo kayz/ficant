@@ -27,6 +27,26 @@ gate_run_native() {
   return 2
 }
 
+bind_source_identity() {
+  [[ $# -eq 1 ]] || die 'bind_source_identity requires one Git worktree'
+  local source_root=$1
+  local resolved_commit resolved_tree
+  resolved_commit=$(git -C "$source_root" rev-parse --verify 'HEAD^{commit}' 2>/dev/null) \
+    || die 'cannot resolve source commit identity'
+  resolved_tree=$(git -C "$source_root" rev-parse --verify 'HEAD^{tree}' 2>/dev/null) \
+    || die 'cannot resolve source tree identity'
+  [[ $resolved_commit =~ ^[0-9a-f]{40}$ ]] || die 'source commit identity is not one lowercase Git SHA'
+  [[ $resolved_tree =~ ^[0-9a-f]{40}$ ]] || die 'source tree identity is not one lowercase Git SHA'
+  if [[ -n ${FICANT_CODE_COMMIT_SHA:-} && $FICANT_CODE_COMMIT_SHA != "$resolved_commit" ]]; then
+    die 'caller commit identity does not match the source worktree'
+  fi
+  if [[ -n ${FICANT_CODE_TREE_SHA:-} && $FICANT_CODE_TREE_SHA != "$resolved_tree" ]]; then
+    die 'caller tree identity does not match the source worktree'
+  fi
+  export FICANT_CODE_COMMIT_SHA=$resolved_commit
+  export FICANT_CODE_TREE_SHA=$resolved_tree
+}
+
 verify_manifests() {
   [[ $# -eq 2 ]] || die '--verify-manifests requires two JSON manifests'
   python3 - "$1" "$2" <<'PY'
@@ -217,6 +237,14 @@ PY
   fi
 }
 
+if [[ ${1:-} == '--bind-source-identity' ]]; then
+  shift
+  [[ $# -eq 1 ]] || die '--bind-source-identity requires one Git worktree'
+  bind_source_identity "$1"
+  printf 'FICANT_CODE_COMMIT_SHA=%s\nFICANT_CODE_TREE_SHA=%s\n' \
+    "$FICANT_CODE_COMMIT_SHA" "$FICANT_CODE_TREE_SHA"
+  exit 0
+fi
 if [[ ${1:-} == '--verify-manifests' ]]; then
   shift
   verify_manifests "$@"
@@ -252,6 +280,7 @@ done
 [[ $(cargo --version) == cargo\ 1.96.1* ]] || die 'Cargo must be 1.96.1'
 [[ $(uv --version) == 'uv 0.7.13' ]] || die 'uv must be 0.7.13'
 [[ $(corepack pnpm@10.12.4 --version) == '10.12.4' ]] || die 'pnpm must be 10.12.4'
+bind_source_identity "$repo"
 
 tmp=$(mktemp -d) || die 'cannot create temporary directory'
 trap 'rm -rf "$tmp"' EXIT
