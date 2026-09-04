@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -745,6 +746,10 @@ class ComposeSecurityGateTests(unittest.TestCase):
 
 class ReleaseDeploymentContractTests(unittest.TestCase):
     DEPLOY_SHA = "0" * 40
+    CODE_TREE_SHA = "0" * 40
+    SERVER_RUNTIME_DIGEST = "sha256:" + "44" * 32
+    WORKER_RUNTIME_DIGEST = "sha256:" + "22" * 32
+    WORKER_SOURCE_DIGEST = "sha256:" + "33" * 32
     STORAGE_LOCK = json.loads(
         Path("deploy/storage-runtime.lock.json").read_text(encoding="utf-8")
     )
@@ -755,10 +760,13 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
     @staticmethod
     def resolved_release_document(
         deploy_sha: str = DEPLOY_SHA,
+        code_tree_sha: str = CODE_TREE_SHA,
+        server_runtime_digest: str = SERVER_RUNTIME_DIGEST,
     ) -> dict[str, object]:
         environment = {
             **os.environ,
             "FICANT_DEPLOY_SHA": deploy_sha,
+            "FICANT_CODE_TREE_SHA": code_tree_sha,
             "FICANT_STORAGE_RUNTIME_IMAGE": ReleaseDeploymentContractTests.STORAGE_IMAGE,
             "FICANT_IMAGE_PREFIX": "ghcr.io/kayz/ficant",
             "FICANT_ROOT": "/srv/ficant-test",
@@ -772,6 +780,7 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
             "FICANT_EXPERIMENT_CURSOR_KEY_HEX": "11" * 32,
             "FICANT_WORKER_RUNTIME_IMAGE_DIGEST": "sha256:" + "22" * 32,
             "FICANT_WORKER_NATIVE_SOURCE_DIGEST": "sha256:" + "33" * 32,
+            "FICANT_SERVER_RUNTIME_IMAGE_DIGEST": server_runtime_digest,
             "FICANT_GRPC_WEB_ALLOWED_ORIGINS": "https://greatquant.com",
         }
         output = subprocess.run(
@@ -795,12 +804,23 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
     def validate_release(
         document: dict[str, object],
         deploy_sha: str | None = DEPLOY_SHA,
+        code_tree_sha: str | None = CODE_TREE_SHA,
+        server_runtime_digest: str | None = SERVER_RUNTIME_DIGEST,
+        worker_runtime_digest: str | None = WORKER_RUNTIME_DIGEST,
+        worker_source_digest: str | None = WORKER_SOURCE_DIGEST,
     ) -> subprocess.CompletedProcess[str]:
         environment = {**os.environ}
-        if deploy_sha is None:
-            environment.pop("FICANT_DEPLOY_SHA", None)
-        else:
-            environment["FICANT_DEPLOY_SHA"] = deploy_sha
+        for name, value in (
+            ("FICANT_DEPLOY_SHA", deploy_sha),
+            ("FICANT_CODE_TREE_SHA", code_tree_sha),
+            ("FICANT_SERVER_RUNTIME_IMAGE_DIGEST", server_runtime_digest),
+            ("FICANT_WORKER_RUNTIME_IMAGE_DIGEST", worker_runtime_digest),
+            ("FICANT_WORKER_NATIVE_SOURCE_DIGEST", worker_source_digest),
+        ):
+            if value is None:
+                environment.pop(name, None)
+            else:
+                environment[name] = value
         return subprocess.run(
             [sys.executable, "deploy/test/validate_release.py"],
             input=json.dumps(document),
@@ -826,13 +846,41 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         )
         self.assertEqual(
             worker["environment"]["FICANT_WORKER_RUNTIME_IMAGE_DIGEST"],
-            "sha256:" + "22" * 32,
+            self.WORKER_RUNTIME_DIGEST,
+        )
+        self.assertEqual(
+            worker["environment"]["FICANT_CODE_COMMIT_SHA"], self.DEPLOY_SHA
+        )
+        self.assertEqual(
+            worker["environment"]["FICANT_CODE_TREE_SHA"], self.CODE_TREE_SHA
+        )
+        self.assertEqual(
+            worker["environment"]["FICANT_WORKER_ORPHAN_GRACE_SECONDS"], "3600"
+        )
+        self.assertEqual(
+            worker["environment"]["FICANT_WORKER_ORPHAN_INTERVAL_SECONDS"], "300"
+        )
+        server = document["services"]["ficant-server"]
+        self.assertEqual(
+            server["environment"]["FICANT_SERVER_RUNTIME_IMAGE_DIGEST"],
+            self.SERVER_RUNTIME_DIGEST,
+        )
+        server_environment_attestation = (
+            "ficant.server.environment.v1\n"
+            "arch=amd64\n"
+            "os=linux\n"
+            "profile=test"
+        )
+        self.assertEqual(
+            server["environment"]["FICANT_SERVER_ENVIRONMENT_ATTESTATION"],
+            "sha256:"
+            + hashlib.sha256(server_environment_attestation.encode("utf-8")).hexdigest(),
         )
         self.assertEqual(
             document["services"]["ficant-server"]["environment"][
                 "FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST"
             ],
-            "sha256:" + "33" * 32,
+            self.WORKER_SOURCE_DIGEST,
         )
         self.assertEqual(
             document["services"]["ficant-ui"]["environment"][
@@ -909,6 +957,217 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn(service, result.stderr)
 
+    def test_release_validator_binds_complete_runtime_identity(self) -> None:
+        candidate = "a1" * 20
+        tree = "b2" * 20
+        server_runtime = "sha256:" + "c3" * 32
+        document = self.resolved_release_document(candidate, tree, server_runtime)
+
+        result = self.validate_release(document, candidate, tree, server_runtime)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        server_environment = document["services"]["ficant-server"]["environment"]
+        worker_environment = document["services"]["ficant-worker"]["environment"]
+        for environment in (server_environment, worker_environment):
+            self.assertEqual(environment["FICANT_CODE_COMMIT_SHA"], candidate)
+            self.assertEqual(environment["FICANT_CODE_TREE_SHA"], tree)
+        self.assertEqual(
+            server_environment["FICANT_SERVER_RUNTIME_IMAGE_DIGEST"], server_runtime
+        )
+
+        for invalid_tree in (None, "", tree.upper(), "g1" * 20, tree[:-1], tree + "0"):
+            with self.subTest(invalid_tree=invalid_tree):
+                result = self.validate_release(
+                    document, candidate, invalid_tree, server_runtime
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("FICANT_CODE_TREE_SHA must be", result.stderr)
+
+        for invalid_runtime in (
+            None,
+            "",
+            "c3" * 32,
+            "sha256:" + "C3" * 32,
+            "sha256:" + "g3" * 32,
+            "sha256:" + "c3" * 31,
+        ):
+            with self.subTest(invalid_runtime=invalid_runtime):
+                result = self.validate_release(document, candidate, tree, invalid_runtime)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("FICANT_SERVER_RUNTIME_IMAGE_DIGEST must be", result.stderr)
+
+        invalid_worker_digests = (
+            None,
+            "",
+            "22" * 32,
+            "sha256:" + "A2" * 32,
+            "sha256:" + "g2" * 32,
+            "sha256:" + "22" * 31,
+        )
+        for variable, argument_index in (
+            ("FICANT_WORKER_RUNTIME_IMAGE_DIGEST", 0),
+            ("FICANT_WORKER_NATIVE_SOURCE_DIGEST", 1),
+        ):
+            for invalid_digest in invalid_worker_digests:
+                with self.subTest(variable=variable, invalid_digest=invalid_digest):
+                    worker_arguments = [
+                        self.WORKER_RUNTIME_DIGEST,
+                        self.WORKER_SOURCE_DIGEST,
+                    ]
+                    worker_arguments[argument_index] = invalid_digest
+                    result = self.validate_release(
+                        document,
+                        candidate,
+                        tree,
+                        server_runtime,
+                        *worker_arguments,
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(f"{variable} must be", result.stderr)
+
+        for service in ("ficant-server", "ficant-worker"):
+            for key in ("FICANT_CODE_COMMIT_SHA", "FICANT_CODE_TREE_SHA"):
+                with self.subTest(service=service, key=key):
+                    drifted = self.resolved_release_document(
+                        candidate, tree, server_runtime
+                    )
+                    drifted["services"][service]["environment"][key] = "d4" * 20
+                    result = self.validate_release(
+                        drifted, candidate, tree, server_runtime
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(f"{service} Code identity", result.stderr)
+
+        server_required = (
+            "FICANT_CODE_COMMIT_SHA",
+            "FICANT_CODE_TREE_SHA",
+            "FICANT_SERVER_RUNTIME_IMAGE_DIGEST",
+            "FICANT_SERVER_ENVIRONMENT_ATTESTATION",
+            "FICANT_BOOTSTRAP_ACTOR_ID",
+            "FICANT_BOOTSTRAP_TENANT_ID",
+            "FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS",
+            "FICANT_BOOTSTRAP_ACTIVE_ROLE",
+            "FICANT_INPUT_FILE_NDJSON_ROOT",
+            "FICANT_INPUT_FILE_CONNECTION_BINDING",
+            "FICANT_INPUT_POSTGRES_CONNECTION_BINDING",
+        )
+        for key in server_required:
+            with self.subTest(missing_server_key=key):
+                drifted = self.resolved_release_document(candidate, tree, server_runtime)
+                drifted["services"]["ficant-server"]["environment"].pop(key)
+                result = self.validate_release(
+                    drifted, candidate, tree, server_runtime
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("missing its production runtime environment", result.stderr)
+
+        for key in (
+            "FICANT_CODE_COMMIT_SHA",
+            "FICANT_CODE_TREE_SHA",
+            "FICANT_WORKER_RUNTIME_IMAGE_DIGEST",
+            "FICANT_WORKER_ENVIRONMENT_ATTESTATION",
+            "FICANT_WORKER_NATIVE_SOURCE_DIGEST",
+            "FICANT_WORKER_ORPHAN_GRACE_SECONDS",
+            "FICANT_WORKER_ORPHAN_INTERVAL_SECONDS",
+        ):
+            with self.subTest(missing_worker_key=key):
+                drifted = self.resolved_release_document(candidate, tree, server_runtime)
+                drifted["services"]["ficant-worker"]["environment"].pop(key)
+                result = self.validate_release(
+                    drifted, candidate, tree, server_runtime
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    "missing its production database/S3/identity environment",
+                    result.stderr,
+                )
+
+        runtime_drift = self.resolved_release_document(candidate, tree, server_runtime)
+        runtime_drift["services"]["ficant-server"]["environment"][
+            "FICANT_SERVER_RUNTIME_IMAGE_DIGEST"
+        ] = "sha256:" + "e5" * 32
+        result = self.validate_release(runtime_drift, candidate, tree, server_runtime)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Runtime image does not match", result.stderr)
+
+        paired_runtime_drift = self.resolved_release_document(
+            candidate, tree, server_runtime
+        )
+        fake_runtime = "sha256:" + "e6" * 32
+        paired_runtime_drift["services"]["ficant-worker"]["environment"][
+            "FICANT_WORKER_RUNTIME_IMAGE_DIGEST"
+        ] = fake_runtime
+        paired_runtime_drift["services"]["ficant-server"]["environment"][
+            "FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST"
+        ] = fake_runtime
+        result = self.validate_release(
+            paired_runtime_drift, candidate, tree, server_runtime
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ficant-worker Runtime image does not match", result.stderr)
+
+        paired_source_drift = self.resolved_release_document(candidate, tree, server_runtime)
+        fake_source = "sha256:" + "e7" * 32
+        paired_source_drift["services"]["ficant-worker"]["environment"][
+            "FICANT_WORKER_NATIVE_SOURCE_DIGEST"
+        ] = fake_source
+        paired_source_drift["services"]["ficant-server"]["environment"][
+            "FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST"
+        ] = fake_source
+        result = self.validate_release(
+            paired_source_drift, candidate, tree, server_runtime
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ficant-worker native source does not match", result.stderr)
+
+        paired_attestation_drift = self.resolved_release_document(
+            candidate, tree, server_runtime
+        )
+        fake_attestation = "ficant.worker.environment.v1\nprofile=drifted"
+        paired_attestation_drift["services"]["ficant-worker"]["environment"][
+            "FICANT_WORKER_ENVIRONMENT_ATTESTATION"
+        ] = fake_attestation
+        paired_attestation_drift["services"]["ficant-server"]["environment"][
+            "FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION"
+        ] = fake_attestation
+        result = self.validate_release(
+            paired_attestation_drift, candidate, tree, server_runtime
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("environment attestation is not the fixed", result.stderr)
+
+        fixed_value_mutations = {
+            "FICANT_SERVER_ENVIRONMENT_ATTESTATION": "sha256:" + "f6" * 32,
+            "FICANT_BOOTSTRAP_ACTOR_ID": "01J00000000000000000000013",
+            "FICANT_BOOTSTRAP_TENANT_ID": "01J00000000000000000000014",
+            "FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS": "01J00000000000000000000015",
+            "FICANT_BOOTSTRAP_ACTIVE_ROLE": "PLATFORM_ADMINISTRATOR",
+            "FICANT_INPUT_FILE_NDJSON_ROOT": "/tmp/input",
+            "FICANT_INPUT_FILE_CONNECTION_BINDING": "drifted-file",
+            "FICANT_INPUT_POSTGRES_CONNECTION_BINDING": "drifted-postgres",
+        }
+        for key, value in fixed_value_mutations.items():
+            with self.subTest(drifted_server_key=key):
+                drifted = self.resolved_release_document(candidate, tree, server_runtime)
+                drifted["services"]["ficant-server"]["environment"][key] = value
+                result = self.validate_release(
+                    drifted, candidate, tree, server_runtime
+                )
+                self.assertNotEqual(result.returncode, 0)
+
+        for key, value in (
+            ("FICANT_WORKER_ORPHAN_GRACE_SECONDS", "0"),
+            ("FICANT_WORKER_ORPHAN_INTERVAL_SECONDS", "3601"),
+        ):
+            with self.subTest(drifted_worker_key=key):
+                drifted = self.resolved_release_document(candidate, tree, server_runtime)
+                drifted["services"]["ficant-worker"]["environment"][key] = value
+                result = self.validate_release(
+                    drifted, candidate, tree, server_runtime
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("orphan maintenance intervals", result.stderr)
+
     def test_rollback_smoke_accepts_forward_only_migration_supersets(self) -> None:
         smoke = Path("deploy/test/bin/smoke-test.sh").read_text(encoding="utf-8")
 
@@ -926,8 +1185,12 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         self.assertIn("${FICANT_STORAGE_RUNTIME_IMAGE:", compose)
         self.assertNotIn("FICANT_STORAGE_SHA", compose + deploy + rollback)
         self.assertIn(
-            "FICANT_DEPLOY_SHA=%s\\nFICANT_STORAGE_RUNTIME_IMAGE=%s\\n"
-            "FICANT_STORAGE_RUNTIME_CONFIG_DIGEST=%s\\n",
+            "FICANT_DEPLOY_SHA=%s\\nFICANT_CODE_TREE_SHA=%s\\n"
+            "FICANT_STORAGE_RUNTIME_IMAGE=%s\\n"
+            "FICANT_STORAGE_RUNTIME_CONFIG_DIGEST=%s\\n"
+            "FICANT_SERVER_RUNTIME_IMAGE_DIGEST=%s\\n"
+            "FICANT_WORKER_RUNTIME_IMAGE_DIGEST=%s\\n"
+            "FICANT_WORKER_NATIVE_SOURCE_DIGEST=%s\\n",
             deploy,
         )
         self.assertIn("FICANT_STORAGE_RUNTIME_IMAGE=$previous_storage_image", rollback)
@@ -961,7 +1224,7 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         self.assertIn("--print-native-source-digest", deploy)
         self.assertIn("FICANT_WORKER_RUNTIME_IMAGE_DIGEST", deploy)
         self.assertIn(
-            '"$actual" == "$storage_config" || "$actual" == "$index"', deploy
+            '"$actual" == "$expected_config" || "$actual" == "$index"', deploy
         )
 
         self.assertIn(
@@ -1549,13 +1812,32 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
                 "    try {",
                 "    finally {",
                 "    if (-not $temporaryRoot.StartsWith($temporaryBase, [StringComparison]::OrdinalIgnoreCase)) {",
-                "    if ($LASTEXITCODE -ne 0 -or $workerRuntimeDigest -notmatch '^sha256:[0-9a-f]{64}$') {",
-                "    if ($LASTEXITCODE -ne 0 -or $workerSourceDigest -notmatch '^sha256:[0-9a-f]{64}$') {",
-                "    foreach ($entry in $runtimeEnvironment.GetEnumerator()) {",
                 "    try {",
                 "    finally {",
             ],
         )
+        temporary_setup = preflight.index(
+            "    try {\n"
+            "        New-Item -ItemType Directory -Path "
+            "(Join-Path $temporaryRoot 'config')"
+        )
+        temporary_cleanup = preflight.index(
+            "    finally {\n"
+            "        if (Test-Path -LiteralPath $temporaryRoot) {\n"
+            "            Remove-Item -LiteralPath $temporaryRoot -Recurse -Force\n"
+            "        }\n"
+            "    }",
+            temporary_setup,
+        )
+        for protected_marker in (
+            "Copy-Item -LiteralPath",
+            "$serverRuntimeDigest = (& docker image inspect",
+            "$workerRuntimeDigest = (& docker image inspect",
+            "$workerSourceDigest = (& docker run",
+            "Invoke-ReleaseCompose -ArgumentList @('up'",
+        ):
+            marker_position = preflight.index(protected_marker, temporary_setup)
+            self.assertLess(marker_position, temporary_cleanup)
         self.assertEqual(
             preflight.rstrip().splitlines()[-10:],
             [

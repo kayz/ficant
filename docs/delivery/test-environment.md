@@ -11,7 +11,7 @@
 - 自动触发：Human 创建符合版本格式、指向当前 `main` 精确提交的不可变 `v*` tag；普通 branch push、Pull Request 和 `main` 合并不运行完整 GitHub CI。
 - 手动重试：`release-test` workflow dispatch 只接受已存在的不可变版本 tag，并重新解析该 tag 的原始候选 Commit；不接受裸 Commit SHA，也不要求历史 tag 事后仍等于已经前进的 `main`。
 - 应用镜像：只构建 `ghcr.io/kayz/ficant-{server,worker,ui}:sha-<40位CommitSHA>`；三个应用镜像和锁定的 Ceph runtime 全部扫描通过后，只把三个应用镜像提升为对应的不可变 `:<version>` tag。
-- Compose 的应用服务使用 `FICANT_DEPLOY_SHA`；Ceph 存储运行时使用 `deploy/storage-runtime.lock.json` 中的完整 OCI index digest 引用，并另外校验 config digest。不得创建或更新可变 `latest`/`test-latest`。
+- Compose 的应用服务由同一对 40 位小写 commit/tree 身份驱动：`FICANT_CODE_COMMIT_SHA` 唯一派生自 `FICANT_DEPLOY_SHA`，`FICANT_CODE_TREE_SHA` 由已验证 tag 候选提供。Server/Worker 的实际镜像 config digest 在镜像拉取后只读派生，Worker 的 native source digest 继续从实际 Worker 镜像派生；Ceph 存储运行时使用 `deploy/storage-runtime.lock.json` 中的完整 OCI index digest 引用，并另外校验 config digest。不得创建或更新可变 `latest`/`test-latest`。
 - Dockerfile、Rust 工具链和基础镜像沿用仓库锁定版本；版本制品构建及其 SBOM/provenance 生成只发生在 GitHub Linux Runner，本地入口只构建不发布的预检镜像。
 
 ## 测试机
@@ -25,17 +25,17 @@
 
 ## 部署事务
 
-1. 自动新版本校验 tag、其 40 位 Commit SHA 与触发时的当前 `main`；人工重试校验既有不可变 tag 并恢复其原始 Commit，同时校验对应 migration 目录。
+1. 自动新版本校验 tag、其 40 位 Commit SHA、对应 40 位 tree SHA 与触发时的当前 `main`；人工重试校验既有不可变 tag 并从 tag commit/tree 恢复同一候选，同时校验对应 migration 目录。
 2. 原子写入测试专用 S3 access key、secret key 与 bucket，`.env` 权限保持 `0600`。
 3. Human 按需手工触发 `prepare-storage-runtime`。任务先在测试机只读检查 lock 中准确的 index/config digest；已存在即成功退出，缺失时才由 Runner 使用 `docker save | gzip | ssh | docker load` 流式准备，并在加载后复验。它不上传 tar artifact、不使用应用版本 tag，也不表示应用发布成功。
-4. 应用部署使用工作流短期 `GITHUB_TOKEN` 登录 GHCR，拉取固定 digest 的 PostgreSQL 镜像，以及按候选 Commit SHA 标识的 Server、Worker、UI 三个应用镜像；部署前只读确认锁定的 Ceph runtime 已准备，目标机不现场构建。
+4. 应用部署使用工作流短期 `GITHUB_TOKEN` 登录 GHCR，并以 `deploy.sh <commit> <tree>` 显式传入已授权 Code 身份；拉取固定 digest 的 PostgreSQL 镜像，以及按候选 Commit SHA 标识的 Server、Worker、UI 三个应用镜像。拉取后只读派生 Server/Worker 实际镜像 config digest 与 Worker native source digest；部署前只读确认锁定的 Ceph runtime 已准备，目标机不现场构建。
 5. 启动固定 digest 的 PostgreSQL 与锁定 OCI index 的 Ceph RGW，串行执行版本化 migration。
-6. 启动 Server、Worker 和 UI，等待 PostgreSQL、Ceph RGW 与三个应用共五项长期运行服务健康；一次性 migration 必须已成功退出。Worker 必须使用真实 PostgreSQL、S3 和身份配置。
+6. 启动 Server、Worker 和 UI，等待 PostgreSQL、Ceph RGW 与三个应用共五项长期运行服务健康；一次性 migration 必须已成功退出。Server 必须接收候选 commit/tree、实际 Server runtime digest、固定测试环境摘要、受控 bootstrap bearer/tenant/actor/owner/role 以及文件/PostgreSQL 输入绑定；Worker 必须接收同一 Code 身份、实际 runtime/source 身份、真实 PostgreSQL/S3 配置和固定 orphan grace/interval。
 7. 验证容器健康、服务 readiness，以及数据库已应用 migration 是候选所需 migration 的超集且无缺项。
-8. 成功后原子更新 `state/current.env` 中的 `FICANT_DEPLOY_SHA`、`FICANT_STORAGE_RUNTIME_IMAGE` 与 `FICANT_STORAGE_RUNTIME_CONFIG_DIGEST`，并把旧状态写入 `state/previous.env`。
+8. 成功后原子更新 `state/current.env` 中的 deploy commit、Code tree、storage image/config、Server runtime、Worker runtime/source，并把旧状态完整写入 `state/previous.env`。新候选必须保存真实 tree/runtime；只有回滚缺少这些字段的旧状态时，才允许通过显式 legacy 模式使用零 tree/零 runtime 兼容占位。
 9. 写入 `state/deployments/<sha>.json`。
 
-失败时，若 previous 存在，则直接恢复 previous 镜像并重复健康/冒烟；首次部署失败则停止应用容器、保留数据库卷和诊断记录，不伪造成功状态。
+失败时，若 previous 存在，则按其已保存的 commit/tree 恢复 previous 镜像、重新派生实际 Runtime 身份并重复健康/冒烟；缺少 R9E 新字段的旧状态只走显式 legacy 回滚兼容路径。首次部署失败则停止应用容器、保留数据库卷和诊断记录，不伪造成功状态。
 
 ## 数据库回滚边界
 
@@ -54,4 +54,5 @@
 - **R9A repo-policy 收口（2026-09-04）：** `.github/scripts/tests/test_compose_security_gate.py -v` 共 34 项，结果为 32 passed、2 skipped、0 failed；两个 skipped 是必须显式启用的 Ceph image / live Compose 环境测试。夹具现在验证开发 Compose 的两个精确 origin 与 `Get-ImageConfigDigest` / `Get-WorkerAttestation` 行为边界，不再依赖已失效的单 origin 或内联命令字符串。
 - **R9A 状态发布收口：** `deploy/test/bin/deploy.sh` 对 `current.env` / `previous.env` 使用目标同目录临时文件，完整写入、设为 `0600` 后通过 rename 原子发布；4 个专用夹具覆盖成功、rename 失败、旧状态保持、临时文件清理和版本并发合同。
 - **R9A 并发合同收口：** `cicd.yml` 的 `cancel_outdated_runs` 已与 `.github/workflows/ci.yml`、`release-test.yml` 的 `cancel-in-progress: false` 对齐。不可变版本的已开始 CI/部署不会被后续运行自动取消。
+- **R9E 当前候选（2026-09-04）：** R9D 已通过 [PR #69](https://github.com/kayz/ficant/pull/69) 线性合入 `main@433d03dd998a1e5829fc7bbc2ec6438e66cbfe00`（tree `1806850afbc1b3ca1690c30cc94a7cc3dd8aa17f`）。第四次 clean-main preflight 已通过构建、Server/Worker/UI/Ceph 四镜像扫描、resolved Compose 与空库 migration，随后因 Server 缺少 `FICANT_CODE_COMMIT_SHA` 而在监听前 unhealthy 并正确停止；未创建 tag。R9E 已补齐上述运行时身份、bootstrap/input、Worker orphan 与状态/回滚合同；定向本地真实 Compose 探针观察到 migration 成功、Server/Worker/UI healthy、`WORKER=200:ok`、`UI=200`。目标证据现为 compose security 37 tests（35 passed、2 个显式 live gate skipped、0 failed）、state contract 9/9、repo-policy PASS、实际镜像摘要的 resolved validator PASS，修复后独立复审为 Blocker/Major/Minor `0/0/0`；最终 `scripts/check-fast.ps1` exit `0`、23/23 步通过，完整 `scripts/check.ps1` exit `0`、40/40 步通过。本地候选已完成并可提交/合并；提交/合并与第五次 clean-main preflight 尚待执行，tag、版本 CI 和测试环境交付均未发生，详见 [R9E brief](../iterations/2026-09-r9e-release-runtime-identity.md)。
 

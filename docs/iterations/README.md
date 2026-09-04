@@ -10,9 +10,9 @@
 - 如确需新增写路径，Root 必须在首次写入前停止并取得 Human 明确授权；扩权只能作为新的 §5 条目记录精确路径、理由与边界，原 §6 清单保持不变。事后发现的越界必须如实记录为偏差，不得用修改 §6 追认。
 - 被约束的实施者不得单方改写用来判断其是否越界的约束。这一原则同样适用于允许写路径、guarded 集合、预期值、Oracle、断言与其他自管门禁；需要变更时必须由独立授权或独立可审阅证据承载。
 
-**当前迭代：** [`2026-09-r9d-compose-candidate-binding.md`](2026-09-r9d-compose-candidate-binding.md)（R9C 已通过 PR #68 合入；第三次 clean-main preflight 在四个镜像扫描通过后发现 Compose 校验器仍把零 SHA 夹具写死为唯一允许身份。R9D 只把校验器精确绑定调用方候选并补齐失败关闭回归，`v0.1.0-alpha.10` 仍未创建。）
+**当前迭代：** [`2026-09-r9e-release-runtime-identity.md`](2026-09-r9e-release-runtime-identity.md)（R9D 已通过 [PR #69](https://github.com/kayz/ficant/pull/69) 线性合入 `main@433d03dd998a1e5829fc7bbc2ec6438e66cbfe00` / tree `1806850afbc1b3ca1690c30cc94a7cc3dd8aa17f`。第四次 clean-main preflight 已通过构建、四镜像扫描、resolved Compose 与空库 migration，随后因 Server 缺少 `FICANT_CODE_COMMIT_SHA` 而 unhealthy。R9E 已补齐完整 commit/tree、Server runtime/environment/bootstrap/input、Worker orphan、部署状态与回滚身份合同；定向真实 Compose 探针、compose security 37 tests（35 passed、2 个显式 live gate skipped）、state contract 9/9、repo-policy、实际镜像摘要 resolved validator 和修复后独立复审 Blocker/Major/Minor `0/0/0` 均已通过；最终 `check-fast.ps1` exit `0`、23/23 步通过，完整 `check.ps1` exit `0`、40/40 步通过。本地候选已完成并可提交/合并；提交/合并与第五次 clean-main preflight 尚待执行，`v0.1.0-alpha.10` 仍未创建，版本 CI 与测试环境交付尚未运行。）
 
-**最近完成迭代：** [`2026-09-r9c-ui-runtime-cve.md`](2026-09-r9c-ui-runtime-cve.md)（[PR #68](https://github.com/kayz/ficant/pull/68) 已线性合入 `main@eb09b2e12f2ed8d4237c235eb638d0da1db07b38`；本地完整检查通过，随后 Compose 候选身份门的失败关闭事实由 R9D 接续，不把失败描述为版本交付。）
+**最近完成迭代：** [`2026-09-r9d-compose-candidate-binding.md`](2026-09-r9d-compose-candidate-binding.md)（[PR #69](https://github.com/kayz/ficant/pull/69) 已线性合入上述 `main`；R9D 的目标回归、快速及标准完整本地检查均已通过。合入后的第四次 preflight 在 tag 前暴露 Server 运行时身份缺口并由 R9E 接续，不把该失败描述为版本交付。）
 
 ## 归档说明（2026-07-26）
 

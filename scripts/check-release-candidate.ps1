@@ -174,6 +174,7 @@ try {
 
     $validationEnvironment = @{
         FICANT_DEPLOY_SHA = $candidateSha
+        FICANT_CODE_TREE_SHA = ('00' * 20)
         FICANT_STORAGE_RUNTIME_IMAGE = $storageImage
         FICANT_IMAGE_PREFIX = 'ghcr.io/kayz/ficant'
         FICANT_ROOT = '/srv/ficant-test'
@@ -187,6 +188,7 @@ try {
         FICANT_EXPERIMENT_CURSOR_KEY_HEX = ('11' * 32)
         FICANT_WORKER_RUNTIME_IMAGE_DIGEST = "sha256:$('22' * 32)"
         FICANT_WORKER_NATIVE_SOURCE_DIGEST = "sha256:$('33' * 32)"
+        FICANT_SERVER_RUNTIME_IMAGE_DIGEST = "sha256:$('44' * 32)"
         FICANT_GRPC_WEB_ALLOWED_ORIGINS = 'https://greatquant.com'
     }
     $savedEnvironment = @{}
@@ -218,92 +220,102 @@ try {
     if (-not $temporaryRoot.StartsWith($temporaryBase, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Resolved temporary root escaped the system temporary directory: $temporaryRoot"
     }
-    New-Item -ItemType Directory -Path (Join-Path $temporaryRoot 'config') -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $temporaryRoot "releases\$candidateSha\migrations") -Force | Out-Null
-    Copy-Item -LiteralPath (Join-Path $script:FicantRoot 'deploy\test\config\ficant.toml') `
-        -Destination (Join-Path $temporaryRoot 'config\ficant.toml')
-    Copy-Item -Path (Join-Path $script:FicantRoot 'migrations\postgresql\*.sql') `
-        -Destination (Join-Path $temporaryRoot "releases\$candidateSha\migrations")
-
-    $script:PreflightProject = "ficant-release-preflight-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
-    $portBase = Get-Random -Minimum 31000 -Maximum 39000
-    $workerRuntimeDigest = (& docker image inspect --format '{{.Id}}' $images[1])
-    if ($LASTEXITCODE -ne 0 -or $workerRuntimeDigest -notmatch '^sha256:[0-9a-f]{64}$') {
-        throw 'Preflight Worker image has no canonical local digest.'
-    }
-    $workerSourceDigest = (& docker run --rm --read-only --cap-drop ALL `
-        --security-opt no-new-privileges:true --pids-limit 64 --memory 128m `
-        $images[1] --print-native-source-digest)
-    if ($LASTEXITCODE -ne 0 -or $workerSourceDigest -notmatch '^sha256:[0-9a-f]{64}$') {
-        throw 'Preflight Worker image has no canonical native source digest.'
-    }
-    $runtimeEnvironment = @{
-        FICANT_DEPLOY_SHA = $candidateSha
-        FICANT_STORAGE_RUNTIME_IMAGE = $storageImage
-        FICANT_IMAGE_PREFIX = $imagePrefix
-        FICANT_ROOT = $temporaryRoot
-        FICANT_POSTGRES_PASSWORD = 'preflight-postgres-password'
-        FICANT_S3_ACCESS_KEY = 'preflightaccess'
-        FICANT_S3_SECRET_KEY = 'preflight-secret-key-0000000000000000'
-        FICANT_S3_BUCKET = 'ficant'
-        FICANT_PLATFORM_SIGNING_KEY_HEX = ('11' * 32)
-        FICANT_PLATFORM_TRACE_KEY_HEX = ('22' * 32)
-        FICANT_BOOTSTRAP_BEARER_TOKEN = 'preflight-bootstrap-token-00000000'
-        FICANT_EXPERIMENT_CURSOR_KEY_HEX = ('33' * 32)
-        FICANT_WORKER_RUNTIME_IMAGE_DIGEST = $workerRuntimeDigest.Trim()
-        FICANT_WORKER_NATIVE_SOURCE_DIGEST = $workerSourceDigest.Trim()
-        FICANT_GRPC_WEB_ALLOWED_ORIGINS = 'http://127.0.0.1'
-        FICANT_POSTGRES_PORT = [string]$portBase
-        FICANT_S3_PORT = [string]($portBase + 1)
-        FICANT_SERVER_PORT = [string]($portBase + 2)
-        FICANT_WORKER_PORT = [string]($portBase + 3)
-        FICANT_UI_PORT = [string]($portBase + 4)
-    }
-    $savedRuntimeEnvironment = @{}
-    foreach ($entry in $runtimeEnvironment.GetEnumerator()) {
-        $savedRuntimeEnvironment[$entry.Key] = [Environment]::GetEnvironmentVariable($entry.Key)
-        [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value)
-    }
     try {
-        Invoke-ReleaseCompose -ArgumentList @('up', '-d', '--wait', '--wait-timeout', '180', 'postgres', 'ceph-rgw')
-        Invoke-ReleaseCompose -ArgumentList @('run', '--rm', 'migration')
-        Invoke-ReleaseCompose -ArgumentList @(
-            'up', '-d', '--remove-orphans', '--wait', '--wait-timeout', '180',
-            'ficant-server', 'ficant-worker', 'ficant-ui'
-        )
+        New-Item -ItemType Directory -Path (Join-Path $temporaryRoot 'config') -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $temporaryRoot "releases\$candidateSha\migrations") -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $script:FicantRoot 'deploy\test\config\ficant.toml') `
+            -Destination (Join-Path $temporaryRoot 'config\ficant.toml')
+        Copy-Item -Path (Join-Path $script:FicantRoot 'migrations\postgresql\*.sql') `
+            -Destination (Join-Path $temporaryRoot "releases\$candidateSha\migrations")
 
-        $worker = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$($portBase + 3)/worker-ready"
-        $ui = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$($portBase + 4)/ficant/"
-        if ($worker.Content.Trim() -ne 'ok' -or $ui.Content -notlike '*<div id="root">*') {
-            throw 'Release readiness or UI smoke failed.'
+        $script:PreflightProject = "ficant-release-preflight-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+        $portBase = Get-Random -Minimum 31000 -Maximum 39000
+        $serverRuntimeDigest = (& docker image inspect --format '{{.Id}}' $images[0])
+        if ($LASTEXITCODE -ne 0 -or $serverRuntimeDigest -notmatch '^sha256:[0-9a-f]{64}$') {
+            throw 'Preflight Server image has no canonical local digest.'
         }
-        $requiredMigrations = @(
-            Get-ChildItem -LiteralPath (Join-Path $temporaryRoot "releases\$candidateSha\migrations") `
-                -Filter '*.sql' -File | Select-Object -ExpandProperty Name
-        )
-        $appliedOutput = & docker compose --project-name $script:PreflightProject `
-            --file (Join-Path $script:FicantRoot 'deploy\test\compose.test.yml') `
-            exec -T postgres psql -U ficant -d ficant -At `
-            -c 'SELECT version FROM public.ficant_schema_migrations ORDER BY version'
-        if ($LASTEXITCODE -ne 0) {
-            throw 'Unable to inspect applied migrations.'
+        $workerRuntimeDigest = (& docker image inspect --format '{{.Id}}' $images[1])
+        if ($LASTEXITCODE -ne 0 -or $workerRuntimeDigest -notmatch '^sha256:[0-9a-f]{64}$') {
+            throw 'Preflight Worker image has no canonical local digest.'
         }
-        $appliedMigrations = @($appliedOutput | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-        $missingMigrations = @($requiredMigrations | Where-Object { $_ -notin $appliedMigrations })
-        if ($missingMigrations.Count -ne 0) {
-            throw "Release topology missed required migrations: $($missingMigrations -join ', ')"
+        $workerSourceDigest = (& docker run --rm --read-only --cap-drop ALL `
+            --security-opt no-new-privileges:true --pids-limit 64 --memory 128m `
+            $images[1] --print-native-source-digest)
+        if ($LASTEXITCODE -ne 0 -or $workerSourceDigest -notmatch '^sha256:[0-9a-f]{64}$') {
+            throw 'Preflight Worker image has no canonical native source digest.'
+        }
+        $runtimeEnvironment = @{
+            FICANT_DEPLOY_SHA = $candidateSha
+            FICANT_CODE_TREE_SHA = $candidateTree
+            FICANT_STORAGE_RUNTIME_IMAGE = $storageImage
+            FICANT_IMAGE_PREFIX = $imagePrefix
+            FICANT_ROOT = $temporaryRoot
+            FICANT_POSTGRES_PASSWORD = 'preflight-postgres-password'
+            FICANT_S3_ACCESS_KEY = 'preflightaccess'
+            FICANT_S3_SECRET_KEY = 'preflight-secret-key-0000000000000000'
+            FICANT_S3_BUCKET = 'ficant'
+            FICANT_PLATFORM_SIGNING_KEY_HEX = ('11' * 32)
+            FICANT_PLATFORM_TRACE_KEY_HEX = ('22' * 32)
+            FICANT_BOOTSTRAP_BEARER_TOKEN = 'preflight-bootstrap-token-00000000'
+            FICANT_EXPERIMENT_CURSOR_KEY_HEX = ('33' * 32)
+            FICANT_WORKER_RUNTIME_IMAGE_DIGEST = $workerRuntimeDigest.Trim()
+            FICANT_WORKER_NATIVE_SOURCE_DIGEST = $workerSourceDigest.Trim()
+            FICANT_SERVER_RUNTIME_IMAGE_DIGEST = $serverRuntimeDigest.Trim()
+            FICANT_GRPC_WEB_ALLOWED_ORIGINS = "http://127.0.0.1:$($portBase + 4)"
+            FICANT_POSTGRES_PORT = [string]$portBase
+            FICANT_S3_PORT = [string]($portBase + 1)
+            FICANT_SERVER_PORT = [string]($portBase + 2)
+            FICANT_WORKER_PORT = [string]($portBase + 3)
+            FICANT_UI_PORT = [string]($portBase + 4)
+        }
+        $savedRuntimeEnvironment = @{}
+        try {
+            foreach ($entry in $runtimeEnvironment.GetEnumerator()) {
+                $savedRuntimeEnvironment[$entry.Key] = [Environment]::GetEnvironmentVariable($entry.Key)
+                [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value)
+            }
+            Invoke-ReleaseCompose -ArgumentList @('up', '-d', '--wait', '--wait-timeout', '180', 'postgres', 'ceph-rgw')
+            Invoke-ReleaseCompose -ArgumentList @('run', '--rm', 'migration')
+            Invoke-ReleaseCompose -ArgumentList @(
+                'up', '-d', '--remove-orphans', '--wait', '--wait-timeout', '180',
+                'ficant-server', 'ficant-worker', 'ficant-ui'
+            )
+
+            $worker = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$($portBase + 3)/worker-ready"
+            $ui = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$($portBase + 4)/ficant/"
+            if ($worker.Content.Trim() -ne 'ok' -or $ui.Content -notlike '*<div id="root">*') {
+                throw 'Release readiness or UI smoke failed.'
+            }
+            $requiredMigrations = @(
+                Get-ChildItem -LiteralPath (Join-Path $temporaryRoot "releases\$candidateSha\migrations") `
+                    -Filter '*.sql' -File | Select-Object -ExpandProperty Name
+            )
+            $appliedOutput = & docker compose --project-name $script:PreflightProject `
+                --file (Join-Path $script:FicantRoot 'deploy\test\compose.test.yml') `
+                exec -T postgres psql -U ficant -d ficant -At `
+                -c 'SELECT version FROM public.ficant_schema_migrations ORDER BY version'
+            if ($LASTEXITCODE -ne 0) {
+                throw 'Unable to inspect applied migrations.'
+            }
+            $appliedMigrations = @($appliedOutput | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            $missingMigrations = @($requiredMigrations | Where-Object { $_ -notin $appliedMigrations })
+            if ($missingMigrations.Count -ne 0) {
+                throw "Release topology missed required migrations: $($missingMigrations -join ', ')"
+            }
+        }
+        finally {
+            try {
+                Invoke-ReleaseCompose -ArgumentList @('down', '--volumes', '--remove-orphans')
+            }
+            catch {
+                Write-Warning $_
+            }
+            foreach ($entry in $savedRuntimeEnvironment.GetEnumerator()) {
+                [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value)
+            }
         }
     }
     finally {
-        try {
-            Invoke-ReleaseCompose -ArgumentList @('down', '--volumes', '--remove-orphans')
-        }
-        catch {
-            Write-Warning $_
-        }
-        foreach ($entry in $savedRuntimeEnvironment.GetEnumerator()) {
-            [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value)
-        }
         if (Test-Path -LiteralPath $temporaryRoot) {
             Remove-Item -LiteralPath $temporaryRoot -Recurse -Force
         }
