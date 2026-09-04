@@ -1,6 +1,6 @@
 # R9A 迭代 brief — `v0.1.0-alpha.10` 发布门禁收口
 
-**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R9A · **execution base：** `1788bcfba8d0609002008043908c8f0013474fce` · **base tree：** `0c255e73bb2ac13ce1e5d1d8c654d6cb7a6d0ac5` · **状态：** 实施中
+**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R9A · **execution base：** `1788bcfba8d0609002008043908c8f0013474fce` · **base tree：** `0c255e73bb2ac13ce1e5d1d8c654d6cb7a6d0ac5` · **状态：** 本地候选完成，待 clean `main` 发布候选预检
 
 本 brief 是 R9A 面向 Human 的唯一范围、权限边界与最终本地证据载体。开始实施时，`main == origin/main`，工作树另有一组已由 Human 要求完成的当前状态文档差异，其起始 diff identity 为 `4dd71ddf238625e89fc9f4a72a18288b95d18374`；两者共同构成本轮输入。
 
@@ -23,7 +23,7 @@
 | 并发语义 | `cicd.yml` 与 GitHub workflow 都明确 `false`：已开始的不可变版本 CI/部署不得因另一运行而自动取消。 |
 | 可重入检查 | 显式 `package-contracts.ps1` 仍产出可消费包；统一检查拥有内部 `dist` 的确定生命周期，连续执行不会使 license/supply-chain 输入集合漂移。所有修改的 PowerShell 在首次执行前 parser error 为 0。 |
 | 一方包策略 | 发布预检精确验证 20 个一方包：18 Cargo、1 PyPI SDK、1 npm generated-contract package；不得通过改 lock、漏计 npm 或虚构已删除 Cargo package 制造通过。 |
-| 最终本地候选 | `check-fast.ps1`、`check.ps1`、`check.ps1 -IncludeIntegration` 与 `git diff --check` 在最终候选上通过；不得以计划、旧提交或 Worker 声明替代 Root 最终证据。 |
+| 最终可执行候选 | `check-fast.ps1`、`check.ps1`、`check.ps1 -IncludeIntegration` 与 `git diff --check` 在最终可执行候选上通过；其后的 docs-only 证据后继须重跑所有受文档与仓库状态影响的快速门，不得以计划、旧提交或 Worker 声明替代 Root 最终证据。 |
 | 版本候选 | 合入后 `main` 必须 clean 且精确等于 `origin/main`；更新 Trivy 0.72.0 DB 后，完整 `check-release-candidate.ps1` exit 0，随后才进入 CICD 创建不可变 tag。 |
 
 ## 3. 非目标
@@ -93,7 +93,7 @@
 
 **受保护事实：** 以上闭集之外的实现、Proto、migration、Cargo/npm/Python 依赖、供应链 lock、金融 Golden/Oracle/expected/容差、ignored private authority、远端权限与测试机均不得修改。版本 tag、镜像、部署和 GitHub workflow 运行属于 OPAID 完成后的 CICD 活动。
 
-本节以下只追加同一最终候选上的实际命令、exit code、可得 test count、精确候选身份与必要失败恢复；计划命令不得写成通过。
+本节以下只追加最终可执行候选上的实际命令、exit code、可得 test count、精确候选身份与必要失败恢复；完成自测后只允许追加 Human 可读证据的 forward-only 后继，并须证明可执行树未变化、相关快速门已重跑。计划命令不得写成通过。
 
 **RED 与局部收口证据：**
 
@@ -110,10 +110,15 @@
 | `pwsh -NoLogo -NoProfile -NonInteractive -File scripts/test-contract-package-reentrancy.ps1`（锁定 Node 22.17.0） | 0 | 7 项外层判据；2 次 contract test 共 12 项、2 次 license binding，结束后 `repository_output_removed=true`。 |
 | PowerShell Parser（4 个改动/新增脚本）与 `bash -n deploy/test/bin/deploy.sh` | 0 / 0 | PowerShell parse errors 0；Bash syntax valid。 |
 | `pwsh -NoLogo -NoProfile -NonInteractive -File scripts/check.ps1`（锁定 Node 22.17.0） | 0 | 首轮在 Web typecheck 前因本 checkout 缺 ignored `node_modules` exit 1；随后 `pnpm@10.12.4 install --offline --frozen-lockfile` 复用 178/178、下载 0，完整入口从头重跑通过：C++ 9/9、Web 35/35、contract reentrancy 7 项及全部 Rust/Python/Oracle/策略检查通过。 |
+| 隔离 Compose 上的 `pwsh -NoLogo -NoProfile -NonInteractive -File scripts/check.ps1 -IncludeIntegration` | 0 | 绑定可执行候选 commit `20fa5b3fc1d51ef4694745c66577bbf7c8f4bc51`、tree `2a160cb0ab48129b385890f9746e4dd4375ec56b`。Migration 7/7、lease 1/1、execution closure 3/3、production Worker 1/1、Phase 1 正向 1/1 与负向 13/13、Phase 2B/2C/2D 各 1/1、Phase 3A registry/parity 各 1/1、Phase 3B codec 3/3 与 publication 1/1、R6A/R6B 各 1/1、R8A PostgreSQL 5/5 与生产 gRPC/gRPC-Web 1/1、R8B PostgreSQL 1/1 与生产 gRPC/gRPC-Web 1/1，以及 R7B source-destroy/fresh-restore 全部通过；恢复 manifest SHA-256 为 `DDF47CCA00F15A4863273B03C20EC05A65BBDD9CC9A59C338DB98B0737D1AE20`。 |
+| 隔离环境退出清理 | 0 | `ficant-r9a-20fa5b3f`、R7B source 与 restore 的容器、网络和数据卷均通过精确 Compose project name 执行 `down --volumes --remove-orphans` 并删除。 |
+| `git diff --check`、最终 repo-policy、Markdown 相对链接与 `scripts/check-fast.ps1`（证据后继复核） | 0 | 证据后继只更新本 brief 与证据索引，不改变上述已验证可执行树。首次快速门因调用 shell 的默认 Node 为 24.18.0、与冻结的 22.17.0 不符而在契约打包前正确 exit 1；显式锁定 Node 22.17.0 后从头重跑 exit 0。格式、tracked-path policy 与 2 份改动 Markdown 的 3 个相对链接（0 broken）均通过后才提交。 |
+
+R9A 的自测主体绑定上述可执行候选；随后只追加 Human 可读证据的 forward-only 后继。合并后的精确 `main` 仍须重新通过完整发布候选预检，不能用本节本地证据替代 tag 后的 Linux CI、镜像、SBOM/provenance 或测试环境事实。
 
 ## 7. 残余风险
 
-- 当前仍未形成精确最终候选；测试结果与候选身份将在实施完成后写入第 6 节。
+- 完整发布候选预检尚未在合并后的 clean `main == origin/main` 上执行；预检失败时不得创建 tag，且不得把本地自测冒充远端交付证据。
 - Ceph CentOS Stream 9 OS family 仍不受 Trivy 0.72.0 完整 OS 包识别，语言包扫描不等价于完整 Ceph OS 漏洞覆盖。
 - 测试环境仍使用 rootful Docker；本轮只闭合版本交付合同，不迁移宿主隔离模型。
 - `alpha.10` 仍是内部 Alpha：完整业务 WebApp、GeneratedNode/gVisor、OIDC 与业务 UAT 不属于本轮。
