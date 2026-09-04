@@ -938,6 +938,543 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
             dockerfile,
         )
 
+    def test_release_rust_builds_bind_authorized_commit_and_tree(self) -> None:
+        workflow = Path(".github/workflows/release-test.yml").read_text(
+            encoding="utf-8"
+        )
+        preflight = Path("scripts/check-release-candidate.ps1").read_text(
+            encoding="utf-8"
+        )
+        top_level_env_matches = list(
+            re.finditer(
+                r"(?ms)^env:\n(?P<body>.*?)(?=^jobs:\n)", workflow
+            )
+        )
+        self.assertEqual(len(top_level_env_matches), 1)
+        self.assertEqual(
+            top_level_env_matches[0].group("body").rstrip().splitlines(),
+            [
+                "  DEPLOY_VERSION: ${{ github.event.workflow_run.head_branch || inputs.version }}"
+            ],
+        )
+
+        build_job_matches = list(
+            re.finditer(
+                r"(?ms)^  build:\n(?P<body>.*?)(?=^  [a-z0-9-]+:\n|\Z)",
+                workflow,
+            )
+        )
+        self.assertEqual(len(build_job_matches), 1)
+        build_job_match = build_job_matches[0]
+        build_job = build_job_match.group("body")
+        self.assertEqual(
+            build_job.rstrip().splitlines(),
+            [
+                "    needs: authorize",
+                "    runs-on: ubuntu-24.04",
+                "    permissions:",
+                "      contents: read",
+                "      packages: write",
+                "    strategy:",
+                "      fail-fast: false",
+                "      matrix:",
+                "        include:",
+                "          - package: ficant-server",
+                "            binary: ficant-server",
+                "          - package: ficant-worker",
+                "            binary: ficant-worker",
+                "    steps:",
+                "      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
+                "        with:",
+                "          ref: ${{ needs.authorize.outputs.sha }}",
+                "      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f",
+                "      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9",
+                "        with:",
+                "          registry: ghcr.io",
+                "          username: ${{ github.actor }}",
+                "          password: ${{ github.token }}",
+                "      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8",
+                "        with:",
+                "          context: .",
+                "          file: deploy/dev/RustService.Dockerfile",
+                "          build-args: |",
+                "            BINARY=${{ matrix.binary }}",
+                "            FICANT_CODE_COMMIT_SHA=${{ needs.authorize.outputs.sha }}",
+                "            FICANT_CODE_TREE_SHA=${{ needs.authorize.outputs.tree }}",
+                "          push: true",
+                "          tags: |",
+                "            ghcr.io/${{ github.repository_owner }}/${{ matrix.package }}:sha-${{ needs.authorize.outputs.sha }}",
+                "          labels: |",
+                "            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}",
+                "            org.opencontainers.image.revision=${{ needs.authorize.outputs.sha }}",
+                "            org.opencontainers.image.version=${{ needs.authorize.outputs.version }}",
+                "            org.opencontainers.image.licenses=MIT",
+                "          cache-from: type=gha,scope=${{ matrix.package }}",
+                "          cache-to: type=gha,mode=max,scope=${{ matrix.package }}",
+                "          provenance: mode=max",
+                "          sbom: true",
+            ],
+        )
+        self.assertNotRegex(build_job, r"(?m)^    if:")
+        self.assertNotRegex(build_job, r"(?m)^    continue-on-error:")
+        strategy_match = re.search(
+            r"(?ms)^    strategy:\n(?P<body>.*?)(?=^    [A-Za-z][A-Za-z0-9_-]*:|\Z)",
+            build_job,
+        )
+        self.assertIsNotNone(strategy_match)
+        matrix_match = re.search(
+            r"(?ms)^      matrix:\n(?P<body>.*)\Z", strategy_match.group("body")
+        )
+        self.assertIsNotNone(matrix_match)
+        include_match = re.search(
+            r"(?ms)^        include:\n(?P<body>.*)\Z", matrix_match.group("body")
+        )
+        self.assertIsNotNone(include_match)
+        matrix_rows = [
+            line.strip()
+            for line in include_match.group("body").splitlines()
+            if line.strip()
+        ]
+        self.assertEqual(
+            matrix_rows,
+            [
+                "- package: ficant-server",
+                "binary: ficant-server",
+                "- package: ficant-worker",
+                "binary: ficant-worker",
+            ],
+        )
+        build_action_uses = re.findall(
+            r"(?m)^      - uses: docker/build-push-action@[^\n]+$", build_job
+        )
+        self.assertEqual(len(build_action_uses), 1)
+        build_action_matches = list(
+            re.finditer(
+                r"(?ms)^      - uses: docker/build-push-action@(?P<pin>[0-9a-f]{40})\n"
+                r"(?P<body>.*?)(?=^      - |\Z)",
+                build_job,
+            )
+        )
+        self.assertEqual(len(build_action_matches), 1)
+        build_action_match = build_action_matches[0]
+        self.assertEqual(
+            build_action_match.group("pin"),
+            "10e90e3645eae34f1e60eeb005ba3a3d33f178e8",
+        )
+        build_action = build_action_match.group("body")
+        self.assertNotRegex(build_action, r"(?m)^        if:")
+        self.assertNotRegex(build_action, r"(?m)^        continue-on-error:")
+        build_with_match = re.search(
+            r"(?ms)^        with:\n(?P<body>.*?)(?=^        [A-Za-z][A-Za-z0-9_-]*:\n|\Z)",
+            build_action,
+        )
+        self.assertIsNotNone(build_with_match)
+        build_with = build_with_match.group("body")
+        build_args_match = re.search(
+            r"(?ms)^          build-args: \|\n(?P<args>(?:            [^\n]+\n)+)",
+            build_with,
+        )
+        self.assertIsNotNone(build_args_match)
+        build_args = [
+            line.strip() for line in build_args_match.group("args").splitlines()
+        ]
+        self.assertEqual(
+            build_args,
+            [
+                "BINARY=${{ matrix.binary }}",
+                "FICANT_CODE_COMMIT_SHA=${{ needs.authorize.outputs.sha }}",
+                "FICANT_CODE_TREE_SHA=${{ needs.authorize.outputs.tree }}",
+            ],
+        )
+        authorize_job_matches = list(
+            re.finditer(
+                r"(?ms)^  authorize:\n(?P<body>.*?)(?=^  [a-z0-9-]+:\n|\Z)",
+                workflow,
+            )
+        )
+        self.assertEqual(len(authorize_job_matches), 1)
+        authorize_job_match = authorize_job_matches[0]
+        authorize_job = authorize_job_match.group("body")
+        self.assertNotRegex(authorize_job, r"(?m)^    continue-on-error:")
+        self.assertNotRegex(
+            authorize_job,
+            r"(?m)^    (?:[\"'](?:needs|env)[\"']|needs|env)\s*:",
+        )
+        self.assertEqual(
+            len(
+                re.findall(
+                    r"(?m)^    (?:[\"']if[\"']|if)\s*:", authorize_job
+                )
+            ),
+            1,
+        )
+        authorize_if_matches = list(
+            re.finditer(
+                r"(?ms)^    if: >-\n(?P<body>(?:      [^\n]+\n)+)",
+                authorize_job,
+            )
+        )
+        self.assertEqual(len(authorize_if_matches), 1)
+        self.assertEqual(
+            [
+                line.strip()
+                for line in authorize_if_matches[0].group("body").splitlines()
+            ],
+            [
+                "github.event_name == 'workflow_dispatch' ||",
+                "(github.event.workflow_run.conclusion == 'success' &&",
+                "github.event.workflow_run.event == 'push' &&",
+                "startsWith(github.event.workflow_run.head_branch, 'v'))",
+            ],
+        )
+        authorize_checkout_matches = list(
+            re.finditer(
+                r"(?ms)^      - uses: actions/checkout@(?P<pin>[0-9a-f]{40})\n"
+                r"(?P<body>.*?)(?=^      - |\Z)",
+                authorize_job,
+            )
+        )
+        self.assertEqual(len(authorize_checkout_matches), 1)
+        self.assertEqual(
+            authorize_checkout_matches[0].group("pin"),
+            "34e114876b0b11c390a56381ad16ebd13914f8d5",
+        )
+        self.assertEqual(
+            authorize_checkout_matches[0].group("body").rstrip().splitlines(),
+            [
+                "        with:",
+                "          fetch-depth: 0",
+                "          ref: ${{ env.DEPLOY_VERSION }}",
+            ],
+        )
+        outputs_match = re.search(
+            r"(?ms)^    outputs:\n(?P<outputs>(?:      [^\n]+\n)+)", authorize_job
+        )
+        self.assertIsNotNone(outputs_match)
+        self.assertEqual(
+            outputs_match.group("outputs").rstrip().splitlines(),
+            [
+                "      sha: ${{ steps.candidate.outputs.sha }}",
+                "      tree: ${{ steps.candidate.outputs.tree }}",
+                "      version: ${{ steps.candidate.outputs.version }}",
+                "      storage_image: ${{ steps.storage.outputs.image }}",
+                "      storage_config: ${{ steps.storage.outputs.config }}",
+            ],
+        )
+        output_pairs = dict(
+            re.findall(
+                r"(?m)^      ([a-z][a-z0-9_]*): (.+)$",
+                outputs_match.group("outputs"),
+            )
+        )
+        self.assertEqual(
+            output_pairs.get("sha"), "${{ steps.candidate.outputs.sha }}"
+        )
+        self.assertEqual(
+            output_pairs.get("tree"), "${{ steps.candidate.outputs.tree }}"
+        )
+        self.assertEqual(
+            len(re.findall(r"(?m)^      tree:", outputs_match.group("outputs"))),
+            1,
+        )
+        candidate_step_matches = list(
+            re.finditer(
+                r"(?ms)^      - id: candidate\n(?P<body>.*?)"
+                r"(?=^      - (?:id|name|uses):|\Z)",
+                authorize_job,
+            )
+        )
+        self.assertEqual(len(candidate_step_matches), 1)
+        candidate_step_match = candidate_step_matches[0]
+        candidate_step = candidate_step_match.group("body")
+        self.assertEqual(
+            candidate_step.rstrip().splitlines(),
+            [
+                "        shell: bash",
+                "        run: |",
+                "          set -euo pipefail",
+                "          version=$DEPLOY_VERSION",
+                "          [[ \"$version\" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]",
+                "          git fetch origin main --tags --force",
+                "          sha=$(git rev-parse \"refs/tags/$version^{commit}\")",
+                "          [[ \"$sha\" =~ ^[0-9a-f]{40}$ ]]",
+                "          tree=$(git rev-parse \"refs/tags/$version^{tree}\")",
+                "          [[ \"$tree\" =~ ^[0-9a-f]{40}$ ]]",
+                "          [[ \"$sha\" == $(git rev-parse HEAD) ]]",
+                "          if [[ \"${{ github.event_name }}\" == workflow_run ]]; then",
+                "            [[ \"$sha\" == $(git rev-parse origin/main) ]]",
+                "            [[ \"$version\" == \"${{ github.event.workflow_run.head_branch }}\" ]]",
+                "            [[ \"$sha\" == \"${{ github.event.workflow_run.head_sha }}\" ]]",
+                "          fi",
+                "          printf 'sha=%s\\n' \"$sha\" >> \"$GITHUB_OUTPUT\"",
+                "          printf 'tree=%s\\n' \"$tree\" >> \"$GITHUB_OUTPUT\"",
+                "          printf 'version=%s\\n' \"$version\" >> \"$GITHUB_OUTPUT\"",
+            ],
+        )
+        self.assertNotRegex(candidate_step, r"(?m)^        if:")
+        self.assertNotRegex(candidate_step, r"(?m)^        continue-on-error:")
+        candidate_run_match = re.search(
+            r"(?ms)^        run: \|\n(?P<body>(?:          [^\n]*\n)+)",
+            candidate_step,
+        )
+        self.assertIsNotNone(candidate_run_match)
+        candidate_run = candidate_run_match.group("body")
+        identity_assignments = [
+            line.strip()
+            for line in candidate_run.splitlines()
+            if re.match(r"\s*(?:sha|tree)=", line)
+        ]
+        self.assertEqual(
+            identity_assignments,
+            [
+                'sha=$(git rev-parse "refs/tags/$version^{commit}")',
+                'tree=$(git rev-parse "refs/tags/$version^{tree}")',
+            ],
+        )
+        for candidate_marker in (
+            "git fetch origin main --tags --force",
+            '[[ "$sha" == $(git rev-parse HEAD) ]]',
+            '[[ "$sha" =~ ^[0-9a-f]{40}$ ]]',
+            '[[ "$tree" =~ ^[0-9a-f]{40}$ ]]',
+            "printf 'sha=%s\\n' \"$sha\" >> \"$GITHUB_OUTPUT\"",
+            "printf 'tree=%s\\n' \"$tree\" >> \"$GITHUB_OUTPUT\"",
+        ):
+            self.assertIn(candidate_marker, candidate_run)
+        identity_output_writes = [
+            line.strip()
+            for line in candidate_run.splitlines()
+            if "GITHUB_OUTPUT" in line
+        ]
+        self.assertEqual(
+            identity_output_writes,
+            [
+                "printf 'sha=%s\\n' \"$sha\" >> \"$GITHUB_OUTPUT\"",
+                "printf 'tree=%s\\n' \"$tree\" >> \"$GITHUB_OUTPUT\"",
+                "printf 'version=%s\\n' \"$version\" >> \"$GITHUB_OUTPUT\"",
+            ],
+        )
+
+        preflight_builds_match = re.search(
+            r"(?ms)^\$buildSteps = @\(\n(?P<body>.*?)^\)\n\$scanSteps = @\(",
+            preflight,
+        )
+        self.assertIsNotNone(preflight_builds_match)
+        preflight_builds = preflight_builds_match.group("body")
+        self.assertEqual(
+            preflight_builds.rstrip().splitlines(),
+            [
+                "    New-FicantCheckStep -Name 'Build release server image' -FilePath 'docker' -ArgumentList @(",
+                "        'build', '--pull=false', '--file', 'deploy/dev/RustService.Dockerfile',",
+                "        '--build-arg', 'BINARY=ficant-server',",
+                "        '--build-arg', \"FICANT_CODE_COMMIT_SHA=$candidateSha\",",
+                "        '--build-arg', \"FICANT_CODE_TREE_SHA=$candidateTree\",",
+                "        '--tag', $images[0], '.'",
+                "    )",
+                "    New-FicantCheckStep -Name 'Build release worker image' -FilePath 'docker' -ArgumentList @(",
+                "        'build', '--pull=false', '--file', 'deploy/dev/RustService.Dockerfile',",
+                "        '--build-arg', 'BINARY=ficant-worker',",
+                "        '--build-arg', \"FICANT_CODE_COMMIT_SHA=$candidateSha\",",
+                "        '--build-arg', \"FICANT_CODE_TREE_SHA=$candidateTree\",",
+                "        '--tag', $images[1], '.'",
+                "    )",
+                "    New-FicantCheckStep -Name 'Build release UI image' -FilePath 'docker' -ArgumentList @(",
+                "        'build', '--pull=false', '--file', 'deploy/test/FicantUi.Dockerfile',",
+                "        '--tag', $images[2], '.'",
+                "    )",
+                "    New-FicantCheckStep -Name 'Pull locked Ceph RGW storage runtime' -FilePath 'docker' -ArgumentList @(",
+                "        'pull', $storageImage",
+                "    )",
+            ],
+        )
+        candidate_identity_match = re.search(
+            r"(?ms)^\$candidateSha = .*?(?=^\$imagePrefix = )", preflight
+        )
+        self.assertIsNotNone(candidate_identity_match)
+        self.assertEqual(
+            candidate_identity_match.group(0).rstrip().splitlines(),
+            [
+                "$candidateSha = Get-FicantCommandOutput -FilePath 'git' -ArgumentList @(",
+                "    '-C', $script:FicantRoot, 'rev-parse', 'HEAD'",
+                ")",
+                "if ($candidateSha -notmatch '^[0-9a-f]{40}$') {",
+                "    throw 'Release preflight requires a canonical Git commit identity.'",
+                "}",
+                "$candidateTreeRevision = '{0}^{{tree}}' -f $candidateSha",
+                "$candidateTree = Get-FicantCommandOutput -FilePath 'git' -ArgumentList @(",
+                "    '-C', $script:FicantRoot, 'rev-parse', $candidateTreeRevision",
+                ")",
+                "if ($candidateTree -notmatch '^[0-9a-f]{40}$') {",
+                "    throw 'Release preflight requires a canonical Git tree identity.'",
+                "}",
+            ],
+        )
+        for identity_variable in (
+            "candidateSha",
+            "candidateTreeRevision",
+            "candidateTree",
+        ):
+            self.assertEqual(
+                len(
+                    re.findall(
+                        rf"(?m)^\s*\${identity_variable}\s*=", preflight
+                    )
+                ),
+                1,
+            )
+        for step_name, binary in (
+            ("Build release server image", "ficant-server"),
+            ("Build release worker image", "ficant-worker"),
+        ):
+            step_match = re.search(
+                rf"(?ms)New-FicantCheckStep -Name '{re.escape(step_name)}'.*?"
+                rf"(?=\n    New-FicantCheckStep|\Z)",
+                preflight_builds,
+            )
+            self.assertIsNotNone(step_match)
+            step = step_match.group(0)
+            self.assertIn(f"'--build-arg', 'BINARY={binary}'", step)
+            self.assertIn(
+                "'--build-arg', \"FICANT_CODE_COMMIT_SHA=$candidateSha\"", step
+            )
+            self.assertIn(
+                "'--build-arg', \"FICANT_CODE_TREE_SHA=$candidateTree\"", step
+            )
+
+        for identity_marker in (
+            "$candidateTreeRevision = '{0}^{{tree}}' -f $candidateSha",
+            "'rev-parse', $candidateTreeRevision",
+            "function Assert-ReleaseCandidateIdentity",
+            "$head -ne $candidateSha",
+            "$tree -ne $candidateTree",
+        ):
+            self.assertIn(identity_marker, preflight)
+        identity_function_matches = list(
+            re.finditer(
+                r"(?ms)^function Assert-ReleaseCandidateIdentity \{\n.*?^\}"
+                r"(?=\n\ntry \{)",
+                preflight,
+            )
+        )
+        self.assertEqual(len(identity_function_matches), 1)
+        self.assertEqual(
+            identity_function_matches[0].group(0).splitlines(),
+            [
+                "function Assert-ReleaseCandidateIdentity {",
+                "    Push-Location -LiteralPath $script:FicantRoot",
+                "    try {",
+                "        $branch = Get-FicantCommandOutput -FilePath 'git' -ArgumentList @(",
+                "            'branch', '--show-current'",
+                "        )",
+                "        $head = Get-FicantCommandOutput -FilePath 'git' -ArgumentList @(",
+                "            'rev-parse', 'HEAD'",
+                "        )",
+                "        $tree = Get-FicantCommandOutput -FilePath 'git' -ArgumentList @(",
+                "            'rev-parse', 'HEAD^{tree}'",
+                "        )",
+                "        $remoteMain = Get-FicantCommandOutput -FilePath 'git' -ArgumentList @(",
+                "            'rev-parse', 'origin/main'",
+                "        )",
+                "        $worktree = @(& git status --porcelain)",
+                "        if ($LASTEXITCODE -ne 0) {",
+                "            throw 'Unable to inspect the release-candidate worktree.'",
+                "        }",
+                "        if ($branch -ne 'main' -or $head -ne $candidateSha -or",
+                "            $tree -ne $candidateTree -or $head -ne $remoteMain -or",
+                "            $worktree.Count -ne 0) {",
+                "            throw 'Release preflight requires a clean local main exactly equal to origin/main and the frozen candidate identity.'",
+                "        }",
+                "    }",
+                "    finally {",
+                "        Pop-Location",
+                "    }",
+                "}",
+            ],
+        )
+        main_prefix_matches = list(
+            re.finditer(
+                r"(?ms)^try \{\n(?P<body>.*?)(?=^    \$actualStorageConfig = )",
+                preflight,
+            )
+        )
+        self.assertEqual(len(main_prefix_matches), 1)
+        self.assertEqual(
+            main_prefix_matches[0].group(0).rstrip().splitlines(),
+            [
+                "try {",
+                "    if ($ListOnly) {",
+                "        Show-FicantCheckPlan -Steps $steps",
+                "        $nextStep = $steps.Count + 1",
+                '        Write-Host "[$nextStep] Verify exact locked storage-runtime config and RepoDigest"',
+                '        Write-Host "[$($nextStep + 1)] Validate immutable release Compose model"',
+                '        Write-Host "[$($nextStep + 2)] Start PostgreSQL and locked Ceph RGW, apply migrations, start all application services"',
+                '        Write-Host "[$($nextStep + 3)] Verify health, readiness, UI, and forward-only migration compatibility"',
+                "        exit 0",
+                "    }",
+                "",
+                "    foreach ($command in @('git', 'docker', 'python', 'trivy')) {",
+                "        Assert-FicantCommand $command",
+                "    }",
+                "    $trivyVersion = Get-FicantCommandOutput -FilePath 'trivy' -ArgumentList @('--version')",
+                "    if ($trivyVersion -notmatch '^Version:\\s+0\\.72\\.0(?:\\s|$)') {",
+                '        throw "Required Trivy version is 0.72.0, but the active output is: $trivyVersion"',
+                "    }",
+                "",
+                "    Assert-ReleaseCandidateIdentity",
+                "    Invoke-FicantCheckPlan -Steps $bindingSteps",
+                "    Assert-ReleaseCandidateIdentity",
+                "    foreach ($buildStep in $buildSteps) {",
+                "        Assert-ReleaseCandidateIdentity",
+                "        Invoke-FicantCheckPlan -Steps @($buildStep)",
+                "        Assert-ReleaseCandidateIdentity",
+                "    }",
+                "    Invoke-FicantCheckPlan -Steps $scanSteps",
+                "    Assert-ReleaseCandidateIdentity",
+            ],
+        )
+        self.assertEqual(preflight.count("Assert-ReleaseCandidateIdentity"), 7)
+        self.assertNotRegex(preflight, r"(?im)\bFunction:")
+        self.assertNotRegex(preflight, r"(?m)^\s*return(?:\s|$)")
+        self.assertEqual(len(re.findall(r"(?m)^\s*exit 0$", preflight)), 2)
+        self.assertEqual(
+            preflight.rstrip().splitlines()[-10:],
+            [
+                "    Assert-ReleaseCandidateIdentity",
+                "",
+                "    Write-Host ''",
+                "    Write-Host 'FICANT release-candidate preflight passed.'",
+                "    exit 0",
+                "}",
+                "catch {",
+                "    Write-Error $_",
+                "    exit 1",
+                "}",
+            ],
+        )
+        self.assertEqual(
+            len(
+                re.findall(
+                    r"(?m)^\s+Assert-ReleaseCandidateIdentity$", preflight
+                )
+            ),
+            6,
+        )
+        for flow_marker in (
+            "    Assert-ReleaseCandidateIdentity\n"
+            "    Invoke-FicantCheckPlan -Steps $bindingSteps\n"
+            "    Assert-ReleaseCandidateIdentity",
+            "    foreach ($buildStep in $buildSteps) {\n"
+            "        Assert-ReleaseCandidateIdentity\n"
+            "        Invoke-FicantCheckPlan -Steps @($buildStep)\n"
+            "        Assert-ReleaseCandidateIdentity\n"
+            "    }",
+            "    Invoke-FicantCheckPlan -Steps $scanSteps\n"
+            "    Assert-ReleaseCandidateIdentity",
+            "    Assert-ReleaseCandidateIdentity\n\n"
+            "    Write-Host ''\n"
+            "    Write-Host 'FICANT release-candidate preflight passed.'",
+        ):
+            self.assertIn(flow_marker, preflight)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,7 +7,19 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'check-common.ps1')
 
-$candidateSha = '0000000000000000000000000000000000000000'
+$candidateSha = Get-FicantCommandOutput -FilePath 'git' -ArgumentList @(
+    '-C', $script:FicantRoot, 'rev-parse', 'HEAD'
+)
+if ($candidateSha -notmatch '^[0-9a-f]{40}$') {
+    throw 'Release preflight requires a canonical Git commit identity.'
+}
+$candidateTreeRevision = '{0}^{{tree}}' -f $candidateSha
+$candidateTree = Get-FicantCommandOutput -FilePath 'git' -ArgumentList @(
+    '-C', $script:FicantRoot, 'rev-parse', $candidateTreeRevision
+)
+if ($candidateTree -notmatch '^[0-9a-f]{40}$') {
+    throw 'Release preflight requires a canonical Git tree identity.'
+}
 $imagePrefix = 'ficant-preflight/ficant'
 $storageLock = Get-Content -LiteralPath (Join-Path $script:FicantRoot 'deploy\storage-runtime.lock.json') `
     -Raw | ConvertFrom-Json
@@ -47,11 +59,17 @@ $bindingSteps = @(
 $buildSteps = @(
     New-FicantCheckStep -Name 'Build release server image' -FilePath 'docker' -ArgumentList @(
         'build', '--pull=false', '--file', 'deploy/dev/RustService.Dockerfile',
-        '--build-arg', 'BINARY=ficant-server', '--tag', $images[0], '.'
+        '--build-arg', 'BINARY=ficant-server',
+        '--build-arg', "FICANT_CODE_COMMIT_SHA=$candidateSha",
+        '--build-arg', "FICANT_CODE_TREE_SHA=$candidateTree",
+        '--tag', $images[0], '.'
     )
     New-FicantCheckStep -Name 'Build release worker image' -FilePath 'docker' -ArgumentList @(
         'build', '--pull=false', '--file', 'deploy/dev/RustService.Dockerfile',
-        '--build-arg', 'BINARY=ficant-worker', '--tag', $images[1], '.'
+        '--build-arg', 'BINARY=ficant-worker',
+        '--build-arg', "FICANT_CODE_COMMIT_SHA=$candidateSha",
+        '--build-arg', "FICANT_CODE_TREE_SHA=$candidateTree",
+        '--tag', $images[1], '.'
     )
     New-FicantCheckStep -Name 'Build release UI image' -FilePath 'docker' -ArgumentList @(
         'build', '--pull=false', '--file', 'deploy/test/FicantUi.Dockerfile',
@@ -84,6 +102,36 @@ function Invoke-ReleaseCompose {
     }
 }
 
+function Assert-ReleaseCandidateIdentity {
+    Push-Location -LiteralPath $script:FicantRoot
+    try {
+        $branch = Get-FicantCommandOutput -FilePath 'git' -ArgumentList @(
+            'branch', '--show-current'
+        )
+        $head = Get-FicantCommandOutput -FilePath 'git' -ArgumentList @(
+            'rev-parse', 'HEAD'
+        )
+        $tree = Get-FicantCommandOutput -FilePath 'git' -ArgumentList @(
+            'rev-parse', 'HEAD^{tree}'
+        )
+        $remoteMain = Get-FicantCommandOutput -FilePath 'git' -ArgumentList @(
+            'rev-parse', 'origin/main'
+        )
+        $worktree = @(& git status --porcelain)
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Unable to inspect the release-candidate worktree.'
+        }
+        if ($branch -ne 'main' -or $head -ne $candidateSha -or
+            $tree -ne $candidateTree -or $head -ne $remoteMain -or
+            $worktree.Count -ne 0) {
+            throw 'Release preflight requires a clean local main exactly equal to origin/main and the frozen candidate identity.'
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 try {
     if ($ListOnly) {
         Show-FicantCheckPlan -Steps $steps
@@ -103,21 +151,16 @@ try {
         throw "Required Trivy version is 0.72.0, but the active output is: $trivyVersion"
     }
 
-    Push-Location -LiteralPath $script:FicantRoot
-    try {
-        $branch = (& git branch --show-current).Trim()
-        $head = (& git rev-parse HEAD).Trim()
-        $remoteMain = (& git rev-parse origin/main).Trim()
-        $worktree = @(& git status --porcelain)
-        if ($branch -ne 'main' -or $head -ne $remoteMain -or $worktree.Count -ne 0) {
-            throw 'Release preflight requires a clean local main exactly equal to origin/main.'
-        }
+    Assert-ReleaseCandidateIdentity
+    Invoke-FicantCheckPlan -Steps $bindingSteps
+    Assert-ReleaseCandidateIdentity
+    foreach ($buildStep in $buildSteps) {
+        Assert-ReleaseCandidateIdentity
+        Invoke-FicantCheckPlan -Steps @($buildStep)
+        Assert-ReleaseCandidateIdentity
     }
-    finally {
-        Pop-Location
-    }
-
-    Invoke-FicantCheckPlan -Steps $steps
+    Invoke-FicantCheckPlan -Steps $scanSteps
+    Assert-ReleaseCandidateIdentity
     $actualStorageConfig = (& docker image inspect --format '{{.Id}}' $storageImage).Trim()
     $storageIndexDigest = [string]$storageLock.oci.index_digest
     if ($LASTEXITCODE -ne 0 -or
@@ -265,6 +308,8 @@ try {
             Remove-Item -LiteralPath $temporaryRoot -Recurse -Force
         }
     }
+
+    Assert-ReleaseCandidateIdentity
 
     Write-Host ''
     Write-Host 'FICANT release-candidate preflight passed.'

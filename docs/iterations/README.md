@@ -10,9 +10,9 @@
 - 如确需新增写路径，Root 必须在首次写入前停止并取得 Human 明确授权；扩权只能作为新的 §5 条目记录精确路径、理由与边界，原 §6 清单保持不变。事后发现的越界必须如实记录为偏差，不得用修改 §6 追认。
 - 被约束的实施者不得单方改写用来判断其是否越界的约束。这一原则同样适用于允许写路径、guarded 集合、预期值、Oracle、断言与其他自管门禁；需要变更时必须由独立授权或独立可审阅证据承载。
 
-**当前迭代：** [`2026-09-r9a-release-gate-closure.md`](2026-09-r9a-release-gate-closure.md)（Human 已选择 `v0.1.0-alpha.10`；R9A 先闭合 repo-policy、原子部署状态、版本并发合同与本地检查可重入性，形成干净主线并通过发布候选预检后，才进入版本 CICD。）
+**当前迭代：** [`2026-09-r9b-release-identity-binding.md`](2026-09-r9b-release-identity-binding.md)（R9A 已通过 PR #66 合入；首次 clean-main preflight 在 tag 前发现本地与远端 Rust 镜像构建均未传候选 commit/tree。R9B 只补齐该身份绑定并重跑门禁，`v0.1.0-alpha.10` 仍未创建。）
 
-**最近完成迭代：** [`2026-08-r8b-portfolio-performance.md`](2026-08-r8b-portfolio-performance.md)（R8B 本地实施与同候选全量取证已完成；[PR #65](https://github.com/kayz/ficant/pull/65) 已合入 `main`，合并后完整本地检查通过；后端组合日度计量与收益序列已闭合，不接入新 WebApp；尚未发布。）
+**最近完成迭代：** [`2026-09-r9a-release-gate-closure.md`](2026-09-r9a-release-gate-closure.md)（[PR #66](https://github.com/kayz/ficant/pull/66) 已线性合入 `main`；本地完整检查通过，随后发布预检的失败关闭事实由 R9B 接续，不把失败描述为版本交付。）
 
 ## 归档说明（2026-07-26）
 
