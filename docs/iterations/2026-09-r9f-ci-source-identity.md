@@ -1,6 +1,6 @@
 # R9F 迭代 brief — CI 源码身份闭环
 
-**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R9F · **execution base：** `6b194996cce06d8fefee91b130e28869a3ae5293` · **base tree：** `2f5f73381c0701e061802a56f34c7aa4f7e8a3ff` · **状态：** 本地候选完成，待合入
+**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R9F · **execution base：** `6b194996cce06d8fefee91b130e28869a3ae5293` · **base tree：** `2f5f73381c0701e061802a56f34c7aa4f7e8a3ff` · **状态：** 已通过 [PR #71](https://github.com/kayz/ficant/pull/71) 合入 `main`，待新版本号
 
 本 brief 是 R9F 面向 Human 的唯一范围、权限边界与最终本地证据载体。`v0.1.0-alpha.10` 已不可变地绑定上述 base；其 [CI run 33889960292](https://github.com/kayz/ficant/actions/runs/33889960292) 在本地 17 步 preflight 通过后暴露了干净 Linux checkout / 无 `.git` archive 中的源码身份传播缺口，因此版本 CI 失败；后续 [release-test run 33890473662](https://github.com/kayz/ficant/actions/runs/33890473662) 的 7 个 job 全部 skipped，未构建或推送版本应用镜像，也未部署测试环境。
 
@@ -36,12 +36,12 @@
 
 ## 5. 需 Human 决策
 
-- R9F 候选完成并合入后，需 Human 明确选择新的 forward-only 版本号；建议届时使用 `v0.1.0-alpha.11`。
+- R9F 已合入；需 Human 明确选择新的 forward-only 版本号，建议使用 `v0.1.0-alpha.11`。
 - 本轮不需要更改业务语义、Oracle、expected、断言或容差；若实施发现必须如此，立即停止并返回 Human。
 
 ## 6. 最终真实测试证据
 
-以下只记录最终候选上已实际执行的命令、exit code、可得 test count 与失败/跳过事实。
+以下记录 R9F 实现候选及其最终文档收口前已实际执行的命令、exit code、可得 test count 与失败/跳过事实；计划不写成通过。
 
 | 真实命令/检查 | Exit / Conclusion | 结果 |
 |---|---:|---|
@@ -53,7 +53,8 @@
 | `python -m pytest .github/scripts/tests/test_compose_security_gate.py -q` | 0 | 37 个测试：35 passed，2 个需真实 registry 的 live 测试显式 skipped；另执行 79 个 subtests。 |
 | CI YAML 解析与 job 清单检查 | 0 | PyYAML 成功解析 11 个 job；本机未安装 `actionlint`，未把该项写成通过。 |
 | 固定 Rust Linux 镜像内的 Server/Worker 身份探针 | 0 | bind-mounted checkout 显式注入候选 commit/tree 后，`cargo check --locked -p ficant-server -p ficant-worker` 通过。 |
-| 真实 `verify-contract-generation.sh` | 0 | 可达 baseline `01123c0...` 与旧 baseline 的 `interface/` tree 相同；descriptor `0de1176...`；Rust 34、Python 1、TypeScript 1 个 consumer 测试及类型检查全部通过。 |
+| 真实 `verify-contract-generation.sh`（实现提交 `8733d9c2...`） | 0 | 可达 baseline `01123c0...` 与旧 baseline 的 `interface/` tree 相同；descriptor `0de1176...`；Rust 34、Python 1、TypeScript 1 个 consumer 测试及类型检查全部通过。后续只改文档，不再改 contract/interface/gate。 |
+| 最终文档候选上的 contract 双生成复核 | 2（外部限制） | 多次完成 generation A 后，generation B 被[公共 BSR 匿名 code-generation bucket](https://buf.build/docs/bsr/rate-limits/) 以 `resource_exhausted` 拒绝；另一次为每个真实请求配置 385 秒预等待，但 generation A 仍被共享 source-IP 桶拒绝。未把限流记为代码失败或本地通过。 |
 | 真实 `verify-reproducibility.sh` | 0 | 两份不含 `.git` 的 archive 均完成 Rust、Python、C++、Web 构建；四类制品逐类哈希一致。 |
 | `.\scripts\check-fast.ps1` | 0 | 23/23 个快速本地步骤通过。 |
 | `.\scripts\check.ps1` | 0 | 40/40 个标准本地步骤通过。 |
@@ -64,6 +65,7 @@
 - R9F 只能准备新的本地候选；远端 Linux CI、镜像发布和测试环境交付必须由 Human 另行确认的新版本 tag 提供证据。
 - 本地 Docker 探针可覆盖 bind mount 与显式身份注入，但不能替代 GitHub runner 的完整矩阵。
 - 本机没有 `actionlint`；GitHub workflow 语法仅由 PyYAML、静态夹具和后续远端 runner 共同覆盖。
+- 公共 BSR 的匿名远程生成桶是共享外部依赖；实现提交上的完整真实 contract gate 已通过，但合入前的文档-only 精确提交未能在同一 source IP 下再次连续取得两个生成额度。新的版本 CI 仍需提供远端 Linux contract 证据。
 - GitHub Actions 当前仍提示部分固定 action 使用 Node.js 20 runtime 并被 runner 强制到 Node.js 24；这是上游 action runtime 提示，不是本次五个 job 的失败根因，后续应独立处理。
 
 ### 冻结写路径
