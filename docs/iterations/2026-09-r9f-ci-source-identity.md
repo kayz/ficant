@@ -1,6 +1,6 @@
 # R9F 迭代 brief — CI 源码身份闭环
 
-**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R9F · **execution base：** `6b194996cce06d8fefee91b130e28869a3ae5293` · **base tree：** `2f5f73381c0701e061802a56f34c7aa4f7e8a3ff` · **状态：** 实施完成，最终 clean-tree 证据待收集
+**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R9F · **execution base：** `6b194996cce06d8fefee91b130e28869a3ae5293` · **base tree：** `2f5f73381c0701e061802a56f34c7aa4f7e8a3ff` · **状态：** 本地候选完成，待合入
 
 本 brief 是 R9F 面向 Human 的唯一范围、权限边界与最终本地证据载体。`v0.1.0-alpha.10` 已不可变地绑定上述 base；其 [CI run 33889960292](https://github.com/kayz/ficant/actions/runs/33889960292) 在本地 17 步 preflight 通过后暴露了干净 Linux checkout / 无 `.git` archive 中的源码身份传播缺口，因此版本 CI 失败；后续 [release-test run 33890473662](https://github.com/kayz/ficant/actions/runs/33890473662) 的 7 个 job 全部 skipped，未构建或推送版本应用镜像，也未部署测试环境。
 
@@ -41,18 +41,29 @@
 
 ## 6. 最终真实测试证据
 
-实施完成后仅在此表追加最终候选上的真实命令、exit code、可得 test count 与失败/跳过事实；计划不写成通过。
+以下只记录最终候选上已实际执行的命令、exit code、可得 test count 与失败/跳过事实。
 
 | 真实命令/检查 | Exit / Conclusion | 结果 |
 |---|---:|---|
 | `v0.1.0-alpha.10` / CI run `33889960292` | `failure` | authorize、Python、migration、repo-policy、C++、supply-chain 通过；Rust、contract、Web、reproducibility、business-loop 失败。 |
 | release-test run `33890473662` | `skipped` | authorize、build、build-ui、scan、promote、deploy 等 7 个 job 全部 skipped；无版本应用镜像和测试环境部署。 |
 | 五个失败 job 的独立只读日志诊断 | 0 | 四个 job 共因源码身份未传入容器/archive；contract 独立因 baseline 为不可 fetch 的悬空对象。未修改或重跑旧 tag。 |
+| `bash .github/scripts/tests/run-gates-tests.sh` | 0 | 源码身份的未设置、匹配、空值、半设置、漂移及子进程继承矩阵全部通过；删除生产 baseline 调用等变异均被拒绝。 |
+| `bash .github/scripts/tests/run-repo-policy-tests.sh` | 0 | release-state 9/9、repo policy 通过；21 个 CI 身份传播变异全部被拒绝。 |
+| `python -m pytest .github/scripts/tests/test_compose_security_gate.py -q` | 0 | 37 个测试：35 passed，2 个需真实 registry 的 live 测试显式 skipped；另执行 79 个 subtests。 |
+| CI YAML 解析与 job 清单检查 | 0 | PyYAML 成功解析 11 个 job；本机未安装 `actionlint`，未把该项写成通过。 |
+| 固定 Rust Linux 镜像内的 Server/Worker 身份探针 | 0 | bind-mounted checkout 显式注入候选 commit/tree 后，`cargo check --locked -p ficant-server -p ficant-worker` 通过。 |
+| 真实 `verify-contract-generation.sh` | 0 | 可达 baseline `01123c0...` 与旧 baseline 的 `interface/` tree 相同；descriptor `0de1176...`；Rust 34、Python 1、TypeScript 1 个 consumer 测试及类型检查全部通过。 |
+| 真实 `verify-reproducibility.sh` | 0 | 两份不含 `.git` 的 archive 均完成 Rust、Python、C++、Web 构建；四类制品逐类哈希一致。 |
+| `.\scripts\check-fast.ps1` | 0 | 23/23 个快速本地步骤通过。 |
+| `.\scripts\check.ps1` | 0 | 40/40 个标准本地步骤通过。 |
+| 独立增量复审 | 0 | blocker / major / minor = 0 / 0 / 0；冻结合同、失败闭合及变异覆盖未发现遗漏。 |
 
 ## 7. 残余风险
 
 - R9F 只能准备新的本地候选；远端 Linux CI、镜像发布和测试环境交付必须由 Human 另行确认的新版本 tag 提供证据。
 - 本地 Docker 探针可覆盖 bind mount 与显式身份注入，但不能替代 GitHub runner 的完整矩阵。
+- 本机没有 `actionlint`；GitHub workflow 语法仅由 PyYAML、静态夹具和后续远端 runner 共同覆盖。
 - GitHub Actions 当前仍提示部分固定 action 使用 Node.js 20 runtime 并被 runner 强制到 Node.js 24；这是上游 action runtime 提示，不是本次五个 job 的失败根因，后续应独立处理。
 
 ### 冻结写路径
