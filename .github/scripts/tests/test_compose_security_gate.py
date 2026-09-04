@@ -945,6 +945,27 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         preflight = Path("scripts/check-release-candidate.ps1").read_text(
             encoding="utf-8"
         )
+        self.assertEqual(
+            workflow.splitlines()[:16],
+            [
+                "name: release-test",
+                "",
+                "on:",
+                "  workflow_run:",
+                "    workflows: [ci]",
+                "    types: [completed]",
+                "  workflow_dispatch:",
+                "    inputs:",
+                "      version:",
+                "        description: Existing v* version tag on the current main commit",
+                "        required: true",
+                "        type: string",
+                "",
+                "permissions:",
+                "  contents: read",
+                "",
+            ],
+        )
         top_level_env_matches = list(
             re.finditer(
                 r"(?ms)^env:\n(?P<body>.*?)(?=^jobs:\n)", workflow
@@ -1095,6 +1116,10 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         self.assertEqual(len(authorize_job_matches), 1)
         authorize_job_match = authorize_job_matches[0]
         authorize_job = authorize_job_match.group("body")
+        self.assertEqual(
+            re.findall(r"(?m)^    runs-on: ([^\n]+)$", authorize_job),
+            ["ubuntu-24.04"],
+        )
         self.assertNotRegex(authorize_job, r"(?m)^    continue-on-error:")
         self.assertNotRegex(
             authorize_job,
@@ -1435,6 +1460,37 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         self.assertNotRegex(preflight, r"(?im)\bFunction:")
         self.assertNotRegex(preflight, r"(?m)^\s*return(?:\s|$)")
         self.assertEqual(len(re.findall(r"(?m)^\s*exit 0$", preflight)), 2)
+        post_scan_segment = preflight.split(
+            "    $actualStorageConfig = ", 1
+        )[1].split(
+            "    Assert-ReleaseCandidateIdentity\n\n"
+            "    Write-Host ''\n"
+            "    Write-Host 'FICANT release-candidate preflight passed.'",
+            1,
+        )[0]
+        self.assertEqual(
+            [
+                line.rstrip()
+                for line in post_scan_segment.splitlines()
+                if re.match(
+                    r"^    (?:if|foreach|try|finally|catch|while|for|switch)\b",
+                    line,
+                )
+            ],
+            [
+                "    if ($LASTEXITCODE -ne 0 -or",
+                "    if ($LASTEXITCODE -ne 0 -or $storageImage -notin $repoDigests) {",
+                "    foreach ($entry in $validationEnvironment.GetEnumerator()) {",
+                "    try {",
+                "    finally {",
+                "    if (-not $temporaryRoot.StartsWith($temporaryBase, [StringComparison]::OrdinalIgnoreCase)) {",
+                "    if ($LASTEXITCODE -ne 0 -or $workerRuntimeDigest -notmatch '^sha256:[0-9a-f]{64}$') {",
+                "    if ($LASTEXITCODE -ne 0 -or $workerSourceDigest -notmatch '^sha256:[0-9a-f]{64}$') {",
+                "    foreach ($entry in $runtimeEnvironment.GetEnumerator()) {",
+                "    try {",
+                "    finally {",
+            ],
+        )
         self.assertEqual(
             preflight.rstrip().splitlines()[-10:],
             [
