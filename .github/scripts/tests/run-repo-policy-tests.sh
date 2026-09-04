@@ -14,6 +14,8 @@ else
   python=python
 fi
 
+"$python" "$repo/.github/scripts/tests/test_release_state_contract.py" -v
+
 expect_fail() {
   local label=$1
   shift
@@ -395,15 +397,23 @@ printf '%s\n' \
   docs/history/hoqa/governance/history/proqaid-superseded/README.md >"$tmp/safe-hoqa-paths"
 "$gate" --check-path-list "$tmp/safe-hoqa-paths"
 printf '%s\n' \
+  .github/scripts/tests/test_release_state_contract.py \
   .github/scripts/verify-cargo-reachability.py \
   .github/scripts/verify-license-inventory.py \
   .github/scripts/verify-risk-acceptance.py \
   docs/history/hoqa/deploy-execution/execution-validator.py \
   tests/oracle/china-rates/validator.py \
+  tests/oracle/portfolio/test_r8b_portfolio_performance_decimal_oracle.py \
   tests/phase2b/verify_acceptance_matrix.py \
   tests/phase3/verify_acceptance_matrix.py \
   tests/oracle/china-rates/quantlib_oracle.cpp >"$tmp/safe-python-gate-tools"
 "$gate" --check-path-list "$tmp/safe-python-gate-tools"
+grep -Fq 'git -c core.quotepath=false ls-files' "$gate" || {
+  printf 'repo-policy-tests: tracked Unicode paths must not be C-escaped before validation\n' >&2
+  exit 1
+}
+printf '%s\n' 'docs/中国债券市场量化交易可行性研究.md' >"$tmp/safe-unicode-path"
+"$gate" --check-path-list "$tmp/safe-unicode-path"
 printf '%s\n' crates/ficant-runtime/src/worker_pool.rs docs/secretary-notes.md docs/cache-policy.md >"$tmp/safe-component-names"
 "$gate" --check-path-list "$tmp/safe-component-names"
 printf '%s\n' .github/scripts/tests/fixtures/secret/packages.syft.json .github/scripts/tests/fixtures/secret/new-controlled-evidence.json >"$tmp/controlled-secret-fixtures"

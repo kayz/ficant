@@ -1,10 +1,20 @@
 # 交付发布说明
 
+> **当前交付状态（2026-09-04）：** R9A execution base 是已包含 R8B 的公共 `main@1788bcfba8d0609002008043908c8f0013474fce`；Human 已选择 `v0.1.0-alpha.10`，但不可变 tag 只能在 R9A 精确候选合入、干净主线发布预检通过后创建。最近的既有 tag 仍为落后该 base 58 个提交的 `v0.1.0-alpha.9`；本段不宣称 `alpha.10` 镜像或测试环境已经交付。以下“候选”章节记录各轮发生时的交付事实，不应被解释为当前外部运行状态。
+
+## `v0.1.0-alpha.10` 发布门禁收口候选（2026-09-04）
+
+- 将本轮 current-truth 文档与 R8B 公共合并事实纳入同一候选，不改变业务、数值、Proto、migration、Oracle、expected 或容差。
+- repo-policy 夹具不再匹配旧的单 origin/内联 image-inspect 实现：开发 CORS 继续精确允许 Platform Shell `18083` 与相邻 WebApp `5173`，Worker runtime/source identity 继续由单一受控 helper 读取；34 项测试为 32 passed、2 个显式 live gate skipped、0 failed。
+- 测试环境 `current.env` / `previous.env` 通过同目录完整临时文件、`0600` 与原子 rename 发布；失败保留旧状态并清理临时文件。中央 `cicd.yml` 与 workflow 统一为不自动取消已开始的不可变版本运行。
+- 统一检查会精确清理自身生成的 ignored contracts `dist`，显式打包命令仍保留可消费 `.tgz`；发布许可证策略精确为 18 Cargo、1 PyPI SDK、1 npm generated-contract package。
+- 本节只是 pre-tag 候选说明。最终本地命令、候选状态和残余风险以 [R9A brief](../iterations/2026-09-r9a-release-gate-closure.md) 为准；版本 CI、GHCR、SBOM/provenance、测试环境部署与回滚只能由后续不可变 tag 提供外部证据。
+
 ## R6B Artifact 与生产拓扑候选（2026-08-19）
 
 - 公共 ArtifactService 收敛为 verified Artifact/SignalSet metadata 与有序 lineage 查询；发布继续只由 Rates、ResearchGraph 和 Worker 的 server-owned verified publish 路径完成，不保留 caller-supplied metadata 发布入口。
 - `ficant-web` 健康检查孤儿进程已从 Cargo、Compose、镜像、扫描、部署和健康/冒烟矩阵删除；`ficant-ui` 是唯一静态 Platform Shell，并继续把 `/ficant-api/` 直接反代 `ficant-server`。当前应用镜像集合为 Server、Worker、UI，Ceph RGW 仍由独立锁定运行时管理。
-- 下方旧版本章节保留其发生时的历史拓扑事实，不代表 R6B 之后的当前包或镜像集合；R6B 最终测试与残余风险以当前迭代 brief 为准。
+- 下方旧版本章节保留其发生时的历史拓扑事实，不代表 R6B 之后的当前包或镜像集合；R6B 当时的最终测试与残余风险见 [`../iterations/2026-08-r6b-artifact-topology.md`](../iterations/2026-08-r6b-artifact-topology.md)。
 
 ## Phase 3B 不可变 Parquet Snapshot 候选（2026-07-20）
 
@@ -45,7 +55,7 @@
 ## Ceph RGW 对象存储迁移候选（2026-07-19）
 
 - 新增独立迭代，把对象存储服务端从 MinIO 更换为 Ceph RGW 20.2.2，把 Rust client 从 `minio 0.4.0` 更换为 Apache `object_store 0.14.1`；公共 Protobuf、数据库 migration 和业务数值语义不变。
-- 活动 Cargo 锁文件与可达依赖图不再包含 `minio` 或 `async-std`，供应链 `risk_acceptances` 收敛为空；`RUSTSEC-2025-0052` 的历史接受记录仍保留在旧迭代证据中，但不再适用于当前候选。
+- 活动 Cargo 锁文件与可达依赖图不再包含 `minio` 或 `async-std`，供应链 `risk_acceptances` 收敛为空；`RUSTSEC-2025-0052` 的历史接受记录仍保留在旧迭代证据中，但不再适用于当前公共主线。
 - 开发 Compose 和 Linux business-loop CI 统一使用锁定摘要、非 root、只读根文件系统的单节点 Ceph RGW 夹具。它用于真实 S3/业务回归，不授权生产 Ceph 集群、数据迁移或发布。
 - 本节的最终命令、测试数量、候选 commit 和残余风险以 [`docs/history/iterations/2026-07-ceph-object-store-migration.md`](../history/iterations/2026-07-ceph-object-store-migration.md) 与对应 Pull Request 为准；以下旧发布说明保持其发生时的历史事实。
 
@@ -137,4 +147,4 @@
 
 ## 有效期
 
-有效至当前候选树、Compose 配置、镜像锁或运行时合同发生变化。
+各历史章节只对其绑定的候选树、Compose 配置、镜像锁和运行时合同有效；当前交付状态以本文顶部的日期化摘要及实际 `cicd.yml` / workflow 为准。

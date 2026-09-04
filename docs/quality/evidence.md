@@ -1,10 +1,12 @@
 # ficant 验收与证据索引
 
-> **历史记录（superseded）：** 本文记录 iteration-2 当时的 PROQAID Quality、Delivery 和 Review 事实。旧角色名、路径和 verdict 仅用于审计，不是当前 OPAID 权威；后续治理边界见 ADR-0009，HOQA 状态与 Iteration 3 checklist 分别归档于 `docs/history/hoqa/governance/state.toml` 和 `docs/history/hoqa/iteration-3-checklist.md`。
+> **历史记录（superseded）：** 除“当前治理证据”索引外，本文主体记录 iteration-2 当时的 PROQAID Quality、Delivery 和 Review 事实。旧角色名、路径和 verdict 仅用于审计，不是当前 OPAID 权威；后续治理边界见 ADR-0009，HOQA 状态与 Iteration 3 checklist 分别归档于 `docs/history/hoqa/governance/state.toml` 和 `docs/history/hoqa/iteration-3-checklist.md`。
 >
 > **后续处置：** 2026-07-19 的 Ceph RGW 迁移候选已从活动 Cargo/Compose/CI 合同移除 `minio` 与 `async-std`，并把风险接受集合收敛为空。下文继续保留 iteration-2 当时的原始证据；当前选择与升级条件见 ADR-0010。
 
-**当前结论：** iteration-2 已 `CLOSED`。原 Phase 0/1 的真实业务、运行时与可重放证据保持有效；2026-07-13 closure audit 对 `RUSTSEC-2025-0052` 完成了精确机器门、真实对象存储验证和候选绑定 CI。独立 Quality verdict 为 `PASS-WITH-ACCEPTED-RISK`，内部 Review 为 `pass-with-accepted-findings`（C0/I0/M1）；唯一 accepted finding 是下述限时维护风险，不是未关闭 blocker。
+> **当前候选：** R8B 已合入公共主线；Human 于 2026-09-04 选择 `v0.1.0-alpha.10` 后，R9A 只闭合 current-truth 文档、repo-policy、部署状态原子性、不可变版本并发合同和本地检查可重入性，不改业务或数值证据。最终本地结果将记录于 [`2026-09-r9a-release-gate-closure.md`](../iterations/2026-09-r9a-release-gate-closure.md)；版本 CI 和测试环境事实仍只能由 tag 后外部运行提供。
+
+**iteration-2 结论：** iteration-2 已 `CLOSED`。原 Phase 0/1 的真实业务、运行时与可重放证据保持有效；2026-07-13 closure audit 对 `RUSTSEC-2025-0052` 完成了精确机器门、真实对象存储验证和候选绑定 CI。独立 Quality verdict 为 `PASS-WITH-ACCEPTED-RISK`，内部 Review 为 `pass-with-accepted-findings`（C0/I0/M1）；唯一 accepted finding 是下述限时维护风险，不是未关闭 blocker。
 
 ## 状态词汇
 
@@ -80,19 +82,21 @@ Delivery 在 commit `87db3897d82b0bea4e35eee3595178f366bbf041`、树 `e8fb65c5a8
 
 Closure CI run [`29200796715`](https://github.com/kayz/ficant/actions/runs/29200796715) 在候选 `f492eefb19d7b60e74cbcc1b7a0b862b31bc3d1f` / tree `5debcd4b60b3585a4c168d3af0d5c92218ec528e` 上 10/10 job 成功。其 `accepted-unfixed.json` SHA-256 为 `76111880a5a61d4dbdf8c7c2274d0dbfbf24ab8c3d7b91b53dbd46aa906eb784`，只接受 `RUSTSEC-2025-0052`。最终状态 successor 只收敛本文档状态，不改变机器策略、生产代码、契约、Migration 或运行时；在 fast-forward `main` 前仍须通过同一 required CI 与 targeted final Review。
 
-## 当前治理证据
+## 当前治理证据（更新于 2026-09-04）
 
-### R7B 候选证据边界（2026-08-20）
+### R7B 已落地证据边界
 
-R7B 正在以 [`../iterations/2026-08-r7b-evidence-recovery.md`](../iterations/2026-08-r7b-evidence-recovery.md) 为唯一 Human brief 收口 AC30–AC33。当前代码候选已定义统一 `FormalOutputEvidence`、同步 formal output 持久化、Graph 13 维与 publication intent/orphan recovery，并新增隔离备份恢复和 exact authority MANUAL runner。此处只记录证据类型，不把中间 focused 命令写成最终 verdict；最终候选的真实命令、exit code、test count、descriptor/生成树/恢复 manifest digest 与 clean Git identity只写入该 brief §6。
+R7B 的公共实现、最终本地证据与主线合并已经完成；[`../iterations/2026-08-r7b-evidence-recovery.md`](../iterations/2026-08-r7b-evidence-recovery.md) 仍是该轮唯一 Human brief。落地能力包括统一 `FormalOutputEvidence`、同步 formal output 持久化、Graph 13 维、publication intent/orphan recovery、隔离备份恢复和 exact authority MANUAL runner。最终命令、exit code、test count、descriptor/生成树/恢复 manifest digest 与候选身份见该 brief §6；公共实现和本地证据不能代替 AC30–AC33 的独立 private authority 绑定。
 
 R7B 的灾备证据明确限于本地隔离 source-destroy/fresh-restore：PG dump 与全部 immutable object key/size/SHA-256 同时绑定公共 Code 和实际 Runtime，恢复后 required-read Graph Artifact 与同步 Analytics record。它不构成生产 HA、PITR、RPO/RTO 或版本交付证据。
 
-### R8B 候选证据边界（2026-08-25）
+### R8B 已落地证据边界
 
-R8B 以 [`../iterations/2026-08-r8b-portfolio-performance.md`](../iterations/2026-08-r8b-portfolio-performance.md) 为唯一 Human brief。证据必须在同一最终候选上覆盖：18-service descriptor/生产 route、69/7/62 coverage inventory、FormalInputKind 22..24、独立 Python Decimal Oracle 与 Rust 生产公式逐字段对照、PostgreSQL 0027 不可变/双时间/租户负例、幂等 bootstrap、native gRPC/gRPC-Web 真实组合，以及正式证据先持久化后返回和进程重启读回。
+R8B 已通过 [PR #65](https://github.com/kayz/ficant/pull/65) 合入 `main`；[`../iterations/2026-08-r8b-portfolio-performance.md`](../iterations/2026-08-r8b-portfolio-performance.md) 仍是该轮唯一 Human brief。其最终候选证据已覆盖 18-service descriptor/生产 route、69/7/62 coverage inventory、FormalInputKind 22..24、独立 Python Decimal Oracle 与 Rust 生产公式逐字段对照、PostgreSQL 0027 不可变/双时间/租户负例、幂等 bootstrap、native gRPC/gRPC-Web 真实组合，以及正式证据先持久化后返回和进程重启读回。
 
-本页只声明证据责任，不把实施中的 focused 通过冒充最终 verdict。最终命令、exit code、可得 test count、descriptor/生成树摘要、Git identity 与允许路径核对只写入 R8B brief §6。R8B 是研究计量输入与收益序列，不构成正式会计 NAV、PMS/OMS、版本发布或 WebApp 已接入证据。
+2026-09-04 在同步的公共基线 `main == origin/main == 1788bcfba8d0609002008043908c8f0013474fce` 上执行 `.\scripts\check.ps1 -IncludeIntegration`，exit `0`；最终隔离恢复 manifest SHA-256 为 `D2321253E7CA1B32905DDE2A6445FEC69AB1E5B11321AE98E6AE8A72C605FAAF`。完整原始候选证据、Git rebase 映射和残余风险见 R8B brief §6–§7。R8B 是研究计量输入与收益序列，不构成正式会计 NAV、PMS/OMS、版本发布或 WebApp 已接入证据。
+
+## iteration-2 历史治理检查表
 
 | ID | 验收 | 当前状态 | 证据位置 |
 |---|---|---|---|

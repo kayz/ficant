@@ -109,7 +109,9 @@ def resolved_document() -> dict[str, object]:
     document["services"]["ficant-server"]["environment"] = {
         "FICANT_CONFIG": "/etc/ficant/ficant.toml",
         "FICANT_GRPC_BIND": "0.0.0.0:8080",
-        "FICANT_GRPC_WEB_ALLOWED_ORIGINS": "http://127.0.0.1:18082",
+        "FICANT_GRPC_WEB_ALLOWED_ORIGINS": (
+            "http://127.0.0.1:18083,http://127.0.0.1:5173"
+        ),
         "FICANT_PLATFORM_SIGNING_KEY_HEX": "test-only-signing-key",
         "FICANT_PLATFORM_TRACE_KEY_HEX": "test-only-trace-key",
     }
@@ -171,7 +173,10 @@ def runtime_document() -> list[dict[str, object]]:
     )
     server["Config"]["Env"] = [
         "FICANT_GRPC_BIND=0.0.0.0:8080",
-        "FICANT_GRPC_WEB_ALLOWED_ORIGINS=http://127.0.0.1:18082",
+        (
+            "FICANT_GRPC_WEB_ALLOWED_ORIGINS="
+            "http://127.0.0.1:18083,http://127.0.0.1:5173"
+        ),
         "FICANT_PLATFORM_SIGNING_KEY_HEX=test-only-signing-key",
         "FICANT_PLATFORM_TRACE_KEY_HEX=test-only-trace-key",
     ]
@@ -512,6 +517,27 @@ class ComposeSecurityGateTests(unittest.TestCase):
                 f"missing {expected} failure: {failures}",
             )
 
+        for unsafe_origins in (
+            "http://127.0.0.1:18083",
+            "https://attacker.example,http://127.0.0.1:5173",
+            "http://127.0.0.1:18083,http://127.0.0.1:5173,http://127.0.0.1:4174",
+            "http://127.0.0.1:18083,*",
+            "http://127.0.0.1:18083,http://127.0.0.1:18083",
+            "http://127.0.0.1:18083, http://127.0.0.1:5173",
+            "http://127.0.0.1:18083/path,http://127.0.0.1:5173",
+        ):
+            document = resolved_document()
+            document["services"]["ficant-server"]["environment"][
+                "FICANT_GRPC_WEB_ALLOWED_ORIGINS"
+            ] = unsafe_origins
+
+            failures = validate_resolved(document, PROJECT)
+
+            self.assertTrue(
+                any("exact CORS origin allowlist" in failure for failure in failures),
+                f"unsafe CORS allowlist was accepted: {unsafe_origins}",
+            )
+
     def test_resolved_server_rejects_unsafe_optional_identity_combinations(self) -> None:
         unsafe_environments = [
             {"FICANT_BOOTSTRAP_SUBJECT": "dev-user"},
@@ -564,9 +590,10 @@ class ComposeSecurityGateTests(unittest.TestCase):
 
         self.assertIn('FICANT_GRPC_BIND: "0.0.0.0:8080"', compose)
         self.assertIn(
-            'FICANT_GRPC_WEB_ALLOWED_ORIGINS: "http://127.0.0.1:${FICANT_UI_PORT:-18083}"',
+            'FICANT_GRPC_WEB_ALLOWED_ORIGINS: "http://127.0.0.1:${FICANT_UI_PORT:-18083},http://127.0.0.1:5173"',
             compose,
         )
+        self.assertIn('127.0.0.1:${FICANT_UI_PORT:-18083}:8080', compose)
         for key in ("FICANT_PLATFORM_SIGNING_KEY_HEX", "FICANT_PLATFORM_TRACE_KEY_HEX"):
             self.assertRegex(compose, rf"(?m)^[ \t]+{re.escape(key)}:[ \t]+\"\$\{{{key}:\?[^}}]+\}}\"$")
         for key in ("FICANT_BOOTSTRAP_SUBJECT", "FICANT_BOOTSTRAP_BEARER_TOKEN", "FICANT_BOOTSTRAP_SCOPES"):
@@ -615,10 +642,27 @@ class ComposeSecurityGateTests(unittest.TestCase):
         self.assertIn("/ficant-api/ficant.app.v1.PlatformService/GetCurrentSession", up)
         self.assertIn("grpc-status:\\s*0", up)
         self.assertIn("'--profile', 'ui'", up)
-        self.assertIn("docker image inspect --format '{{.Id}}' $workerImage", up)
-        self.assertIn("'--print-native-source-digest'", up)
-        self.assertIn("RuntimeDigest = $runtimeDigest", up)
-        self.assertIn("SourceDigest = $sourceDigest", up)
+        image_digest_helper = up.split("function Get-ImageConfigDigest {", 1)[1].split(
+            "function Get-EnvironmentDigest {", 1
+        )[0]
+        self.assertIn("docker image inspect --format '{{.Id}}' $Image", image_digest_helper)
+        self.assertIn("if ($LASTEXITCODE -ne 0)", image_digest_helper)
+        self.assertIn("'^sha256:[0-9a-f]{64}$'", image_digest_helper)
+        worker_attestation_helper = up.split("function Get-WorkerAttestation {", 1)[1].split(
+            "function Test-GrpcWebSession {", 1
+        )[0]
+        self.assertIn(
+            "$runtimeDigest = Get-ImageConfigDigest -Image $workerImage -Role 'Worker'",
+            worker_attestation_helper,
+        )
+        self.assertIn("'--print-native-source-digest'", worker_attestation_helper)
+        self.assertIn("$sourceDigest = (& docker @sourceArguments)", worker_attestation_helper)
+        self.assertIn("if ($LASTEXITCODE -ne 0)", worker_attestation_helper)
+        self.assertIn("'^sha256:[0-9a-f]{64}$'", worker_attestation_helper)
+        self.assertIn("RuntimeDigest = $runtimeDigest", worker_attestation_helper)
+        self.assertIn("SourceDigest = $sourceDigest", worker_attestation_helper)
+        entrypoint = up.split("if ($ListOnly)", 1)[1]
+        self.assertIn("$workerAttestation = Get-WorkerAttestation", entrypoint)
         entries = up.split("$entries = @(", 1)[1].split(")", 1)[0]
         self.assertNotIn("FICANT_WORKER_RUNTIME_IMAGE_DIGEST", entries)
         self.assertNotIn("FICANT_WORKER_NATIVE_SOURCE_DIGEST", entries)

@@ -50,7 +50,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 .\scripts\check-fast.ps1
 ```
 
-它运行 `cargo fmt`、离线 workspace check、R5D 精确 crate 邻接表与 L1→L2 语法依赖门禁、R7B MANUAL/恢复清单负向 fixture、R8A/R8B Portfolio 契约、本地契约包、18-service 拓扑、R8B domain/application/API focused tests、非环境 Rust 测试和 Storage library 测试；不会连接 PostgreSQL、Ceph RGW、GitHub 或目标服务器。R6A 真实输入平面 SIT、R7B 真实 source-destroy/fresh-restore 与 R8A/R8B Portfolio PostgreSQL/gRPC SIT 被显式标记为 integration-only；未知 workspace package/依赖边，以及 `research/**` 对 analytics/curves/futures 模块的直接或 façade 引用，都会默认失败。
+它运行 `cargo fmt`、离线 workspace check、R5D 精确 crate 邻接表与 L1→L2 语法依赖门禁、R7B MANUAL/恢复清单负向 fixture、R8A/R8B Portfolio 契约、本地契约包、18-service 拓扑、R8B domain/application/API focused tests、非环境 Rust 测试和 Storage library 测试；不会连接 PostgreSQL、Ceph RGW、GitHub 或目标服务器。R6A 真实输入平面 SIT、R6B Artifact 生产拓扑 SIT、R7B 真实 source-destroy/fresh-restore 与 R8A/R8B Portfolio PostgreSQL/gRPC SIT 被显式标记为 integration-only；未知 workspace package/依赖边，以及 `research/**` 对 analytics/curves/futures 模块的直接或 façade 引用，都会默认失败。
 
 完整本地回归：
 
@@ -60,6 +60,8 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 ```
 
 它在不依赖目标服务器的前提下运行：严格 Rust format/Clippy/build/test、生成契约与 R5D 结构门禁、冻结 `cgb-futures` 与 R5E `cgb-interest-tax` RulePack 的确定性 payload 漂移检查、C++ Release build 与当前 CMake/CTest catalog 中登记的全部测试、既有 acceptance matrix/独立 Oracle/确定性 Artifact 回归、R5D 独立 Decimal KRD Oracle、R5E 税收调整 Decimal Oracle、R8A Portfolio Decimal Oracle、R8B Portfolio Performance Decimal Oracle、20 个一方包的许可证绑定、Python 契约测试、可重复本地 `@ficant/contracts-generated@0.0.0` 包，以及冻结 Node 22.17.0 下的 Web typecheck/build/Vitest。默认不运行需要持久化服务的测试。CTest 数量由当前 catalog 决定，文档不另行硬编码一个会漂移的计数。
+
+R9A 后，显式运行 `scripts/package-contracts.ps1` 仍会在 ignored `web-dm/packages/contracts-generated/dist/` 留下可消费 `.tgz`；统一 `check-fast.ps1` / `check.ps1` 的内部打包验证则只在受校验的同一路径使用并清理该产物。许可证绑定明确忽略这一个瞬态输出目录，仍精确验证 contracts package 的 tracked source；完整检查另运行连续打包/许可证专测，防止自身产物改变下一次检查输入。
 
 可选本地集成回归：
 
@@ -77,9 +79,9 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 - `FICANT_TEST_S3_SECRET_KEY`
 - `FICANT_TEST_RUNTIME_IMAGE_DIGEST`
 
-脚本不会连接或清理目标服务器，也不会打印这些值。调用者提供的数据库必须可安全重置，不得指向共享、测试发布或生产数据库。集成计划依次覆盖 migration、Phase 1 正向业务闭环、13 项负向不变量、Phase 2B Carry/Roll-down、Phase 2C 国债期货交割、Phase 2D 套保、Phase 3A/3B 数据与快照、R6A 生产输入平面、R8A Portfolio PostgreSQL/生产 gRPC，以及 R8B Portfolio Performance PostgreSQL/生产 native gRPC/gRPC-Web，最后执行 R7B 自建隔离 PostgreSQL/Ceph source 与 restore project 的真实销毁恢复证明。R7B runner 只删除其名称受限的临时 project/volume；细节见 [`operations/recovery.md`](operations/recovery.md)。
+脚本不会连接或清理目标服务器，也不会打印这些值。调用者提供的数据库必须可安全重置，不得指向共享、测试发布或生产数据库。集成计划依次覆盖 migration、Phase 1 正向业务闭环、13 项负向不变量、Phase 2B Carry/Roll-down、Phase 2C 国债期货交割、Phase 2D 套保、Phase 3A/3B 数据与快照、R6A 生产输入平面、R6B Artifact 生产拓扑、R8A Portfolio PostgreSQL/生产 gRPC，以及 R8B Portfolio Performance PostgreSQL/生产 native gRPC/gRPC-Web，最后执行 R7B 自建隔离 PostgreSQL/Ceph source 与 restore project 的真实销毁恢复证明。R7B runner 只删除其名称受限的临时 project/volume；细节见 [`operations/recovery.md`](operations/recovery.md)。
 
-仓库内 `deploy/dev/docker-compose.yml` 是当前唯一的本地 Compose 拓扑，提供锁定基础镜像摘要的 PostgreSQL、单节点 Ceph RGW、migration、三个 Rust 服务和 React Platform Shell；它不是生产 Ceph 部署模板。日常开发只调用下面的包装脚本：
+仓库内 `deploy/dev/docker-compose.yml` 是当前唯一的本地 Compose 拓扑，提供锁定基础镜像摘要的 PostgreSQL、单节点 Ceph RGW、migration、Server、Worker 和 React Platform Shell；它不是生产 Ceph 部署模板。日常开发只调用下面的包装脚本：
 
 ```powershell
 .\scripts\dev-up.ps1 -ListOnly
@@ -90,7 +92,7 @@ OPAID 是这套候选关系的默认表达方式。只有真实失败记录能�
 
 ### R8A/R8B 本地接线
 
-相邻 `ficant-portfolio` WebApp 不进入本仓库构建。金证FICC合同管理系统的 D01/P01/P02/P03/P04 只读页通过 gRPC-Web 调用本仓库生产 server；其余十九页由 WebApp 自己标记 demo/partial。FICANT BFF 永不返回 `demo`。
+相邻 `ficant-portfolio` WebApp 不进入本仓库构建，R8A/R8B 也未修改或接入该应用。FICANT 当前只提供金证FICC合同管理系统 D01/P01/P02/P03/P04 所需的真实只读 DTO/BFF 合同；下游完成独立接线后必须通过 gRPC-Web 调用本仓库生产 server，其余十九页仍由 WebApp 自己标记 demo/partial。FICANT BFF 永不返回 `demo`。
 
 | 用途 | 地址 | 谁使用 |
 |---|---|---|
@@ -172,7 +174,7 @@ trivy image --download-db-only
 .\scripts\check-release-candidate.ps1
 ```
 
-该入口不创建 tag、不推送镜像、不连接测试服务器，也不安装工具。它使用正式 Dockerfile 和固定基础镜像 digest 构建 Server、Worker、Web、UI 四个应用镜像，验证 `deploy/storage-runtime.lock.json` 后复用并扫描锁定的 Ceph OCI digest；所有五个运行镜像都以本地 Trivy 数据库执行 `HIGH,CRITICAL`、`ignore-unfixed` 扫描。随后启动 PostgreSQL、锁定的 Ceph RGW、真实 Worker、Server、Web 和 UI，验证 readiness、UI 与 forward-only migration 兼容。只有该入口通过且 Human 明确给出版本号后，才创建新的不可变版本 tag。
+该入口不创建 tag、不推送镜像、不连接测试服务器，也不安装工具。它使用正式 Dockerfile 和固定基础镜像 digest 构建 Server、Worker、UI 三个应用镜像，验证 `deploy/storage-runtime.lock.json` 后复用并扫描锁定的 Ceph OCI digest；三个应用镜像与 Ceph 运行时共四个运行镜像都以本地 Trivy 数据库执行 `HIGH,CRITICAL`、`ignore-unfixed` 扫描。随后启动 PostgreSQL 与锁定的 Ceph RGW，执行一次性 migration，再启动真实 Worker、Server 和 UI，验证 readiness、UI 与 forward-only migration 兼容。只有该入口通过且 Human 明确给出版本号后，才创建新的不可变版本 tag。
 
 数个迭代后，Human 确定版本号并创建符合版本格式、指向当前 `main` 精确提交的不可变 `v*` tag。创建 tag 即把版本候选交给 CICD，并授权完整 GitHub CI、SHA 镜像构建、扫描、不可变版本标签提升、Linux 测试环境部署、健康/冒烟检查和失败回滚。版本失败后不得移动原 tag；修复进入新的 OPAID 迭代，再建立 forward-only 版本候选。普通 OPAID 工作不得修改 `.github/**`、`cicd.yml` 或 `deploy/**` 来绕过这个交接边界。
 

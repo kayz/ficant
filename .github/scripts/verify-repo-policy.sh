@@ -120,7 +120,7 @@ validate_path_list() {
         ;;
       *.py)
         case "$path" in
-          python/*|tests/oracle/china-rates/*|tests/iteration-3/verify_acceptance_matrix.py|tests/phase[0-9]/verify_acceptance_matrix.py|tests/phase[0-9][a-z]/verify_acceptance_matrix.py|docs/history/hoqa/deploy-execution/execution-validator.py|deploy/test/validate_release.py|deploy/verify-storage-runtime.py|.github/scripts/compose_security_gate.py|.github/scripts/tests/test_compose_security_gate.py|.github/scripts/tests/test_license_inventory_bindings.py|.github/scripts/tests/test_storage_runtime_lock.py|.github/scripts/verify-cargo-reachability.py|.github/scripts/verify-license-inventory.py|.github/scripts/verify-risk-acceptance.py) ;;
+          python/*|tests/oracle/china-rates/*|tests/oracle/portfolio/*|tests/iteration-3/verify_acceptance_matrix.py|tests/phase[0-9]/verify_acceptance_matrix.py|tests/phase[0-9][a-z]/verify_acceptance_matrix.py|docs/history/hoqa/deploy-execution/execution-validator.py|deploy/test/validate_release.py|deploy/verify-storage-runtime.py|.github/scripts/compose_security_gate.py|.github/scripts/tests/test_compose_security_gate.py|.github/scripts/tests/test_license_inventory_bindings.py|.github/scripts/tests/test_release_state_contract.py|.github/scripts/tests/test_storage_runtime_lock.py|.github/scripts/verify-cargo-reachability.py|.github/scripts/verify-license-inventory.py|.github/scripts/verify-risk-acceptance.py) ;;
           *) record_failure "Python is restricted to python/ or the exact CI gate tool allowlist: $path" ;;
         esac
         ;;
@@ -319,7 +319,7 @@ fi
 
 tracked=$(mktemp)
 trap 'rm -f "$tracked"' EXIT
-git ls-files >"$tracked" || exit 2
+git -c core.quotepath=false ls-files >"$tracked" || exit 2
 validate_path_list "$tracked"
 validate_ci .github/workflows/ci.yml
 

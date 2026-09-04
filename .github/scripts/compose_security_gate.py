@@ -56,6 +56,7 @@ LOOPBACK_IDENTITY_ENV = {
     "FICANT_LOOPBACK_SUBJECT",
     "FICANT_LOOPBACK_SCOPES",
 }
+ADJACENT_WEB_ORIGIN = "http://127.0.0.1:5173"
 
 
 def record(condition: bool, message: str, failures: list[str]) -> None:
@@ -94,6 +95,35 @@ def is_exact_origin(value: object) -> bool:
         and parsed.query == ""
         and parsed.fragment == ""
         and value == f"{parsed.scheme}://{parsed.netloc}"
+    )
+
+
+def is_exact_loopback_http_origin_with_port(value: object) -> bool:
+    if not is_exact_origin(value):
+        return False
+    parsed = urlsplit(value)
+    try:
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "http"
+        and parsed.hostname == "127.0.0.1"
+        and port is not None
+        and 1 <= port <= 65535
+        and value == f"http://127.0.0.1:{port}"
+    )
+
+
+def is_exact_dev_origin_allowlist(value: object) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    origins = value.split(",")
+    return (
+        len(origins) == 2
+        and len(origins) == len(set(origins))
+        and is_exact_loopback_http_origin_with_port(origins[0])
+        and origins[1] == ADJACENT_WEB_ORIGIN
     )
 
 
@@ -161,8 +191,10 @@ def validate_server_environment(service: dict[str, Any], failures: list[str]) ->
         failures,
     )
     record(
-        is_exact_origin(environment.get("FICANT_GRPC_WEB_ALLOWED_ORIGINS")),
-        "ficant-server: exact CORS origin is required",
+        is_exact_dev_origin_allowlist(
+            environment.get("FICANT_GRPC_WEB_ALLOWED_ORIGINS")
+        ),
+        "ficant-server: exact CORS origin allowlist is required",
         failures,
     )
     for key, description in SERVER_REQUIRED_ENV.items():
