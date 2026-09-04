@@ -9,7 +9,7 @@
     "required_workflow": "ci",
     "trigger": "version-tag",
     "version_tag_pattern": "v*",
-    "cancel_outdated_runs": true
+    "cancel_outdated_runs": false
   },
   "images": [
     {

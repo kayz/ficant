@@ -1,6 +1,6 @@
 # R8B 迭代 brief — 组合日度计量与收益序列
 
-**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R8B · **execution base：** `a66f780c949614ab050a625667b93b129653588f` · **base tree：** `01d41c2cc2a14065bce91d555d43e9c6d0d7c1ee` · **状态：** 本地实施与同候选全量取证已完成；代码候选 `7d9c737031914ec9a23d49f09fd5487cac86c2fc`，未推送、未发布
+**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R8B · **execution base：** `a66f780c949614ab050a625667b93b129653588f` · **base tree：** `01d41c2cc2a14065bce91d555d43e9c6d0d7c1ee` · **状态：** R8B 已完成；[PR #65](https://github.com/kayz/ficant/pull/65) 已合入 `main`，合并后完整本地检查通过；未发布
 
 本 brief 是 R8B 面向 Human 的唯一设计、权限边界和最终证据载体。本轮只在 `C:\git\ficant` 建设后端组合日度计量与收益序列；不接入 `C:\git\ficant-portfolio`，不创建版本、tag、镜像或部署，也不触发远端 CI/CD。
 
@@ -152,7 +152,7 @@ Human 已批准以下冻结项；实施中若要改变，必须先停下并取�
 
 本节以下只允许记录同一最终候选上的真实命令、exit code 与可得 test count；计划命令不得写成通过。
 
-**最终代码候选（本地、未推送）：** commit `7d9c737031914ec9a23d49f09fd5487cac86c2fc`，tree `664c7c8cbe2ec5dec35f8109d17364d1ff248297`，唯一父提交 `a66f780c949614ab050a625667b93b129653588f`。代码候选相对 execution base 共 66 个变化路径，全部落入 65 条允许路径规则，unexpected=0。随后只更新本 brief 与迭代指针的证据提交不是代码候选，不改变以下取证对象。
+**最终代码候选（取证时为本地、未推送）：** commit `7d9c737031914ec9a23d49f09fd5487cac86c2fc`，tree `664c7c8cbe2ec5dec35f8109d17364d1ff248297`，唯一父提交 `a66f780c949614ab050a625667b93b129653588f`。代码候选相对 execution base 共 66 个变化路径，全部落入 65 条允许路径规则，unexpected=0。随后只更新本 brief 与迭代指针的证据提交不是代码候选，不改变以下取证对象。
 
 | 真实命令 | Exit code | 同一代码候选上的结果 |
 |---|---:|---|
@@ -164,6 +164,8 @@ Human 已批准以下冻结项；实施中若要改变，必须先停下并取�
 | `uv run --offline --locked --project python python .github/scripts/verify-license-inventory.py verify-bindings ...` | 0 | 删除 ignored 本地生成包后，release-tree binding 再次返回 `7c485b3fb0b4e858f52a5455a42ba12a9816ddfdc2b00baf8319296c689c512c`。 |
 | `git diff --check origin/main...7d9c737031914ec9a23d49f09fd5487cac86c2fc` 与允许路径/受保护事实核对 | 0 | whitespace clean；66/66 变化路径获准；`.github/workflows/**`、`cicd.yml`、`deploy/test/**`、0001..0026、既有 Oracle/expected/tolerance、C/C++/FFI/native 数值实现、RulePack 与 WebApp repo 均未改变。 |
 
+**公共合并与合并后复核（2026-09-04）：** PR #65 以 rebase merge 合入公共主线。原代码候选 `7d9c737031914ec9a23d49f09fd5487cac86c2fc` 被重写为公共提交 `f044f397a173f4caee2fb186efcee81dfff378d7`，两者 tree 均为 `664c7c8cbe2ec5dec35f8109d17364d1ff248297`；原证据提交 `a7d6dca5803a6713e01e9c71268cb81e03f0db48` 被重写为 `1788bcfba8d0609002008043908c8f0013474fce`，两者最终 tree 均为 `0c255e73bb2ac13ce1e5d1d8c654d6cb7a6d0ac5`。同步核对时 `main == origin/main == 1788bcfba8d0609002008043908c8f0013474fce`；在该公共基线上再次执行 `pwsh -NoLogo -NoProfile -File scripts/check.ps1 -IncludeIntegration`，exit `0`，最终隔离恢复 manifest SHA-256 为 `D2321253E7CA1B32905DDE2A6445FEC69AB1E5B11321AE98E6AE8A72C605FAAF`。这只是同一代码树的本地合并后重取证，不是版本 CI 或发布证据。
+
 **RED-first 与修复记录：** 实施中先后由 descriptor/service inventory、coverage carrier、runtime snapshot ref 形状、canonical evidence role/ULID、strict Clippy 和 license binding 暴露真实 RED；均在对应层修正。供应链最终门禁还发现 Syft 默认 JavaScript catalog 未选择本地交付包、两个私有 workspace manifest 不属于交付面，以及 ignored `contracts-generated/dist` 会污染工作目录式 release tree；现由显式 JavaScript catalog、精确交付排除夹具和删除 ignored 生成物闭合。未修改任何既有金融 Oracle、expected 或 tolerance，R8B expected 只由本轮独立 Decimal Oracle 新增。
 
 ## 7. 残余风险
@@ -172,5 +174,5 @@ Human 已批准以下冻结项；实施中若要改变，必须先停下并取�
 - 首个切片只承诺单币种中国国债组合和静态 Benchmark level；多币种、动态基准和跨资产需另开迭代。
 - 严格完整覆盖会在数据缺日时返回错误，优先保证结果可信，不承诺“尽量出数”。
 - 本地契约包仍是未发布 `0.0.0`；不构成 WebApp 已接入或可部署产品。
-- 无版本发布授权，因此本轮不运行版本候选镜像入口、不创建 tag、不部署、不触发远端 CI/CD。
-- 代码候选与证据提交均只保留在本地；未推送 GitHub，远端主线仍停留在 execution base。
+- 成功的契约包步骤会留下 ignored `web-dm/packages/contracts-generated/dist/`；若不先清理便立即重跑完整检查，R8B first-party license binding 会失败。最终干净重跑已经通过，但自动清理/可重入性仍是后续工具改进项。
+- R8B 已通过 PR #65 合入 `main` 并完成合并后本地检查；R8B 自身没有版本发布授权，普通 PR 合并不构成版本候选、镜像发布或部署，也不触发版本 CI/CD。Human 后续在独立 R9A 中选择了 `v0.1.0-alpha.10`，其门禁与交付证据不回写为 R8B 的历史结果。

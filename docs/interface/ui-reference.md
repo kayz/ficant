@@ -1,6 +1,6 @@
 # Platform Shell 与多 WebApp 界面参考
 
-**状态：** iteration-2 已实现界面边界
+**状态（2026-09-04）：** Platform Shell 与 Phase 5A 非业务观测面板已实现；DMQuant 和相邻 Portfolio 业务 WebApp 尚未在本仓库落地或完成接线
 
 **详细页面设计：** `web-dm/webapps/<app-id>/design.md`
 
@@ -18,7 +18,7 @@ web-dm/
 interface/                           # Rust/Python/TypeScript 共用后台合同
 ```
 
-新增 WebApp 的页面设计、源码和测试都进入 `web-dm/webapps/<app-id>/`。共享 Shell 不承载具体研究产品流程，根 `interface/` 不放页面设计；WebApp 也不得建立平行后台 DTO 或服务。
+未来新增 WebApp 的页面设计、源码和测试都进入 `web-dm/webapps/<app-id>/`。当前该目录只有 `dmquant/design.md`，实际前端实现仍位于 `platform-shell/`。共享 Shell 不承载完整研究产品流程，根 `interface/` 不放页面设计；WebApp 也不得建立平行后台 DTO 或服务。
 
 ## 已实现 Platform Shell 流程
 
@@ -77,7 +77,7 @@ Platform Service 返回 `SafeError(code, safe_message, trace_id, retryable)`。S
 - 区分认证过期、禁止、资源不存在、暂时不可用和本地边界校验失败；
 - 网络失败只显示安全的“平台连接暂时不可用”，不暴露 raw cause、stack、credential 或服务端内部信息。
 
-Phase1 领域错误使用 `ficant.core.v1.ErrorDetail` 的独立 core mapper；当前 Platform Shell 没有伪造尚不存在的 Phase1 业务 RPC 或结果页面。
+Phase 1 领域错误使用 `ficant.core.v1.ErrorDetail` 的独立 core mapper。Platform Shell 当前只额外装配 Phase 5A 观测面板：它读取已持久化 Run 输出并解码 `AnalyzeBondResult` / `RiskSummary`，不是面向用户提交分析的通用 Phase 1 业务页，也不伪造后台结果。
 
 ## 可访问性现状
 
@@ -85,15 +85,15 @@ Phase1 领域错误使用 `ficant.core.v1.ErrorDetail` 的独立 core mapper；�
 
 ## DMQuant 与明确延期
 
-DMQuant 的登录后研究流程仍以 `web-dm/webapps/dmquant/design.md` 为唯一页面设计。AI 草稿、参数编辑、策略版本、异步回测、指标/曲线/Artifact 浏览、归因、寻优和多 run 对比均不在 iteration-2；旧静态原型的评审工具条、手工状态开关和硬编码示例数据不得进入产品。
+DMQuant 的登录后研究流程仍以 `web-dm/webapps/dmquant/design.md` 为唯一页面设计。AI 草稿、参数编辑、策略版本、异步回测、通用指标/曲线/Artifact 浏览、归因、寻优和多 run 对比尚未实现；旧静态原型的评审工具条、手工状态开关和硬编码示例数据不得进入产品。
 
-Phase 2 固定收益算法也不属于当前页面能力。界面不得展示看似真实但没有后台合同与业务闭环的定价、DV01、基差、IRR 或 CTD 结果。
+Phase 5A 观测面板能展示既有 Run 中经完整性校验的 `AnalyzeBondResult` / `RiskSummary`，但没有直接发起 Phase 2 分析的交互流程；DV01、基差、IRR、CTD 等其他结果仍无业务页面。界面不得展示看似真实但没有后台合同与业务闭环的结果。
 
 ## 相邻 Portfolio WebApp 接线
 
 金证FICC合同管理系统的 24 页工作台不在 `web-dm/webapps/`。FICANT 只提供 `ficant.portfolio.v1` 只读 RPC 与 `portfolio-workbench.v1` PageEnvelope；相邻仓库安装本地 `@ficant/contracts-generated@0.0.0` artifact，不得继续 alias 到本树 `web-dm/packages/contracts-generated/src`。
 
-Docker 开发 gRPC-Web 默认 `http://127.0.0.1:18080`，允许 origin 精确包含 `http://127.0.0.1:5173`。`127.0.0.1:50051` 只用于本机 native gRPC。Hybrid 范围是 D01/P01/P02/P03/P04 走真实 DTO，其余页面由 WebApp 自己标 demo/partial；BFF 失败必须呈现 typed error，不得用 mock 冒充 backend success。
+Docker 开发 gRPC-Web 默认 `http://127.0.0.1:18080`，允许 origin 精确包含 `http://127.0.0.1:5173`。`127.0.0.1:50051` 只用于本机 native gRPC。R8A/R8B 已提供 D01/P01/P02/P03/P04 所需的真实 DTO/BFF 合同，但尚未修改或接入相邻 WebApp；下游接线后这五页必须使用真实 DTO，其余页面由 WebApp 自己标 demo/partial。BFF 失败必须呈现 typed error，不得用 mock 冒充 backend success。
 
 ## Validity
 

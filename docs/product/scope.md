@@ -1,8 +1,8 @@
 # ficant 产品范围
 
-**状态：** 当前候选已具备 Phase 0 开发环境/migration 合同与 Phase 4 持久化执行闭环，并通过本地多语言及真实 PostgreSQL + Ceph RGW 验证；正式镜像冷构建和测试环境交付待 version Action 闭合；对象存储统一为 Ceph RGW + Apache `object_store`
+**状态（2026-09-04）：** 本轮同步核对起点为公共 `main == origin/main == 1788bcfba8d0609002008043908c8f0013474fce`；R8A/R8B 已合入，当前 descriptor 与唯一生产 route set 精确包含 18 个公共 Protobuf service。该基线包含的 R8B 代码树已通过本地多语言及真实 PostgreSQL + Ceph RGW 全量检查；Human 已选择 `v0.1.0-alpha.10`，R9A 正把 current-truth 文档与发布门禁收口纳入同一候选。版本 tag、镜像和测试环境交付只能发生在候选合入、干净主线发布预检通过之后。对象存储统一为 Ceph RGW + Apache `object_store`
 
-**实现状态：** 当前能力以冻结合同、当前候选代码和已记录的真实本地证据为准；尚未运行的集成命令不得写成通过，不把局部纵向切片扩写为最终产品
+**实现状态：** 当前能力以公共 `main`、冻结合同和已记录的真实本地证据为准；本地通过不等于版本 CI 或目标环境通过，不把局部纵向切片扩写为最终产品
 
 **来源：** `README.md`、`interface/`、`web-dm/` 与当前生产实现
 
@@ -12,15 +12,15 @@ ficant 是面向专业投资研究团队的 AI 原生量化研究平台。平台
 
 正式产品终点保持为 `ResearchArtifact`、`SimulationResult`、`ReportArtifact`、`SignalSet` 和 `TargetExposure`。平台不拥有订单和外部交易执行，不建设 OMS、EMS、对外报单、清算、结算或投资组合会计。
 
-首个市场仍是中国国债现券与国债期货。Phase 1 领域内核、Phase 2 固定收益参考数值库和 Phase 3 可复现数据链已有各自冻结证据；Python SDK 通过同一 Protobuf/gRPC 合同调用真实 Rust/C++ 生产路径，文件与 PostgreSQL adapter 把外部报价转换为同一 Canonical Arrow Schema 后发布为可校验、可脱离外源重读的不可变 Parquet `DataSnapshot`。当前候选补齐了 Phase 4 持久化执行路径，但仍不表示完整研究产品页面、GeneratedNode 或 Phase 5 业务体验已经实现。
+首个市场仍是中国国债现券与国债期货。Phase 1 领域内核、Phase 2 固定收益参考数值库和 Phase 3 可复现数据链已有各自冻结证据；Python SDK 通过同一 Protobuf/gRPC 合同调用真实 Rust/C++ 生产路径，文件与 PostgreSQL adapter 把外部报价转换为同一 Canonical Arrow Schema 后发布为可校验、可脱离外源重读的不可变 Parquet `DataSnapshot`。公共主线还具备 Phase 4 持久化执行路径、R8A 只读组合目录/聚合/Workbench 后台，以及 R8B 严格日度 TWR 与区间几何累计；这仍不表示完整研究产品 WebApp、相邻 Portfolio WebApp 接线、GeneratedNode/gVisor、OIDC 或 Phase 5 业务体验已经实现。
 
 ## Phase 0 已落地边界
 
-- Rust Workspace 是唯一后台实现；Python 只承担生成节点运行时/合同消费，C++20 只保留稳定 C ABI 数值库边界。
+- Rust Workspace 是唯一后台实现；Python 当前用于 SDK/合同消费、测试和独立 Oracle，GeneratedNode/Python node runtime 尚未生产装配；C++20 只保留稳定 C ABI 数值库边界。
 - `interface/` 是后台 Protobuf 唯一来源，并生成 Rust、Python、TypeScript consumer；不建立平行 REST/OpenAPI DTO。
 - PostgreSQL Migration、Ceph RGW 内容寻址对象、开发 Compose、固定工具链和多语言构建有冻结合同；`scripts/dev-up.ps1` 构建并启动六个服务，从真实 Worker 镜像派生 runtime/source identity，并通过 React UI 直接反代 `ficant-server` 验证已认证的 gRPC-Web Session。
 - React Platform Shell 已实现真实 Rust gRPC-Web 路径、会话、应用目录和短期应用启动授权。
-- 多 WebApp 的页面设计、代码和测试统一位于 `web-dm/`；后台接口设计保留在根 `interface/`，避免未来 WebApp 各自复制后台合同。
+- `web-dm/` 当前包含 Platform Shell 源码/测试、生成的 TypeScript consumer package，以及 `webapps/dmquant/design.md` 页面设计；完整业务 WebApp 尚未落地。后台接口设计保留在根 `interface/`，避免未来 WebApp 各自复制后台合同。
 
 ## Phase 1 已落地业务切片
 
@@ -89,11 +89,11 @@ total_return = carry + roll_down
 
 `AnalyzeBond` 保留原市场税前字段，并以同一 clean price、逐期 `gross/(1+0.06)` 在 12 位 ties-to-even 后重算主体 YTM；`AnalyzeFuturesDelivery` 保留原市场 IRR、funding-adjusted IRR 和市场 CTD，同时为每只候选返回税收调整后 interim coupon、主体 IRR 与独立主体 CTD。该口径严格标注为“coupon 销项 VAT 调整、抵扣进项前”，不代表机构最终应纳 VAT、完整税后利润、金融商品转让/期货平仓/实物交割税务或完整税务会计；境外机构、小规模纳税人、非国债及其他未批准 profile 失败关闭。
 
-## 2026-08 / R6A 受治理输入平面（实施候选）
+## 2026-08 / R6A 受治理输入平面（已合入 `main`）
 
-当前候选把 Platform Admin 与 Researcher 固化为独立 active role，并从受信 session 逐请求派生 actor、tenant、owner 与 scopes。Definition、Fact、Snapshot 和 FoundationChange 公共服务已组合进同一生产 native gRPC / gRPC-Web server；管理员可以原子发布完整 Definition、直接 Fact/Curve/Universe 与精确 DataSource authorization，研究用户只能通过管理员批准的 exact source version、mapping、schema、接口和有效期执行 server-side canonical import。
+当前实现把 Platform Admin 与 Researcher 固化为独立 active role，并从受信 session 逐请求派生 actor、tenant、owner 与 scopes。Definition、Fact、Snapshot 和 FoundationChange 公共服务已组合进同一生产 native gRPC / gRPC-Web server；管理员可以原子发布完整 Definition、直接 Fact/Curve/Universe 与精确 DataSource authorization，研究用户只能通过管理员批准的 exact source version、mapping、schema、接口和有效期执行 server-side canonical import。
 
-导入路径从 registry connection binding 选择 adapter，验证 Calendar、Unit、双时间与内容身份，发布可重启读回的不可变 Parquet/Manifest，并把 authorization、actor 与实际输入写入 lineage、请求指纹和 append-only change record。未授权或漂移请求在 adapter、blob 与 repository 前失败关闭。该能力是后续投研 WebApp 的后台前置条件，不新增 Portfolio/Book、NAV/P&L、Benchmark、归因、VaR、模拟组合或 UI；在迭代 brief 完成最终取证前不得把候选宣传为已发布 AC37。
+导入路径从 registry connection binding 选择 adapter，验证 Calendar、Unit、双时间与内容身份，发布可重启读回的不可变 Parquet/Manifest，并把 authorization、actor 与实际输入写入 lineage、请求指纹和 append-only change record。未授权或漂移请求在 adapter、blob 与 repository 前失败关闭。R6A 公共实现与最终本地证据已经完成；AC37 的正式点亮仍取决于独立 private authority 精确绑定，本文不代替 Human 裁决。Portfolio/Book 与 NAV/P&L 后来分别由 R8A/R8B 的有界后台切片增加，完整 UI、归因、VaR 和模拟组合仍不在 R6A 范围。
 
 ## 2026-07 / Phase 3A 已落地双源 Canonical Quote 接入
 
@@ -107,7 +107,7 @@ total_return = carry + roll_down
 
 Application 复用既有 `BlobStore`、`VerifiedSnapshotProof::data` 与 `SnapshotRepository` 完成 Parquet/Manifest 双 payload 发布；正式读取复用 `VerifiedReadFacade` required read，再由 `ficant-data` 对 metadata、两个 payload、canonical Manifest、Parquet 元数据、schema、行数与血缘失败关闭。真实 PostgreSQL 16 + Ceph RGW 验收证明外源只在 ingest 时调用一次；销毁 source adapter 并重建存储 adapter 后，仍可只按 `DataSnapshot` ID 取得完全相同的 Canonical RecordBatch。
 
-## 当前候选 / Phase 4 持久化 ResearchGraph 执行闭环
+## 已落地 / Phase 4 持久化 ResearchGraph 执行闭环
 
 ResearchNodeContract 与 ResearchGraph 是版本化 Definition：节点合同绑定输入/输出 type ID、version、schema hash、状态/参数 schema、确定性等级、权限、资源限制和不变量；图将节点、边、外部输入声明和外部输入绑定规范化，并拒绝类型不匹配、循环或未满足的必需输入。实际外部值连同内容 hash 进入可复现身份；身份还绑定 Data/Universe Snapshot、参数、runtime/environment、seed、RulePack 的 ID/version/content hash 与节点实现 digest。`ExperimentRun` 只标识一次执行实例，不进入计算或 Artifact 的可复现 digest。
 
@@ -117,27 +117,27 @@ ResearchNodeContract 与 ResearchGraph 是版本化 Definition：节点合同绑
 
 真实 PostgreSQL 16 + Ceph RGW 已验证正式 application 提交与持久查询、对象提升后/事务前 worker 中断、attempt 2 重新领取、旧 fencing epoch 拒绝、`AnalyzeBondResult -> RiskSummary` 强类型两节点推进、上游篡改失败、Artifact/Journal/checkpoint/Run 原子收口与最终重放。Phase 4 的退出范围仍限于 Rust NativeNode 执行闭环，不包含 GeneratedNode/gVisor、业务 UI 或 Phase 5 Lab。
 
-## 2026-08 / R7B 正式证据与恢复（实施候选）
+## 2026-08 / R7B 正式证据与恢复（已合入 `main`）
 
 正式分析输出固定为五个 Rates 结果、Portfolio KRD、PositionViews、成功 CapitalUse、DataHealthReport，以及 Experiment Artifact/SignalSet。它们共用 `FormalOutputEvidence` 与单一 canonical identity 算法：exact Subject、stable typed actual inputs、Code commit/tree、实际 Runtime/environment、实现、参数/seed 和 result bytes 任一漂移都会改变 identity。同步 Analytics 成功前持久化 canonical payload/evidence；Graph Artifact/SignalSet 在完成事务中持久化并交叉核对证据。基础 Definition/Fact/Snapshot CRUD 读取不是正式分析输出，不添加该包装。
 
-R7B 同时提供 output intent crash recovery、生产 orphan maintenance、隔离 PostgreSQL/Ceph dump + 完整 immutable-object manifest + source-destroy/fresh-restore，以及 exact private authority MANUAL 的 clean-checkout literal runner。这些能力证明本地候选的确定性和可恢复性，不等于生产 HA/PITR、已运营备份、版本发布或部署。AC30–AC33 仍需最终候选真实取证、公共合并和独立 authority 绑定后才能点亮。
+R7B 同时提供 output intent crash recovery、生产 orphan maintenance、隔离 PostgreSQL/Ceph dump + 完整 immutable-object manifest + source-destroy/fresh-restore，以及 exact private authority MANUAL 的 clean-checkout literal runner。公共实现、最终本地取证与合并已经完成；这些能力不等于生产 HA/PITR、已运营备份、版本发布或部署，AC30–AC33 的正式点亮仍须由独立 private authority 精确绑定，本文不代替 Human 裁决。
 
-## 2026-08 / R8A 只读组合纵向切片（实施候选）
+## 2026-08 / R8A 只读组合纵向切片（已合入 `main`，本地取证完成）
 
 金证FICC合同管理系统的 D01/P01/P02/P03/P04 由 FICANT 提供真实、只读、可审计的中国国债组合后台。新增最小不可变 `Book` / `PortfolioGroup` / `Portfolio` 目录、exact `PositionSnapshot` 绑定、最小 `BenchmarkRef` 与版本化 `PortfolioMetricConvention`。Book/Portfolio 只定义目录与聚合范围，不复制 Position、交易、成本、现金、NAV 或会计账簿。
 
 生产新增三个只读 service：`PortfolioCatalogService.ListBooksAndPortfolios`、`PortfolioAggregationService.GetPortfolioOverview`、`PortfolioWorkbenchService.GetDefaultContext/GetPage`。Catalog 是非正式 CRUD 读取；Aggregation 复用既有 PositionViews、Portfolio KRD、AnalyzeBond 与 MarketFact/Definition，不复制算法；Workbench 只解析六维 context、授权裁剪并投影领域 DTO，不承载 PageModel、layout 或 11 类 UI module。descriptor 与生产路由从 14 个精确扩展为 17 个。
 
-相邻 `ficant-portfolio` 以 Hybrid 消费：这五页在后台可达时只能使用真实 DTO；其余十九页由 WebApp 自己标记 demo/partial。FICANT BFF 没有 `DEMO`，真实失败返回 typed error。年化收益、波动、Sharpe/Calmar、最大回撤、Campisi、VaR、OMS/PMS 与其余页面均不在本切片。完成状态以 [R8A iteration brief](iterations/2026-08-r8a-portfolio-p0.md) 的最终真实证据为准。
+FICANT 只提供 D01/P01/P02/P03/P04 五个 page ID 所需的真实 DTO/BFF 合同；R8A/R8B 未修改或接入相邻 `ficant-portfolio` WebApp，后续仍需独立 UI 接线。接入后这五页在后台可达时只能使用真实 DTO，其余十九页由 WebApp 自己标记 demo/partial；FICANT BFF 没有 `DEMO`，真实失败返回 typed error。年化收益、波动、Sharpe/Calmar、最大回撤、Campisi、VaR、OMS/PMS 与其余页面均不在本切片。完成状态以 [R8A iteration brief](../iterations/2026-08-r8a-portfolio-p0.md) 的最终真实证据为准。
 
-## 2026-08 / R8B 组合日度计量与收益序列（实施候选）
+## 2026-08 / R8B 组合日度计量与收益序列（已合入 `main`，本地取证完成，未发布）
 
 R8B 只扩展 FICANT 后台研究计量，不接入相邻 WebApp。新增不可变 `PortfolioValuationSnapshot`、`BenchmarkLevelSnapshot`、版本化 `PortfolioPerformanceConvention`，以及只读 `PortfolioPerformanceService.GetPortfolioPerformance`；descriptor 与生产路由从 17 个精确扩展为 18 个。请求只接受 R8A 已规范化的 exact context，不接受 NAV、Flow、Benchmark level、Calendar 内容或公式参数副本。
 
 Application 按 exact owner/Subject/scope/knowledge-at required-read Calendar 开市 session、全部成员 Portfolio/PositionSnapshot/估值快照、Benchmark/level、Unit 与 Convention。每个 session 先聚合成员 NAV 和期末外部 Flow，再用 scale-12 `FixedDecimal` ties-to-even 计算经济 P&L、日度 TWR、Benchmark/active return 与逐步几何累计；缺日、重复或任何 identity/time/Unit/session 漂移均失败关闭。成功 `PortfolioPerformanceSeries` 携完整 coverage、请求指纹和 R7B 正式证据，并在响应前写入 immutable formal-output repository。
 
-这些快照是可审计的研究输入，不是正式估值关账或会计 NAV。R8B 不提供交易、批次成本、现金/负债生产引擎、外部流水导入、年化/波动/回撤/Sharpe、归因、VaR、动态基准、多币种、PMS/OMS 或清算。完成状态以 [R8B iteration brief](iterations/2026-08-r8b-portfolio-performance.md) 的最终真实证据为准。
+这些快照是可审计的研究输入，不是正式估值关账或会计 NAV。R8B 不提供交易、批次成本、现金/负债生产引擎、外部流水导入、年化/波动/回撤/Sharpe、归因、VaR、动态基准、多币种、PMS/OMS 或清算；该能力尚未形成版本镜像或部署。完成状态以 [R8B iteration brief](../iterations/2026-08-r8b-portfolio-performance.md) 的最终真实证据为准。
 
 ## WebApp 产品边界
 

@@ -34,7 +34,7 @@
 - `.github/**`、`cicd.yml`、`deploy/**` 和中央 `kayz/cicd` 平台定义版本候选的正式 CI/CD 与发布合同。
 - 普通 branch push、Pull Request 和 `main` 合并不得触发完整 GitHub CI、镜像构建或部署。数个迭代后，只有 Human 明确确定版本号并创建指向当前 `main` 精确提交的 `v*` tag，才进入 CICD；创建 tag 即授权自动完成版本 CI、构建、扫描和测试环境交付。
 - 发布制品只能由 Linux GitHub Runner 构建并以 Commit SHA 标识；测试服务器只拉取不可变镜像并部署，不现场编译。
-- 创建版本 tag 前，在已同步且干净的 `main` 上更新本机 Trivy 数据库并运行 `.\scripts\check-release-candidate.ps1`；该入口必须用正式 Dockerfile 构建和扫描全部最终镜像，并启动 PostgreSQL、Ceph RGW、真实 Worker、Server、Web 与 UI 的本地发布拓扑。它不创建 tag、不推送镜像、不连接目标服务器。
+- 创建版本 tag 前，在已同步且干净的 `main` 上更新本机 Trivy 数据库并运行 `.\scripts\check-release-candidate.ps1`；该入口必须用正式 Dockerfile 构建并扫描与最终拓扑对应的 Server、Worker、UI 三个本地预检应用镜像，复核并扫描锁定的 Ceph RGW 运行时，启动 PostgreSQL、Ceph RGW，串行执行一次性 migration，再启动真实 Worker、Server 与 UI。它不创建 tag、不推送镜像、不连接目标服务器。
 - GitHub Secrets、Environment、GHCR、SSH、Nginx、目标环境健康检查、部署记录和回滚只在获授权的 CICD/运维工作中处理。
 - 未获得 Human 的版本号与版本交付授权时，不得创建、移动或删除版本 tag。版本 CI 失败后不得移动原 tag；修复必须进入新的 OPAID 迭代，再创建 forward-only 版本候选。
 - OPAID 交接的是精确 Commit SHA 的本地自测候选、brief 及真实测试证据，不直接触发发布，也不把远端 CI 结果写成本地通过结论。版本交付任务使用 `$cicd` skill；普通开发任务使用 `$opaid` skill。

@@ -57,13 +57,21 @@ FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三�
 >
 > 关于**什么必须为真**，权威在私有 `kayz/ficant-authority` 仓库中由 `authority-manifest.json` 精确绑定公共提交的 `SPEC.md`，不在本文或公共仓库根目录的同名本地文件。
 
+## 当前公共主线状态（2026-09-04）
+
+- 同步核对时 `main == origin/main == 1788bcfba8d0609002008043908c8f0013474fce`；[PR #65](https://github.com/kayz/ficant/pull/65) 已于 2026-08-28 以 rebase merge 合入 R8B。原代码候选与公共提交 `f044f397a173f4caee2fb186efcee81dfff378d7` 的代码 tree 同为 `664c7c8cbe2ec5dec35f8109d17364d1ff248297`。
+- 当前 descriptor 与唯一生产 route set 精确包含 18 个公共 Protobuf service。最新纵向切片提供只读组合目录/聚合/Workbench 后台及严格日度 TWR、P&L、Benchmark/active return 和区间几何累计；最终状态与边界见 [R8B brief](docs/iterations/2026-08-r8b-portfolio-performance.md) 和 [产品范围](docs/product/scope.md)。
+- 上述公共基线已在本机完成 `.\scripts\check.ps1 -IncludeIntegration` 合并后重取证并以 exit `0` 结束。这是本地 OPAID 证据，不是版本 CI、镜像或测试环境交付证据。
+- 产品仍以后台能力、Platform Shell 和 Phase 5A 非业务观测面为主；完整业务 WebApp、相邻 Portfolio WebApp 接线、GeneratedNode/Python node runtime、gVisor、OIDC、PMS/OMS 和投资组合会计尚未落地。
+- Human 已选择并授权在门禁全部闭合后交付 `v0.1.0-alpha.10`；本候选通过 R9A 修复两项 repo-policy 漂移、部署状态原子更新、不可变版本运行的并发语义以及本地检查可重入性。创建 tag 前仍必须把精确候选合入并同步到干净 `main`，更新 Trivy 数据库并完整通过发布候选预检；因此本段所述源码本身不冒充版本 tag、镜像或测试环境部署证据，详见 [R9A brief](docs/iterations/2026-09-r9a-release-gate-closure.md) 与 [测试环境合同](docs/delivery/test-environment.md)。
+
 ## GitHub 测试环境发布（2026-07-17）
 
 - 本节属于中央 `cicd` 发布管理边界，不是 OPAID 本地自测的一部分。
 - 中央管理源位于私有仓库 `kayz/cicd` 的 `ficant/`；本仓库中的 `cicd.yml`、`.github/workflows/release-test.yml` 和 `deploy/test/` 是固定平台版本生成的业务接入文件。
-- Human 创建符合版本格式且指向当前 `main` 精确提交的 `v*` tag 后，GitHub 才运行现有十项完整 `ci`。CI 成功后 Linux Runner 构建 `ficant-server`、`ficant-worker`、`ficant-ui` 和 `ficant-ceph-rgw` 的 `sha-<commit>` 镜像；全部扫描通过后，再把同一组镜像提升为不可变版本 tag。测试机始终部署 SHA 标签，不维护 `test-latest`。
+- Human 创建符合版本格式且指向当前 `main` 精确提交的 `v*` tag 后，GitHub 才运行版本授权门与现有十项验证 job。CI 成功后 Linux Runner 构建并扫描 `ficant-server`、`ficant-worker`、`ficant-ui` 三个 `sha-<commit>` 应用镜像，并另外扫描锁定 digest 的 Ceph RGW 运行时；只把三个应用镜像提升为不可变版本 tag，Ceph 不随应用版本重建或晋升。测试机始终部署 SHA 标签，不维护 `test-latest`。
 - GitHub `test` Environment 通过专用 SSH 身份连接测试机的 `ficant-deploy` 账号；测试机只拉镜像、执行版本化 PostgreSQL migration 和 Docker Compose，不现场编译源码。
-- 发布脚本记录 current、previous、镜像 SHA、部署时间、migration、健康检查和冒烟结果；失败时如存在 previous SHA，直接切回上一组镜像。回滚验证要求旧版本所需 migration 全部存在，允许数据库保留 forward-only 后续 migration。
+- 发布脚本记录 current、previous、候选 Commit SHA（用于派生三个应用 SHA 标签）、Ceph 运行时身份、部署时间、状态和是否自动回滚；migration 状态保存在数据库，健康检查和冒烟以失败即退出的执行日志为证据。失败时如存在 previous SHA，直接切回上一组镜像。回滚验证要求旧版本所需 migration 全部存在，允许数据库保留 forward-only 后续 migration。
 - 测试发布拓扑装配真实 Phase 4 Worker、PostgreSQL 和受管单节点 Ceph RGW；Worker 的数据库、S3 和身份合同 fail-closed，凭据只由 GitHub `test` Environment 注入。源码 Workspace 使用 Apache `object_store`，锁文件与可达依赖图不包含 `minio`/`async-std`，既有 `RUSTSEC-2025-0052` 风险接受已退出。
 - Ceph 测试存储运行时由 `deploy/storage-runtime.lock.json` 独立绑定构建输入、来源提交和 OCI index/platform/config identity。应用版本只构建、扫描和晋升 Server、Worker、UI；锁定 Ceph digest 仍在每个候选使用最新漏洞库扫描，但只通过独立 Human 手工任务按需流式准备，不随应用版本重建或传输。
 - 该环境证明发布链路、真实 Worker 启动与对象存储连接，不等于完整业务 UAT、生产发布或生产 Ceph 集群拓扑验收。
@@ -776,7 +784,7 @@ CapabilityArtifact
 
 ### 8.1 进程模型
 
-当前 v0.1 候选采用一个 Rust Cargo Workspace 与一个静态 Platform Shell，形成以下运行单元：
+当前 `main` 的本地运行拓扑采用一个 Rust Cargo Workspace 与一个静态 Platform Shell，形成以下运行单元：
 
 ```text
 ficant-server          控制平面和统一 API
@@ -784,7 +792,7 @@ ficant-worker          NativeNode 执行与批量任务
 ficant-ui              静态 Platform Shell，直接反代 ficant-server
 ```
 
-C++ 数值库作为共享库由 `ficant-worker` 调用，不单独形成服务。
+C++ 数值库作为共享库，由 `ficant-server` 与 `ficant-worker` 经 Rust adapter 调用，不单独形成服务。
 
 ### 8.2 模块化单体
 
@@ -814,21 +822,17 @@ GeneratedNode 沙箱和 Python node runtime 继续顺延至 v0.2，不属于当�
 
 ### 8.4 RunJournal 与 Evidence Ledger
 
-每次实验记录有序事实：
+当前公共 `RunJournal` 合同记录以下有序事实：
 
 ```text
-UserIntentRecorded
-ResearchPlanCreated
-ToolInvoked
-SnapshotBound
-GraphVersionCreated
-CapabilityGenerated
-ValidationCompleted
-NodeStarted
-NodeCompleted
-ArtifactCreated
-SignalPublished
-RunClosed
+RUN_CREATED
+RUN_STARTED
+RUN_SUCCEEDED / RUN_FAILED / RUN_CANCELLED
+NODE_STARTED
+NODE_SUCCEEDED / NODE_FAILED
+NODE_CHECKPOINTED
+ARTIFACT_PUBLISHED
+SIGNAL_SET_PUBLISHED
 ```
 
 事实先写入 PostgreSQL 的 append-only journal，再由投影表形成可查询状态。Artifact 使用内容哈希保存在 Ceph RGW。
@@ -855,6 +859,8 @@ WebApp 由平台 Shell 通过 iframe 加载，使用短期 App Token 调用 gRPC
 ## 9. 唯一技术选型
 
 本节定义 v0.1 的唯一实现方式。任何替换都必须经过 ADR，不在业务开发中临时增加第二套技术。
+
+本表同时包含已落地选择和后续阶段的唯一目标，不是当前实现清单。截至 2026-09-04，生产执行只装配 Rust NativeNode；GeneratedNode/Python node runtime、gVisor 与 OIDC 尚未落地。
 
 | 类别 | 唯一选择 | 用途 |
 |---|---|---|
@@ -1129,7 +1135,7 @@ PostgreSQL 16 schema
 - Protobuf 可生成 Rust、Python 和 TypeScript 类型；
 - PostgreSQL Migration 可从空库执行。
 
-**当前候选（2026-07-24）：** `scripts/dev-up.ps1` 是完整开发环境的唯一一键入口。它生成或复用 ignored 的 `deploy/dev/.env.local`，以正式 Dockerfile 构建 PostgreSQL、Ceph RGW、migration、Server、Worker、Web 和 React Platform Shell，随后从实际 Worker 镜像派生 OCI runtime digest 与构建内嵌 source digest，再用这两项受信身份启动服务。脚本最终通过 UI 的 `/ficant-api` 精确代理调用真实 `GetCurrentSession` gRPC-Web，并要求响应同时包含已认证 Session 和 `grpc-status: 0`；`scripts/dev-down.ps1` 停止容器但默认保留 PostgreSQL/Ceph 数据卷。Rust、Python、C++、Web、Protobuf 生成及空库 migration 已取得本地可重放证据；正式镜像冷构建和测试环境交付仍须由 Human 指定版本号后的 version Action 闭合。
+**当前公共实现（Phase 0，更新于 2026-09-04）：** `scripts/dev-up.ps1` 是完整开发环境的唯一一键入口。它生成或复用 ignored 的 `deploy/dev/.env.local`，组装固定 PostgreSQL 与 migration，并以正式 Dockerfile 构建 Ceph RGW、Server、Worker 和 React Platform Shell；R6B 已删除无业务职责的独立 `ficant-web`。脚本随后从实际 Worker 镜像派生 OCI runtime digest 与构建内嵌 source digest，再用这些受信身份启动服务。最终通过 UI 的 `/ficant-api` 精确代理调用真实 `GetCurrentSession` gRPC-Web，并要求响应同时包含已认证 Session 和 `grpc-status: 0`；`scripts/dev-down.ps1` 停止容器但默认保留 PostgreSQL/Ceph 数据卷。Rust、Python、C++、Web、Protobuf 生成及空库 migration 已取得本地可重放证据；正式镜像冷构建和测试环境交付仍须由 Human 指定版本号后的 version Action 闭合。
 
 ### Phase 1：领域内核
 
@@ -1203,7 +1209,7 @@ PostgreSQL 16 schema
 
 **当前状态（2026-07-20）：** Phase 3A 已交付版本化 DataSource、文件 NDJSON 与 PostgreSQL 双源接入、精确版本映射、双时间点时过滤、失败关闭的数据质量规则和固定 16 列 Canonical Quote Arrow Schema。Phase 3B 已把该 RecordBatch 编码为参数冻结的确定性 Parquet 与 canonical Manifest，并复用 Phase 1 双 blob proof 发布为真实 `DataSnapshot`。正式重读先完成 PostgreSQL metadata、Ceph RGW 两个 required payload 和内容摘要校验，再校验 Snapshot/Manifest/Parquet 三方绑定后解码；真实验收在销毁外部 source adapter、重建存储 adapter 后仍只按 Snapshot ID 得到相同 RecordBatch，外源调用次数保持一次。因此 Phase 3 已正式退出；最终证据与残余风险见 [Phase 3B iteration brief](docs/history/iterations/2026-07-phase3b-immutable-parquet-snapshot.md)。
 
-**R6A 当前候选（2026-08-13）：** 输入面新增 Platform Admin / Researcher 单 active-role principal、精确 DataSource authorization 与 FoundationChange 证据；完整 Definition、Fact、Snapshot 已进入同一生产 native gRPC / gRPC-Web composition。研究用户只可经管理员批准的 exact source version、mapping、schema、接口与有效期执行 server-side canonical import；未授权漂移在 adapter、blob 和 repository 前失败关闭，成功结果可在外源移除及 server 重启后从 PostgreSQL/Ceph 验证读回。R6A 不包含组合投研 WebApp、PMS、业务 UI 或 R6B Artifact service；完成状态以 [R6A iteration brief](docs/iterations/2026-08-r6a-governed-input-plane.md) 的最终真实证据为准。
+**R6A 已合入公共 `main`（状态更新于 2026-09-04）：** 输入面新增 Platform Admin / Researcher 单 active-role principal、精确 DataSource authorization 与 FoundationChange 证据；完整 Definition、Fact、Snapshot 已进入同一生产 native gRPC / gRPC-Web composition。研究用户只可经管理员批准的 exact source version、mapping、schema、接口与有效期执行 server-side canonical import；未授权漂移在 adapter、blob 和 repository 前失败关闭，成功结果可在外源移除及 server 重启后从 PostgreSQL/Ceph 验证读回。R6A 不包含组合投研 WebApp、PMS 或业务 UI；完成状态以 [R6A iteration brief](docs/iterations/2026-08-r6a-governed-input-plane.md) 的最终真实证据为准。
 
 优先实现：
 
@@ -1250,13 +1256,13 @@ PostgreSQL 16 schema
 - 实验中断后可从安全点恢复；
 - 任意输出可追踪到每个节点。
 
-**当前候选（2026-08-20）：** Phase 4 已形成生产入口到持久化 Worker 的闭环。加法式 `ExperimentService` 从认证后的 `experiment:read`/`experiment:write` scope 接受提交和查询；Server 对 Data/Universe Snapshot、RulePack、Subject、外部 Artifact 及其 Ceph payload 执行 required read，只使用部署注入且与二进制内嵌值一致的 Code commit/tree、OCI runtime、canonical environment 和实现摘要，客户端不能自报这些受信身份。Repository 在任何 blob stage 前冻结 output publication intent；Worker 以 lease/fencing 从 stage、promote、事务前中断或过期 lease forward-only 恢复，并由生产 orphan maintenance 保护 active intent/正式引用、清除超龄无引用候选。完成事务逐项校验 intent、fence、Artifact、manifest、formal evidence、hash/size，并只产生一个 terminal result。持久查询可读取 run/manifest/checkpoint、展开 typed formal trace，并按 Data、Universe、Graph、Parameters、Runtime、Environment、Seed、RulePack、Implementation、ExternalInput、Result、Subject、Code 共 13 维比较。Phase 4 仍不包含 GeneratedNode/gVisor 或 Phase 5 业务 UI。
+**当前公共实现（Phase 4，更新于 2026-09-04）：** Phase 4 已形成生产入口到持久化 Worker 的闭环。加法式 `ExperimentService` 从认证后的 `experiment:read`/`experiment:write` scope 接受提交和查询；Server 对 Data/Universe Snapshot、RulePack、Subject、外部 Artifact 及其 Ceph payload 执行 required read，只使用部署注入且与二进制内嵌值一致的 Code commit/tree、OCI runtime、canonical environment 和实现摘要，客户端不能自报这些受信身份。Repository 在任何 blob stage 前冻结 output publication intent；Worker 以 lease/fencing 从 stage、promote、事务前中断或过期 lease forward-only 恢复，并由生产 orphan maintenance 保护 active intent/正式引用、清除超龄无引用候选。完成事务逐项校验 intent、fence、Artifact、manifest、formal evidence、hash/size，并只产生一个 terminal result。持久查询可读取 run/manifest/checkpoint、展开 typed formal trace，并按 Data、Universe、Graph、Parameters、Runtime、Environment、Seed、RulePack、Implementation、ExternalInput、Result、Subject、Code 共 13 维比较。Phase 4 仍不包含 GeneratedNode/gVisor 或 Phase 5 业务 UI。
 
-R7B 为五个 Rates RPC、Portfolio KRD、PositionViews、成功 CapitalUse、DataHealthReport、Experiment Artifact/SignalSet 统一增加 `FormalOutputEvidence`；R8A `PortfolioOverview` 与 R8B `PortfolioPerformanceSeries` 继续复用同一信封和 identity。它绑定稳定排序的 typed actual inputs、exact Subject、公共 Code、实际 Runtime/environment、实现、参数/seed 与 result bytes，并用同一个 domain-separated canonical v1 算法得到 output identity；同步 Analytics 在成功应答前按 identity 持久化 payload/evidence，Graph Artifact/SignalSet 在完成事务中交叉核对同一证据。最终点亮状态仍以 [R7B iteration brief](docs/iterations/2026-08-r7b-evidence-recovery.md) 的最终真实证据与后续 authority 绑定为准，本段不宣称已经发布 AC30–AC33。
+R7B 已把五个 Rates RPC、Portfolio KRD、PositionViews、成功 CapitalUse、DataHealthReport、Experiment Artifact/SignalSet 统一到 `FormalOutputEvidence`；R8A `PortfolioOverview` 与 R8B `PortfolioPerformanceSeries` 继续复用同一信封和 identity。它绑定稳定排序的 typed actual inputs、exact Subject、公共 Code、实际 Runtime/environment、实现、参数/seed 与 result bytes，并用同一个 domain-separated canonical v1 算法得到 output identity；同步 Analytics 在成功应答前按 identity 持久化 payload/evidence，Graph Artifact/SignalSet 在完成事务中交叉核对同一证据。公共实现、最终本地证据与合并已经完成；AC30–AC33 的正式点亮仍以 [R7B iteration brief](docs/iterations/2026-08-r7b-evidence-recovery.md) 和独立 private authority 绑定为准，本段不代替 Human 裁决。
 
-**R8A 当前候选（2026-08-21）：** 金证FICC合同管理系统新增只读 Portfolio/Book 目录、exact PositionSnapshot 绑定、点时组合聚合与最小 Workbench BFF。生产路由从 14 个精确扩展为 17 个：`PortfolioCatalogService`、`PortfolioAggregationService`、`PortfolioWorkbenchService`。D01/P01/P02/P03/P04 由后台投影真实领域 DTO；BFF 不返回 demo，也不把 Web UI module 写入 proto。完成状态以 [R8A iteration brief](docs/iterations/2026-08-r8a-portfolio-p0.md) 的最终真实证据为准；本轮不包含 OMS/PMS、其余十九页或收益序列口径。
+**R8A 已合入公共 `main`（状态更新于 2026-09-04）：** 金证FICC合同管理系统新增只读 Portfolio/Book 目录、exact PositionSnapshot 绑定、点时组合聚合与最小 Workbench BFF。该轮把生产路由从 14 个精确扩展为 17 个：`PortfolioCatalogService`、`PortfolioAggregationService`、`PortfolioWorkbenchService`；R8B 后当前总数为 18。D01/P01/P02/P03/P04 可由后台投影真实领域 DTO，BFF 不返回 demo，也不把 Web UI module 写入 proto；这只是后台合同，不代表相邻 WebApp 已接线。完成状态以 [R8A iteration brief](docs/iterations/2026-08-r8a-portfolio-p0.md) 的最终真实证据为准；本轮不包含 OMS/PMS、其余十九页或收益序列口径。
 
-**R8B 当前候选（2026-08-25）：** FICANT 在 R8A exact scope 上新增不可变 `PortfolioValuationSnapshot`、`BenchmarkLevelSnapshot`、版本化 `PortfolioPerformanceConvention` 与 `PortfolioPerformanceService.GetPortfolioPerformance`，生产路由从 17 个精确扩展为 18 个。服务按 Calendar session required-read 全成员 NAV/期末 Flow 与 Benchmark level，先聚合再以 scale-12 ties-to-even 计算日度 TWR、P&L、active 和几何累计；任何 owner/Subject/hash/version/time/Unit/session/scope 漂移均在计算或正式发布前失败关闭。成功 `PortfolioPerformanceSeries` 在响应前持久化 R7B 正式证据。本轮仍不是正式会计 NAV、PMS/OMS，也不接入 WebApp；完成状态以 [R8B iteration brief](docs/iterations/2026-08-r8b-portfolio-performance.md) 的最终真实证据为准。
+**R8B 已合入公共 `main`（2026-08-28）：** FICANT 在 R8A exact scope 上新增不可变 `PortfolioValuationSnapshot`、`BenchmarkLevelSnapshot`、版本化 `PortfolioPerformanceConvention` 与 `PortfolioPerformanceService.GetPortfolioPerformance`，descriptor 与生产 route set 均从 17 个精确扩展为 18 个公共 gRPC service。服务按 Calendar session required-read 全成员 NAV/期末 Flow 与 Benchmark level，先聚合再以 scale-12 ties-to-even 计算日度 TWR、P&L、active 和几何累计；任何 owner/Subject/hash/version/time/Unit/session/scope 漂移均在计算或正式发布前失败关闭。成功 `PortfolioPerformanceSeries` 在响应前持久化 R7B 正式证据。合并后公共基线的 `.\scripts\check.ps1 -IncludeIntegration` 已以 exit `0` 通过；它仍不是正式会计 NAV、PMS/OMS 或 WebApp 接入，R8B 自身也没有版本发布、镜像或部署授权。Human 后续在独立 R9A 中为 `v0.1.0-alpha.10` 给出“全部发布门禁通过后交付”的条件授权。最终证据见 [R8B iteration brief](docs/iterations/2026-08-r8b-portfolio-performance.md)。
 
 ### Phase 5：Rates Research Lab
 
@@ -1281,7 +1287,7 @@ R7B 为五个 Rates RPC、Portfolio KRD、PositionViews、成功 CapitalUse、Da
 - 不直接访问数据库和对象存储；
 - 所有分析绑定 DataSnapshot 和 MarketRulePack。
 
-**Phase 5A 当前候选（2026-07-26）：** 在不宣称完成 Rates Research Lab 的前提下，Platform Shell 内嵌一块临时只读观测面板。Human 输入既有 Run ID 后，页面仅通过真实 gRPC-Web 读取运行、执行身份、Data/Universe Snapshot、RulePack、外部输入 Artifact、节点 manifest/checkpoint、递归血缘及经过完整性校验的 `AnalyzeBondResult`/`RiskSummary` payload，并展示现金流、净全价、YTM、久期、凸性和 DV01。新增的 `ReadNodeOutput` 仍走 Artifact/Ceph required-read，限制 envelope 为 1 MiB，并逐端口交叉校验 manifest 名称、类型与 hash；任何缺失、漂移或已知 Protobuf 解码失败均失败关闭。该面板显式标记“非业务界面”，不提供搜索、筛选、推荐、交易、目标仓位、曲线构建、相对价值、对比或报告，因此 Phase 5 尚未退出。
+**Phase 5A 当前公共实现（2026-07-26）：** 在不宣称完成 Rates Research Lab 的前提下，Platform Shell 内嵌一块临时只读观测面板。Human 输入既有 Run ID 后，页面仅通过真实 gRPC-Web 读取运行、执行身份、Data/Universe Snapshot、RulePack、外部输入 Artifact、节点 manifest/checkpoint、递归血缘及经过完整性校验的 `AnalyzeBondResult`/`RiskSummary` payload，并展示现金流、净全价、YTM、久期、凸性和 DV01。新增的 `ReadNodeOutput` 仍走 Artifact/Ceph required-read，限制 envelope 为 1 MiB，并逐端口交叉校验 manifest 名称、类型与 hash；任何缺失、漂移或已知 Protobuf 解码失败均失败关闭。该面板显式标记“非业务界面”，不提供搜索、筛选、推荐、交易、目标仓位、曲线构建、相对价值、对比或报告，因此 Phase 5 尚未退出。
 
 ### Phase 6：国债期货与市场仿真
 
@@ -1492,11 +1498,11 @@ ficant/
 ### 14.3 安全
 
 - 最小权限；
-- OIDC 身份；
+- OIDC 身份（目标，尚未落地）；
 - RBAC + ABAC；
 - AI 代码禁网；
 - 数据库和对象存储密钥不进入沙箱；
-- gVisor 隔离；
+- gVisor 隔离（GeneratedNode 阶段目标，尚未落地）；
 - 依赖白名单；
 - SBOM；
 - 模型调用、工具调用和发布操作审计。

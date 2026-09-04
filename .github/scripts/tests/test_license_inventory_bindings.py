@@ -320,16 +320,20 @@ class R5DFirstPartyPolicyTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def test_policy_is_exactly_nineteen_cargo_packages_plus_python_sdk(self):
+    def test_policy_is_exactly_eighteen_cargo_packages_plus_python_and_contracts(self):
         supply = json.loads(self.supply_lock.read_text(encoding="utf-8"))
         policy = supply["first_party_packages"]
         purls = [item["purl"] for item in policy]
         self.assertEqual(len(policy), 20)
         self.assertEqual(len(set(purls)), 20)
-        self.assertEqual(sum(item["ecosystem"] == "crates.io" for item in policy), 19)
+        self.assertEqual(sum(item["ecosystem"] == "crates.io" for item in policy), 18)
         self.assertEqual(
             [item["purl"] for item in policy if item["ecosystem"] == "PyPI"],
             ["pkg:pypi/ficant-sdk@0.1.0"],
+        )
+        self.assertEqual(
+            [item["purl"] for item in policy if item["ecosystem"] == "npm"],
+            ["pkg:npm/%40ficant/contracts-generated@0.0.0"],
         )
 
     def test_each_r5d_pack_is_required_by_the_exact_policy(self):

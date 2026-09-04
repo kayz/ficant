@@ -22,6 +22,9 @@ GENERATOR = {"name": "ficant-license-inventory", "version": 4}
 FIRST_PARTY_CLASSIFICATION = "first-party-open-source"
 FIRST_PARTY_LICENSE = "MIT"
 ECOSYSTEMS = {"cargo": "crates.io", "pypi": "PyPI", "npm": "npm"}
+TRANSIENT_RELEASE_TREE_PATHS = {
+    pathlib.PurePosixPath("web-dm/packages/contracts-generated/dist")
+}
 
 
 def fail(message):
@@ -78,6 +81,15 @@ def tree_integrity(root, relative):
     for path in sorted(files, key=lambda item: item.relative_to(base).as_posix().encode()):
         rel = path.relative_to(base)
         if any(part in {".git", "target", "node_modules", ".venv", "__pycache__", ".pytest_cache"} for part in rel.parts): continue
+        release_relative = (
+            pathlib.PurePosixPath(str(relative).replace("\\", "/"))
+            / pathlib.PurePosixPath(rel.as_posix())
+        )
+        if any(
+            release_relative == transient or transient in release_relative.parents
+            for transient in TRANSIENT_RELEASE_TREE_PATHS
+        ):
+            continue
         entries.append({"path": rel.as_posix(), "sha256": checkout_independent_tree_sha256(path)})
     return "sha256:" + hashlib.sha256(canonical(entries)).hexdigest()
 

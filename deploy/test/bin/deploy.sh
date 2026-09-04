@@ -85,6 +85,39 @@ configure_execution_identity() {
   export FICANT_WORKER_NATIVE_SOURCE_DIGEST=$source
 }
 
+write_deployment_state() (
+  local destination=$1
+  local deploy_sha=$2
+  local state_storage_image=$3
+  local state_storage_config=$4
+  local state_runtime=$5
+  local state_source=$6
+  local directory=${destination%/*}
+  local filename=${destination##*/}
+  local temporary=''
+
+  [[ "$directory" != "$destination" && -d "$directory" ]] || return 1
+  temporary=$(mktemp "$directory/.${filename}.tmp.XXXXXX") || return 1
+  cleanup_state_temporary() {
+    if [[ -n "$temporary" ]]; then
+      rm -f -- "$temporary" || true
+    fi
+  }
+  trap cleanup_state_temporary EXIT
+  trap 'exit 1' HUP INT TERM
+
+  if ! printf 'FICANT_DEPLOY_SHA=%s\nFICANT_STORAGE_RUNTIME_IMAGE=%s\nFICANT_STORAGE_RUNTIME_CONFIG_DIGEST=%s\nFICANT_WORKER_RUNTIME_IMAGE_DIGEST=%s\nFICANT_WORKER_NATIVE_SOURCE_DIGEST=%s\n' \
+    "$deploy_sha" "$state_storage_image" "$state_storage_config" "$state_runtime" "$state_source" \
+    >"$temporary"; then
+    return 1
+  fi
+  chmod 0600 "$temporary" || return 1
+  if ! mv -f -- "$temporary" "$destination"; then
+    return 1
+  fi
+  temporary=''
+)
+
 record() {
   local status=$1
   local rollback=$2
@@ -129,12 +162,21 @@ if [[ "$current" =~ ^[0-9a-f]{40}$ && "$current" != "$sha" ]]; then
   [[ "$previous_storage_image" =~ @sha256:[0-9a-f]{64}$ ]] || previous_storage_image=$storage_image
   previous_storage_config=$current_storage_config
   [[ "$previous_storage_config" =~ ^sha256:[0-9a-f]{64}$ ]] || previous_storage_config=$storage_config
-  printf 'FICANT_DEPLOY_SHA=%s\nFICANT_STORAGE_RUNTIME_IMAGE=%s\nFICANT_STORAGE_RUNTIME_CONFIG_DIGEST=%s\nFICANT_WORKER_RUNTIME_IMAGE_DIGEST=%s\nFICANT_WORKER_NATIVE_SOURCE_DIGEST=%s\n' \
-    "$current" "$previous_storage_image" "$previous_storage_config" "$current_runtime" "$current_source" >"$root/state/previous.env"
+  write_deployment_state \
+    "$root/state/previous.env" \
+    "$current" \
+    "$previous_storage_image" \
+    "$previous_storage_config" \
+    "$current_runtime" \
+    "$current_source"
 fi
-printf 'FICANT_DEPLOY_SHA=%s\nFICANT_STORAGE_RUNTIME_IMAGE=%s\nFICANT_STORAGE_RUNTIME_CONFIG_DIGEST=%s\nFICANT_WORKER_RUNTIME_IMAGE_DIGEST=%s\nFICANT_WORKER_NATIVE_SOURCE_DIGEST=%s\n' \
-  "$sha" "$storage_image" "$storage_config" "$FICANT_WORKER_RUNTIME_IMAGE_DIGEST" "$FICANT_WORKER_NATIVE_SOURCE_DIGEST" \
-  >"$root/state/current.env"
+write_deployment_state \
+  "$root/state/current.env" \
+  "$sha" \
+  "$storage_image" \
+  "$storage_config" \
+  "$FICANT_WORKER_RUNTIME_IMAGE_DIGEST" \
+  "$FICANT_WORKER_NATIVE_SOURCE_DIGEST"
 record success false
 trap - ERR
 echo "Deployment succeeded: $sha"

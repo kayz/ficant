@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$RemoveRepositoryOutput
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -9,6 +11,7 @@ $packageRoot = Join-Path $ficantRoot 'web-dm\packages\contracts-generated'
 $portfolioSource = Join-Path $packageRoot 'src\ficant\portfolio\v1\portfolio_pb.ts'
 $packageScript = Join-Path $PSScriptRoot 'package-contracts.ps1'
 $expectedPackageName = 'ficant-contracts-generated-0.0.0.tgz'
+$repositoryOutput = Join-Path $packageRoot 'dist'
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 
 function Invoke-CapturedNative {
@@ -73,6 +76,35 @@ function Remove-VerifiedTemporaryRoot {
     }
 }
 
+function Remove-VerifiedRepositoryOutput {
+    $expectedPath = [System.IO.Path]::GetFullPath(
+        (Join-Path $ficantRoot 'web-dm\packages\contracts-generated\dist')
+    )
+    $candidatePath = [System.IO.Path]::GetFullPath($repositoryOutput)
+    if (-not [string]::Equals($candidatePath, $expectedPath, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove unexpected repository output '$candidatePath'."
+    }
+    if (-not (Test-Path -LiteralPath $candidatePath)) {
+        return
+    }
+
+    $resolvedPath = [System.IO.Path]::GetFullPath(
+        (Resolve-Path -LiteralPath $candidatePath).ProviderPath
+    )
+    if (-not [string]::Equals($resolvedPath, $expectedPath, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove repository output resolved outside the expected path: '$resolvedPath'."
+    }
+    $item = Get-Item -LiteralPath $resolvedPath -Force
+    if (-not $item.PSIsContainer) {
+        throw "Refusing to remove repository output because it is not a directory: '$resolvedPath'."
+    }
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Refusing to remove repository output because it is a reparse point: '$resolvedPath'."
+    }
+
+    Remove-Item -LiteralPath $resolvedPath -Recurse -Force
+}
+
 if (-not (Test-Path -LiteralPath $portfolioSource -PathType Leaf)) {
     throw "R8A Portfolio generated source is required before package verification: '$portfolioSource'."
 }
@@ -106,7 +138,10 @@ try {
         throw 'Fresh contract package bytes are not identical.'
     }
 
-    $finalOutput = Join-Path $packageRoot 'dist'
+    $finalOutput = $repositoryOutput
+    if ($RemoveRepositoryOutput) {
+        Remove-VerifiedRepositoryOutput
+    }
     $final = Invoke-PackageBuild -OutputDirectory $finalOutput
     if ($final.package_sha256 -ne $first.package_sha256) {
         throw 'Final ignored package digest differs from the two fresh package runs.'
@@ -225,5 +260,12 @@ if (!PortfolioWorkbenchService.methods.some((method) => method.name === "GetPage
 }
 finally {
     $env:COREPACK_ENABLE_NETWORK = $previousCorepackNetwork
-    Remove-VerifiedTemporaryRoot -Path $temporaryRoot
+    try {
+        Remove-VerifiedTemporaryRoot -Path $temporaryRoot
+    }
+    finally {
+        if ($RemoveRepositoryOutput) {
+            Remove-VerifiedRepositoryOutput
+        }
+    }
 }

@@ -20,7 +20,7 @@ iteration-3 Phase 2A 生成的现金流、估值和风险结果保持内部 `Bon
 
 - Definition 支持按 ID + version 精确读取、按 UTC instant 解析 as-of 版本，以及用 cursor 稳定分页读取历史版本。
 - Market Fact 支持按精确 Instrument version + 时间窗口分页查询，并支持按 ID 读取已发布 CurveSnapshot。
-- Artifact 与 SignalSet 分别支持读取对象及其分页血缘；不暴露 MinIO 凭据或物理存储接口。
+- Artifact 与 SignalSet 分别支持读取对象及其分页血缘；不暴露 Ceph RGW/S3 凭据或物理对象存储接口。
 - `ficant.research.v1.ExperimentService.ReadNodeOutput` 是 Phase 5A 的加法式只读观测合同：只按 Run/Node 读取已持久化且经 Artifact/Ceph required-read、envelope hash 与 manifest 端口绑定共同校验的有界输出，不发布、修改或重新解释研究结果，也不暴露对象存储凭据。
 - `ficant.app.v1.PlatformService` 固定为 Registry、当前会话、会话刷新/撤销、应用启动授权/刷新/撤销七个 RPC。启动授权只在成功分支返回短期 credential、服务端裁剪 scopes、精确 origin、CSP、sandbox 与签发/过期时间；安全失败统一走 `SafeError`。
 - 为严格遵循 Interface 冻结的授权响应复用，Buf lint 仅对 `proto/ficant/app/v1/registry.proto` 忽略 `RPC_REQUEST_RESPONSE_UNIQUE` 和 `RPC_RESPONSE_STANDARD_NAME`；descriptor test 仍精确固定七个方法及输入/输出。

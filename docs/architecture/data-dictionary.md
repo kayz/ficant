@@ -1,8 +1,8 @@
 # ficant 架构与数据字典
 
-**状态：** Phase 0 / Phase 1 / Phase 2 / Phase 3 已实现架构字典
+**状态（2026-09-04）：** 已同步公共 `main` 上 Phase 0–4、R5D/R5E、R6A/R6B、R7A/R7B 与 R8A/R8B 的架构字典；后续规划能力不视为已实现
 
-**权威边界：** `README.md` 定义系统约束，`interface/` 定义跨边界字段，Rust Domain/Application 定义业务不变量，Migration 定义持久映射；架构选择与依据记录在 `docs/architecture/adr/`
+**权威边界：** private authority manifest 绑定的 `SPEC.md` 定义规范；`README.md` 只提供非权威技术基线与背景，`interface/` 定义跨边界字段，Rust Domain/Application 定义业务不变量，Migration 定义持久映射；架构选择与依据记录在 `docs/architecture/adr/`
 
 ## 模块与依赖方向
 
@@ -22,7 +22,7 @@ ficant-data adapters → point-in-time + mapping + quality → Canonical Arrow R
        → Application dual-blob publication → PostgreSQL + Ceph RGW DataSnapshot
        → required read + three-way verification → Canonical Arrow RecordBatch
 
-iteration-3 目标边界：
+2026-07 iteration-3 目标边界（现已落地，保留为依赖方向说明）：
 Application → BondAnalyticsEngine port ← ficant-fixed-income-native adapter
                                               ↓
                                        ficant-kernel-sys（唯一 unsafe）
