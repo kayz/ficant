@@ -629,6 +629,17 @@ class ComposeSecurityGateTests(unittest.TestCase):
             dockerfile,
         )
         self.assertNotIn("ARG FICANT_UI_BEARER_TOKEN", dockerfile)
+        self.assertEqual(
+            re.findall(r"(?m)^FROM\s+(.+)$", dockerfile),
+            [
+                "node@sha256:b04ce4ae4e95b522112c2e5c52f781471a5cbc3b594527bcddedee9bc48c03a0 AS build",
+                "nginx@sha256:3b171d7224b669faa3cc2137fea0a65301791df1ec1f271ebd2a2b7461f7fade",
+            ],
+        )
+        self.assertNotIn(
+            "45b82ed5f285b90d63df07ba70430fdd8f25624b416617d9e6dc93412b2006dc",
+            dockerfile,
+        )
 
     def test_dev_entrypoints_preserve_volumes_and_verify_grpc_status_zero(self) -> None:
         up = Path("scripts/dev-up.ps1").read_text(encoding="utf-8")
