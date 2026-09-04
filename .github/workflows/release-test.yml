@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
+      tree: ${{ steps.candidate.outputs.tree }}
       version: ${{ steps.candidate.outputs.version }}
       storage_image: ${{ steps.storage.outputs.image }}
       storage_config: ${{ steps.storage.outputs.config }}
@@ -41,16 +42,19 @@ jobs:
           set -euo pipefail
           version=$DEPLOY_VERSION
           [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]
-          sha=$(git rev-parse HEAD)
-          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
           git fetch origin main --tags --force
-          [[ "$sha" == $(git rev-parse "refs/tags/$version^{commit}") ]]
+          sha=$(git rev-parse "refs/tags/$version^{commit}")
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          tree=$(git rev-parse "refs/tags/$version^{tree}")
+          [[ "$tree" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$sha" == $(git rev-parse HEAD) ]]
           if [[ "${{ github.event_name }}" == workflow_run ]]; then
             [[ "$sha" == $(git rev-parse origin/main) ]]
             [[ "$version" == "${{ github.event.workflow_run.head_branch }}" ]]
             [[ "$sha" == "${{ github.event.workflow_run.head_sha }}" ]]
           fi
           printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
+          printf 'tree=%s\n' "$tree" >> "$GITHUB_OUTPUT"
           printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
       - id: storage
         name: Verify and expose locked storage runtime
@@ -117,7 +121,10 @@ jobs:
         with:
           context: .
           file: deploy/dev/RustService.Dockerfile
-          build-args: BINARY=${{ matrix.binary }}
+          build-args: |
+            BINARY=${{ matrix.binary }}
+            FICANT_CODE_COMMIT_SHA=${{ needs.authorize.outputs.sha }}
+            FICANT_CODE_TREE_SHA=${{ needs.authorize.outputs.tree }}
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ matrix.package }}:sha-${{ needs.authorize.outputs.sha }}
