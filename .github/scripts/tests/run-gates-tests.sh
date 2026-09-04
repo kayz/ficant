@@ -46,6 +46,18 @@ FICANT_CODE_COMMIT_SHA=0000000000000000000000000000000000000000 \
 FICANT_CODE_TREE_SHA=0000000000000000000000000000000000000000 \
   expect_exit 2 "$scripts_dir/verify-reproducibility.sh" --bind-source-identity \
   "$tmp/source-identity"
+FICANT_CODE_COMMIT_SHA= \
+  expect_exit 2 "$scripts_dir/verify-reproducibility.sh" --bind-source-identity \
+  "$tmp/source-identity"
+FICANT_CODE_TREE_SHA= \
+  expect_exit 2 "$scripts_dir/verify-reproducibility.sh" --bind-source-identity \
+  "$tmp/source-identity"
+FICANT_CODE_COMMIT_SHA="$fixture_commit" \
+  expect_exit 2 "$scripts_dir/verify-reproducibility.sh" --bind-source-identity \
+  "$tmp/source-identity"
+FICANT_CODE_TREE_SHA="$fixture_tree" \
+  expect_exit 2 "$scripts_dir/verify-reproducibility.sh" --bind-source-identity \
+  "$tmp/source-identity"
 mkdir -p "$tmp/source-archive"
 git -C "$tmp/source-identity" archive HEAD | tar -x -C "$tmp/source-archive"
 [[ ! -e $tmp/source-archive/.git ]]
@@ -117,12 +129,12 @@ expect_exit 0 "$scripts_dir/verify-contract-generation.sh" --verify-trees \
 # merely from a stale object retained by one developer clone.
 contract_base=$(sed -n 's/^CONTRACT_BASE_SHA=//p' "$scripts_dir/verify-contract-generation.sh")
 [[ $contract_base =~ ^[0-9a-f]{40}$ ]]
-git -C "$scripts_dir" merge-base --is-ancestor "$contract_base" HEAD
+expect_exit 0 "$scripts_dir/verify-contract-generation.sh" --verify-contract-base "$scripts_dir"
+[[ $(grep -Fc 'verify_contract_base "$repo"' "$scripts_dir/verify-contract-generation.sh") -eq 1 ]]
 cp "$scripts_dir/verify-contract-generation.sh" "$tmp/unreachable-contract-baseline.sh"
 sed -i "s/^CONTRACT_BASE_SHA=.*/CONTRACT_BASE_SHA=0000000000000000000000000000000000000000/" \
   "$tmp/unreachable-contract-baseline.sh"
-unreachable_base=$(sed -n 's/^CONTRACT_BASE_SHA=//p' "$tmp/unreachable-contract-baseline.sh")
-expect_exit 128 git -C "$scripts_dir" merge-base --is-ancestor "$unreachable_base" HEAD
+expect_exit 2 "$tmp/unreachable-contract-baseline.sh" --verify-contract-base "$scripts_dir"
 
 # Reproducibility evidence must reject a hash mismatch and accept equal manifests.
 printf '{"artifacts":{"rust":"aaa","python":"bbb"}}\n' >"$tmp/build-a.json"

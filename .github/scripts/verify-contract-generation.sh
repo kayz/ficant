@@ -30,6 +30,12 @@ gate_run_native() {
   return 2
 }
 
+verify_contract_base() {
+  [[ $# -eq 1 ]] || die 'verify_contract_base requires one Git worktree'
+  git -C "$1" merge-base --is-ancestor "$CONTRACT_BASE_SHA" HEAD \
+    || die 'exact contract baseline must be an ancestor of HEAD'
+}
+
 tree_digest() {
   python3 - "$1" <<'PY'
 import hashlib
@@ -83,6 +89,12 @@ if [[ ${1:-} == '--build-descriptor' ]]; then
   build_descriptor "$@"
   exit $?
 fi
+if [[ ${1:-} == '--verify-contract-base' ]]; then
+  shift
+  [[ $# -eq 1 ]] || die '--verify-contract-base requires one Git worktree'
+  verify_contract_base "$1"
+  exit 0
+fi
 if [[ ${1:-} == '--map-native' ]]; then
   shift
   [[ $# -ge 2 && ($1 == finding || $1 == tool) ]] || die '--map-native requires finding|tool command [args...]'
@@ -105,7 +117,7 @@ done
 read -r uv_name uv_version _ < <(uv --version)
 [[ $uv_name == uv && $uv_version == 0.7.13 ]] || die 'uv must be 0.7.13'
 [[ $(corepack pnpm@10.12.4 --version) == '10.12.4' ]] || die 'pnpm must be 10.12.4'
-git merge-base --is-ancestor "$CONTRACT_BASE_SHA" HEAD || die 'exact contract baseline must be an ancestor of HEAD'
+verify_contract_base "$repo"
 
 gate_run_native finding 'Buf format drift' buf format --diff --exit-code interface || exit $?
 gate_run_native finding 'Buf lint violation' buf lint interface || exit $?
