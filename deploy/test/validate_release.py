@@ -20,6 +20,14 @@ EXPECTED_SERVICES = {
 }
 APP_SERVICES = {"ficant-server", "ficant-worker", "ficant-ui"}
 CEPH_SERVICE = "ceph-rgw"
+SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
+DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
+SERVER_ENVIRONMENT_DIGEST = (
+    "sha256:5610d256cb433afb90595e430f00ff53953dd199d0fed5826498fc8e87870734"
+)
+WORKER_ENVIRONMENT_ATTESTATION = (
+    "ficant.worker.environment.v1\narch=amd64\nos=linux\nprofile=test"
+)
 POSTGRES_IMAGE = (
     "postgres@sha256:"
     "38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74"
@@ -38,8 +46,20 @@ def main() -> None:
         fail(f"unexpected services: {sorted(services or {})}")
 
     deploy_sha = os.environ.get("FICANT_DEPLOY_SHA", "")
-    if re.fullmatch(r"[0-9a-f]{40}", deploy_sha) is None:
+    if SHA_PATTERN.fullmatch(deploy_sha) is None:
         fail("FICANT_DEPLOY_SHA must be one 40-character lowercase SHA")
+    code_tree_sha = os.environ.get("FICANT_CODE_TREE_SHA", "")
+    if SHA_PATTERN.fullmatch(code_tree_sha) is None:
+        fail("FICANT_CODE_TREE_SHA must be one 40-character lowercase SHA")
+    server_runtime_digest = os.environ.get("FICANT_SERVER_RUNTIME_IMAGE_DIGEST", "")
+    if DIGEST_PATTERN.fullmatch(server_runtime_digest) is None:
+        fail("FICANT_SERVER_RUNTIME_IMAGE_DIGEST must be one canonical SHA-256 digest")
+    worker_runtime_digest = os.environ.get("FICANT_WORKER_RUNTIME_IMAGE_DIGEST", "")
+    if DIGEST_PATTERN.fullmatch(worker_runtime_digest) is None:
+        fail("FICANT_WORKER_RUNTIME_IMAGE_DIGEST must be one canonical SHA-256 digest")
+    worker_source_digest = os.environ.get("FICANT_WORKER_NATIVE_SOURCE_DIGEST", "")
+    if DIGEST_PATTERN.fullmatch(worker_source_digest) is None:
+        fail("FICANT_WORKER_NATIVE_SOURCE_DIGEST must be one canonical SHA-256 digest")
 
     for name, service in services.items():
         if "build" in service:
@@ -86,6 +106,8 @@ def main() -> None:
     worker = services["ficant-worker"]
     worker_environment = worker.get("environment", {})
     required_worker_environment = {
+        "FICANT_CODE_COMMIT_SHA",
+        "FICANT_CODE_TREE_SHA",
         "FICANT_WORKER_DATABASE_URL",
         "FICANT_WORKER_S3_ENDPOINT",
         "FICANT_WORKER_S3_BUCKET",
@@ -95,18 +117,49 @@ def main() -> None:
         "FICANT_WORKER_RUNTIME_IMAGE_DIGEST",
         "FICANT_WORKER_ENVIRONMENT_ATTESTATION",
         "FICANT_WORKER_NATIVE_SOURCE_DIGEST",
+        "FICANT_WORKER_ORPHAN_GRACE_SECONDS",
+        "FICANT_WORKER_ORPHAN_INTERVAL_SECONDS",
     }
     if not required_worker_environment.issubset(worker_environment):
         fail("ficant-worker is missing its production database/S3/identity environment")
     if worker_environment["FICANT_WORKER_S3_ENDPOINT"] != "http://ceph-rgw:9000":
         fail("ficant-worker must use the managed ceph-rgw endpoint")
+    if (
+        worker_environment["FICANT_CODE_COMMIT_SHA"] != deploy_sha
+        or worker_environment["FICANT_CODE_TREE_SHA"] != code_tree_sha
+    ):
+        fail("ficant-worker Code identity does not match the authorized candidate")
+    if worker_environment["FICANT_WORKER_RUNTIME_IMAGE_DIGEST"] != worker_runtime_digest:
+        fail("ficant-worker Runtime image does not match the inspected image")
+    if worker_environment["FICANT_WORKER_NATIVE_SOURCE_DIGEST"] != worker_source_digest:
+        fail("ficant-worker native source does not match the inspected image")
+    if (
+        worker_environment["FICANT_WORKER_ENVIRONMENT_ATTESTATION"]
+        != WORKER_ENVIRONMENT_ATTESTATION
+    ):
+        fail("ficant-worker environment attestation is not the fixed test profile")
+    if (
+        str(worker_environment["FICANT_WORKER_ORPHAN_GRACE_SECONDS"]) != "3600"
+        or str(worker_environment["FICANT_WORKER_ORPHAN_INTERVAL_SECONDS"]) != "300"
+    ):
+        fail("ficant-worker orphan maintenance intervals are not the test contract")
     worker_dependencies = worker.get("depends_on", {})
     if worker_dependencies.get("ceph-rgw", {}).get("condition") != "service_healthy":
         fail("ficant-worker must wait for healthy ceph-rgw")
 
     server_environment = services["ficant-server"].get("environment", {})
     required_server_environment = {
+        "FICANT_CODE_COMMIT_SHA",
+        "FICANT_CODE_TREE_SHA",
+        "FICANT_SERVER_RUNTIME_IMAGE_DIGEST",
+        "FICANT_SERVER_ENVIRONMENT_ATTESTATION",
+        "FICANT_BOOTSTRAP_SUBJECT",
         "FICANT_BOOTSTRAP_BEARER_TOKEN",
+        "FICANT_BOOTSTRAP_ACTOR_ID",
+        "FICANT_BOOTSTRAP_TENANT_ID",
+        "FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS",
+        "FICANT_BOOTSTRAP_ACTIVE_ROLE",
+        "FICANT_BOOTSTRAP_SCOPES",
         "FICANT_EXPERIMENT_DATABASE_URL",
         "FICANT_EXPERIMENT_S3_ENDPOINT",
         "FICANT_EXPERIMENT_S3_BUCKET",
@@ -119,9 +172,38 @@ def main() -> None:
         "FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST",
         "FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION",
         "FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST",
+        "FICANT_INPUT_FILE_NDJSON_ROOT",
+        "FICANT_INPUT_FILE_CONNECTION_BINDING",
+        "FICANT_INPUT_POSTGRES_CONNECTION_BINDING",
     }
     if not required_server_environment.issubset(server_environment):
-        fail("ficant-server is missing its authenticated experiment environment")
+        fail("ficant-server is missing its production runtime environment")
+    if (
+        server_environment["FICANT_CODE_COMMIT_SHA"] != deploy_sha
+        or server_environment["FICANT_CODE_TREE_SHA"] != code_tree_sha
+    ):
+        fail("ficant-server Code identity does not match the authorized candidate")
+    if server_environment["FICANT_SERVER_RUNTIME_IMAGE_DIGEST"] != server_runtime_digest:
+        fail("ficant-server Runtime image does not match the inspected image")
+    if (
+        server_environment["FICANT_SERVER_ENVIRONMENT_ATTESTATION"]
+        != SERVER_ENVIRONMENT_DIGEST
+    ):
+        fail("ficant-server environment attestation is not the fixed test profile")
+    expected_server_identity = {
+        "FICANT_BOOTSTRAP_SUBJECT": "ficant-test-user",
+        "FICANT_BOOTSTRAP_ACTOR_ID": "01J00000000000000000000012",
+        "FICANT_BOOTSTRAP_TENANT_ID": "01J00000000000000000000010",
+        "FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS": "01J00000000000000000000011",
+        "FICANT_BOOTSTRAP_ACTIVE_ROLE": "RESEARCHER",
+        "FICANT_BOOTSTRAP_SCOPES": "apps:read,experiment:read,experiment:write",
+        "FICANT_INPUT_FILE_NDJSON_ROOT": "/var/lib/ficant/input",
+        "FICANT_INPUT_FILE_CONNECTION_BINDING": "test-file-ndjson",
+        "FICANT_INPUT_POSTGRES_CONNECTION_BINDING": "test-postgres",
+    }
+    for name, expected in expected_server_identity.items():
+        if server_environment[name] != expected:
+            fail(f"ficant-server has an unexpected test runtime value for {name}")
     if (
         server_environment["FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST"]
         != worker_environment["FICANT_WORKER_RUNTIME_IMAGE_DIGEST"]

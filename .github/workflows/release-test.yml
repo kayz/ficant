@@ -75,6 +75,7 @@ jobs:
         shell: bash
         env:
           FICANT_DEPLOY_SHA: "0000000000000000000000000000000000000000"
+          FICANT_CODE_TREE_SHA: "0000000000000000000000000000000000000000"
           FICANT_STORAGE_RUNTIME_IMAGE: ${{ steps.storage.outputs.image }}
           FICANT_IMAGE_PREFIX: ghcr.io/kayz/ficant
           FICANT_ROOT: /srv/ficant-test
@@ -88,6 +89,7 @@ jobs:
           FICANT_EXPERIMENT_CURSOR_KEY_HEX: "1111111111111111111111111111111111111111111111111111111111111111"
           FICANT_WORKER_RUNTIME_IMAGE_DIGEST: sha256:2222222222222222222222222222222222222222222222222222222222222222
           FICANT_WORKER_NATIVE_SOURCE_DIGEST: sha256:3333333333333333333333333333333333333333333333333333333333333333
+          FICANT_SERVER_RUNTIME_IMAGE_DIGEST: sha256:4444444444444444444444444444444444444444444444444444444444444444
           FICANT_GRPC_WEB_ALLOWED_ORIGINS: https://greatquant.com
         run: >-
           docker compose --file deploy/test/compose.test.yml config --format json
@@ -358,6 +360,7 @@ jobs:
           USER: ${{ vars.FICANT_TEST_USER }}
           ROOT: ${{ vars.FICANT_TEST_ROOT }}
           SHA: ${{ needs.authorize.outputs.sha }}
+          TREE: ${{ needs.authorize.outputs.tree }}
           GHCR_TOKEN: ${{ github.token }}
           STORAGE_IMAGE: ${{ needs.authorize.outputs.storage_image }}
           STORAGE_CONFIG: ${{ needs.authorize.outputs.storage_config }}
@@ -366,4 +369,4 @@ jobs:
           printf '%s\n' "$GHCR_TOKEN" | ssh \
             -i "$HOME/.ssh/ficant-test" -p "$PORT" \
             -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            "$USER@$HOST" "GHCR_USER='${{ github.actor }}' FICANT_ROOT='$ROOT' FICANT_STORAGE_RUNTIME_IMAGE='$STORAGE_IMAGE' FICANT_STORAGE_RUNTIME_CONFIG_DIGEST='$STORAGE_CONFIG' '$ROOT/bin/deploy.sh' '$SHA'"
+            "$USER@$HOST" "GHCR_USER='${{ github.actor }}' FICANT_ROOT='$ROOT' FICANT_STORAGE_RUNTIME_IMAGE='$STORAGE_IMAGE' FICANT_STORAGE_RUNTIME_CONFIG_DIGEST='$STORAGE_CONFIG' '$ROOT/bin/deploy.sh' '$SHA' '$TREE'"
