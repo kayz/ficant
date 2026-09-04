@@ -22,6 +22,36 @@ expect_exit() {
   fi
 }
 
+# Source identities are resolved once in the real worktree and exported for
+# deterministic archive builds, which intentionally contain no .git metadata.
+mkdir -p "$tmp/source-identity"
+git -C "$tmp/source-identity" init -q
+git -C "$tmp/source-identity" config user.name fixture
+git -C "$tmp/source-identity" config user.email fixture@example.invalid
+printf 'identity fixture\n' >"$tmp/source-identity/input.txt"
+git -C "$tmp/source-identity" add input.txt
+git -C "$tmp/source-identity" commit -q -m fixture
+fixture_commit=$(git -C "$tmp/source-identity" rev-parse HEAD)
+fixture_tree=$(git -C "$tmp/source-identity" rev-parse 'HEAD^{tree}')
+expect_exit 0 "$scripts_dir/verify-reproducibility.sh" --bind-source-identity \
+  "$tmp/source-identity"
+grep -Fx "FICANT_CODE_COMMIT_SHA=$fixture_commit" "$tmp/stdout" >/dev/null
+grep -Fx "FICANT_CODE_TREE_SHA=$fixture_tree" "$tmp/stdout" >/dev/null
+FICANT_CODE_COMMIT_SHA="$fixture_commit" FICANT_CODE_TREE_SHA="$fixture_tree" \
+  expect_exit 0 "$scripts_dir/verify-reproducibility.sh" --bind-source-identity \
+  "$tmp/source-identity"
+FICANT_CODE_COMMIT_SHA=0000000000000000000000000000000000000000 \
+  expect_exit 2 "$scripts_dir/verify-reproducibility.sh" --bind-source-identity \
+  "$tmp/source-identity"
+FICANT_CODE_TREE_SHA=0000000000000000000000000000000000000000 \
+  expect_exit 2 "$scripts_dir/verify-reproducibility.sh" --bind-source-identity \
+  "$tmp/source-identity"
+mkdir -p "$tmp/source-archive"
+git -C "$tmp/source-identity" archive HEAD | tar -x -C "$tmp/source-archive"
+[[ ! -e $tmp/source-archive/.git ]]
+FICANT_CODE_COMMIT_SHA="$fixture_commit" FICANT_CODE_TREE_SHA="$fixture_tree" \
+  bash -c '[[ $FICANT_CODE_COMMIT_SHA =~ ^[0-9a-f]{40}$ && $FICANT_CODE_TREE_SHA =~ ^[0-9a-f]{40}$ ]]'
+
 # The frozen descriptor authority is a plain FileDescriptorSet. Exercise the
 # script's descriptor target with a deterministic Buf fixture so an image build
 # cannot silently replace that evidence format.
@@ -82,6 +112,17 @@ expect_exit 1 "$scripts_dir/verify-contract-generation.sh" --verify-trees \
 cp "$tmp/generated-a/message.rs" "$tmp/generated-b/message.rs"
 expect_exit 0 "$scripts_dir/verify-contract-generation.sh" --verify-trees \
   "$tmp/generated-a" "$tmp/generated-b" "$tmp/generated-tracked"
+
+# The breaking baseline must be obtainable from normal repository history, not
+# merely from a stale object retained by one developer clone.
+contract_base=$(sed -n 's/^CONTRACT_BASE_SHA=//p' "$scripts_dir/verify-contract-generation.sh")
+[[ $contract_base =~ ^[0-9a-f]{40}$ ]]
+git -C "$scripts_dir" merge-base --is-ancestor "$contract_base" HEAD
+cp "$scripts_dir/verify-contract-generation.sh" "$tmp/unreachable-contract-baseline.sh"
+sed -i "s/^CONTRACT_BASE_SHA=.*/CONTRACT_BASE_SHA=0000000000000000000000000000000000000000/" \
+  "$tmp/unreachable-contract-baseline.sh"
+unreachable_base=$(sed -n 's/^CONTRACT_BASE_SHA=//p' "$tmp/unreachable-contract-baseline.sh")
+expect_exit 128 git -C "$scripts_dir" merge-base --is-ancestor "$unreachable_base" HEAD
 
 # Reproducibility evidence must reject a hash mismatch and accept equal manifests.
 printf '{"artifacts":{"rust":"aaa","python":"bbb"}}\n' >"$tmp/build-a.json"

@@ -10,9 +10,9 @@
 - 如确需新增写路径，Root 必须在首次写入前停止并取得 Human 明确授权；扩权只能作为新的 §5 条目记录精确路径、理由与边界，原 §6 清单保持不变。事后发现的越界必须如实记录为偏差，不得用修改 §6 追认。
 - 被约束的实施者不得单方改写用来判断其是否越界的约束。这一原则同样适用于允许写路径、guarded 集合、预期值、Oracle、断言与其他自管门禁；需要变更时必须由独立授权或独立可审阅证据承载。
 
-**当前迭代：** [`2026-09-r9e-release-runtime-identity.md`](2026-09-r9e-release-runtime-identity.md)（R9D 已通过 [PR #69](https://github.com/kayz/ficant/pull/69) 线性合入 `main@433d03dd998a1e5829fc7bbc2ec6438e66cbfe00` / tree `1806850afbc1b3ca1690c30cc94a7cc3dd8aa17f`。第四次 clean-main preflight 已通过构建、四镜像扫描、resolved Compose 与空库 migration，随后因 Server 缺少 `FICANT_CODE_COMMIT_SHA` 而 unhealthy。R9E 已补齐完整 commit/tree、Server runtime/environment/bootstrap/input、Worker orphan、部署状态与回滚身份合同；定向真实 Compose 探针、compose security 37 tests（35 passed、2 个显式 live gate skipped）、state contract 9/9、repo-policy、实际镜像摘要 resolved validator 和修复后独立复审 Blocker/Major/Minor `0/0/0` 均已通过；最终 `check-fast.ps1` exit `0`、23/23 步通过，完整 `check.ps1` exit `0`、40/40 步通过。本地候选已完成并可提交/合并；提交/合并与第五次 clean-main preflight 尚待执行，`v0.1.0-alpha.10` 仍未创建，版本 CI 与测试环境交付尚未运行。）
+**当前迭代：** [`2026-09-r9f-ci-source-identity.md`](2026-09-r9f-ci-source-identity.md)（R9E 已通过 [PR #70](https://github.com/kayz/ficant/pull/70) 合入 `main@6b194996cce06d8fefee91b130e28869a3ae5293` / tree `2f5f73381c0701e061802a56f34c7aa4f7e8a3ff`，随后第五次 clean-main 发布预检 17/17 步全部通过。不可变 tag `v0.1.0-alpha.10` 已创建并推送；[版本 CI run 33889960292](https://github.com/kayz/ficant/actions/runs/33889960292) 的 authorize、Python、migration、repo-policy、C++、supply-chain 通过，Rust、contract、Web、reproducibility、business-loop 失败，[release-test run 33890473662](https://github.com/kayz/ficant/actions/runs/33890473662) 因上游失败而 skipped，未构建发布镜像、未部署测试环境。R9F 正在以 forward-only 候选补齐已授权 commit/tree 到所有 Server/Worker 编译入口的传播，并把 contract baseline 改绑到公共 `main` 可达的内容等价祖先；新的版本号仍待 Human 在本地候选完成并合入后确认。）
 
-**最近完成迭代：** [`2026-09-r9d-compose-candidate-binding.md`](2026-09-r9d-compose-candidate-binding.md)（[PR #69](https://github.com/kayz/ficant/pull/69) 已线性合入上述 `main`；R9D 的目标回归、快速及标准完整本地检查均已通过。合入后的第四次 preflight 在 tag 前暴露 Server 运行时身份缺口并由 R9E 接续，不把该失败描述为版本交付。）
+**最近完成迭代：** [`2026-09-r9e-release-runtime-identity.md`](2026-09-r9e-release-runtime-identity.md)（[PR #70](https://github.com/kayz/ficant/pull/70) 已合入上述 `main`；R9E 的目标回归、快速及标准完整本地检查与第五次 clean-main preflight 均已通过。`alpha.10` 随后的远端失败作为 R9F 的输入保留，不回写成 R9E 的通过结论。）
 
 ## 归档说明（2026-07-26）
 

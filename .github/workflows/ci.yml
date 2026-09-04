@@ -15,11 +15,15 @@ concurrency:
 jobs:
   authorize-version:
     runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.candidate.outputs.sha }}
+      tree: ${{ steps.candidate.outputs.tree }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
-      - name: Authorize exact version tag on current main
+      - id: candidate
+        name: Authorize exact version tag on current main
         shell: bash
         env:
           VERSION: ${{ github.ref_name }}
@@ -29,8 +33,14 @@ jobs:
           version=$VERSION
           [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]
           git fetch origin main --tags --force
-          [[ "$GITHUB_SHA" == $(git rev-parse "refs/tags/$version^{commit}") ]]
+          sha=$(git rev-parse "refs/tags/$version^{commit}")
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          tree=$(git rev-parse "refs/tags/$version^{tree}")
+          [[ "$tree" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$sha" ]]
           [[ "$GITHUB_SHA" == $(git rev-parse origin/main) ]]
+          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
+          printf 'tree=%s\n' "$tree" >> "$GITHUB_OUTPUT"
 
   repo-policy:
     needs: authorize-version
@@ -85,6 +95,8 @@ jobs:
       - run: >-
           docker run --rm
           --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu
+          --env FICANT_CODE_COMMIT_SHA=${{ needs['authorize-version'].outputs.sha }}
+          --env FICANT_CODE_TREE_SHA=${{ needs['authorize-version'].outputs.tree }}
           --volume "${{ github.workspace }}:/workspace"
           --workdir /workspace
           rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663
@@ -142,12 +154,16 @@ jobs:
           environment_attestation=$'ficant.worker.environment.v1\narch=amd64\nos=linux\nprofile=ci'
           native_source_digest=$(docker run --rm --network host \
             --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu \
+            --env FICANT_CODE_COMMIT_SHA=${{ needs['authorize-version'].outputs.sha }} \
+            --env FICANT_CODE_TREE_SHA=${{ needs['authorize-version'].outputs.tree }} \
             --volume "${{ github.workspace }}:/workspace" --workdir /workspace \
             rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 \
             sh -ec 'cargo run --quiet --locked -p ficant-worker -- --print-native-source-digest')
           [[ "$native_source_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
           docker run --detach --rm --name ficant-ci-grpc --network host \
             --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu \
+            --env FICANT_CODE_COMMIT_SHA=${{ needs['authorize-version'].outputs.sha }} \
+            --env FICANT_CODE_TREE_SHA=${{ needs['authorize-version'].outputs.tree }} \
             --env FICANT_GRPC_BIND=127.0.0.1:50051 \
             --env FICANT_GRPC_WEB_ALLOWED_ORIGINS=http://127.0.0.1:4174 \
             --env FICANT_PLATFORM_SIGNING_KEY_HEX="$signing_key" \
@@ -299,6 +315,8 @@ jobs:
           export FICANT_TEST_RUNTIME_IMAGE_DIGEST=sha256:8e97031468b2ad51ab8484d06d8af9d63f1b73f8c04654f17be40ac629076cd9
           docker run --rm --network host \
             --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu \
+            --env FICANT_CODE_COMMIT_SHA=${{ needs['authorize-version'].outputs.sha }} \
+            --env FICANT_CODE_TREE_SHA=${{ needs['authorize-version'].outputs.tree }} \
             --env FICANT_TEST_DATABASE_URL=postgres://ficant:ficant-ci-password@127.0.0.1:5432/ficant \
             --env FICANT_TEST_S3_ENDPOINT=http://127.0.0.1:9000 \
             --env FICANT_TEST_S3_BUCKET=ficant-ci \
@@ -339,6 +357,9 @@ jobs:
   reproducibility:
     needs: authorize-version
     runs-on: ubuntu-24.04
+    env:
+      FICANT_CODE_COMMIT_SHA: ${{ needs['authorize-version'].outputs.sha }}
+      FICANT_CODE_TREE_SHA: ${{ needs['authorize-version'].outputs.tree }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
