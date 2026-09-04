@@ -11,7 +11,7 @@ ENV FICANT_UI_BASE_PATH=/ficant/
 ENV VITE_FICANT_GRPC_WEB_BASE_URL=/ficant-api
 RUN pnpm build
 
-FROM nginx@sha256:45b82ed5f285b90d63df07ba70430fdd8f25624b416617d9e6dc93412b2006dc
+FROM nginx@sha256:3b171d7224b669faa3cc2137fea0a65301791df1ec1f271ebd2a2b7461f7fade
 
 COPY deploy/test/ui/nginx.conf /etc/nginx/nginx.conf.template
 COPY --from=build /workspace/web-dm/platform-shell/dist /usr/share/nginx/html/ficant

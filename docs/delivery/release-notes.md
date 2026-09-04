@@ -1,15 +1,16 @@
 # 交付发布说明
 
-> **当前交付状态（2026-09-04）：** R9A 已通过 [PR #66](https://github.com/kayz/ficant/pull/66) 线性合入公共 `main@542d91582da926be3bc3ef2adffb3bdb9d00f39d`；Human 已选择 `v0.1.0-alpha.10`，但首次干净主线发布预检在 tag 前发现 Rust release build 未接收候选 commit/tree 并正确失败。R9B 正以独立候选补齐本地与远端构建身份；目标 tag 仍不存在，最近既有 tag 仍为 `v0.1.0-alpha.9`。本段不宣称 `alpha.10` 镜像或测试环境已经交付。
+> **当前交付状态（2026-09-04）：** R9B 已通过 [PR #67](https://github.com/kayz/ficant/pull/67) 线性合入公共 `main@43e52c4e6831a68fd1fbfa0ede4dc59504bcbe83`；Human 已选择 `v0.1.0-alpha.10`。第二次干净主线发布预检证明 Server/Worker 构建身份与扫描通过，随后在 tag 前发现固定 UI 运行时中的 `CVE-2026-14456`（HIGH）并正确失败。R9C 正以前移官方 Nginx 不可变摘要的独立候选收口；目标 tag 仍不存在，最近既有 tag 仍为 `v0.1.0-alpha.9`。本段不宣称 `alpha.10` 镜像或测试环境已经交付。
 
 ## `v0.1.0-alpha.10` 发布门禁收口候选（2026-09-04）
 
 - R9B 修复 preflight 暴露的源码身份断链：本地脚本冻结 clean-main commit 并从它派生 tree，在构建流水线各阶段边界重验 commit/tree/worktree；远端 authorize job 从已验证 tag 直接派生同一对身份并显式传给 Server/Worker 正式 Dockerfile。唯一 Rust build action 继续锁定到 40 位 action SHA，现有 Rust 编译时 SHA 校验保持失败关闭。最终证据与边界见 [R9B brief](../iterations/2026-09-r9b-release-identity-binding.md)。
+- R9C 把 UI 最终运行时从存在两个 `CVE-2026-14456` HIGH finding 的官方 `nginx 1.31.3-alpine-slim` 摘要前移到官方 `1.31.5-alpine-slim` 不可变摘要。正式 UI 镜像本地扫描为 0，继续以 UID 101 提供 `/health` 与 `/ficant/`；回归测试精确锁定全部 build stages，拒绝旧摘要和追加可变 final stage。当前边界与实际证据见 [R9C brief](../iterations/2026-09-r9c-ui-runtime-cve.md)。
 - 将本轮 current-truth 文档与 R8B 公共合并事实纳入同一候选，不改变业务、数值、Proto、migration、Oracle、expected 或容差。
-- repo-policy 夹具不再匹配旧的单 origin/内联 image-inspect 实现：开发 CORS 继续精确允许 Platform Shell `18083` 与相邻 WebApp `5173`，Worker runtime/source identity 继续由单一受控 helper 读取；34 项测试为 32 passed、2 个显式 live gate skipped、0 failed。
+- repo-policy 夹具不再匹配旧的单 origin/内联 image-inspect 实现：开发 CORS 继续精确允许 Platform Shell `18083` 与相邻 WebApp `5173`，Worker runtime/source identity 继续由单一受控 helper 读取；当前 35 项测试为 33 passed、2 个显式 live gate skipped、0 failed。
 - 测试环境 `current.env` / `previous.env` 通过同目录完整临时文件、`0600` 与原子 rename 发布；失败保留旧状态并清理临时文件。中央 `cicd.yml` 与 workflow 统一为不自动取消已开始的不可变版本运行。
 - 统一检查会精确清理自身生成的 ignored contracts `dist`，显式打包命令仍保留可消费 `.tgz`；发布许可证策略精确为 18 Cargo、1 PyPI SDK、1 npm generated-contract package。
-- 本节只是 pre-tag 候选说明。门禁收口与首次完整本地证据见 [R9A brief](../iterations/2026-09-r9a-release-gate-closure.md)，preflight 身份修复与当前候选状态见 [R9B brief](../iterations/2026-09-r9b-release-identity-binding.md)；版本 CI、GHCR、SBOM/provenance、测试环境部署与回滚只能由后续不可变 tag 提供外部证据。
+- 本节只是 pre-tag 候选说明。门禁收口与首次完整本地证据见 [R9A brief](../iterations/2026-09-r9a-release-gate-closure.md)，preflight 身份修复见 [R9B brief](../iterations/2026-09-r9b-release-identity-binding.md)，当前 UI 运行时收口状态见 [R9C brief](../iterations/2026-09-r9c-ui-runtime-cve.md)；版本 CI、GHCR、SBOM/provenance、测试环境部署与回滚只能由后续不可变 tag 提供外部证据。
 
 ## R6B Artifact 与生产拓扑候选（2026-08-19）
 

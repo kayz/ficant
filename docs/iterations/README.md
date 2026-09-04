@@ -10,9 +10,9 @@
 - 如确需新增写路径，Root 必须在首次写入前停止并取得 Human 明确授权；扩权只能作为新的 §5 条目记录精确路径、理由与边界，原 §6 清单保持不变。事后发现的越界必须如实记录为偏差，不得用修改 §6 追认。
 - 被约束的实施者不得单方改写用来判断其是否越界的约束。这一原则同样适用于允许写路径、guarded 集合、预期值、Oracle、断言与其他自管门禁；需要变更时必须由独立授权或独立可审阅证据承载。
 
-**当前迭代：** [`2026-09-r9b-release-identity-binding.md`](2026-09-r9b-release-identity-binding.md)（R9A 已通过 PR #66 合入；首次 clean-main preflight 在 tag 前发现本地与远端 Rust 镜像构建均未传候选 commit/tree。R9B 只补齐该身份绑定并重跑门禁，`v0.1.0-alpha.10` 仍未创建。）
+**当前迭代：** [`2026-09-r9c-ui-runtime-cve.md`](2026-09-r9c-ui-runtime-cve.md)（R9B 已通过 PR #67 合入；第二次 clean-main preflight 在 tag 前发现固定 UI 运行时中的已修复 OpenSSL HIGH 漏洞。R9C 只前移官方 Nginx 不可变摘要并补齐防回退约束，`v0.1.0-alpha.10` 仍未创建。）
 
-**最近完成迭代：** [`2026-09-r9a-release-gate-closure.md`](2026-09-r9a-release-gate-closure.md)（[PR #66](https://github.com/kayz/ficant/pull/66) 已线性合入 `main`；本地完整检查通过，随后发布预检的失败关闭事实由 R9B 接续，不把失败描述为版本交付。）
+**最近完成迭代：** [`2026-09-r9b-release-identity-binding.md`](2026-09-r9b-release-identity-binding.md)（[PR #67](https://github.com/kayz/ficant/pull/67) 已线性合入 `main@43e52c4e6831a68fd1fbfa0ede4dc59504bcbe83`；本地完整检查通过，随后 UI 漏洞门的失败关闭事实由 R9C 接续，不把失败描述为版本交付。）
 
 ## 归档说明（2026-07-26）
 
