@@ -4,7 +4,7 @@
 >
 > **后续处置：** 2026-07-19 的 Ceph RGW 迁移候选已从活动 Cargo/Compose/CI 合同移除 `minio` 与 `async-std`，并把风险接受集合收敛为空。下文继续保留 iteration-2 当时的原始证据；当前选择与升级条件见 ADR-0010。
 
-> **当前候选：** R9B 已通过 PR #67 合入公共 `main@43e52c4e6831a68fd1fbfa0ede4dc59504bcbe83`；Human 于 2026-09-04 选择的 `v0.1.0-alpha.10` 仍未创建。第二次 clean-main 发布预检证明 Server/Worker 构建与扫描通过，随后在 tag 前发现 UI 固定运行时中的两个 `CVE-2026-14456` HIGH finding 并正确失败。R9C 只前移官方 Nginx 不可变摘要并精确约束全部 build stages，不改业务或数值证据；正式 UI 镜像的 targeted build、Trivy 0 finding、UID 101、HTTP smoke 与标准完整本地检查均已通过，结果记录于 [`2026-09-r9c-ui-runtime-cve.md`](../iterations/2026-09-r9c-ui-runtime-cve.md)。版本 CI 和测试环境事实仍只能由 tag 后外部运行提供。
+> **当前候选：** R9C 已通过 PR #68 合入公共 `main@eb09b2e12f2ed8d4237c235eb638d0da1db07b38`；Human 于 2026-09-04 选择的 `v0.1.0-alpha.10` 仍未创建。第三次 clean-main 发布预检证明三个应用镜像与锁定 Ceph 的可识别漏洞扫描均为 0，随后在 tag 前发现 Compose 校验器把零 SHA 静态夹具写死为唯一允许身份并正确失败。R9D 只把校验器精确绑定调用方的 40 位小写候选 SHA，不改 Compose、workflow、preflight、业务或数值证据；non-zero 正例、缺失/非法/错配与镜像名称欺骗回归、快速及标准完整本地检查均已通过，真实结果记录于 [`2026-09-r9d-compose-candidate-binding.md`](../iterations/2026-09-r9d-compose-candidate-binding.md)。版本 CI 和测试环境事实仍只能由 tag 后外部运行提供。
 
 **iteration-2 结论：** iteration-2 已 `CLOSED`。原 Phase 0/1 的真实业务、运行时与可重放证据保持有效；2026-07-13 closure audit 对 `RUSTSEC-2025-0052` 完成了精确机器门、真实对象存储验证和候选绑定 CI。独立 Quality verdict 为 `PASS-WITH-ACCEPTED-RISK`，内部 Review 为 `pass-with-accepted-findings`（C0/I0/M1）；唯一 accepted finding 是下述限时维护风险，不是未关闭 blocker。
 

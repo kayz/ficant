@@ -744,6 +744,7 @@ class ComposeSecurityGateTests(unittest.TestCase):
 
 
 class ReleaseDeploymentContractTests(unittest.TestCase):
+    DEPLOY_SHA = "0" * 40
     STORAGE_LOCK = json.loads(
         Path("deploy/storage-runtime.lock.json").read_text(encoding="utf-8")
     )
@@ -752,10 +753,12 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
     )
 
     @staticmethod
-    def resolved_release_document() -> dict[str, object]:
+    def resolved_release_document(
+        deploy_sha: str = DEPLOY_SHA,
+    ) -> dict[str, object]:
         environment = {
             **os.environ,
-            "FICANT_DEPLOY_SHA": "0" * 40,
+            "FICANT_DEPLOY_SHA": deploy_sha,
             "FICANT_STORAGE_RUNTIME_IMAGE": ReleaseDeploymentContractTests.STORAGE_IMAGE,
             "FICANT_IMAGE_PREFIX": "ghcr.io/kayz/ficant",
             "FICANT_ROOT": "/srv/ficant-test",
@@ -789,13 +792,22 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         return json.loads(output)
 
     @staticmethod
-    def validate_release(document: dict[str, object]) -> subprocess.CompletedProcess[str]:
+    def validate_release(
+        document: dict[str, object],
+        deploy_sha: str | None = DEPLOY_SHA,
+    ) -> subprocess.CompletedProcess[str]:
+        environment = {**os.environ}
+        if deploy_sha is None:
+            environment.pop("FICANT_DEPLOY_SHA", None)
+        else:
+            environment["FICANT_DEPLOY_SHA"] = deploy_sha
         return subprocess.run(
             [sys.executable, "deploy/test/validate_release.py"],
             input=json.dumps(document),
             capture_output=True,
             text=True,
             check=False,
+            env=environment,
         )
 
     def test_release_topology_includes_real_worker_and_ceph_contract(self) -> None:
@@ -854,6 +866,48 @@ class ReleaseDeploymentContractTests(unittest.TestCase):
         result = self.validate_release(without_worker_secret)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing its production database/S3/identity environment", result.stderr)
+
+    def test_release_validator_binds_every_app_image_to_the_supplied_candidate(
+        self,
+    ) -> None:
+        candidate = "a1" * 20
+        document = self.resolved_release_document(candidate)
+
+        result = self.validate_release(document, candidate)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        invalid_candidates = (
+            None,
+            "",
+            candidate.upper(),
+            "g1" * 20,
+            candidate[:-1],
+            candidate + "0",
+        )
+        for invalid_candidate in invalid_candidates:
+            with self.subTest(invalid_candidate=invalid_candidate):
+                result = self.validate_release(document, invalid_candidate)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("FICANT_DEPLOY_SHA must be", result.stderr)
+
+        result = self.validate_release(document, "b2" * 20)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("expected immutable GHCR tag", result.stderr)
+
+        for service in ("ficant-server", "ficant-worker", "ficant-ui"):
+            service_suffix = service.removeprefix("ficant-")
+            invalid_images = (
+                f"ghcr.io/kayz/{service}:sha-" + "b2" * 20,
+                f"ghcr.io/kayz/ficant-shadow-{service_suffix}:sha-{candidate}",
+                f"ghcr.io/kayz/ficant/{service}:sha-{candidate}",
+            )
+            for invalid_image in invalid_images:
+                with self.subTest(service=service, invalid_image=invalid_image):
+                    drifted = self.resolved_release_document(candidate)
+                    drifted["services"][service]["image"] = invalid_image
+                    result = self.validate_release(drifted, candidate)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(service, result.stderr)
 
     def test_rollback_smoke_accepts_forward_only_migration_supersets(self) -> None:
         smoke = Path("deploy/test/bin/smoke-test.sh").read_text(encoding="utf-8")

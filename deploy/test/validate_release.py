@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
+import re
 import sys
 
 
@@ -35,6 +37,10 @@ def main() -> None:
     if not isinstance(services, dict) or set(services) != EXPECTED_SERVICES:
         fail(f"unexpected services: {sorted(services or {})}")
 
+    deploy_sha = os.environ.get("FICANT_DEPLOY_SHA", "")
+    if re.fullmatch(r"[0-9a-f]{40}", deploy_sha) is None:
+        fail("FICANT_DEPLOY_SHA must be one 40-character lowercase SHA")
+
     for name, service in services.items():
         if "build" in service:
             fail(f"{name} must pull an immutable image, not build on the server")
@@ -63,8 +69,10 @@ def main() -> None:
 
     for name in APP_SERVICES:
         image = services[name].get("image", "")
-        suffix = f"-{name.removeprefix('ficant-')}:sha-" + "0" * 40
-        if not image.startswith("ghcr.io/kayz/ficant") or not image.endswith(suffix):
+        expected_image = (
+            f"ghcr.io/kayz/ficant-{name.removeprefix('ficant-')}:sha-{deploy_sha}"
+        )
+        if image != expected_image:
             fail(f"{name} does not resolve to the expected immutable GHCR tag: {image}")
 
     storage_lock = json.loads(STORAGE_LOCK.read_text(encoding="utf-8"))
