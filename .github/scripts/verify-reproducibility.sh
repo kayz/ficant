@@ -37,10 +37,13 @@ bind_source_identity() {
     || die 'cannot resolve source tree identity'
   [[ $resolved_commit =~ ^[0-9a-f]{40}$ ]] || die 'source commit identity is not one lowercase Git SHA'
   [[ $resolved_tree =~ ^[0-9a-f]{40}$ ]] || die 'source tree identity is not one lowercase Git SHA'
-  if [[ -n ${FICANT_CODE_COMMIT_SHA:-} && $FICANT_CODE_COMMIT_SHA != "$resolved_commit" ]]; then
+  if [[ ${FICANT_CODE_COMMIT_SHA+x} != ${FICANT_CODE_TREE_SHA+x} ]]; then
+    die 'caller must provide both source identities or neither'
+  fi
+  if [[ ${FICANT_CODE_COMMIT_SHA+x} == x && $FICANT_CODE_COMMIT_SHA != "$resolved_commit" ]]; then
     die 'caller commit identity does not match the source worktree'
   fi
-  if [[ -n ${FICANT_CODE_TREE_SHA:-} && $FICANT_CODE_TREE_SHA != "$resolved_tree" ]]; then
+  if [[ ${FICANT_CODE_TREE_SHA+x} == x && $FICANT_CODE_TREE_SHA != "$resolved_tree" ]]; then
     die 'caller tree identity does not match the source worktree'
   fi
   export FICANT_CODE_COMMIT_SHA=$resolved_commit
@@ -241,8 +244,8 @@ if [[ ${1:-} == '--bind-source-identity' ]]; then
   shift
   [[ $# -eq 1 ]] || die '--bind-source-identity requires one Git worktree'
   bind_source_identity "$1"
-  printf 'FICANT_CODE_COMMIT_SHA=%s\nFICANT_CODE_TREE_SHA=%s\n' \
-    "$FICANT_CODE_COMMIT_SHA" "$FICANT_CODE_TREE_SHA"
+  bash -c 'printf "FICANT_CODE_COMMIT_SHA=%s\nFICANT_CODE_TREE_SHA=%s\n" \
+    "$FICANT_CODE_COMMIT_SHA" "$FICANT_CODE_TREE_SHA"'
   exit 0
 fi
 if [[ ${1:-} == '--verify-manifests' ]]; then
