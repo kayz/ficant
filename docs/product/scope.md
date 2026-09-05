@@ -1,6 +1,6 @@
 # ficant 产品范围
 
-**状态（2026-09-04）：** 本轮同步核对起点为公共 `main == origin/main == 1788bcfba8d0609002008043908c8f0013474fce`；R8A/R8B 已合入，当前 descriptor 与唯一生产 route set 精确包含 18 个公共 Protobuf service。该基线包含的 R8B 代码树已通过本地多语言及真实 PostgreSQL + Ceph RGW 全量检查；Human 已选择 `v0.1.0-alpha.10`，R9A 正把 current-truth 文档与发布门禁收口纳入同一候选。版本 tag、镜像和测试环境交付只能发生在候选合入、干净主线发布预检通过之后。对象存储统一为 Ceph RGW + Apache `object_store`
+**状态（2026-09-05）：** 当前已同步公共基线为 `main == origin/main == 791555b22b6ef8c847622621c860a8789ba9e32d`（tree `fc723187bf4421fde0b71165f239b98dd311db77`）；R8A/R8B 已合入，descriptor 与唯一生产 route set 精确包含 18 个公共 Protobuf service，该基线已通过干净主线 17/17 步发布候选预检。不可变 tag `v0.1.0-alpha.11` 的版本 CI 有 9 个 job 成功、Rust 与 Web 失败，release-test 7/7 jobs skipped，未形成版本镜像或测试环境交付；R9G 只处理 Linux 测试夹具与 CI 启动合同，其本地可执行候选 `cd8e64e5b2912147cf4a24cc4247ebbdb4fe82b0` 已闭合，未改变产品能力或公共合同。对象存储统一为 Ceph RGW + Apache `object_store`。
 
 **实现状态：** 当前能力以公共 `main`、冻结合同和已记录的真实本地证据为准；本地通过不等于版本 CI 或目标环境通过，不把局部纵向切片扩写为最终产品
 
