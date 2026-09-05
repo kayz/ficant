@@ -10,9 +10,9 @@
 - 如确需新增写路径，Root 必须在首次写入前停止并取得 Human 明确授权；扩权只能作为新的 §5 条目记录精确路径、理由与边界，原 §6 清单保持不变。事后发现的越界必须如实记录为偏差，不得用修改 §6 追认。
 - 被约束的实施者不得单方改写用来判断其是否越界的约束。这一原则同样适用于允许写路径、guarded 集合、预期值、Oracle、断言与其他自管门禁；需要变更时必须由独立授权或独立可审阅证据承载。
 
-**当前迭代：** [`2026-09-r9g-linux-release-parity.md`](2026-09-r9g-linux-release-parity.md)（不可变 tag `v0.1.0-alpha.11` 已精确绑定 `main@791555b22b6ef8c847622621c860a8789ba9e32d` / tree `fc723187bf4421fde0b71165f239b98dd311db77`；[版本 CI run 33933106201](https://github.com/kayz/ficant/actions/runs/33933106201) 的 11 个 job 中 9 个成功、Rust 与 Web 失败，[release-test run 33934227298](https://github.com/kayz/ficant/actions/runs/33934227298) 7/7 jobs skipped，未形成版本应用镜像或测试环境部署。R9G 只修复跨平台测试夹具与 CI 启动/工具合同；本地可执行候选 `cd8e64e5b2912147cf4a24cc4247ebbdb4fe82b0` 已通过全部冻结验收，待 PR/main 与 clean-main preflight，`alpha.11` 保持原位且不重跑。）
+**当前迭代：** [`2026-09-r9g-linux-release-parity.md`](2026-09-r9g-linux-release-parity.md)（不可变 tag `v0.1.0-alpha.11` 已精确绑定 `main@791555b22b6ef8c847622621c860a8789ba9e32d` / tree `fc723187bf4421fde0b71165f239b98dd311db77`；[版本 CI run 33933106201](https://github.com/kayz/ficant/actions/runs/33933106201) 的 11 个 job 中 9 个成功、Rust 与 Web 失败，[release-test run 33934227298](https://github.com/kayz/ficant/actions/runs/33934227298) 7/7 jobs skipped，未形成版本应用镜像或测试环境部署。R9G 只修复跨平台测试夹具与 CI 启动/工具合同，已通过 [PR #73](https://github.com/kayz/ficant/pull/73) 合入 `main@811a7062e25af41df1316d2c883914a00c5142ed`，合入后的 17/17 步 clean-main preflight 通过；`alpha.11` 保持原位且不重跑，下一版本号须由 Human 明确选择。）
 
-**最近完成迭代：** [`2026-09-r9f-ci-source-identity.md`](2026-09-r9f-ci-source-identity.md)（[PR #71](https://github.com/kayz/ficant/pull/71) 已合入；R9F 修复 `alpha.10` 暴露的 CI 源码身份传播与 contract baseline 可达性缺口。新的远端版本证据必须等待 Human 选择 forward-only 版本号后产生。）
+**最近完成迭代：** [`2026-09-r9g-linux-release-parity.md`](2026-09-r9g-linux-release-parity.md)（[PR #73](https://github.com/kayz/ficant/pull/73) 已合入；R9G 修复 `alpha.11` 暴露的 Linux 路径、锁定 Buf 与 Web Server 启动/快速留证缺口，PR 集成基线的 17/17 步 clean-main preflight 已通过。尚无新的版本 CI 或部署证据。）
 
 ## 归档说明（2026-07-26）
 
