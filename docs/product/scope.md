@@ -1,6 +1,6 @@
 # ficant 产品范围
 
-**状态（2026-09-05）：** R9G 已通过 [PR #73](https://github.com/kayz/ficant/pull/73) 合入公共 `main@811a7062e25af41df1316d2c883914a00c5142ed`（tree `34cba6a4afb1bd2440211ea3342c82a73d41c6af`），合入后的干净主线 17/17 步发布候选预检通过；descriptor 与唯一生产 route set 仍精确包含 18 个公共 Protobuf service。不可变 tag `v0.1.0-alpha.11` 的版本 CI 有 9 个 job 成功、Rust 与 Web 失败，release-test 7/7 jobs skipped，未形成版本镜像或测试环境交付；R9G 只处理 Linux 测试夹具与 CI 启动合同，未改变产品能力或公共合同。对象存储统一为 Ceph RGW + Apache `object_store`。
+**状态（2026-09-05）：** R9G 已通过 [PR #73](https://github.com/kayz/ficant/pull/73) 合入，Human 授权的不可变 `v0.1.0-alpha.12` 发布基线为 `42e7c323543401567f8d76166d4d13958dd55f7b`（tree `db9123eabc27d8b1d5c52dd001d57c6f5934dd32`）。该基线的 clean-main 发布预检 17/17、[版本 CI](https://github.com/kayz/ficant/actions/runs/33943037740) 11/11、[release-test](https://github.com/kayz/ficant/actions/runs/33943924358) 10/10 均成功，GitHub `test` Environment 已完成 27/27 migration、五项长期服务健康与 smoke，未触发回滚。descriptor 与唯一生产 route set 仍精确包含 18 个公共 Protobuf service；R9G 只处理 Linux 测试夹具与 CI 启动合同，发布成功未增加产品能力或公共合同，也不等于完整业务 UAT 或生产发布。对象存储统一为 Ceph RGW + Apache `object_store`。
 
 **实现状态：** 当前能力以公共 `main`、冻结合同和已记录的真实本地证据为准；本地通过不等于版本 CI 或目标环境通过，不把局部纵向切片扩写为最终产品
 

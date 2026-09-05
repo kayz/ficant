@@ -1,8 +1,8 @@
 # R9G 迭代 brief — Linux 版本门禁一致性
 
-**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R9G · **execution base：** `791555b22b6ef8c847622621c860a8789ba9e32d` · **base tree：** `fc723187bf4421fde0b71165f239b98dd311db77` · **状态：** 已通过 [PR #73](https://github.com/kayz/ficant/pull/73) 合入，R9G 集成基线 clean-main preflight 17/17 通过，待 Human 选择新版本号
+**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R9G · **execution base：** `791555b22b6ef8c847622621c860a8789ba9e32d` · **base tree：** `fc723187bf4421fde0b71165f239b98dd311db77` · **状态：** 已通过 [PR #73](https://github.com/kayz/ficant/pull/73) 合入并由不可变 `v0.1.0-alpha.12` 完成版本 CI、镜像晋升与测试环境交付
 
-本 brief 是 R9G 面向 Human 的唯一范围、权限边界与最终本地证据载体。不可变 tag `v0.1.0-alpha.11` 精确绑定上述 base；其 [版本 CI run 33933106201](https://github.com/kayz/ficant/actions/runs/33933106201) 在本地 17 步 preflight 通过后暴露了 Rust 测试夹具的跨平台路径假设，以及 Web CI 启动参数未跟随当前 Server 配置合同的问题。该 CI 的 11 个 job 中 9 个成功、2 个失败；[release-test run 33934227298](https://github.com/kayz/ficant/actions/runs/33934227298) 的 7 个 job 全部 skipped，未构建、推送或部署版本应用镜像。
+本 brief 是 R9G 面向 Human 的唯一范围、权限边界与最终本地证据载体。不可变 tag `v0.1.0-alpha.11` 精确绑定上述 base；其 [版本 CI run 33933106201](https://github.com/kayz/ficant/actions/runs/33933106201) 在本地 17 步 preflight 通过后暴露了 Rust 测试夹具的跨平台路径假设，以及 Web CI 启动参数未跟随当前 Server 配置合同的问题。该 CI 的 11 个 job 中 9 个成功、2 个失败；[release-test run 33934227298](https://github.com/kayz/ficant/actions/runs/33934227298) 的 7 个 job 全部 skipped，未构建、推送或部署版本应用镜像。R9G 合入和 current-truth 文档收口后，Human 另行授权的 `v0.1.0-alpha.12` 精确绑定 `42e7c323543401567f8d76166d4d13958dd55f7b`（tree `db9123eabc27d8b1d5c52dd001d57c6f5934dd32`），并完成版本 CI、镜像晋升与 GitHub `test` Environment 交付；该后续 CICD 事实不改变 R9G 当时冻结的写路径、验收与非目标。
 
 ## 1. 目标
 
@@ -36,16 +36,16 @@
 - 生产安全语义：无变化；受治理文件根仍必须是当前平台绝对路径，Server 身份、runtime 与 input 配置继续失败关闭。
 - 交付测试合同：Rust job 新增锁定 Buf 的显式容器边界；Web job 与当前 Server 启动合同同步，并把服务提前退出从十分钟无信息超时收紧为立即输出容器日志的确定性失败。
 
-## 5. 需 Human 决策
+## 5. 需 Human 决策（已完成）
 
 - `v0.1.0-alpha.11` 是失败且不可变的版本候选，不构成已发布镜像或测试环境交付证据。
-- R9G 已完成合入，PR #73 的集成提交已通过 clean-main 发布预检；current-truth 文档收口形成新的 `main` tip 后，仍须在该精确干净、同步 tip 上重新通过同一 17 步门禁。
-- 新的 forward-only 版本号仍须由 Human 明确选择；建议使用 `v0.1.0-alpha.12`。
+- R9G 已完成合入，current-truth 文档通过 [PR #74](https://github.com/kayz/ficant/pull/74) 收口；Human 随后明确选择 forward-only 版本 `v0.1.0-alpha.12`，并在精确、干净、同步的最终 tag commit 上重新通过 17/17 步门禁。
+- `alpha.12` 的版本 CI、镜像晋升和测试环境部署均成功，R9G 不再有待定版本决策；任何后续版本仍须重新取得 Human 的精确版本授权。
 - 本轮不需要改变业务语义或测试 Oracle；若实施发现必须如此，立即停止并返回 Human。
 
 ## 6. 最终真实测试证据
 
-最终可执行候选在测试后原样提交为 `cd8e64e5b2912147cf4a24cc4247ebbdb4fe82b0`（tree `e59ca735291833b2d12da8f078d429c73d59ff85`，parent 为 execution base）；PR #73 rebase merge 后的代码提交 `6ddc399e6b72f8b59c235f1e94604158de301a4e` 保持相同 tree，随后只改文档的集成提交为 `811a7062e25af41df1316d2c883914a00c5142ed`（tree `34cba6a4afb1bd2440211ea3342c82a73d41c6af`）。下表只把已实际执行的 preflight 写成通过；未执行的新版本 CI 或部署不写成通过。
+最终可执行候选在测试后原样提交为 `cd8e64e5b2912147cf4a24cc4247ebbdb4fe82b0`（tree `e59ca735291833b2d12da8f078d429c73d59ff85`，parent 为 execution base）；PR #73 rebase merge 后的代码提交 `6ddc399e6b72f8b59c235f1e94604158de301a4e` 保持相同 tree，随后只改文档的集成提交为 `811a7062e25af41df1316d2c883914a00c5142ed`（tree `34cba6a4afb1bd2440211ea3342c82a73d41c6af`）。下表分别记录最终本地候选的实际命令，以及 R9G 结束后由 Human 独立授权并已完成的 CICD 外部事实；两类证据不互相替代。
 
 | 真实命令/检查 | Exit / Conclusion | 结果 |
 |---|---:|---|
@@ -65,6 +65,10 @@
 | 独立只读复审 | PASS | 最终结论 blocker 0 / major 0 / minor 0；此前实测可绕过的 Buf `printf -v`、Web 动态值重赋、`-e`、`--env-file`、cleanup `if false` 与 readiness 提前 `break` 六个候选现均被拒绝。 |
 | [PR #73](https://github.com/kayz/ficant/pull/73) rebase merge | 0 | PR base `791555b...`、head `944b306...`，17 个文件与冻结闭集一致；普通 PR 未触发版本流水线。合入后代码提交 `6ddc399e...` 的 tree 仍为 `e59ca735...`，R9G 集成提交为 `811a706...` / tree `34cba6a...`。远端临时分支自动删除，本地同 tree 分支删除。 |
 | `trivy image --download-db-only` + `scripts/check-release-candidate.ps1`（clean `main@811a706...` / tree `34cba6a...`） | 0 | Trivy 0.72.0 DB 更新为 `UpdatedAt 2026-09-05 01:12:13Z`、`DownloadedAt 2026-09-05 02:18:25Z`；17/17 步通过。许可证/存储绑定、Server/Worker/UI 正式镜像构建、三个应用与锁定 Ceph 的扫描、OCI/Compose 身份、PostgreSQL/Ceph 健康、migration、Server/Worker/UI readiness 与 forward-only migration 兼容均通过，运行容器、卷和网络由脚本清理。 |
+| [PR #74](https://github.com/kayz/ficant/pull/74) 文档收口与最终 tag preflight | 0 | PR #74 以 rebase merge 收口 R9G 的 current-truth 文档；最终干净、同步的 `main@42e7c323543401567f8d76166d4d13958dd55f7b` / tree `db9123eabc27d8b1d5c52dd001d57c6f5934dd32` 在创建 tag 前更新同日 Trivy 数据库，并重新通过 17/17 步 `scripts/check-release-candidate.ps1`。 |
+| `v0.1.0-alpha.12` / [CI run `33943037740`](https://github.com/kayz/ficant/actions/runs/33943037740) | `success` | annotated tag object `d682b53ebc5168545953b2d8a59a8480036ef7bd` 与远端 peeled commit 核验一致；authorize、migration、contract、Python、repo-policy、Web、Rust、supply-chain、business-loop、reproducibility、C++ 共 11/11 jobs 成功，R9G 修复由真实 GitHub Linux Runner 证明。 |
+| [release-test run `33943924358`](https://github.com/kayz/ficant/actions/runs/33943924358) | `success` | 10/10 jobs 成功；Server `sha256:61e1e57d...`、Worker `sha256:7ec42789...`、UI `sha256:0cff08d1...` 的 SHA/版本 tag 分别解析为相同 OCI index digest，三者带 SPDX SBOM 与 SLSA provenance。三个应用及锁定 Ceph RGW 的 HIGH/CRITICAL 扫描为 0 result；7 个 workflow artifacts 为 4 份 Trivy SARIF 与 3 份 Docker build record。 |
+| GitHub Deployment `6277018679` / `test` | `success` | 状态依次为 waiting、queued、in_progress、success；`required_migrations=27`、`applied_migrations=27`，PostgreSQL、Ceph RGW、Server、Worker、UI 健康与 smoke 全部通过，最终绑定 `42e7c323...`，未触发自动回滚。 |
 
 ### 冻结写路径
 
@@ -92,7 +96,7 @@
 
 ## 7. 残余风险
 
-- 本地固定 Linux 容器可验证同一 OS/工具边界，但不能冒充 GitHub Runner 上新的版本 CI 证据。
+- `alpha.12` 已提供 GitHub Runner 与测试环境证据，但证据只绑定其不可变 commit/tree；后续源码或文档提交不会自动继承该版本结论。
 - Web 真实 gRPC-Web smoke 不访问 Experiment/数据接入 RPC；PostgreSQL、Ceph RGW 与受治理输入的真实链路继续由 migration、business-loop、集成检查及发布 preflight 覆盖。
-- GitHub Actions 上游 Node runtime 提示与本次两个失败无关，不在 R9G 范围内。
-- 只有新的 Human 授权不可变 tag 才能证明修复后的完整版本 CI、镜像发布和测试环境部署。
+- GitHub Actions 仍提示部分上游 action 使用即将弃用的 Node 20 runtime；本次由 Runner 强制使用 Node 24 后成功，但后续应跟随中央 CICD 平台升级 action pin。
+- 本地 preflight 的 Trivy 0.72.0 与 GitHub release-test 锁定的 Trivy v0.70.0 均不支持 Ceph 基础镜像的 CentOS Stream 9 OS family，现有 0 result 只覆盖其可识别组件；GitHub Deployment 也未提供 `environment_url`。这些限制及测试环境成功均不构成完整业务 UAT 或生产发布授权。

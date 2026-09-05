@@ -1,6 +1,15 @@
 # 交付发布说明
 
-> **当前交付状态（2026-09-05）：** Human 选择的不可变 tag `v0.1.0-alpha.11` 已绑定 `791555b22b6ef8c847622621c860a8789ba9e32d`；[版本 CI run 33933106201](https://github.com/kayz/ficant/actions/runs/33933106201) 中 9 个 job 成功、Rust 与 Web 失败，[release-test run 33934227298](https://github.com/kayz/ficant/actions/runs/33934227298) 的 7/7 jobs skipped，远端核验没有此次版本的应用镜像、artifact 或测试环境 deployment。`alpha.11` 保持原位且不重跑、移动或复用。R9G forward-only 修复已通过 [PR #73](https://github.com/kayz/ficant/pull/73) 合入公共 `main@811a7062e25af41df1316d2c883914a00c5142ed`（tree `34cba6a4afb1bd2440211ea3342c82a73d41c6af`），当日 Trivy 0.72.0 数据库更新后 clean-main 发布预检 17/17 步通过；下一版本号仍须由 Human 明确选择。
+> **当前交付状态（2026-09-05）：** Human 授权的不可变 tag `v0.1.0-alpha.12` 精确绑定 `42e7c323543401567f8d76166d4d13958dd55f7b`（tree `db9123eabc27d8b1d5c52dd001d57c6f5934dd32`）。同一候选先在干净、同步的 `main` 上更新 Trivy 0.72.0 数据库并通过 17/17 步本地发布预检；[版本 CI run 33943037740](https://github.com/kayz/ficant/actions/runs/33943037740) 11/11 jobs 成功，[release-test run 33943924358](https://github.com/kayz/ficant/actions/runs/33943924358) 10/10 jobs 成功，三类应用镜像已完成扫描、留证、版本晋升并成功部署到 GitHub `test` Environment。`v0.1.0-alpha.11` 仍原位保留为失败且未部署的历史候选。
+
+## `v0.1.0-alpha.12` 测试环境交付（2026-09-05）
+
+- annotated tag object `d682b53ebc5168545953b2d8a59a8480036ef7bd` 与远端 peeled commit 均核验无漂移；版本 CI 的 authorize、migration、contract、Python、repo-policy、Web、Rust、supply-chain、business-loop、reproducibility 与 C++ 全部成功。R9G 修复的 Linux 路径、锁定 Buf 1.56.0 及真实 Web Server 启动合同由 GitHub Linux Runner 证明有效。
+- release-test 完成 Server、Worker、UI 构建与 HIGH/CRITICAL 扫描，同时扫描锁定的 Ceph RGW；四份 Trivy SARIF 均为 0 result。Server、Worker、UI 的 SHA tag 与 `v0.1.0-alpha.12` tag 分别解析为同一 OCI index digest：Server `sha256:61e1e57d006821cacd7c0956408fd4962922afdf278d317325bb28f1df675aa6`、Worker `sha256:7ec42789544375775c1ad3509ef70b0f65e7437459c860596d3752d9953f498d`、UI `sha256:0cff08d17a7c6ebda618a439b527f1a9e494c71a06c1eacdd811d8494a15a6fd`。
+- 三个应用镜像均带 SPDX SBOM 与 SLSA provenance attestation；CI 的 `ficant-supply-evidence` 以及 release-test 的 4 份 Trivy SARIF、3 份 Docker build record 均未过期，保留至 2026-12-04。
+- GitHub Deployment `6277018679` 在 `test` Environment 依次进入 waiting、queued、in_progress、success；测试机完成 `required_migrations=27` / `applied_migrations=27`，PostgreSQL、Ceph RGW、Server、Worker、UI 健康及 smoke 全部通过，最终记录 `Deployment succeeded: 42e7c323543401567f8d76166d4d13958dd55f7b`，未触发自动回滚。
+- 交付成功不授权生产发布或完整业务 UAT。已知非阻塞限制仍为：本地 preflight 使用的 Trivy 0.72.0 与 GitHub release-test 锁定的 Trivy v0.70.0 均无法识别 Ceph 基础镜像的 CentOS Stream 9 OS family；GitHub Deployment 未设置 `environment_url`；Actions 日志存在上游 Node 20 runtime 弃用提示。部署发现的旧 `ficant-web` orphan 已由 Compose 流程停止并删除。
+- `v0.1.0-alpha.11@791555b22b6ef8c847622621c860a8789ba9e32d` 的 Rust/Web 失败与 release-test skipped 事实保持不变；该 tag 未被重跑、移动或复用。R9G 最终范围、修复证据与 forward-only 版本结果见 [R9G brief](../iterations/2026-09-r9g-linux-release-parity.md)。
 
 ## `v0.1.0-alpha.11` 发布结果与 R9G 修复候选（2026-09-05）
 
