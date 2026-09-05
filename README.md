@@ -57,13 +57,13 @@ FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三�
 >
 > 关于**什么必须为真**，权威在私有 `kayz/ficant-authority` 仓库中由 `authority-manifest.json` 精确绑定公共提交的 `SPEC.md`，不在本文或公共仓库根目录的同名本地文件。
 
-## 当前公共主线状态（2026-09-04）
+## 当前公共主线状态（2026-09-05）
 
-- 同步核对时 `main == origin/main == 1788bcfba8d0609002008043908c8f0013474fce`；[PR #65](https://github.com/kayz/ficant/pull/65) 已于 2026-08-28 以 rebase merge 合入 R8B。原代码候选与公共提交 `f044f397a173f4caee2fb186efcee81dfff378d7` 的代码 tree 同为 `664c7c8cbe2ec5dec35f8109d17364d1ff248297`。
+- 当前已同步公共基线为 `main == origin/main == 791555b22b6ef8c847622621c860a8789ba9e32d`（tree `fc723187bf4421fde0b71165f239b98dd311db77`）；R8A/R8B 产品切片、R9A–R9E 发布门禁收口与 R9F CI 源码身份修复均已合入。
 - 当前 descriptor 与唯一生产 route set 精确包含 18 个公共 Protobuf service。最新纵向切片提供只读组合目录/聚合/Workbench 后台及严格日度 TWR、P&L、Benchmark/active return 和区间几何累计；最终状态与边界见 [R8B brief](docs/iterations/2026-08-r8b-portfolio-performance.md) 和 [产品范围](docs/product/scope.md)。
-- 上述公共基线已在本机完成 `.\scripts\check.ps1 -IncludeIntegration` 合并后重取证并以 exit `0` 结束。这是本地 OPAID 证据，不是版本 CI、镜像或测试环境交付证据。
+- 上述公共基线已在干净、同步的 `main` 上通过 17/17 步 `.\scripts\check-release-candidate.ps1`。这是本地候选证据，不替代 GitHub 版本 CI、镜像或测试环境交付证据。
 - 产品仍以后台能力、Platform Shell 和 Phase 5A 非业务观测面为主；完整业务 WebApp、相邻 Portfolio WebApp 接线、GeneratedNode/Python node runtime、gVisor、OIDC、PMS/OMS 和投资组合会计尚未落地。
-- Human 已选择并授权在门禁全部闭合后交付 `v0.1.0-alpha.10`；本候选通过 R9A 修复两项 repo-policy 漂移、部署状态原子更新、不可变版本运行的并发语义以及本地检查可重入性。创建 tag 前仍必须把精确候选合入并同步到干净 `main`，更新 Trivy 数据库并完整通过发布候选预检；因此本段所述源码本身不冒充版本 tag、镜像或测试环境部署证据，详见 [R9A brief](docs/iterations/2026-09-r9a-release-gate-closure.md) 与 [测试环境合同](docs/delivery/test-environment.md)。
+- Human 授权的不可变 tag `v0.1.0-alpha.11` 已绑定该基线；[版本 CI](https://github.com/kayz/ficant/actions/runs/33933106201) 9 个 job 成功、Rust 与 Web 失败，[release-test](https://github.com/kayz/ficant/actions/runs/33934227298) 7/7 jobs skipped，因此没有版本应用镜像或测试环境部署。R9G 的 forward-only 本地可执行候选 `cd8e64e5b2912147cf4a24cc4247ebbdb4fe82b0`（tree `e59ca735291833b2d12da8f078d429c73d59ff85`）已通过 Windows/Linux 定向验证、23/23 快速检查、40/40 标准检查和独立复审，待 PR 合入与 clean-main preflight；`alpha.11` 保持原位且不重跑，详见 [R9G brief](docs/iterations/2026-09-r9g-linux-release-parity.md) 与 [测试环境合同](docs/delivery/test-environment.md)。
 
 ## GitHub 测试环境发布（2026-07-17）
 
