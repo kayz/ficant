@@ -217,9 +217,9 @@ web = job("web")
 worker_start = web.index("          native_source_digest=$(docker run --rm --network host \\\n")
 worker_end = web.index('          [[ "$native_source_digest" =~', worker_start)
 server_start = web.index(
-    "          docker run --detach --rm --name ficant-ci-grpc --network host \\\n"
+    "          docker run --rm --name \"$server_container\" --network host \\\n"
 )
-server_end = web.index("          trap 'docker rm -f", server_start)
+server_end = web.index("          server_pid=$!", server_start)
 require_container_identity("web worker", web[worker_start:worker_end])
 require_container_identity("web server", web[server_start:server_end])
 if web.count(commit_env) != 2 or web.count(tree_env) != 2:
@@ -247,6 +247,452 @@ for marker in host_env.splitlines()[2:4]:
 
 if "safe.directory" in text:
     raise SystemExit("CI source identity must not weaken Git safe-directory checks")
+PY
+}
+
+check_ci_linux_release_parity_contract() {
+  local candidate=$1 candidate_lock=$2
+  "$python" - "$candidate" "$candidate_lock" <<'PY'
+import pathlib
+import re
+import sys
+import tomllib
+
+workflow_path, lock_path = map(pathlib.Path, sys.argv[1:])
+text = workflow_path.read_text(encoding="utf-8")
+lock = tomllib.loads(lock_path.read_text(encoding="utf-8"))
+
+
+def job(name: str) -> str:
+    matches = list(
+        re.finditer(
+            rf"(?ms)^  {re.escape(name)}:\n.*?(?=^  [a-z0-9-]+:\n|\Z)",
+            text,
+        )
+    )
+    if len(matches) != 1:
+        raise SystemExit(f"expected one {name} job")
+    return matches[0].group(0)
+
+
+buf = lock.get("buf", {})
+buf_image = "bufbuild/buf@sha256:89fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26"
+if buf.get("version") != "1.56.0" or buf.get("image") != buf_image:
+    raise SystemExit("toolchain lock must pin the reviewed Buf 1.56.0 image")
+
+rust = job("rust")
+rust_run_start = rust.index("          docker run --rm\n")
+rust_run = rust[rust_run_start:]
+rust_image = "rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663"
+rust_setup_matches = list(
+    re.finditer(
+        r"(?ms)^      - name: Extract frozen Buf for Rust topology tests\n"
+        r".*?(?=^      - |\Z)",
+        rust,
+    )
+)
+if len(rust_setup_matches) != 1:
+    raise SystemExit("Rust job must have one frozen Buf extraction step")
+rust_setup = rust_setup_matches[0].group(0)
+expected_rust_setup = """      - name: Extract frozen Buf for Rust topology tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          buf_image=$(python3 - <<'PY'
+          import tomllib
+
+          with open("deploy/dev/toolchain.lock.toml", "rb") as lock_file:
+              lock = tomllib.load(lock_file)
+          if lock["buf"]["version"] != "1.56.0":
+              raise SystemExit("toolchain lock must pin Buf 1.56.0")
+          print(lock["buf"]["image"])
+          PY
+          )
+          [[ "$buf_image" == 'bufbuild/buf@sha256:89fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26' ]]
+          buf_container=ficant-rust-buf-tool
+          buf_path="${{ runner.temp }}/ficant-buf"
+          trap 'docker rm -f "$buf_container" >/dev/null 2>&1 || true' EXIT
+          docker create --name "$buf_container" "$buf_image" >/dev/null
+          docker cp "${buf_container}:/usr/local/bin/buf" "$buf_path"
+          chmod 0755 "$buf_path"
+          [[ "$("$buf_path" --version)" == '1.56.0' ]]
+          docker rm "$buf_container" >/dev/null
+          trap - EXIT
+"""
+if rust_setup != expected_rust_setup:
+    raise SystemExit("Rust frozen Buf extraction step drifted from its reviewed executable text")
+rust_setup_lines = rust_setup.splitlines()
+rust_lines = rust.splitlines()
+buf_assignment = "          buf_image=$(python3 - <<'PY'"
+buf_assertion = f"          [[ \"$buf_image\" == '{buf_image}' ]]"
+buf_create = '          docker create --name "$buf_container" "$buf_image" >/dev/null'
+buf_copy = '          docker cp "${buf_container}:/usr/local/bin/buf" "$buf_path"'
+buf_version = '          [[ "$("$buf_path" --version)" == \'1.56.0\' ]]'
+rust_setup_lines_required = (
+    buf_assignment,
+    '          with open("deploy/dev/toolchain.lock.toml", "rb") as lock_file:',
+    '          if lock["buf"]["version"] != "1.56.0":',
+    '          print(lock["buf"]["image"])',
+    buf_assertion,
+    buf_create,
+    buf_copy,
+    '          chmod 0755 "$buf_path"',
+    buf_version,
+)
+for line in rust_setup_lines_required:
+    if rust_setup_lines.count(line) != 1 or rust_lines.count(line) != 1:
+        raise SystemExit(f"Rust job missing scoped unique frozen Buf line: {line}")
+setup_positions = [rust_setup_lines.index(line) for line in rust_setup_lines_required]
+if setup_positions != sorted(setup_positions):
+    raise SystemExit("Buf lock, digest, extraction, and version checks must remain ordered")
+buf_assignments = re.findall(
+    r"(?m)^\s*(?:(?:export|readonly)\s+)?buf_image=", rust_setup
+)
+if len(buf_assignments) != 1:
+    raise SystemExit("validated Buf image must have exactly one assignment")
+if len(re.findall(r"(?<![A-Za-z0-9_])buf_image(?![A-Za-z0-9_])", rust_setup)) != 3:
+    raise SystemExit("validated Buf image token must appear only in assignment, digest check, and create")
+if re.search(r"(?m)^\s*(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\)\s*\{", rust_setup):
+    raise SystemExit("Buf extraction step must not hide commands in helper functions")
+if rust.count('docker create --name "$buf_container"') != 1:
+    raise SystemExit("reviewed Buf container create command must be unique")
+
+rust_container_lines = (
+    "          --env FICANT_BUF=/usr/local/bin/buf",
+    '          --volume "${{ runner.temp }}/ficant-buf:/usr/local/bin/buf:ro"',
+    f"          {rust_image}",
+)
+for line in rust_container_lines:
+    if rust_run.splitlines().count(line) != 1 or rust_lines.count(line) != 1:
+        raise SystemExit(f"Rust test container missing scoped unique Buf line: {line}")
+    if rust_run.index(line) > rust_run.index(rust_image):
+        raise SystemExit("Buf must be injected read-only into the fixed Rust test container")
+rust_container_positions = [rust_run.splitlines().index(line) for line in rust_container_lines]
+if rust_container_positions != sorted(rust_container_positions):
+    raise SystemExit("Buf environment and read-only mount must precede the fixed Rust image")
+if rust.count("--env FICANT_BUF=") != 1 or rust.count(":/usr/local/bin/buf:") != 1:
+    raise SystemExit("Buf environment and mount must not be supplied by a decoy")
+
+web = job("web")
+server_start_marker = '          docker run --rm --name "$server_container" --network host'
+server_end_marker = '            sh -ec \'cargo run --locked -p ficant-server\' >"$server_log" 2>&1 &'
+server_start = web.index(server_start_marker)
+server_end = web.index(server_end_marker, server_start) + len(server_end_marker)
+server_run = web[server_start:server_end]
+if "--detach" in server_run:
+    raise SystemExit("Web server must stay attached to the monitored Docker client process")
+
+required_server_env = (
+    "RUSTUP_TOOLCHAIN",
+    "FICANT_GRPC_BIND",
+    "FICANT_GRPC_WEB_ALLOWED_ORIGINS",
+    "FICANT_PLATFORM_SIGNING_KEY_HEX",
+    "FICANT_PLATFORM_TRACE_KEY_HEX",
+    "FICANT_CODE_COMMIT_SHA",
+    "FICANT_CODE_TREE_SHA",
+    "FICANT_SERVER_RUNTIME_IMAGE_DIGEST",
+    "FICANT_SERVER_ENVIRONMENT_ATTESTATION",
+    "FICANT_BOOTSTRAP_SUBJECT",
+    "FICANT_BOOTSTRAP_BEARER_TOKEN",
+    "FICANT_BOOTSTRAP_ACTOR_ID",
+    "FICANT_BOOTSTRAP_TENANT_ID",
+    "FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS",
+    "FICANT_BOOTSTRAP_ACTIVE_ROLE",
+    "FICANT_BOOTSTRAP_SCOPES",
+    "FICANT_INPUT_FILE_NDJSON_ROOT",
+    "FICANT_INPUT_FILE_CONNECTION_BINDING",
+    "FICANT_INPUT_POSTGRES_CONNECTION_BINDING",
+    "FICANT_EXPERIMENT_DATABASE_URL",
+    "FICANT_EXPERIMENT_S3_ENDPOINT",
+    "FICANT_EXPERIMENT_S3_BUCKET",
+    "FICANT_EXPERIMENT_S3_ACCESS_KEY",
+    "FICANT_EXPERIMENT_S3_SECRET_KEY",
+    "FICANT_EXPERIMENT_CURSOR_KEY_HEX",
+    "FICANT_EXPERIMENT_TENANT_ID",
+    "FICANT_EXPERIMENT_OWNER_ID",
+    "FICANT_EXPERIMENT_ACTOR_ID",
+    "FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST",
+    "FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION",
+    "FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST",
+)
+for name in required_server_env:
+    marker = f"--env {name}="
+    if server_run.count(marker) != 1:
+        raise SystemExit(f"Web server command must receive {name} exactly once")
+
+server_binding_lines = (
+    '            --env FICANT_SERVER_RUNTIME_IMAGE_DIGEST="$server_runtime_digest" \\',
+    '            --env FICANT_SERVER_ENVIRONMENT_ATTESTATION="$server_environment_attestation" \\',
+    "            --env FICANT_BOOTSTRAP_ACTOR_ID=01J00000000000000000000012 \\",
+    "            --env FICANT_BOOTSTRAP_TENANT_ID=01J00000000000000000000010 \\",
+    "            --env FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS=01J00000000000000000000011 \\",
+    "            --env FICANT_BOOTSTRAP_ACTIVE_ROLE=RESEARCHER \\",
+    "            --env FICANT_INPUT_FILE_NDJSON_ROOT=/tmp/ficant-ci-input \\",
+    "            --env FICANT_INPUT_FILE_CONNECTION_BINDING=ci-file-ndjson \\",
+    "            --env FICANT_INPUT_POSTGRES_CONNECTION_BINDING=ci-postgres \\",
+)
+server_run_lines = server_run.splitlines()
+web_lines = web.splitlines()
+for line in server_binding_lines:
+    if server_run_lines.count(line) != 1 or web_lines.count(line) != 1:
+        raise SystemExit(f"Web server value binding missing, drifted, or decoyed: {line}")
+server_env_option_count = len(
+    re.findall(r"(?<!\S)--env(?=\s|=)", server_run)
+)
+if server_env_option_count != len(required_server_env):
+    raise SystemExit("Web server command must have exactly the reviewed --env options")
+if re.search(r"(?<!\S)(?:-e(?=\s|=)|--env=|--env-file(?=\s|=))", server_run):
+    raise SystemExit("Web server command must not use alternate Docker environment options")
+
+server_environment_line = (
+    "          server_environment=$'ficant.server.environment.v1\\narch=amd64\\nos=linux\\nprofile=ci'"
+)
+server_attestation_line = (
+    '          server_environment_attestation="sha256:$(printf \'%s\' "$server_environment" | sha256sum | awk \'{print $1}\')"'
+)
+server_attestation_check = (
+    '          [[ "$server_environment_attestation" =~ ^sha256:[0-9a-f]{64}$ ]]'
+)
+server_runtime_derivation = (
+    "          server_runtime_digest=$(docker image inspect --format '{{.Id}}' \\\n"
+    f"            {rust_image})"
+)
+server_runtime_lines = server_runtime_derivation.splitlines()
+server_runtime_check = '          [[ "$server_runtime_digest" =~ ^sha256:[0-9a-f]{64}$ ]]'
+for marker in (
+    server_environment_line,
+    server_attestation_line,
+    server_attestation_check,
+    server_runtime_check,
+):
+    if web_lines.count(marker) != 1:
+        raise SystemExit(f"Web server identity derivation missing or duplicated: {marker}")
+for line in server_runtime_lines:
+    if web_lines.count(line) != 1:
+        raise SystemExit(f"Web server runtime derivation missing or decoyed: {line}")
+runtime_positions = [web_lines.index(line) for line in server_runtime_lines]
+if runtime_positions != sorted(runtime_positions):
+    raise SystemExit("Web server runtime image digest derivation order drifted")
+for name in ("server_environment", "server_environment_attestation", "server_runtime_digest"):
+    assignments = re.findall(
+        rf"(?m)^\s*(?:(?:export|readonly)\s+)?{re.escape(name)}=", web
+    )
+    if len(assignments) != 1:
+        raise SystemExit(f"Web server identity {name} must have exactly one assignment")
+expected_identity_tokens = {
+    "server_environment": 2,
+    "server_environment_attestation": 3,
+    "server_runtime_digest": 3,
+}
+for name, expected_count in expected_identity_tokens.items():
+    token_count = len(
+        re.findall(
+            rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])",
+            web,
+        )
+    )
+    if token_count != expected_count:
+        raise SystemExit(f"Web server identity token count drifted for {name}")
+
+cleanup_start_marker = "          cleanup_web_server() {"
+cleanup_start = web.index(cleanup_start_marker)
+cleanup_end_marker = "          }\n"
+cleanup_end = web.index(cleanup_end_marker, cleanup_start) + len(cleanup_end_marker)
+cleanup = web[cleanup_start:cleanup_end]
+expected_cleanup = """          cleanup_web_server() {
+            status=$?
+            trap - EXIT
+            if (( status != 0 )); then
+              printf 'ficant-ci-grpc log:\\n' >&2
+              if [[ -f "$server_log" ]]; then
+                cat "$server_log" >&2 || true
+              fi
+            fi
+            docker rm -f "$server_container" >/dev/null 2>&1 || true
+            if [[ -n "$server_pid" ]]; then
+              kill "$server_pid" >/dev/null 2>&1 || true
+              wait "$server_pid" >/dev/null 2>&1 || true
+            fi
+            rm -f "$server_log" || true
+            exit "$status"
+          }
+"""
+if cleanup != expected_cleanup:
+    raise SystemExit("Web cleanup drifted from its reviewed executable text")
+cleanup_and_trap = "          }\n          trap cleanup_web_server EXIT\n"
+if web.count(cleanup_and_trap) != 1:
+    raise SystemExit("Web cleanup must close immediately before installing its EXIT trap")
+failure_log_block = """            if (( status != 0 )); then
+              printf 'ficant-ci-grpc log:\\n' >&2
+              if [[ -f "$server_log" ]]; then
+                cat "$server_log" >&2 || true
+              fi
+            fi
+"""
+if cleanup.count(failure_log_block) != 1:
+    raise SystemExit("Web cleanup failure log block drifted or was decoyed")
+cleanup_required_lines = (
+    cleanup_start_marker,
+    "            status=$?",
+    "            trap - EXIT",
+    "            if (( status != 0 )); then",
+    '              if [[ -f "$server_log" ]]; then',
+    '                cat "$server_log" >&2 || true',
+    '            docker rm -f "$server_container" >/dev/null 2>&1 || true',
+    '            if [[ -n "$server_pid" ]]; then',
+    '              kill "$server_pid" >/dev/null 2>&1 || true',
+    '              wait "$server_pid" >/dev/null 2>&1 || true',
+    '            rm -f "$server_log" || true',
+    '            exit "$status"',
+    "          }",
+)
+cleanup_lines = cleanup.splitlines()
+for line in cleanup_required_lines:
+    if cleanup_lines.count(line) != 1:
+        raise SystemExit(f"Web cleanup missing scoped unique executable line: {line}")
+cleanup_positions = [cleanup_lines.index(line) for line in cleanup_required_lines]
+if cleanup_positions != sorted(cleanup_positions):
+    raise SystemExit("Web cleanup status, diagnostics, cleanup, and exit order drifted")
+if re.search(r"(?m)^\s*return(?:\s|$)", cleanup):
+    raise SystemExit("Web cleanup must not return before preserving the test status")
+cleanup_body = [line.strip() for line in cleanup_lines[1:-1] if line.strip()]
+if cleanup_body[:2] != ["status=$?", "trap - EXIT"] or cleanup_body[-1] != 'exit "$status"':
+    raise SystemExit("Web cleanup must capture status first and preserve it at the final exit")
+if len(re.findall(r"(?m)^\s*exit(?:\s|$)", cleanup)) != 1:
+    raise SystemExit("Web cleanup must contain exactly one final status-preserving exit")
+if len(re.findall(r"(?m)^\s*(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\)\s*\{", cleanup)) != 1:
+    raise SystemExit("Web cleanup must not hide lifecycle commands in a nested function")
+for line in cleanup_required_lines[1:-1]:
+    if web_lines.count(line) != 1:
+        raise SystemExit(f"Web cleanup executable line must not be supplied by a decoy: {line}")
+
+readiness_start_marker = '          if ! SERVER_PID="$server_pid" python3 - <<\'PY\''
+readiness_start = web.index(readiness_start_marker)
+readiness_end_marker = "          fi\n"
+readiness_end = web.index(readiness_end_marker, readiness_start) + len(readiness_end_marker)
+readiness = web[readiness_start:readiness_end]
+expected_readiness = """          if ! SERVER_PID="$server_pid" python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import socket
+          import time
+
+          server_pid = int(os.environ["SERVER_PID"])
+
+          def server_process_is_running() -> bool:
+              try:
+                  os.kill(server_pid, 0)
+              except ProcessLookupError:
+                  return False
+              except PermissionError:
+                  return True
+              try:
+                  fields = Path(f"/proc/{server_pid}/stat").read_text(encoding="utf-8").split()
+              except OSError:
+                  return False
+              return len(fields) > 2 and fields[2] != "Z"
+
+          for _ in range(600):
+              if not server_process_is_running():
+                  raise SystemExit("real gRPC-Web service process exited before readiness")
+              with socket.socket() as client:
+                  client.settimeout(1.0)
+                  if client.connect_ex(("127.0.0.1", 50051)) == 0:
+                      if server_process_is_running():
+                          break
+                      raise SystemExit("real gRPC-Web service process exited during readiness")
+              time.sleep(1)
+          else:
+              raise SystemExit("real gRPC-Web service did not become ready")
+          PY
+          then
+            exit 1
+          fi
+"""
+if readiness != expected_readiness:
+    raise SystemExit("Web readiness drifted from its reviewed executable text")
+process_contract = """          def server_process_is_running() -> bool:
+              try:
+                  os.kill(server_pid, 0)
+              except ProcessLookupError:
+                  return False
+              except PermissionError:
+                  return True
+              try:
+                  fields = Path(f"/proc/{server_pid}/stat").read_text(encoding="utf-8").split()
+              except OSError:
+                  return False
+              return len(fields) > 2 and fields[2] != "Z"
+"""
+if readiness.count(process_contract) != 1:
+    raise SystemExit("Web readiness process-state function drifted or was decoyed")
+if readiness.count("server_process_is_running()") != 3:
+    raise SystemExit("Web readiness process checks must not be duplicated or bypassed")
+if readiness.count("return True") != 1:
+    raise SystemExit("Web readiness contains an early-success return")
+if re.search(r"(?m)^\s*server_process_is_running\s*=", readiness):
+    raise SystemExit("Web readiness process checker must not be rebound")
+readiness_required_lines = (
+    readiness_start_marker,
+    '          server_pid = int(os.environ["SERVER_PID"])',
+    "          def server_process_is_running() -> bool:",
+    "                  os.kill(server_pid, 0)",
+    '                  fields = Path(f"/proc/{server_pid}/stat").read_text(encoding="utf-8").split()',
+    '              return len(fields) > 2 and fields[2] != "Z"',
+    "          for _ in range(600):",
+    "              if not server_process_is_running():",
+    '                  raise SystemExit("real gRPC-Web service process exited before readiness")',
+    '                  if client.connect_ex(("127.0.0.1", 50051)) == 0:',
+    "                      if server_process_is_running():",
+    "                          break",
+    '                      raise SystemExit("real gRPC-Web service process exited during readiness")',
+    "              time.sleep(1)",
+    "          else:",
+    '              raise SystemExit("real gRPC-Web service did not become ready")',
+    "          PY",
+    "          then",
+    "            exit 1",
+    "          fi",
+)
+readiness_lines = readiness.splitlines()
+for line in readiness_required_lines:
+    if readiness_lines.count(line) != 1:
+        raise SystemExit(f"Web readiness missing scoped unique executable line: {line}")
+readiness_positions = [readiness_lines.index(line) for line in readiness_required_lines]
+if readiness_positions != sorted(readiness_positions):
+    raise SystemExit(
+        "Web process check, socket readiness, and failure propagation order drifted: "
+        + repr(list(zip(readiness_required_lines, readiness_positions)))
+    )
+if len(re.findall(r"(?m)^\s*def\s+", readiness)) != 1:
+    raise SystemExit("Web readiness must not hide the process check in a decoy function")
+for line in readiness_required_lines[1:17]:
+    if web_lines.count(line) != 1:
+        raise SystemExit(f"Web readiness executable line must not be supplied by a decoy: {line}")
+
+web_markers = (
+    '          server_log=$(mktemp "$RUNNER_TEMP/ficant-ci-grpc.XXXXXX.log")',
+    "          trap cleanup_web_server EXIT",
+    '            sh -ec \'cargo run --locked -p ficant-server\' >"$server_log" 2>&1 &',
+    "          server_pid=$!",
+)
+for marker in web_markers:
+    if web_lines.count(marker) != 1:
+        raise SystemExit(f"Web server lifecycle marker missing or duplicated: {marker}")
+
+ordered = (
+    server_environment_line,
+    server_attestation_line,
+    server_runtime_derivation,
+    cleanup_start_marker,
+    "          trap cleanup_web_server EXIT",
+    server_start_marker,
+    "          server_pid=$!",
+    'if ! SERVER_PID="$server_pid" python3',
+)
+positions = [web.index(marker) for marker in ordered]
+if positions != sorted(positions):
+    raise SystemExit("Web server identity, cleanup, launch, and readiness order drifted")
 PY
 }
 
@@ -319,6 +765,10 @@ check_version_trigger_contract "$workflow" || {
 }
 check_ci_source_identity_contract "$workflow" || {
   printf 'repo-policy-tests: CI source identity authorization/consumer contract missing\n' >&2
+  exit 1
+}
+check_ci_linux_release_parity_contract "$workflow" "$toolchain_lock" || {
+  printf 'repo-policy-tests: Linux Rust/Web release parity contract missing\n' >&2
   exit 1
 }
 check_ci_recovery_contracts "$workflow" || {
@@ -445,6 +895,282 @@ for candidate in "$tmp"/source-identity/*.yml; do
   expect_fail "CI source identity mutation $(basename "$candidate")" \
     check_ci_source_identity_contract "$candidate"
 done
+
+"$python" - "$workflow" "$tmp/linux-release-parity" <<'PY'
+import pathlib
+import re
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+root = pathlib.Path(sys.argv[2])
+root.mkdir()
+
+
+def job_span(name: str) -> re.Match[str]:
+    match = re.search(
+        rf"(?ms)^  {re.escape(name)}:\n.*?(?=^  [a-z0-9-]+:\n|\Z)",
+        source,
+    )
+    if match is None:
+        raise SystemExit(f"missing fixture job: {name}")
+    return match
+
+
+def mutate_job_many(
+    name: str, job_name: str, replacements: tuple[tuple[str, str], ...]
+) -> None:
+    match = job_span(job_name)
+    block = match.group(0)
+    for old, new in replacements:
+        if block.count(old) != 1:
+            raise SystemExit(
+                f"Linux parity fixture marker count mismatch for {name}: "
+                f"expected 1, got {block.count(old)}"
+            )
+        block = block.replace(old, new, 1)
+    candidate = source[: match.start()] + block + source[match.end() :]
+    (root / f"{name}.yml").write_text(candidate, encoding="utf-8")
+
+
+def mutate_job(name: str, job_name: str, old: str, new: str) -> None:
+    mutate_job_many(name, job_name, ((old, new),))
+
+
+rust_mutations = {
+    "buf-image-drift": (
+        "[[ \"$buf_image\" == 'bufbuild/buf@sha256:89fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26' ]]",
+        "[[ \"$buf_image\" == 'bufbuild/buf@sha256:" + "0" * 64 + "' ]]",
+    ),
+    "buf-create-image-drift": (
+        'docker create --name "$buf_container" "$buf_image" >/dev/null',
+        'docker create --name "$buf_container" bufbuild/buf:1.56.0 >/dev/null',
+    ),
+    "buf-create-comment-decoy": (
+        '          docker create --name "$buf_container" "$buf_image" >/dev/null',
+        '          docker create --name "$buf_container" bufbuild/buf:1.56.0 >/dev/null\n'
+        '          # docker create --name "$buf_container" "$buf_image" >/dev/null',
+    ),
+    "buf-image-reassigned-after-check": (
+        "          [[ \"$buf_image\" == 'bufbuild/buf@sha256:89fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26' ]]",
+        "          [[ \"$buf_image\" == 'bufbuild/buf@sha256:89fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26' ]]\n"
+        "          buf_image=bufbuild/buf:1.56.0",
+    ),
+    "buf-printf-v-reassigned-after-check": (
+        "          [[ \"$buf_image\" == 'bufbuild/buf@sha256:89fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26' ]]",
+        "          [[ \"$buf_image\" == 'bufbuild/buf@sha256:89fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26' ]]\n"
+        "          printf -v buf_image %s bufbuild/buf:1.56.0",
+    ),
+    "buf-copy-source-drift": (
+        'docker cp "${buf_container}:/usr/local/bin/buf" "$buf_path"',
+        'docker cp "${buf_container}:/tmp/buf" "$buf_path"',
+    ),
+    "buf-version-drift": (
+        '[[ "$("$buf_path" --version)" == \'1.56.0\' ]]',
+        '[[ "$("$buf_path" --version)" == \'1.55.0\' ]]',
+    ),
+    "buf-env-omitted": (
+        "--env FICANT_BUF=/usr/local/bin/buf",
+        "--env FICANT_BUF_REMOVED=/usr/local/bin/buf",
+    ),
+    "buf-mount-writable": (
+        'ficant-buf:/usr/local/bin/buf:ro"',
+        'ficant-buf:/usr/local/bin/buf:rw"',
+    ),
+}
+for name, (old, new) in rust_mutations.items():
+    mutate_job(name, "rust", old, new)
+
+required_web_env = (
+    "FICANT_SERVER_RUNTIME_IMAGE_DIGEST",
+    "FICANT_SERVER_ENVIRONMENT_ATTESTATION",
+    "FICANT_BOOTSTRAP_ACTOR_ID",
+    "FICANT_BOOTSTRAP_TENANT_ID",
+    "FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS",
+    "FICANT_BOOTSTRAP_ACTIVE_ROLE",
+    "FICANT_INPUT_FILE_NDJSON_ROOT",
+    "FICANT_INPUT_FILE_CONNECTION_BINDING",
+    "FICANT_INPUT_POSTGRES_CONNECTION_BINDING",
+)
+for name in required_web_env:
+    mutate_job(
+        f"web-{name.lower().replace('_', '-')}-omitted",
+        "web",
+        f"--env {name}=",
+        f"--env FICANT_REMOVED_{name}=",
+    )
+
+web_binding_drifts = {
+    "server-runtime": (
+        '            --env FICANT_SERVER_RUNTIME_IMAGE_DIGEST="$server_runtime_digest" \\',
+        "            --env FICANT_SERVER_RUNTIME_IMAGE_DIGEST=sha256:" + "0" * 64 + " \\",
+    ),
+    "server-attestation": (
+        '            --env FICANT_SERVER_ENVIRONMENT_ATTESTATION="$server_environment_attestation" \\',
+        "            --env FICANT_SERVER_ENVIRONMENT_ATTESTATION=sha256:" + "0" * 64 + " \\",
+    ),
+    "bootstrap-actor": (
+        "            --env FICANT_BOOTSTRAP_ACTOR_ID=01J00000000000000000000012 \\",
+        "            --env FICANT_BOOTSTRAP_ACTOR_ID=01J00000000000000000000099 \\",
+    ),
+    "bootstrap-tenant": (
+        "            --env FICANT_BOOTSTRAP_TENANT_ID=01J00000000000000000000010 \\",
+        "            --env FICANT_BOOTSTRAP_TENANT_ID=01J00000000000000000000099 \\",
+    ),
+    "bootstrap-owner": (
+        "            --env FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS=01J00000000000000000000011 \\",
+        "            --env FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS=01J00000000000000000000099 \\",
+    ),
+    "bootstrap-role": (
+        "            --env FICANT_BOOTSTRAP_ACTIVE_ROLE=RESEARCHER \\",
+        "            --env FICANT_BOOTSTRAP_ACTIVE_ROLE=ADMIN \\",
+    ),
+    "input-root": (
+        "            --env FICANT_INPUT_FILE_NDJSON_ROOT=/tmp/ficant-ci-input \\",
+        "            --env FICANT_INPUT_FILE_NDJSON_ROOT=ficant-ci-input \\",
+    ),
+    "input-file-binding": (
+        "            --env FICANT_INPUT_FILE_CONNECTION_BINDING=ci-file-ndjson \\",
+        "            --env FICANT_INPUT_FILE_CONNECTION_BINDING=wrong-file-binding \\",
+    ),
+    "input-postgres-binding": (
+        "            --env FICANT_INPUT_POSTGRES_CONNECTION_BINDING=ci-postgres \\",
+        "            --env FICANT_INPUT_POSTGRES_CONNECTION_BINDING=wrong-postgres-binding \\",
+    ),
+}
+for name, (old, new) in web_binding_drifts.items():
+    mutate_job(f"web-{name}-value-drift", "web", old, new)
+
+web_mutations = {
+    "web-server-attestation-drift": (
+        "server_environment=$'ficant.server.environment.v1\\narch=amd64\\nos=linux\\nprofile=ci'",
+        "server_environment=$'ficant.server.environment.v1\\narch=amd64\\nos=linux\\nprofile=staging'",
+    ),
+    "web-runtime-not-derived": (
+        "server_runtime_digest=$(docker image inspect --format '{{.Id}}'",
+        "server_runtime_digest=$(printf 'sha256:%064d' 0 #",
+    ),
+    "web-runtime-comment-decoy": (
+        "          server_runtime_digest=$(docker image inspect --format '{{.Id}}' \\",
+        "          server_runtime_digest=sha256:" + "0" * 64 + " # "
+        "server_runtime_digest=$(docker image inspect --format '{{.Id}}' \\",
+    ),
+    "web-runtime-reassigned-after-check": (
+        '          [[ "$server_runtime_digest" =~ ^sha256:[0-9a-f]{64}$ ]]',
+        '          [[ "$server_runtime_digest" =~ ^sha256:[0-9a-f]{64}$ ]]\n'
+        + "          server_runtime_digest=sha256:"
+        + "0" * 64,
+    ),
+    "web-runtime-printf-v-reassigned": (
+        '          [[ "$server_runtime_digest" =~ ^sha256:[0-9a-f]{64}$ ]]',
+        '          [[ "$server_runtime_digest" =~ ^sha256:[0-9a-f]{64}$ ]]\n'
+        + "          printf -v server_runtime_digest %s sha256:"
+        + "0" * 64,
+    ),
+    "web-attestation-comment-decoy": (
+        '          server_environment_attestation="sha256:$(printf \'%s\' "$server_environment" | sha256sum | awk \'{print $1}\')"',
+        '          server_environment_attestation=sha256:' + "0" * 64
+        + ' # server_environment_attestation="sha256:$(printf \'%s\' "$server_environment" | sha256sum | awk \'{print $1}\')"',
+    ),
+    "web-detached-server": (
+        'docker run --rm --name "$server_container" --network host',
+        'docker run --detach --rm --name "$server_container" --network host',
+    ),
+    "web-short-env-override": (
+        '            --env FICANT_SERVER_RUNTIME_IMAGE_DIGEST="$server_runtime_digest" \\',
+        '            --env FICANT_SERVER_RUNTIME_IMAGE_DIGEST="$server_runtime_digest" \\\n'
+        + "            -e FICANT_SERVER_RUNTIME_IMAGE_DIGEST=sha256:"
+        + "0" * 64
+        + " \\",
+    ),
+    "web-env-file-override": (
+        "            --env FICANT_GRPC_BIND=127.0.0.1:50051 \\",
+        "            --env FICANT_GRPC_BIND=127.0.0.1:50051 \\\n"
+        "            --env-file /tmp/ficant-ci-override.env \\",
+    ),
+    "web-server-pid-not-captured": ("          server_pid=$!", "          server_pid="),
+    "web-process-check-disabled": (
+        "if not server_process_is_running():",
+        "if False:",
+    ),
+    "web-failure-log-hidden": ('cat "$server_log" >&2 || true', "true"),
+    "web-failure-log-comment-decoy": (
+        '                cat "$server_log" >&2 || true',
+        '                true # cat "$server_log" >&2 || true',
+    ),
+    "web-cleanup-early-return": (
+        "          cleanup_web_server() {",
+        "          cleanup_web_server() {\n            return 0",
+    ),
+    "web-cleanup-status-lost": ('exit "$status"', "exit 0"),
+    "web-cleanup-trap-omitted": ("          trap cleanup_web_server EXIT", "          true"),
+    "web-server-log-discarded": (
+        '>"$server_log" 2>&1 &',
+        ">/dev/null 2>&1 &",
+    ),
+    "web-process-check-comment-decoy": (
+        "              if not server_process_is_running():",
+        "              if False: # if not server_process_is_running():",
+    ),
+    "web-process-check-function-decoy": (
+        "              if not server_process_is_running():\n"
+        '                  raise SystemExit("real gRPC-Web service process exited before readiness")',
+        "              if False:\n"
+        '                  raise SystemExit("real gRPC-Web service process exited before readiness")\n'
+        "          def unused_process_check() -> None:\n"
+        "              if not server_process_is_running():\n"
+        '                  raise SystemExit("real gRPC-Web service process exited before readiness")',
+    ),
+    "web-readiness-early-success": (
+        "          def server_process_is_running() -> bool:",
+        "          def server_process_is_running() -> bool:\n              return True",
+    ),
+    "web-readiness-early-break": (
+        "          for _ in range(600):",
+        "          for _ in range(600):\n              break",
+    ),
+}
+for name, (old, new) in web_mutations.items():
+    mutate_job(name, "web", old, new)
+
+mutate_job_many(
+    "web-cleanup-false-wrapper",
+    "web",
+    (
+        (
+            "            trap - EXIT\n            if (( status != 0 )); then",
+            "            trap - EXIT\n            if false; then\n"
+            "            if (( status != 0 )); then",
+        ),
+        (
+            '            rm -f "$server_log" || true\n            exit "$status"',
+            '            rm -f "$server_log" || true\n            fi\n            exit "$status"',
+        ),
+    ),
+)
+PY
+for candidate in "$tmp"/linux-release-parity/*.yml; do
+  expect_fail "Linux release parity mutation $(basename "$candidate")" \
+    check_ci_linux_release_parity_contract "$candidate" "$toolchain_lock"
+done
+
+"$python" - "$toolchain_lock" "$tmp/buf-version-drift.toml" "$tmp/buf-image-drift.toml" <<'PY'
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+version = source.replace('version = "1.56.0"', 'version = "1.55.0"', 1)
+image = source.replace(
+    "89fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26",
+    "09fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26",
+    1,
+)
+pathlib.Path(sys.argv[2]).write_text(version, encoding="utf-8")
+pathlib.Path(sys.argv[3]).write_text(image, encoding="utf-8")
+PY
+expect_fail "Buf lock version drift" \
+  check_ci_linux_release_parity_contract "$workflow" "$tmp/buf-version-drift.toml"
+expect_fail "Buf lock image drift" \
+  check_ci_linux_release_parity_contract "$workflow" "$tmp/buf-image-drift.toml"
 
 "$python" - "$workflow" "$toolchain_lock" "$tmp/node-toolchain" <<'PY'
 import pathlib
@@ -648,9 +1374,9 @@ lock_path, workflow_path, dockerfile_path = map(pathlib.Path, sys.argv[1:])
 image = tomllib.loads(lock_path.read_text(encoding="utf-8"))["rust"]["image"]
 workflow = workflow_path.read_text(encoding="utf-8")
 dockerfile = dockerfile_path.read_text(encoding="utf-8")
-if workflow.count(image) != 5:
+if workflow.count(image) != 6:
     raise SystemExit(
-        "Rust CI image must match the toolchain lock in all five invocations across four jobs"
+        "Rust CI image must match the toolchain lock in all six references across four jobs"
     )
 if f"ARG RUST_IMAGE={image}" not in dockerfile:
     raise SystemExit("Rust service build image must match the toolchain lock")
