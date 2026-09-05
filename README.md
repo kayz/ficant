@@ -59,11 +59,11 @@ FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三�
 
 ## 当前公共主线状态（2026-09-05）
 
-- 当前已同步公共基线为 `main == origin/main == 791555b22b6ef8c847622621c860a8789ba9e32d`（tree `fc723187bf4421fde0b71165f239b98dd311db77`）；R8A/R8B 产品切片、R9A–R9E 发布门禁收口与 R9F CI 源码身份修复均已合入。
+- R9G 已通过 [PR #73](https://github.com/kayz/ficant/pull/73) 以 rebase merge 合入；公共集成基线为 `main@811a7062e25af41df1316d2c883914a00c5142ed`（tree `34cba6a4afb1bd2440211ea3342c82a73d41c6af`），其中合入后的可执行代码提交 `6ddc399e6b72f8b59c235f1e94604158de301a4e` 保持已测试 tree `e59ca735291833b2d12da8f078d429c73d59ff85`。
 - 当前 descriptor 与唯一生产 route set 精确包含 18 个公共 Protobuf service。最新纵向切片提供只读组合目录/聚合/Workbench 后台及严格日度 TWR、P&L、Benchmark/active return 和区间几何累计；最终状态与边界见 [R8B brief](docs/iterations/2026-08-r8b-portfolio-performance.md) 和 [产品范围](docs/product/scope.md)。
-- 上述公共基线已在干净、同步的 `main` 上通过 17/17 步 `.\scripts\check-release-candidate.ps1`。这是本地候选证据，不替代 GitHub 版本 CI、镜像或测试环境交付证据。
+- 上述 R9G 公共集成基线已在干净、同步的 `main` 上通过 17/17 步 `.\scripts\check-release-candidate.ps1`。这是本地候选证据，不替代 GitHub 版本 CI、镜像或测试环境交付证据。
 - 产品仍以后台能力、Platform Shell 和 Phase 5A 非业务观测面为主；完整业务 WebApp、相邻 Portfolio WebApp 接线、GeneratedNode/Python node runtime、gVisor、OIDC、PMS/OMS 和投资组合会计尚未落地。
-- Human 授权的不可变 tag `v0.1.0-alpha.11` 已绑定该基线；[版本 CI](https://github.com/kayz/ficant/actions/runs/33933106201) 9 个 job 成功、Rust 与 Web 失败，[release-test](https://github.com/kayz/ficant/actions/runs/33934227298) 7/7 jobs skipped，因此没有版本应用镜像或测试环境部署。R9G 的 forward-only 本地可执行候选 `cd8e64e5b2912147cf4a24cc4247ebbdb4fe82b0`（tree `e59ca735291833b2d12da8f078d429c73d59ff85`）已通过 Windows/Linux 定向验证、23/23 快速检查、40/40 标准检查和独立复审，待 PR 合入与 clean-main preflight；`alpha.11` 保持原位且不重跑，详见 [R9G brief](docs/iterations/2026-09-r9g-linux-release-parity.md) 与 [测试环境合同](docs/delivery/test-environment.md)。
+- Human 授权的不可变 tag `v0.1.0-alpha.11` 已绑定旧基线 `791555b...`；[版本 CI](https://github.com/kayz/ficant/actions/runs/33933106201) 9 个 job 成功、Rust 与 Web 失败，[release-test](https://github.com/kayz/ficant/actions/runs/33934227298) 7/7 jobs skipped，因此没有版本应用镜像或测试环境部署。R9G 的 forward-only 修复已合入并完成 clean-main preflight；`alpha.11` 保持原位且不重跑，新的版本 tag 仍须 Human 明确授权，详见 [R9G brief](docs/iterations/2026-09-r9g-linux-release-parity.md) 与 [测试环境合同](docs/delivery/test-environment.md)。
 
 ## GitHub 测试环境发布（2026-07-17）
 

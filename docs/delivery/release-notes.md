@@ -1,15 +1,15 @@
 # 交付发布说明
 
-> **当前交付状态（2026-09-05）：** R9F 已通过 [PR #71](https://github.com/kayz/ficant/pull/71) 合入，current-truth 文档随后收口于公共 `main@791555b22b6ef8c847622621c860a8789ba9e32d`（tree `fc723187bf4421fde0b71165f239b98dd311db77`）；该精确基线的 clean-main 发布预检 17/17 步通过。Human 选择的不可变 tag `v0.1.0-alpha.11` 已创建并推送；[版本 CI run 33933106201](https://github.com/kayz/ficant/actions/runs/33933106201) 中 9 个 job 成功、Rust 与 Web 失败，[release-test run 33934227298](https://github.com/kayz/ficant/actions/runs/33934227298) 的 7/7 jobs skipped。远端核验没有此次版本的应用镜像、artifact 或测试环境 deployment。`alpha.11` 保持原位且不重跑、移动或复用；R9G 可执行候选 `cd8e64e5b2912147cf4a24cc4247ebbdb4fe82b0` 已完成本地闭环，待 PR 合入与 clean-main preflight 后再由 Human 选择 forward-only 版本号。
+> **当前交付状态（2026-09-05）：** Human 选择的不可变 tag `v0.1.0-alpha.11` 已绑定 `791555b22b6ef8c847622621c860a8789ba9e32d`；[版本 CI run 33933106201](https://github.com/kayz/ficant/actions/runs/33933106201) 中 9 个 job 成功、Rust 与 Web 失败，[release-test run 33934227298](https://github.com/kayz/ficant/actions/runs/33934227298) 的 7/7 jobs skipped，远端核验没有此次版本的应用镜像、artifact 或测试环境 deployment。`alpha.11` 保持原位且不重跑、移动或复用。R9G forward-only 修复已通过 [PR #73](https://github.com/kayz/ficant/pull/73) 合入公共 `main@811a7062e25af41df1316d2c883914a00c5142ed`（tree `34cba6a4afb1bd2440211ea3342c82a73d41c6af`），当日 Trivy 0.72.0 数据库更新后 clean-main 发布预检 17/17 步通过；下一版本号仍须由 Human 明确选择。
 
 ## `v0.1.0-alpha.11` 发布结果与 R9G 修复候选（2026-09-05）
 
 - `alpha.11` 精确绑定 `791555b22b6ef8c847622621c860a8789ba9e32d`。版本 CI 的 authorize、contract、Python、C++、repo-policy、business-loop、supply-chain、migration 与 reproducibility 成功；Rust 和 Web 失败，0 skipped。相较 `alpha.10`，R9F 的源码身份、contract baseline 与 reproducibility 修复已经由真实 Linux runner 证明有效。
-- Rust job 首个失败来自正向 Server 测试夹具硬编码 `C:\\ficant-input`：该值在 Windows 是绝对路径，在 Linux 不是，因而被生产受治理输入校验正确拒绝；另有六个同类夹具需要一并修正。`service_topology` 同时依赖 Buf 1.56.0，Rust job 必须显式消费现有工具链锁中的不可变 Buf，而不能依赖其他 job 的临时安装。
-- Web job 未同步当前 Server 必需的 runtime、完整 bootstrap identity 与 governed-input 配置；Server 在监听前失败关闭。旧 readiness 只轮询 TCP 且 detached 容器使用 `--rm`，因此丢失真实 stderr 并空等 600 秒。R9G 将补齐有效测试配置，并让附着容器进程提前退出时立即输出捕获日志。
+- Rust job 首个失败来自正向 Server 测试夹具硬编码 `C:\\ficant-input`：该值在 Windows 是绝对路径，在 Linux 不是，因而被生产受治理输入校验正确拒绝；另有六个同类夹具已一并改为平台临时目录。`service_topology` 同时依赖 Buf 1.56.0，R9G Rust job 现显式消费工具链锁中的不可变 Buf，不再依赖其他 job 的临时安装。
+- Web job 未同步当前 Server 必需的 runtime、完整 bootstrap identity 与 governed-input 配置；Server 在监听前失败关闭。旧 readiness 只轮询 TCP 且 detached 容器使用 `--rm`，因此丢失真实 stderr 并空等 600 秒。R9G 已补齐有效测试配置，并让附着容器进程提前退出时立即输出捕获日志。
 - [release-test run 33934227298](https://github.com/kayz/ficant/actions/runs/33934227298) 的 authorize、build、build-ui、scan、scan-storage-runtime、promote、deploy 全部 skipped，artifact 数为 0；Server、Worker、UI 均无此次 SHA 或版本标签，test environment deployments 为空。因此没有 SBOM/provenance、漏洞扫描制品、镜像晋升、部署、健康/烟测或回滚。
 - R9G 不改变业务、Proto、migration、数值、Oracle、expected、断言或容差，也不创建新 tag；最终范围与真实证据见 [R9G brief](../iterations/2026-09-r9g-linux-release-parity.md)。
-- R9G 可执行候选 `cd8e64e5b2912147cf4a24cc4247ebbdb4fe82b0`（tree `e59ca735291833b2d12da8f078d429c73d59ff85`）已通过 Windows/Linux 七组定向测试各 12/12、Linux Rust CI 等价链、真实 gRPC-Web 200/260-byte smoke 与约 2.75 秒快速失败、49+2 个 Linux/lock 变异、23/23 快速检查、40/40 标准检查及 blocker/major/minor 均为 0 的独立复审。机械许可证刷新保持 649 个包、20 个一方包及全部政策字段不变。
+- R9G 可执行候选 `cd8e64e5b2912147cf4a24cc4247ebbdb4fe82b0`（tree `e59ca735291833b2d12da8f078d429c73d59ff85`）已通过 Windows/Linux 七组定向测试各 12/12、Linux Rust CI 等价链、真实 gRPC-Web 200/260-byte smoke 与约 2.75 秒快速失败、49+2 个 Linux/lock 变异、23/23 快速检查、40/40 标准检查及 blocker/major/minor 均为 0 的独立复审。机械许可证刷新保持 649 个包、20 个一方包及全部政策字段不变。[PR #73](https://github.com/kayz/ficant/pull/73) rebase merge 后的代码提交 `6ddc399e6b72f8b59c235f1e94604158de301a4e` 保持相同代码 tree；公共集成提交 `811a7062e25af41df1316d2c883914a00c5142ed` 上的 17/17 步发布候选预检随后通过。
 
 ## `v0.1.0-alpha.10` 发布结果与 R9F 修复候选（2026-09-05）
 

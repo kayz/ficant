@@ -1,6 +1,6 @@
 # R9G 迭代 brief — Linux 版本门禁一致性
 
-**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R9G · **execution base：** `791555b22b6ef8c847622621c860a8789ba9e32d` · **base tree：** `fc723187bf4421fde0b71165f239b98dd311db77` · **状态：** 本地候选已闭合，待 PR 合入与 clean-main 发布预检
+**面向 Human 的产品名：** 金证FICC合同管理系统 · **平台名：** FICANT · **内部迭代：** R9G · **execution base：** `791555b22b6ef8c847622621c860a8789ba9e32d` · **base tree：** `fc723187bf4421fde0b71165f239b98dd311db77` · **状态：** 已通过 [PR #73](https://github.com/kayz/ficant/pull/73) 合入，R9G 集成基线 clean-main preflight 17/17 通过，待 Human 选择新版本号
 
 本 brief 是 R9G 面向 Human 的唯一范围、权限边界与最终本地证据载体。不可变 tag `v0.1.0-alpha.11` 精确绑定上述 base；其 [版本 CI run 33933106201](https://github.com/kayz/ficant/actions/runs/33933106201) 在本地 17 步 preflight 通过后暴露了 Rust 测试夹具的跨平台路径假设，以及 Web CI 启动参数未跟随当前 Server 配置合同的问题。该 CI 的 11 个 job 中 9 个成功、2 个失败；[release-test run 33934227298](https://github.com/kayz/ficant/actions/runs/33934227298) 的 7 个 job 全部 skipped，未构建、推送或部署版本应用镜像。
 
@@ -39,12 +39,13 @@
 ## 5. 需 Human 决策
 
 - `v0.1.0-alpha.11` 是失败且不可变的版本候选，不构成已发布镜像或测试环境交付证据。
-- R9G 若完成合入及 clean-main 发布预检，需 Human 再明确选择新的 forward-only 版本号；建议届时使用 `v0.1.0-alpha.12`。
+- R9G 已完成合入，PR #73 的集成提交已通过 clean-main 发布预检；current-truth 文档收口形成新的 `main` tip 后，仍须在该精确干净、同步 tip 上重新通过同一 17 步门禁。
+- 新的 forward-only 版本号仍须由 Human 明确选择；建议使用 `v0.1.0-alpha.12`。
 - 本轮不需要改变业务语义或测试 Oracle；若实施发现必须如此，立即停止并返回 Human。
 
 ## 6. 最终真实测试证据
 
-最终可执行候选在测试后原样提交为 `cd8e64e5b2912147cf4a24cc4247ebbdb4fe82b0`（tree `e59ca735291833b2d12da8f078d429c73d59ff85`，parent 为 execution base）；本 brief 及 current-truth 文档是其只改文档的后继，不冒充重新执行测试。未执行的远端 CI、部署与 clean-main preflight 不写成通过。
+最终可执行候选在测试后原样提交为 `cd8e64e5b2912147cf4a24cc4247ebbdb4fe82b0`（tree `e59ca735291833b2d12da8f078d429c73d59ff85`，parent 为 execution base）；PR #73 rebase merge 后的代码提交 `6ddc399e6b72f8b59c235f1e94604158de301a4e` 保持相同 tree，随后只改文档的集成提交为 `811a7062e25af41df1316d2c883914a00c5142ed`（tree `34cba6a4afb1bd2440211ea3342c82a73d41c6af`）。下表只把已实际执行的 preflight 写成通过；未执行的新版本 CI 或部署不写成通过。
 
 | 真实命令/检查 | Exit / Conclusion | 结果 |
 |---|---:|---|
@@ -62,6 +63,8 @@
 | `scripts/check-fast.ps1` | 1 → 0 | 首轮活动 Node `v24.18.0` 被精确工具链门拒绝；仅在进程 PATH 前置本机既有 Node `v22.17.0` 后从头 23/23 步通过，未修改版本断言、expected 或容差。 |
 | `scripts/check.ps1`（最终同候选） | 0 | 固定 Node `v22.17.0` 后从头 40/40 步通过并输出 `FICANT complete local checks passed.`；包括 strict Clippy、Rust 全量、C++ 9/9、Cross-Clang 71 rows、各 Decimal Oracle、Python/live SDK、许可证、Web typecheck/build 与 5 files / 35 tests。 |
 | 独立只读复审 | PASS | 最终结论 blocker 0 / major 0 / minor 0；此前实测可绕过的 Buf `printf -v`、Web 动态值重赋、`-e`、`--env-file`、cleanup `if false` 与 readiness 提前 `break` 六个候选现均被拒绝。 |
+| [PR #73](https://github.com/kayz/ficant/pull/73) rebase merge | 0 | PR base `791555b...`、head `944b306...`，17 个文件与冻结闭集一致；普通 PR 未触发版本流水线。合入后代码提交 `6ddc399e...` 的 tree 仍为 `e59ca735...`，R9G 集成提交为 `811a706...` / tree `34cba6a...`。远端临时分支自动删除，本地同 tree 分支删除。 |
+| `trivy image --download-db-only` + `scripts/check-release-candidate.ps1`（clean `main@811a706...` / tree `34cba6a...`） | 0 | Trivy 0.72.0 DB 更新为 `UpdatedAt 2026-09-05 01:12:13Z`、`DownloadedAt 2026-09-05 02:18:25Z`；17/17 步通过。许可证/存储绑定、Server/Worker/UI 正式镜像构建、三个应用与锁定 Ceph 的扫描、OCI/Compose 身份、PostgreSQL/Ceph 健康、migration、Server/Worker/UI readiness 与 forward-only migration 兼容均通过，运行容器、卷和网络由脚本清理。 |
 
 ### 冻结写路径
 
