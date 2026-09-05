@@ -212,7 +212,10 @@ fn settings() -> BTreeMap<String, String> {
         ),
         (
             "FICANT_INPUT_FILE_NDJSON_ROOT".to_owned(),
-            "C:\\ficant-input".to_owned(),
+            std::env::temp_dir()
+                .join("ficant-service-topology-unused-input")
+                .to_string_lossy()
+                .into_owned(),
         ),
         (
             "FICANT_INPUT_FILE_CONNECTION_BINDING".to_owned(),

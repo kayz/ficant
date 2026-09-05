@@ -92,11 +92,37 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
+      - name: Extract frozen Buf for Rust topology tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          buf_image=$(python3 - <<'PY'
+          import tomllib
+
+          with open("deploy/dev/toolchain.lock.toml", "rb") as lock_file:
+              lock = tomllib.load(lock_file)
+          if lock["buf"]["version"] != "1.56.0":
+              raise SystemExit("toolchain lock must pin Buf 1.56.0")
+          print(lock["buf"]["image"])
+          PY
+          )
+          [[ "$buf_image" == 'bufbuild/buf@sha256:89fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26' ]]
+          buf_container=ficant-rust-buf-tool
+          buf_path="${{ runner.temp }}/ficant-buf"
+          trap 'docker rm -f "$buf_container" >/dev/null 2>&1 || true' EXIT
+          docker create --name "$buf_container" "$buf_image" >/dev/null
+          docker cp "${buf_container}:/usr/local/bin/buf" "$buf_path"
+          chmod 0755 "$buf_path"
+          [[ "$("$buf_path" --version)" == '1.56.0' ]]
+          docker rm "$buf_container" >/dev/null
+          trap - EXIT
       - run: >-
           docker run --rm
           --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu
           --env FICANT_CODE_COMMIT_SHA=${{ needs['authorize-version'].outputs.sha }}
           --env FICANT_CODE_TREE_SHA=${{ needs['authorize-version'].outputs.tree }}
+          --env FICANT_BUF=/usr/local/bin/buf
+          --volume "${{ runner.temp }}/ficant-buf:/usr/local/bin/buf:ro"
           --volume "${{ github.workspace }}:/workspace"
           --workdir /workspace
           rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663
@@ -151,7 +177,10 @@ jobs:
           signing_key=$(printf '01%.0s' {1..32})
           trace_key=$(printf '02%.0s' {1..32})
           cursor_key=$(printf '03%.0s' {1..32})
-          environment_attestation=$'ficant.worker.environment.v1\narch=amd64\nos=linux\nprofile=ci'
+          experiment_environment_attestation=$'ficant.worker.environment.v1\narch=amd64\nos=linux\nprofile=ci'
+          server_environment=$'ficant.server.environment.v1\narch=amd64\nos=linux\nprofile=ci'
+          server_environment_attestation="sha256:$(printf '%s' "$server_environment" | sha256sum | awk '{print $1}')"
+          [[ "$server_environment_attestation" =~ ^sha256:[0-9a-f]{64}$ ]]
           native_source_digest=$(docker run --rm --network host \
             --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu \
             --env FICANT_CODE_COMMIT_SHA=${{ needs['authorize-version'].outputs.sha }} \
@@ -160,7 +189,31 @@ jobs:
             rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 \
             sh -ec 'cargo run --quiet --locked -p ficant-worker -- --print-native-source-digest')
           [[ "$native_source_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
-          docker run --detach --rm --name ficant-ci-grpc --network host \
+          server_runtime_digest=$(docker image inspect --format '{{.Id}}' \
+            rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663)
+          [[ "$server_runtime_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          server_container=ficant-ci-grpc
+          server_log=$(mktemp "$RUNNER_TEMP/ficant-ci-grpc.XXXXXX.log")
+          server_pid=
+          cleanup_web_server() {
+            status=$?
+            trap - EXIT
+            if (( status != 0 )); then
+              printf 'ficant-ci-grpc log:\n' >&2
+              if [[ -f "$server_log" ]]; then
+                cat "$server_log" >&2 || true
+              fi
+            fi
+            docker rm -f "$server_container" >/dev/null 2>&1 || true
+            if [[ -n "$server_pid" ]]; then
+              kill "$server_pid" >/dev/null 2>&1 || true
+              wait "$server_pid" >/dev/null 2>&1 || true
+            fi
+            rm -f "$server_log" || true
+            exit "$status"
+          }
+          trap cleanup_web_server EXIT
+          docker run --rm --name "$server_container" --network host \
             --env RUSTUP_TOOLCHAIN=1.96.1-x86_64-unknown-linux-gnu \
             --env FICANT_CODE_COMMIT_SHA=${{ needs['authorize-version'].outputs.sha }} \
             --env FICANT_CODE_TREE_SHA=${{ needs['authorize-version'].outputs.tree }} \
@@ -168,9 +221,18 @@ jobs:
             --env FICANT_GRPC_WEB_ALLOWED_ORIGINS=http://127.0.0.1:4174 \
             --env FICANT_PLATFORM_SIGNING_KEY_HEX="$signing_key" \
             --env FICANT_PLATFORM_TRACE_KEY_HEX="$trace_key" \
+            --env FICANT_SERVER_RUNTIME_IMAGE_DIGEST="$server_runtime_digest" \
+            --env FICANT_SERVER_ENVIRONMENT_ATTESTATION="$server_environment_attestation" \
             --env FICANT_BOOTSTRAP_SUBJECT=ci-browser \
             --env FICANT_BOOTSTRAP_BEARER_TOKEN=ci-grpc-test-token \
+            --env FICANT_BOOTSTRAP_ACTOR_ID=01J00000000000000000000012 \
+            --env FICANT_BOOTSTRAP_TENANT_ID=01J00000000000000000000010 \
+            --env FICANT_BOOTSTRAP_ALLOWED_OWNER_IDS=01J00000000000000000000011 \
+            --env FICANT_BOOTSTRAP_ACTIVE_ROLE=RESEARCHER \
             --env FICANT_BOOTSTRAP_SCOPES=apps:read,experiment:read,experiment:write \
+            --env FICANT_INPUT_FILE_NDJSON_ROOT=/tmp/ficant-ci-input \
+            --env FICANT_INPUT_FILE_CONNECTION_BINDING=ci-file-ndjson \
+            --env FICANT_INPUT_POSTGRES_CONNECTION_BINDING=ci-postgres \
             --env FICANT_EXPERIMENT_DATABASE_URL=postgres://ficant:ci@127.0.0.1:5432/ficant \
             --env FICANT_EXPERIMENT_S3_ENDPOINT=http://127.0.0.1:9000 \
             --env FICANT_EXPERIMENT_S3_BUCKET=ficant-ci \
@@ -181,24 +243,49 @@ jobs:
             --env FICANT_EXPERIMENT_OWNER_ID=01J00000000000000000000011 \
             --env FICANT_EXPERIMENT_ACTOR_ID=01J00000000000000000000012 \
             --env FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
-            --env FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION="$environment_attestation" \
+            --env FICANT_EXPERIMENT_ENVIRONMENT_ATTESTATION="$experiment_environment_attestation" \
             --env FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST="$native_source_digest" \
             --volume "${{ github.workspace }}:/workspace" --workdir /workspace \
             rust@sha256:a339861ae23e9abb272cea45dfafde21760d2ce6577a70f8a926153677902663 \
-            sh -ec 'cargo run --locked -p ficant-server'
-          trap 'docker rm -f ficant-ci-grpc >/dev/null 2>&1 || true' EXIT
-          python3 - <<'PY'
+            sh -ec 'cargo run --locked -p ficant-server' >"$server_log" 2>&1 &
+          server_pid=$!
+          if ! SERVER_PID="$server_pid" python3 - <<'PY'
+          import os
+          from pathlib import Path
           import socket
           import time
 
+          server_pid = int(os.environ["SERVER_PID"])
+
+          def server_process_is_running() -> bool:
+              try:
+                  os.kill(server_pid, 0)
+              except ProcessLookupError:
+                  return False
+              except PermissionError:
+                  return True
+              try:
+                  fields = Path(f"/proc/{server_pid}/stat").read_text(encoding="utf-8").split()
+              except OSError:
+                  return False
+              return len(fields) > 2 and fields[2] != "Z"
+
           for _ in range(600):
+              if not server_process_is_running():
+                  raise SystemExit("real gRPC-Web service process exited before readiness")
               with socket.socket() as client:
+                  client.settimeout(1.0)
                   if client.connect_ex(("127.0.0.1", 50051)) == 0:
-                      break
+                      if server_process_is_running():
+                          break
+                      raise SystemExit("real gRPC-Web service process exited during readiness")
               time.sleep(1)
           else:
               raise SystemExit("real gRPC-Web service did not become ready")
           PY
+          then
+            exit 1
+          fi
           docker run --rm --network host --ipc host \
             --env CI=1 \
             --env FICANT_GRPC_WEB_BASE_URL=http://127.0.0.1:50051 \
