@@ -1,6 +1,6 @@
 # ADR-0009：采用 OPAID 本地开发与 CICD 发布边界
 
-- 状态：Accepted
+- 状态：Accepted；开发侧部分已被 [ADR-0019](0019-lightweight-development-keep-release-boundary.md) 取代（2026-10-19），CICD 发布边界继续有效
 - 日期：2026-07-17
 - 修订：2026-07-20（Human brief 交付与版本 tag 触发）
 - 范围：任务冻结、本地开发与测试、候选交接、CI/CD、发布和历史治理材料
