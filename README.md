@@ -45,11 +45,11 @@
 
 FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三方依赖和随项目分发的第三方材料仍分别适用其原有许可证与署名要求，详见 [`docs/delivery/third-party-notices.md`](docs/delivery/third-party-notices.md)。
 
-## 开发与发布边界（2026-07-17）
+## 开发与发布边界（2026-10-19 修订）
 
-- [OPAID](docs/development.md) 管理从任务冻结、实现和本地测试到精确自测候选及唯一 Human brief；它不执行 CI/CD、部署、UAT 或服务器管理。
+- 日常开发由 agent 自行组织，以 Pull Request 交付可验证的候选；约定见 [`AGENTS.md`](AGENTS.md) 与 [ADR-0019](docs/architecture/adr/0019-lightweight-development-keep-release-boundary.md)。开发不执行 CI/CD、部署、UAT 或服务器管理。
 - Windows PowerShell 7 统一入口为 `.\scripts\check-fast.ps1` 与 `.\scripts\check.ps1`；两者支持 `-ListOnly`，完整检查可显式增加 `-IncludeIntegration`。R7B 的隔离恢复证明使用 `.\scripts\check-recovery.ps1`，只处理名称受限的临时 PostgreSQL/Ceph project。拟创建版本 tag 前，另运行 `.\scripts\check-release-candidate.ps1`，在干净且与远端一致的 `main` 上构建、扫描最终镜像并启动完整测试拓扑。
-- Human 阅读 brief 后可以要求一次完整本地检查与人工复测，也可以接受现有证据、合并并进入下一迭代。普通 branch push、Pull Request 和 `main` 合并不运行完整 GitHub CI。
+- Human 审阅 Pull Request 后可以要求一次完整本地检查与人工复测，也可以接受现有证据并合并。普通 branch push、Pull Request 和 `main` 合并不运行完整 GitHub CI。
 - 数个迭代后，Human 创建指向当前 `main` 的不可变 `v*` 版本 tag，才把候选交给中央 `kayz/cicd`。该 tag 授权 GitHub 版本 CI、Linux 镜像、GHCR、测试环境部署、健康/冒烟检查和回滚；本地通过不能替代这些版本交付证据。
 - 历史 HOQA/PROQAID 材料保留在 `docs/history/hoqa/` 作为当时证据，不再驱动当前工作；权威边界见 [ADR-0009](docs/architecture/adr/0009-opaid-local-development-and-cicd-release-boundary.md)。
 
@@ -67,7 +67,7 @@ FICANT 是公开开源项目，源代码采用 [MIT License](LICENSE)。第三�
 
 ## GitHub 测试环境发布（2026-07-17）
 
-- 本节属于中央 `cicd` 发布管理边界，不是 OPAID 本地自测的一部分。
+- 本节属于中央 `cicd` 发布管理边界，不是本地开发检查的一部分。
 - 中央管理源位于私有仓库 `kayz/cicd` 的 `ficant/`；本仓库中的 `cicd.yml`、`.github/workflows/release-test.yml` 和 `deploy/test/` 是固定平台版本生成的业务接入文件。
 - Human 创建符合版本格式且指向当前 `main` 精确提交的 `v*` tag 后，GitHub 才运行版本授权门与现有十项验证 job。CI 成功后 Linux Runner 构建并扫描 `ficant-server`、`ficant-worker`、`ficant-ui` 三个 `sha-<commit>` 应用镜像，并另外扫描锁定 digest 的 Ceph RGW 运行时；只把三个应用镜像提升为不可变版本 tag，Ceph 不随应用版本重建或晋升。测试机始终部署 SHA 标签，不维护 `test-latest`。
 - GitHub `test` Environment 通过专用 SSH 身份连接测试机的 `ficant-deploy` 账号；测试机只拉镜像、执行版本化 PostgreSQL migration 和 Docker Compose，不现场编译源码。

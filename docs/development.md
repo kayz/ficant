@@ -1,45 +1,8 @@
 # FICANT 本地开发与测试
 
-FICANT 使用 OPAID 组织本地开发、测试候选和 Human brief，使用中央 `cicd` 平台处理 Human 建立的版本候选。本文只描述本地边界；服务器、GHCR、GitHub Environment、部署和回滚不属于本地入口。
+FICANT 的日常开发由 agent 自行组织，以 Pull Request 交付可验证的候选；版本发布只由 Human 创建的版本 tag 触发，交给中央 `cicd` 平台。本文只描述本地边界；服务器、GHCR、GitHub Environment、部署和回滚不属于本地入口。开发约定见 [`AGENTS.md`](../AGENTS.md)，决策依据见 [ADR-0019](architecture/adr/0019-lightweight-development-keep-release-boundary.md)。
 
-## OPAID round contract
-
-每一轮开始前由 Root Orchestrator 冻结：
-
-1. 一个明确的代码结果和一句可验证的 acceptance sentence；
-2. 非目标以及不得修改的业务语义、接口、Oracle、expected 和容差；
-3. 精确 base Commit SHA 和最终候选身份；
-4. 规定的本地自测命令与风险相关回归命令；
-5. 有界任务的依赖关系、允许和禁止写路径；
-6. 只有 Root/Human 能改变的公共契约和业务决定。
-
-Worker 只承担一个有界任务，返回 changed files、实际命令、exit code、可得的 test count、blocker 和 residual risk。Root 检查真实 diff，在所有修改完成后对精确集成候选重新运行规定测试。OPAID 到“本地自测候选与完成的 Human brief”即结束，不等待远端 CI，也不创建仓库内状态 ledger、agent registry、mailbox 或治理 checklist。
-
-## 单一迭代 brief
-
-每个迭代恰好有一份面向 Human 的 brief，位于 [`docs/iterations/`](iterations/README.md)。它是 Human 冻结范围、处理必要决策和阅读最终证据的唯一迭代文档，只能包含：
-
-1. 目标；
-2. 验收；
-3. 非目标；
-4. 公共契约变化；
-5. 需 Human 决策；
-6. 最终真实测试证据；
-7. 残余风险。
-
-Agent 交流、Worker 证据、失败诊断和中间候选关系保留在编排工具与实际命令输出中，不要求 Human 阅读。不得为这些信息生成仓库内状态页、子任务 brief、治理 checklist 或每日进度副本。最终证据必须在同一 brief 中记录实际命令、exit code 和可得的 test count；精确候选身份由最终 Git commit 与 Pull Request 事实源绑定，不复制进会参与候选哈希的 tracked brief。计划命令、`-ListOnly` 输出和 Worker 文字声明都不能冒充测试通过。
-
-## 快速子循环与 forward-only checkpoint
-
-一个迭代可以拆成多个快速子循环，每个子循环必须同时具备：
-
-- 一个可交付结果；
-- 与该结果风险匹配的针对性测试；
-- 一个 forward-only checkpoint，明确已验证且可保留的候选事实，以及下一循环只能继续推进的边界。
-
-子循环不产生独立治理文档，不重新定义或削弱 Human 冻结的迭代验收。局部失败从最近兼容 checkpoint 继续 forward-only 修复，保留其他已经验证的结果；只有公共契约或业务语义需要变化时才返回 Root/Human 决策。
-
-OPAID 是这套候选关系的默认表达方式。只有真实失败记录能够证明现有 OPAID 无法表达依赖、兼容性或 forward-only 恢复关系时，才讨论修改治理；不得因为偏好、预防性设计或方法论整理而改写流程。
+`docs/iterations/` 下的 brief 是 2026-10-19 之前的历史证据，不再新增。
 
 ## 统一命令
 
@@ -160,10 +123,10 @@ R7B 另提供 clean-candidate 恢复与 private MANUAL 入口：
 
 ## 交接给 CICD
 
-OPAID 先把精确 Commit SHA 的本地自测候选和唯一 brief 交给 Human。brief 包含真实 changed files、命令、退出码、测试数量和剩余风险。Human 有两个迭代验收选择：
+开发以 Pull Request 交给 Human。PR 描述包含真实改动、命令、退出码、测试数量和剩余风险。Human 有两个选择：
 
-1. 在同一精确候选上运行一次完整本地检查（本地 CI），并完成风险相关的人工复测；
-2. 按 brief 和已有证据验收，合并并直接进入下一迭代。
+1. 在同一候选上运行一次完整本地检查（本地 CI），并完成风险相关的人工复测；
+2. 按 PR 描述和已有证据验收并合并。
 
 两个选择都不启动 GitHub 完整 CI。普通 branch push、Pull Request 和 `main` 合并只维护远端源码历史；本地检查是普通迭代的正式证据，但不能冒充 Linux Runner、在线供应链、制品或目标环境证据。
 
@@ -176,6 +139,6 @@ trivy image --download-db-only
 
 该入口不创建 tag、不推送镜像、不连接测试服务器，也不安装工具。它使用正式 Dockerfile 和固定基础镜像 digest 构建 Server、Worker、UI 三个应用镜像，验证 `deploy/storage-runtime.lock.json` 后复用并扫描锁定的 Ceph OCI digest；三个应用镜像与 Ceph 运行时共四个运行镜像都以本地 Trivy 数据库执行 `HIGH,CRITICAL`、`ignore-unfixed` 扫描。随后启动 PostgreSQL 与锁定的 Ceph RGW，执行一次性 migration，再启动真实 Worker、Server 和 UI，验证 readiness、UI 与 forward-only migration 兼容。只有该入口通过且 Human 明确给出版本号后，才创建新的不可变版本 tag。
 
-数个迭代后，Human 确定版本号并创建符合版本格式、指向当前 `main` 精确提交的不可变 `v*` tag。创建 tag 即把版本候选交给 CICD，并授权完整 GitHub CI、SHA 镜像构建、扫描、不可变版本标签提升、Linux 测试环境部署、健康/冒烟检查和失败回滚。版本失败后不得移动原 tag；修复进入新的 OPAID 迭代，再建立 forward-only 版本候选。普通 OPAID 工作不得修改 `.github/**`、`cicd.yml` 或 `deploy/**` 来绕过这个交接边界。
+数个迭代后，Human 确定版本号并创建符合版本格式、指向当前 `main` 精确提交的不可变 `v*` tag。创建 tag 即把版本候选交给 CICD，并授权完整 GitHub CI、SHA 镜像构建、扫描、不可变版本标签提升、Linux 测试环境部署、健康/冒烟检查和失败回滚。版本失败后不得移动原 tag；修复走普通 Pull Request 合并到 `main`，再建立 forward-only 版本候选。普通开发工作不得修改 `.github/**`、`cicd.yml` 或 `deploy/**` 来绕过这个交接边界。
 
 本地镜像验证必须使用仓库正式的 `deploy/dev/RustService.Dockerfile` 做冷构建，并保留其精确候选和构建结果。为了排查网络或环境问题而使用的临时 Dockerfile、复制宿主机构建产物后组装的 runtime 镜像，最多只能作为诊断证据，不能冒充正式镜像构建通过。版本制品的最终证据只能来自 Human 创建版本 tag 后触发的 GitHub version Action：它在 Linux Runner 上用正式 Dockerfile 构建并发布 Commit SHA 标识的不可变镜像。普通 branch、Pull Request、`main` 合并以及本地临时镜像均不得被描述为这项最终证据。
