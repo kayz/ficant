@@ -119,7 +119,7 @@ R5b 在 R5a 之后建立 `CoverageDeclaration`，R5c 在 R5a 之后建立 `DataH
 
 ### 缺口 6 · 边界表述与新决定冲突
 
-**现状。** README §3.2 把"投资组合会计"列入不负责清单；README 多处以"不做 OMS/EMS"划界。
+**现状。** 技术基线（[baseline.md](baseline.md)）§3.2 把"投资组合会计"列入不负责清单；README 多处以"不做 OMS/EMS"划界。
 
 **冲突。** 持仓与会计科目已决定进入 ficant；且"不做 OMS"这条界会误伤 TCA、冲击成本、渠道选择——那些是日频或交易前查询的**建模**，不是报单。
 
