@@ -8,8 +8,8 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'check-common.ps1')
 
 $steps = @(
-    New-FicantCheckStep -Name 'Phase 3B deterministic snapshot codec' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-data', '--test', 'snapshot_codec')
-    New-FicantCheckStep -Name 'Phase 3B immutable snapshot publication' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-data', '--test', 'snapshot_publication_sit', '--', '--test-threads=1')
+    New-FicantCheckStep -Name 'Phase 3B deterministic snapshot codec' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'snapshot_codec')
+    New-FicantCheckStep -Name 'Phase 3B immutable snapshot publication' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'snapshot_publication_sit', '--', '--test-threads=1')
 )
 
 try {

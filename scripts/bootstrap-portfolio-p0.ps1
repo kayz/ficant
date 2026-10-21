@@ -86,7 +86,7 @@ $env:FICANT_BOOTSTRAP_S3_SECRET_KEY = $S3SecretKey
 
 Push-Location -LiteralPath $repositoryRoot
 try {
-    & cargo run --locked --offline -p ficant-server --example r8a_portfolio_bootstrap -- `
+    & cargo run --locked -p ficant-server --example r8a_portfolio_bootstrap -- `
         --fixture $resolvedFixture
     if ($LASTEXITCODE -ne 0) {
         throw "Portfolio bootstrap failed with exit code $LASTEXITCODE."

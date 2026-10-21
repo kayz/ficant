@@ -13,7 +13,7 @@ FICANT 的日常开发由 agent 自行组织，以 Pull Request 交付可验证�
 .\scripts\check-fast.ps1
 ```
 
-它运行 `cargo fmt`、离线 workspace check、R5D 精确 crate 邻接表与 L1→L2 语法依赖门禁、R7B MANUAL/恢复清单负向 fixture、R8A/R8B Portfolio 契约、本地契约包、18-service 拓扑、R8B domain/application/API focused tests、非环境 Rust 测试和 Storage library 测试；不会连接 PostgreSQL、Ceph RGW、GitHub 或目标服务器。R6A 真实输入平面 SIT、R6B Artifact 生产拓扑 SIT、R7B 真实 source-destroy/fresh-restore 与 R8A/R8B Portfolio PostgreSQL/gRPC SIT 被显式标记为 integration-only；未知 workspace package/依赖边，以及 `research/**` 对 analytics/curves/futures 模块的直接或 façade 引用，都会默认失败。
+它运行 `cargo fmt`、workspace check、R5D 精确 crate 邻接表与 L1→L2 语法依赖门禁、R7B MANUAL/恢复清单负向 fixture、R8A/R8B Portfolio 契约、本地契约包、18-service 拓扑、R8B domain/application/API focused tests、非环境 Rust 测试和 Storage library 测试；不会连接 PostgreSQL、Ceph RGW、GitHub 或目标服务器。R6A 真实输入平面 SIT、R6B Artifact 生产拓扑 SIT、R7B 真实 source-destroy/fresh-restore 与 R8A/R8B Portfolio PostgreSQL/gRPC SIT 被显式标记为 integration-only；未知 workspace package/依赖边，以及 `research/**` 对 analytics/curves/futures 模块的直接或 façade 引用，都会默认失败。
 
 完整本地回归：
 
@@ -105,19 +105,20 @@ R7B 另提供 clean-candidate 恢复与 private MANUAL 入口：
 
 ## 本地依赖能力
 
-仓库不通过检查脚本安装任何依赖。缺少工具、缓存或锁定版本时会失败并说明原因。
+开发机只确认工具链存在、属于正确的工具族且不低于最低版本，不要求小版本与 CI 一致（[ADR-0020](architecture/adr/0020-dev-toolchain-minimum-versions.md)）。检查脚本不安装工具；依赖按锁文件解析（`--locked`），本机缺少的 crate、wheel 或 pnpm 会从包源取回。精确版本只在 CI 与发布侧锁定，下表最后一列供对照。
 
-| 能力 | 仓库合同 |
-|---|---|
-| PowerShell | PowerShell 7，原生 Windows 路径和参数数组 |
-| Rust | `rust-toolchain.toml` 锁定 Cargo/Rust 1.96.1，crate 必须已在本机 Cargo cache；命令使用 `--offline --locked` |
-| C++ | CMake 3.31.6、Ninja、Visual Studio Build Tools LLVM 19.1.5 x64 `clang++`；不回退到 standalone Clang 18 |
-| Python | uv 0.7.13、Python 3.12 与 `python/uv.lock` 所需 wheel 必须已缓存；命令使用 `--offline --locked` |
-| Web | Node 22.17.0、Corepack 缓存中的 pnpm 10.12.4，以及已完成 frozen-lockfile 安装的 `web-dm/node_modules` |
-| Protobuf | Buf 1.56.0；Windows 可用 `FICANT_BUF` 显式提供已核验的可执行文件路径 |
-| 集成测试 | 仅在 `-IncludeIntegration` 下使用调用者提供的本地一次性 PostgreSQL/Ceph RGW 和固定 runtime image digest |
+| 能力 | 开发机要求 | CI / 发布锁定 |
+|---|---|---|
+| PowerShell | PowerShell 7，原生 Windows 路径和参数数组 | — |
+| Rust | rustup；`rust-toolchain.toml` 会自动装上锁定版本。脚本接受 cargo/rustc ≥ 1.96 | 1.96.1 |
+| C++ | CMake、Ninja、clang++ ≥ 18。依次使用 `FICANT_CXX`、Visual Studio Build Tools 自带 LLVM、`PATH` 上的 `clang++` | LLVM 19.1.5 |
+| Cross-Clang | 可选：WSL 发行版 `ficant-ubuntu-24.04` 中的 `/usr/bin/clang++-18`，可用 `FICANT_WSL_DISTRO` / `FICANT_LINUX_CXX` 覆盖。没有时该步打印 SKIPPED 警告并跳过，跳过不是数值一致的证据；设 `FICANT_REQUIRE_CROSS_CLANG=1` 则改为失败 | Ubuntu clang 18.1.8 |
+| Python | uv ≥ 0.7；Python 版本与 wheel 由 `python/uv.lock` 决定 | uv 0.7.13 |
+| Web | Node ≥ 22，Corepack 按 `web-dm/package.json` 的 `packageManager` 取用 pnpm | Node 22.17.0、pnpm 10.12.4 |
+| Protobuf | Buf ≥ 1.56；Windows 可用 `FICANT_BUF` 指定可执行文件。`package-contracts.ps1` 生成发布用契约包，仍要求 Buf 1.56.0 | Buf 1.56.0 |
+| 集成测试 | 仅在 `-IncludeIntegration` 下使用调用者提供的本地一次性 PostgreSQL/Ceph RGW 和固定 runtime image digest | — |
 
-`COREPACK_ENABLE_NETWORK=0` 只在完整检查的执行范围内设置并恢复。Cargo 和 uv 同样使用离线模式，因此脚本不会因为缺少缓存而静默联网安装。
+工具版本与锁定值不同而检查失败时，先用锁定版本复现，再判断是不是代码问题。`scripts/check-manual.ps1` 是 MANUAL 走查的执行器，仍保持离线安装，不受本节放宽影响。
 
 完整检查对产品 Rust target 执行 `clippy -D warnings`。`ficant-contracts` 的生成文件与 `ficant-contract-tests` 的 descriptor inventory harness 不进入 Clippy；它们由锁定生成器的一致性检查和独立 contract test 覆盖，避免把生成器风格告警误报成手写产品代码缺陷。
 

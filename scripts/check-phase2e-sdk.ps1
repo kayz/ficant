@@ -7,7 +7,6 @@ $ErrorActionPreference = 'Stop'
 # The separate R2 topology/SIT evidence exercises the persisted production repository.
 $arguments = @(
     'test',
-    '--offline',
     '--locked',
     '-p',
     'ficant-api',

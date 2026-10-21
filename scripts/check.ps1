@@ -8,7 +8,17 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'check-common.ps1')
 
-$cppCompiler = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin\clang++.exe'
+# C++ compiler: FICANT_CXX wins, then the Visual Studio Build Tools LLVM, then clang++ on PATH.
+$visualStudioClang = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin\clang++.exe'
+$cppCompiler = if (-not [string]::IsNullOrWhiteSpace($env:FICANT_CXX)) {
+    $env:FICANT_CXX
+}
+elseif (Test-Path -LiteralPath $visualStudioClang -PathType Leaf) {
+    $visualStudioClang
+}
+else {
+    'clang++'
+}
 $cppBuildDirectory = Join-Path $script:FicantRoot 'build\local-cpp-vs-llvm-19'
 $webDirectory = Join-Path $script:FicantRoot 'web-dm'
 
@@ -20,11 +30,11 @@ $steps = @(
     New-FicantCheckStep -Name 'R7B MANUAL literal-runner fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-manual-check.ps1')
     New-FicantCheckStep -Name 'R7B recovery-manifest fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-recovery-check.ps1')
     New-FicantCheckStep -Name 'Rust formatting' -FilePath 'cargo' -ArgumentList @('fmt', '--all', '--', '--check')
-    New-FicantCheckStep -Name 'Rust strict Clippy' -FilePath 'cargo' -ArgumentList @('clippy', '--offline', '--workspace', '--all-targets', '--locked', '--exclude', 'ficant-contracts', '--exclude', 'ficant-contract-tests', '--no-deps', '--', '-D', 'warnings')
-    New-FicantCheckStep -Name 'Rust workspace build' -FilePath 'cargo' -ArgumentList @('build', '--offline', '--workspace', '--all-targets', '--locked')
-    New-FicantCheckStep -Name 'Rust non-environment tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--workspace', '--locked', '--exclude', 'ficant-acceptance', '--exclude', 'ficant-data', '--exclude', 'ficant-storage', '--exclude', 'ficant-contract-tests')
-    New-FicantCheckStep -Name 'Rust storage library tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--lib')
-    New-FicantCheckStep -Name 'Rust generated-contract tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-contract-tests')
+    New-FicantCheckStep -Name 'Rust strict Clippy' -FilePath 'cargo' -ArgumentList @('clippy', '--workspace', '--all-targets', '--locked', '--exclude', 'ficant-contracts', '--exclude', 'ficant-contract-tests', '--no-deps', '--', '-D', 'warnings')
+    New-FicantCheckStep -Name 'Rust workspace build' -FilePath 'cargo' -ArgumentList @('build', '--workspace', '--all-targets', '--locked')
+    New-FicantCheckStep -Name 'Rust non-environment tests' -FilePath 'cargo' -ArgumentList @('test', '--workspace', '--locked', '--exclude', 'ficant-acceptance', '--exclude', 'ficant-data', '--exclude', 'ficant-storage', '--exclude', 'ficant-contract-tests')
+    New-FicantCheckStep -Name 'Rust storage library tests' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-storage', '--lib')
+    New-FicantCheckStep -Name 'Rust generated-contract tests' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-contract-tests')
     New-FicantCheckStep -Name 'CGB futures RulePack payload drift' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-File', 'scripts/generate-cgb-futures-pack.ps1', '-Check')
     New-FicantCheckStep -Name 'R5E CGB interest-tax RulePack payload drift' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/generate-cgb-interest-tax-pack.ps1', '-Check')
     New-FicantCheckStep -Name 'C++ configure' -FilePath 'cmake' -ArgumentList @('-S', 'cpp/fixed-income-kernel', '-B', $cppBuildDirectory, '-G', 'Ninja', "-DCMAKE_CXX_COMPILER=$cppCompiler", '-DCMAKE_BUILD_TYPE=Release')
@@ -32,24 +42,24 @@ $steps = @(
     New-FicantCheckStep -Name 'C++ tests' -FilePath 'ctest' -ArgumentList @('--test-dir', $cppBuildDirectory, '--output-on-failure')
     New-FicantCheckStep -Name 'Cross-Clang comparator fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-cross-clang-check.ps1')
     New-FicantCheckStep -Name 'Cross-Clang raw numeric identity' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/check-cross-clang.ps1')
-    New-FicantCheckStep -Name 'Acceptance-matrix integrity' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', 'tests/iteration-3/verify_acceptance_matrix.py')
-    New-FicantCheckStep -Name 'Phase 2B acceptance-matrix integrity' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', 'tests/phase2b/verify_acceptance_matrix.py')
-    New-FicantCheckStep -Name 'Phase 2C acceptance-matrix integrity' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', 'tests/phase2c/verify_acceptance_matrix.py')
-    New-FicantCheckStep -Name 'Phase 2C independent Oracle' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_phase2c_manual_oracle.py', '-q')
-    New-FicantCheckStep -Name 'Phase 2C deterministic artifact tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'futures_delivery_arrow')
-    New-FicantCheckStep -Name 'Phase 2D acceptance-matrix integrity' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', 'tests/phase2d/verify_acceptance_matrix.py')
-    New-FicantCheckStep -Name 'Phase 2D independent Oracle' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_phase2d_manual_oracle.py', '-q')
-    New-FicantCheckStep -Name 'Phase 2D deterministic artifact tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'futures_hedge_arrow')
-    New-FicantCheckStep -Name 'R5D independent portfolio KRD Oracle' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_r5d_portfolio_krd_decimal_oracle.py', '-q')
-    New-FicantCheckStep -Name 'R5E independent tax-adjusted Decimal Oracle' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_r5e_tax_adjusted_decimal_oracle.py', '-q')
-    New-FicantCheckStep -Name 'R8A independent Portfolio Decimal Oracle' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/portfolio/test_r8a_portfolio_metric_decimal_oracle.py', '-q')
-    New-FicantCheckStep -Name 'R8B independent Portfolio Performance Decimal Oracle' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/portfolio/test_r8b_portfolio_performance_decimal_oracle.py', '-q')
-    New-FicantCheckStep -Name 'R8B first-party license bindings' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', '.github/scripts/verify-license-inventory.py', 'verify-bindings', '--inventory', '.github/scripts/license-inventory.lock.json', '--release-root', '.', '--cargo-lock', 'Cargo.lock', '--uv-lock', 'python/uv.lock', '--pnpm-lock', 'web-dm/pnpm-lock.yaml', '--supply-lock', '.github/scripts/supply-chain.lock.json')
-    New-FicantCheckStep -Name 'Python generated-contract tests' -FilePath 'uv' -ArgumentList @('run', '--offline', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'python/tests')
+    New-FicantCheckStep -Name 'Acceptance-matrix integrity' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', 'tests/iteration-3/verify_acceptance_matrix.py')
+    New-FicantCheckStep -Name 'Phase 2B acceptance-matrix integrity' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', 'tests/phase2b/verify_acceptance_matrix.py')
+    New-FicantCheckStep -Name 'Phase 2C acceptance-matrix integrity' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', 'tests/phase2c/verify_acceptance_matrix.py')
+    New-FicantCheckStep -Name 'Phase 2C independent Oracle' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_phase2c_manual_oracle.py', '-q')
+    New-FicantCheckStep -Name 'Phase 2C deterministic artifact tests' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-storage', '--test', 'futures_delivery_arrow')
+    New-FicantCheckStep -Name 'Phase 2D acceptance-matrix integrity' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', 'tests/phase2d/verify_acceptance_matrix.py')
+    New-FicantCheckStep -Name 'Phase 2D independent Oracle' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_phase2d_manual_oracle.py', '-q')
+    New-FicantCheckStep -Name 'Phase 2D deterministic artifact tests' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-storage', '--test', 'futures_hedge_arrow')
+    New-FicantCheckStep -Name 'R5D independent portfolio KRD Oracle' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_r5d_portfolio_krd_decimal_oracle.py', '-q')
+    New-FicantCheckStep -Name 'R5E independent tax-adjusted Decimal Oracle' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_r5e_tax_adjusted_decimal_oracle.py', '-q')
+    New-FicantCheckStep -Name 'R8A independent Portfolio Decimal Oracle' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/portfolio/test_r8a_portfolio_metric_decimal_oracle.py', '-q')
+    New-FicantCheckStep -Name 'R8B independent Portfolio Performance Decimal Oracle' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/portfolio/test_r8b_portfolio_performance_decimal_oracle.py', '-q')
+    New-FicantCheckStep -Name 'R8B first-party license bindings' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '.github/scripts/verify-license-inventory.py', 'verify-bindings', '--inventory', '.github/scripts/license-inventory.lock.json', '--release-root', '.', '--cargo-lock', 'Cargo.lock', '--uv-lock', 'python/uv.lock', '--pnpm-lock', 'web-dm/pnpm-lock.yaml', '--supply-lock', '.github/scripts/supply-chain.lock.json')
+    New-FicantCheckStep -Name 'Python generated-contract tests' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'python/tests')
     New-FicantCheckStep -Name 'R9A reentrant local contract package and license bindings' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-contract-package-reentrancy.ps1')
     New-FicantCheckStep -Name 'Phase 2E live Python SDK parity' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-File', 'scripts/check-phase2e-sdk.ps1')
-    New-FicantCheckStep -Name 'Phase 3A canonical data tests' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-data', '--test', 'canonical_ingestion')
-    New-FicantCheckStep -Name 'Phase 3B deterministic snapshot codec' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-data', '--test', 'snapshot_codec')
+    New-FicantCheckStep -Name 'Phase 3A canonical data tests' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'canonical_ingestion')
+    New-FicantCheckStep -Name 'Phase 3B deterministic snapshot codec' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'snapshot_codec')
     New-FicantCheckStep -Name 'Web type check' -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', 'typecheck') -WorkingDirectory $webDirectory
     New-FicantCheckStep -Name 'Web production build' -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', 'build') -WorkingDirectory $webDirectory
     New-FicantCheckStep -Name 'Web unit and component tests' -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', 'test', '--', '--run') -WorkingDirectory $webDirectory
@@ -57,23 +67,23 @@ $steps = @(
 
 if ($IncludeIntegration) {
     $steps += @(
-        New-FicantCheckStep -Name 'PostgreSQL migration integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'migration_acceptance', '--', '--test-threads=1')
-        New-FicantCheckStep -Name 'Phase 4C PostgreSQL lease queue integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'lease_queue_sit', '--', '--test-threads=1')
-        New-FicantCheckStep -Name 'Phase 4 PostgreSQL execution closure integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'phase4_execution_sit', '--', '--test-threads=1')
-        New-FicantCheckStep -Name 'Phase 4 production worker integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-worker', '--features', 'integration-tests', '--test', 'phase4_worker_sit', '--', '--test-threads=1')
-        New-FicantCheckStep -Name 'Phase 1 business-loop integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-acceptance', '--test', 'phase1_business_loop', '--', '--test-threads=1')
-        New-FicantCheckStep -Name 'Negative-invariant integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-acceptance', '--test', 'negative_invariants', '--', '--test-threads=1')
-        New-FicantCheckStep -Name 'Phase 2B carry-roll integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'carry_roll_sit', '--', '--test-threads=1')
-        New-FicantCheckStep -Name 'Phase 2C futures-delivery integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'futures_delivery_sit', '--', '--test-threads=1')
-        New-FicantCheckStep -Name 'Phase 2D futures-hedge integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'futures_hedge_sit', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'PostgreSQL migration integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-storage', '--test', 'migration_acceptance', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'Phase 4C PostgreSQL lease queue integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-storage', '--test', 'lease_queue_sit', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'Phase 4 PostgreSQL execution closure integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-storage', '--test', 'phase4_execution_sit', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'Phase 4 production worker integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-worker', '--features', 'integration-tests', '--test', 'phase4_worker_sit', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'Phase 1 business-loop integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-acceptance', '--test', 'phase1_business_loop', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'Negative-invariant integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-acceptance', '--test', 'negative_invariants', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'Phase 2B carry-roll integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-storage', '--test', 'carry_roll_sit', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'Phase 2C futures-delivery integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-storage', '--test', 'futures_delivery_sit', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'Phase 2D futures-hedge integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-storage', '--test', 'futures_hedge_sit', '--', '--test-threads=1')
         New-FicantCheckStep -Name 'Phase 3A data-source integration' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-File', 'scripts/check-phase3a.ps1')
         New-FicantCheckStep -Name 'Phase 3B immutable snapshot integration' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-File', 'scripts/check-phase3b.ps1')
-        New-FicantCheckStep -Name 'R6A governed input-plane production integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-server', '--test', 'r6a_governed_input_sit', '--', '--ignored', '--test-threads=1')
-        New-FicantCheckStep -Name 'R6B Artifact production topology integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-server', '--test', 'r6b_artifact_service_sit', '--', '--ignored', '--test-threads=1')
-        New-FicantCheckStep -Name 'R8A Portfolio PostgreSQL integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'r8a_portfolio_postgres', '--', '--test-threads=1')
-        New-FicantCheckStep -Name 'R8A Portfolio production gRPC/gRPC-Web integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-server', '--test', 'r8a_portfolio_sit', '--', '--ignored', '--test-threads=1')
-        New-FicantCheckStep -Name 'R8B Portfolio Performance PostgreSQL integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'r8b_portfolio_performance_postgres', '--', '--test-threads=1')
-        New-FicantCheckStep -Name 'R8B Portfolio Performance production gRPC/gRPC-Web integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-server', '--test', 'r8b_portfolio_performance_sit', '--', '--ignored', '--test-threads=1')
+        New-FicantCheckStep -Name 'R6A governed input-plane production integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-server', '--test', 'r6a_governed_input_sit', '--', '--ignored', '--test-threads=1')
+        New-FicantCheckStep -Name 'R6B Artifact production topology integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-server', '--test', 'r6b_artifact_service_sit', '--', '--ignored', '--test-threads=1')
+        New-FicantCheckStep -Name 'R8A Portfolio PostgreSQL integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-storage', '--test', 'r8a_portfolio_postgres', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'R8A Portfolio production gRPC/gRPC-Web integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-server', '--test', 'r8a_portfolio_sit', '--', '--ignored', '--test-threads=1')
+        New-FicantCheckStep -Name 'R8B Portfolio Performance PostgreSQL integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-storage', '--test', 'r8b_portfolio_performance_postgres', '--', '--test-threads=1')
+        New-FicantCheckStep -Name 'R8B Portfolio Performance production gRPC/gRPC-Web integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-server', '--test', 'r8b_portfolio_performance_sit', '--', '--ignored', '--test-threads=1')
         New-FicantCheckStep -Name 'R7B isolated backup and fresh-restore proof' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/check-recovery.ps1')
     )
 }
@@ -88,14 +98,9 @@ try {
     foreach ($command in @('pwsh', 'cmake', 'ctest', 'ninja', 'uv', 'node', 'corepack')) {
         Assert-FicantCommand $command
     }
-    Assert-FicantCommand $cppCompiler
-    $cppVersionOutput = Get-FicantCommandOutput -FilePath $cppCompiler -ArgumentList @('--version')
-    $cppVersion = ($cppVersionOutput -split "`r?`n")[0]
-    if ($cppVersion -ne 'clang version 19.1.5') {
-        throw "Required C++ compiler is 'clang version 19.1.5', but the active version is '$cppVersion'."
-    }
-    Assert-FicantExactVersion -Name 'uv' -ArgumentList @('--version') -Expected 'uv 0.7.13 (62ed17b23 2025-06-12)'
-    Assert-FicantExactVersion -Name 'node' -ArgumentList @('--version') -Expected 'v22.17.0'
+    [void](Assert-FicantMinimumVersion -Name 'clang++' -FilePath $cppCompiler -ArgumentList @('--version') -Minimum '18.0.0' -Pinned '19.1.5')
+    [void](Assert-FicantMinimumVersion -Name 'uv' -ArgumentList @('--version') -Minimum '0.7.0' -Pinned '0.7.13')
+    [void](Assert-FicantMinimumVersion -Name 'node' -ArgumentList @('--version') -Minimum '22.0.0' -Pinned '22.17.0')
 
     $bufCommandName = if ([string]::IsNullOrWhiteSpace($env:FICANT_BUF)) {
         'buf'
@@ -103,15 +108,14 @@ try {
     else {
         $env:FICANT_BUF
     }
-    Assert-FicantExactVersion -Name $bufCommandName -ArgumentList @('--version') -Expected '1.56.0'
+    [void](Assert-FicantMinimumVersion -Name $bufCommandName -ArgumentList @('--version') -Minimum '1.56.0' -Pinned '1.56.0')
     $resolvedBuf = (Get-Command $bufCommandName -ErrorAction Stop).Source
 
-    $previousCorepackNetwork = $env:COREPACK_ENABLE_NETWORK
     $previousFicantBuf = $env:FICANT_BUF
-    $env:COREPACK_ENABLE_NETWORK = '0'
     $env:FICANT_BUF = $resolvedBuf
     try {
-        Assert-FicantExactVersion -Name 'corepack' -ArgumentList @('pnpm@10.12.4', '--version') -Expected '10.12.4'
+        # corepack fetches the pnpm pinned by web-dm/package.json `packageManager` on first use.
+        [void](Assert-FicantMinimumVersion -Name 'pnpm' -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', '--version') -Minimum '10.0.0' -Pinned '10.12.4')
 
         if ($IncludeIntegration) {
             $requiredVariables = @(
@@ -133,7 +137,6 @@ try {
         Invoke-FicantCheckPlan -Steps $steps
     }
     finally {
-        $env:COREPACK_ENABLE_NETWORK = $previousCorepackNetwork
         $env:FICANT_BUF = $previousFicantBuf
     }
 

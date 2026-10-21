@@ -358,7 +358,7 @@ function Invoke-RecoveryPhase {
 
     $env:FICANT_RECOVERY_PHASE = $Phase
     Invoke-Native -FilePath 'cargo' -ArgumentList @(
-        'test', '--offline', '--locked', '-p', 'ficant-storage',
+        'test', '--locked', '-p', 'ficant-storage',
         '--test', 'r7b_backup_restore_sit', '--', '--test-threads=1'
     ) -WorkingDirectory $RepositoryRoot
 }

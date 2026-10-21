@@ -33,7 +33,7 @@ $previousDescriptorInput = $env:FICANT_DESCRIPTOR_INPUT
 $env:FICANT_BUF = $bufCommand
 $env:FICANT_DESCRIPTOR_INPUT = $descriptorInput
 try {
-    & cargo test --offline --locked -p ficant-contract-tests --test descriptor_inventory composition_level_outputs_have_coverage -- --exact
+    & cargo test --locked -p ficant-contract-tests --test descriptor_inventory composition_level_outputs_have_coverage -- --exact
     if ($LASTEXITCODE -ne 0) {
         throw "Coverage descriptor inventory failed with exit code $LASTEXITCODE."
     }

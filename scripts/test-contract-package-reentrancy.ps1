@@ -74,7 +74,6 @@ function Remove-VerifiedRepositoryOutput {
 
 $licenseArguments = @(
     'run',
-    '--offline',
     '--locked',
     '--project',
     'python',

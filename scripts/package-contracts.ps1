@@ -112,7 +112,6 @@ if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) {
     throw "Generated TypeScript source root does not exist: '$sourceRoot'."
 }
 
-Assert-ExactToolVersion -FilePath 'node' -ArgumentList @('--version') -Expected 'v22.17.0'
 Assert-ExactToolVersion -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', '--version') -Expected '10.12.4'
 
 $resolvedOutputDirectory = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
