@@ -105,6 +105,31 @@ function Get-GeneratedTreeSha256 {
     }
 }
 
+function Assert-MinimumToolVersion {
+    param(
+        [Parameter(Mandatory)]
+        [string]$FilePath,
+        [Parameter(Mandatory)]
+        [string[]]$ArgumentList,
+        [Parameter(Mandatory)]
+        [version]$Minimum
+    )
+
+    # Determinism is checked by comparing fresh runs with each other, so only the tool family and a
+    # minimum version are required here (ADR-0020); CI pins the exact release toolchain.
+    $versionOutput = @(Invoke-CapturedNative -FilePath $FilePath -ArgumentList $ArgumentList -WorkingDirectory $ficantRoot)
+    $actual = ($versionOutput -join [Environment]::NewLine).Trim()
+    $match = [regex]::Match($actual, '(\d+)\.(\d+)(?:\.(\d+))?')
+    if (-not $match.Success) {
+        throw "Could not read a version from '$FilePath $($ArgumentList -join ' ')': '$actual'."
+    }
+    $patch = if ($match.Groups[3].Success) { [int]$match.Groups[3].Value } else { 0 }
+    $version = [version]::new([int]$match.Groups[1].Value, [int]$match.Groups[2].Value, $patch)
+    if ($version -lt $Minimum) {
+        throw "'$FilePath' must be at least $Minimum, but the active version is '$actual'."
+    }
+}
+
 if (-not (Test-Path -LiteralPath $packageRoot -PathType Container)) {
     throw "Contract package root does not exist: '$packageRoot'."
 }
@@ -134,7 +159,7 @@ try {
         else {
             $env:FICANT_BUF
         }
-        Assert-ExactToolVersion -FilePath $bufCommand -ArgumentList @('--version') -Expected '1.56.0'
+        Assert-MinimumToolVersion -FilePath $bufCommand -ArgumentList @('--version') -Minimum '1.56.0'
         $temporaryDescriptor = Join-Path (
             [System.IO.Path]::GetTempPath()
         ) ("ficant-r8a-descriptor-$([Guid]::NewGuid().ToString('N')).bin")
