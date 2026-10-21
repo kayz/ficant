@@ -1,7 +1,6 @@
 [workspace]
 resolver = "3"
 members = ["binaries/*", "crates/*"]
-exclude = ["crates/vendor"]
 
 [workspace.package]
 edition = "2024"
@@ -19,7 +18,7 @@ pedantic = { level = "warn", priority = -1 }
 
 [workspace.dependencies]
 async-trait = "=0.1.89"
-arrow = { version = "=59.1.0", default-features = false, features = ["ipc"] }
+arrow = { version = "=59.3.1", default-features = false, features = ["ipc"] }
 bytes = "=1.12.1"
 cc = "=1.2.67"
 chrono = { version = "=0.4.45", default-features = false, features = ["std"] }
@@ -40,5 +39,5 @@ tonic-web = "=0.14.6"
 tower-layer = "=0.3.3"
 ulid = { version = "=1.2.1", default-features = false }
 object_store = { version = "=0.14.1", default-features = false, features = ["aws"] }
-parquet = { path = "crates/vendor/parquet-59.1.0", version = "=59.1.0", default-features = false, features = ["arrow"] }
+parquet = { version = "=59.3.1", default-features = false, features = ["arrow"] }
 serde = { version = "=1.0.228", features = ["derive"] }
