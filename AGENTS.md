@@ -15,7 +15,7 @@
 - 公共契约（`interface/proto/**`）、数据库 migration、RulePack 内容（`domain-packs/**`）的语义变化需要 Human 同意；纯实现重构不需要。
 - 完成前运行 `.\scripts\check-fast.ps1`；涉及契约、持久化、RulePack 或主流程时运行 `.\scripts\check.ps1`，需要 PostgreSQL/Ceph 的改动再加 `-IncludeIntegration`。先用 `-ListOnly` 查看将执行的命令。没跑或跑不了就直接说明，不要写成已通过。
 - 交付形式是 Pull Request。PR 描述写清：改了什么、对应哪些 AC 或 SPEC 条款、实际运行的命令与 exit code 和可得的 test count、仍有的风险。不再为每个迭代单独写 brief，也不在仓库里建状态台账、任务清单或进度副本。
-- 脚本保持 PowerShell 7 原生语法、参数数组、失败即退出和离线依赖行为；不得加入 SSH、GitHub、发布、部署或联网安装行为。
+- 脚本保持 PowerShell 7 原生语法、参数数组、失败即退出，依赖按锁文件解析（`--locked`）；不得加入 SSH、GitHub、发布、部署或安装工具的行为。开发机只检查工具族与最低版本，精确版本只在 CI 与发布侧锁定，见 [ADR-0020](docs/architecture/adr/0020-dev-toolchain-minimum-versions.md)。
 
 统一入口：
 

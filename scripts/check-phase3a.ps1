@@ -8,8 +8,8 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'check-common.ps1')
 
 $steps = @(
-    New-FicantCheckStep -Name 'Phase 3A data-source registry integration' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-storage', '--test', 'data_source_registry_sit', '--', '--test-threads=1')
-    New-FicantCheckStep -Name 'Phase 3A file/PostgreSQL canonical parity' -FilePath 'cargo' -ArgumentList @('test', '--offline', '--locked', '-p', 'ficant-data', '--test', 'dual_source_sit', '--', '--test-threads=1')
+    New-FicantCheckStep -Name 'Phase 3A data-source registry integration' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-storage', '--test', 'data_source_registry_sit', '--', '--test-threads=1')
+    New-FicantCheckStep -Name 'Phase 3A file/PostgreSQL canonical parity' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'dual_source_sit', '--', '--test-threads=1')
 )
 
 try {

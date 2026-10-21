@@ -9,9 +9,21 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'check-common.ps1')
 
-$windowsCompiler = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin\clang++.exe'
-$linuxDistribution = 'ficant-ubuntu-24.04'
-$linuxCompiler = '/usr/bin/clang++-18'
+# Compilers and the WSL distribution can be overridden; only the clang family and a minimum
+# major version are checked (ADR-0020). The numeric comparison itself is unchanged.
+$visualStudioClang = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin\clang++.exe'
+$windowsCompiler = if (-not [string]::IsNullOrWhiteSpace($env:FICANT_CXX)) {
+    $env:FICANT_CXX
+}
+elseif (Test-Path -LiteralPath $visualStudioClang -PathType Leaf) {
+    $visualStudioClang
+}
+else {
+    'clang++'
+}
+$linuxDistribution = if ([string]::IsNullOrWhiteSpace($env:FICANT_WSL_DISTRO)) { 'ficant-ubuntu-24.04' } else { $env:FICANT_WSL_DISTRO }
+$linuxCompiler = if ([string]::IsNullOrWhiteSpace($env:FICANT_LINUX_CXX)) { '/usr/bin/clang++-18' } else { $env:FICANT_LINUX_CXX }
+$minimumClang = [version]'18.0.0'
 
 function Read-ValidatedManifest {
     param([Parameter(Mandatory)][string]$Path)
@@ -107,19 +119,33 @@ try {
         throw '-WindowsOutput and -LinuxOutput are only valid with -CompareOnly.'
     }
 
-    Assert-FicantCommand $windowsCompiler
-    Assert-FicantCommand 'wsl.exe'
-    $windowsVersion = @(Invoke-CheckedExternal -FilePath $windowsCompiler -ArgumentList @('--version') -Capture)
-    if ($windowsVersion[0].Trim() -ne 'clang version 19.1.5') {
-        throw "Required Windows compiler is clang version 19.1.5, got '$($windowsVersion[0].Trim())'."
+    [void](Assert-FicantMinimumVersion -Name 'Windows clang++' -FilePath $windowsCompiler -ArgumentList @('--version') -Minimum $minimumClang -Pinned '19.1.5')
+
+    # The Linux half needs a WSL distribution with clang. Without one the gate is skipped and says so;
+    # set FICANT_REQUIRE_CROSS_CLANG=1 to make a missing Linux side fail instead.
+    $linuxUnavailable = $null
+    if ($null -eq (Get-Command 'wsl.exe' -ErrorAction SilentlyContinue)) {
+        $linuxUnavailable = 'wsl.exe was not found'
     }
-    $linuxVersion = @(Invoke-CheckedExternal -FilePath 'wsl.exe' -ArgumentList @(
-            '-d', $linuxDistribution, '--', $linuxCompiler, '--version'
-        ) -Capture)
-    $expectedLinuxVersion = 'Ubuntu clang version 18.1.8 (++20240731025043+3b5b5c1ec4a3-1~exp1~20240731145144.92)'
-    if ($linuxVersion[0].Trim() -ne $expectedLinuxVersion) {
-        throw "Required Linux compiler is '$expectedLinuxVersion', got '$($linuxVersion[0].Trim())'."
+    else {
+        $probe = & wsl.exe -d $linuxDistribution -- $linuxCompiler --version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            $linuxUnavailable = "WSL distribution '$linuxDistribution' with '$linuxCompiler' is not available"
+        }
     }
+    if ($null -ne $linuxUnavailable) {
+        if ($env:FICANT_REQUIRE_CROSS_CLANG -eq '1') {
+            throw "Cross-Clang check requires a Linux compiler: $linuxUnavailable."
+        }
+        Write-Warning "Cross-Clang raw numeric identity SKIPPED: $linuxUnavailable. This is not evidence of identity. Set FICANT_WSL_DISTRO / FICANT_LINUX_CXX, or FICANT_REQUIRE_CROSS_CLANG=1 to fail."
+        exit 0
+    }
+    $linuxFirstLine = (($probe | Out-String).Trim() -split "`r?`n")[0].Trim()
+    $linuxVersion = Get-FicantVersionNumber -Text $linuxFirstLine -Name 'Linux clang++'
+    if ($linuxFirstLine -notmatch 'clang' -or $linuxVersion -lt $minimumClang) {
+        throw "Linux compiler must be clang $minimumClang or newer, got '$linuxFirstLine'."
+    }
+    Write-Host "Toolchain Linux clang++: $linuxFirstLine (CI pin: 18.1.8)"
 
     $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
     $runId = [Guid]::NewGuid().ToString('N')
