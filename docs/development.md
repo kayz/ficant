@@ -115,7 +115,7 @@ R7B 另提供 clean-candidate 恢复与 private MANUAL 入口：
 | Cross-Clang | 可选：WSL 发行版 `ficant-ubuntu-24.04` 中的 `/usr/bin/clang++-18`，可用 `FICANT_WSL_DISTRO` / `FICANT_LINUX_CXX` 覆盖。没有时该步打印 SKIPPED 警告并跳过，跳过不是数值一致的证据；设 `FICANT_REQUIRE_CROSS_CLANG=1` 则改为失败 | Ubuntu clang 18.1.8 |
 | Python | uv ≥ 0.7；Python 版本与 wheel 由 `python/uv.lock` 决定 | uv 0.7.13 |
 | Web | Node ≥ 22，Corepack 按 `web-dm/package.json` 的 `packageManager` 取用 pnpm | Node 22.17.0、pnpm 10.12.4 |
-| Protobuf | Buf ≥ 1.56；Windows 可用 `FICANT_BUF` 指定可执行文件。`package-contracts.ps1` 生成发布用契约包，仍要求 Buf 1.56.0 | Buf 1.56.0 |
+| Protobuf | Buf ≥ 1.56；Windows 可用 `FICANT_BUF` 指定可执行文件 | Buf 1.56.0 |
 | 集成测试 | 仅在 `-IncludeIntegration` 下使用调用者提供的本地一次性 PostgreSQL/Ceph RGW 和固定 runtime image digest | — |
 
 工具版本与锁定值不同而检查失败时，先用锁定版本复现，再判断是不是代码问题。`scripts/check-manual.ps1` 是 MANUAL 走查的执行器，仍保持离线安装，不受本节放宽影响。

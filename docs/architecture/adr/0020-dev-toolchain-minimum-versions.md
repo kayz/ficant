@@ -35,7 +35,7 @@ C++ 编译器依次取 `FICANT_CXX`、Visual Studio Build Tools 自带 LLVM、`P
 
 - `rust-toolchain.toml`、`Cargo.lock`、`python/uv.lock`、`pnpm-lock.yaml`、`packageManager` 照旧锁定；
 - `.github/**` 中 CI、供应链和可复现性脚本的精确版本校验不变；
-- `scripts/package-contracts.ps1` 生成发布用契约包，仍要求 Buf 1.56.0 与 pnpm 10.12.4；
+- 契约包经 corepack 使用 `packageManager` 锁定的 pnpm 10.12.4；本地契约包测试比较的是两次全新打包的结果是否一致，不依赖 Buf 的精确版本，因此 Buf 同样只要求 ≥ 1.56。将来正式发布契约包时由 CI 用锁定工具链构建；
 - `scripts/check-manual.ps1` 是 MANUAL 走查执行器，保持离线安装；
 - 预期值、Oracle 与容差不因工具版本而调整。
 
