@@ -27,7 +27,7 @@
 | pnpm（经 corepack） | 10 | 10.12.4 |
 | Buf | 1.56 | 1.56.0 |
 
-检查时打印实际版本和 CI 锁定版本，便于对照。依赖仍按锁文件解析（`--locked`），但不再强制离线：本机缺少的 crate、wheel 或 pnpm 可以从包源取回。脚本仍不安装工具本身。
+检查时打印实际版本和 CI 锁定版本，便于对照。`web-dm` 的 `engines.node` 相应从 `22.17.0` 改为 `>=22`，否则 `engine-strict` 会让非 22.17.0 的 Node 在安装阶段失败；`engines.pnpm` 保持 10.12.4，由 corepack 自动取用。依赖仍按锁文件解析（`--locked`），但不再强制离线：本机缺少的 crate、wheel 或 pnpm 可以从包源取回。脚本仍不安装工具本身。
 
 C++ 编译器依次取 `FICANT_CXX`、Visual Studio Build Tools 自带 LLVM、`PATH` 上的 `clang++`。Cross-Clang 数值一致性检查需要 WSL 中的 Linux clang；缺少时打印 SKIPPED 警告并跳过，设 `FICANT_REQUIRE_CROSS_CLANG=1` 时改为失败。比较逻辑本身不变。
 
