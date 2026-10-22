@@ -228,7 +228,7 @@ if (!PortfolioWorkbenchService.methods.some((method) => method.name === "GetPage
     Invoke-CapturedNative -FilePath 'corepack' -ArgumentList @(
         'pnpm@10.12.4',
         'install',
-        '--offline',
+        '--prefer-offline',
         '--ignore-scripts',
         '--strict-peer-dependencies'
     ) -WorkingDirectory $consumerRoot | Out-Null

@@ -105,7 +105,7 @@ R7B 另提供 clean-candidate 恢复与 private MANUAL 入口：
 
 ## 本地依赖能力
 
-开发机只确认工具链存在、属于正确的工具族且不低于最低版本，不要求小版本与 CI 一致（[ADR-0020](architecture/adr/0020-dev-toolchain-minimum-versions.md)）。检查脚本不安装工具；依赖按锁文件解析（`--locked`），本机缺少的 crate、wheel 或 pnpm 会从包源取回。精确版本只在 CI 与发布侧锁定，下表最后一列供对照。
+开发机只确认工具链存在、属于正确的工具族且不低于最低版本，不要求小版本与 CI 一致（[ADR-0020](architecture/adr/0020-dev-toolchain-minimum-versions.md)）。检查脚本不安装工具；依赖按锁文件解析（`--locked`），本机缺少的 crate、wheel、npm 包或 pnpm 会从包源取回（本地契约包测试的 consumer 安装改为 `--prefer-offline`：优先用本机缓存，缺了再联网）。精确版本只在 CI 与发布侧锁定，下表最后一列供对照。
 
 | 能力 | 开发机要求 | CI / 发布锁定 |
 |---|---|---|
