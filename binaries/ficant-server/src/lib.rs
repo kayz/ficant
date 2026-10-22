@@ -1,8 +1,9 @@
 use ficant_api::{
-    ArtifactGrpcService, CanonicalCurvePointSetDecoder, CanonicalSnapshotCodecAdapter,
-    DataHealthGrpcService, DataSourceRegistryGrpcService, ExperimentGrpcService,
-    FactorRegistryGrpcService, FormalOutputPublisher, FoundationChangeGrpcService,
-    GrpcWebServeError, GrpcWebServerConfig, MarketDefinitionGrpcService, MarketFactGrpcService,
+    AppRegistration, ArtifactGrpcService, CanonicalCurvePointSetDecoder,
+    CanonicalSnapshotCodecAdapter, CspPolicy, DataHealthGrpcService, DataSourceRegistryGrpcService,
+    ExperimentGrpcService, FactorRegistryGrpcService, FormalOutputPublisher,
+    FoundationChangeGrpcService, GrpcWebServeError, GrpcWebServerConfig,
+    MarketDefinitionGrpcService, MarketFactGrpcService,
     OwnedPortfolioAggregationApplicationBackend, OwnedPortfolioPerformanceApplicationBackend,
     PlatformApplication, PlatformGrpcService, PlatformPort, PortfolioAggregationGrpcService,
     PortfolioCatalogGrpcService, PortfolioPerformanceGrpcService, PortfolioRiskGrpcService,
@@ -122,6 +123,7 @@ const ENV_KEYS: &[&str] = &[
     "FICANT_INPUT_FILE_NDJSON_ROOT",
     "FICANT_INPUT_FILE_CONNECTION_BINDING",
     "FICANT_INPUT_POSTGRES_CONNECTION_BINDING",
+    "FICANT_APP_REGISTRY_JSON",
 ];
 
 pub struct ServerSettings {
@@ -148,6 +150,7 @@ pub struct ServerSettings {
     input_file_ndjson_root: String,
     input_file_connection_binding: String,
     input_postgres_connection_binding: String,
+    apps: Vec<AppRegistration>,
 }
 
 impl fmt::Debug for ServerSettings {
@@ -177,6 +180,7 @@ impl fmt::Debug for ServerSettings {
             .field("input_file_ndjson_root", &"[REDACTED]")
             .field("input_file_connection_binding", &"[REDACTED]")
             .field("input_postgres_connection_binding", &"[REDACTED]")
+            .field("apps", &self.apps.len())
             .finish()
     }
 }
@@ -240,6 +244,7 @@ impl ServerSettings {
             parse_digest_setting(required(values, "FICANT_EXPERIMENT_RUNTIME_IMAGE_DIGEST")?)?;
         let experiment_native_source_digest =
             parse_digest_setting(required(values, "FICANT_EXPERIMENT_NATIVE_SOURCE_DIGEST")?)?;
+        let apps = app_registrations(values)?;
 
         Ok(Self {
             bind,
@@ -279,6 +284,7 @@ impl ServerSettings {
                 "FICANT_INPUT_POSTGRES_CONNECTION_BINDING",
             )?
             .to_owned(),
+            apps,
         })
     }
 }
@@ -1183,7 +1189,7 @@ fn build_platform_application(
         &settings.signing_key,
         identities,
         settings.implicit_identity.clone(),
-        Vec::new(),
+        settings.apps.clone(),
     )
     .map_err(config)?;
     Ok(Arc::new(application))
@@ -1312,6 +1318,69 @@ fn platform_role(value: &str) -> Result<PlatformRole, ServerError> {
             "trusted identity active role must be PLATFORM_ADMIN or RESEARCHER",
         )),
     }
+}
+
+/// One web app registration as written in `FICANT_APP_REGISTRY_JSON` (ADR-0022).
+///
+/// Web apps are clients of the platform; adding or removing one is deployment
+/// configuration, not a source change. Every entry still goes through
+/// `AppRegistration::try_new`, so origin, entrypoint, CSP and sandbox rules are unchanged.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AppRegistryConfig {
+    apps: Vec<AppRegistrationConfig>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AppRegistrationConfig {
+    app_id: String,
+    display_name: String,
+    entrypoint: String,
+    allowed_origin: String,
+    capabilities: Vec<String>,
+    allowed_subjects: Vec<String>,
+    grant_scopes: Vec<String>,
+    csp: BTreeMap<String, Vec<String>>,
+    sandbox: Vec<String>,
+}
+
+fn app_registrations(
+    values: &BTreeMap<String, String>,
+) -> Result<Vec<AppRegistration>, ServerError> {
+    let Some(raw) = values
+        .get("FICANT_APP_REGISTRY_JSON")
+        .filter(|value| !value.trim().is_empty())
+    else {
+        return Ok(Vec::new());
+    };
+    let parsed: AppRegistryConfig = serde_json::from_str(raw)
+        .map_err(|_| config("FICANT_APP_REGISTRY_JSON must be a valid app registry document"))?;
+    parsed
+        .apps
+        .into_iter()
+        .map(|app| {
+            let csp = app
+                .csp
+                .into_iter()
+                .map(|(name, sources)| CspPolicy::new(name, sources))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|reason| config(format!("app '{}': {reason}", app.app_id)))?;
+            let app_id = app.app_id.clone();
+            AppRegistration::try_new(
+                app.app_id,
+                app.display_name,
+                app.entrypoint,
+                app.allowed_origin,
+                app.capabilities,
+                app.allowed_subjects,
+                app.grant_scopes,
+                csp,
+                app.sandbox,
+            )
+            .map_err(|reason| config(format!("app '{app_id}': {reason}")))
+        })
+        .collect()
 }
 
 fn required<'a>(
