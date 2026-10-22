@@ -170,3 +170,105 @@ async fn production_composition_has_real_session_and_empty_registry_without_fake
         "production composition must not install fixture apps"
     );
 }
+
+const APP_REGISTRY: &str = r#"{
+  "apps": [
+    {
+      "app_id": "research.workbench",
+      "display_name": "Research workbench",
+      "entrypoint": "/research/index.html",
+      "allowed_origin": "https://apps.example.test",
+      "capabilities": ["rates:analyze", "artifacts:read"],
+      "allowed_subjects": ["browser-user"],
+      "grant_scopes": ["artifacts:read"],
+      "csp": {"default-src": ["'none'"], "connect-src": ["'self'"]},
+      "sandbox": ["allow-scripts"]
+    }
+  ]
+}"#;
+
+fn values_with_registry(registry: &str) -> BTreeMap<String, String> {
+    let mut values = values("127.0.0.1:50051");
+    values.insert("FICANT_APP_REGISTRY_JSON".to_owned(), registry.to_owned());
+    values
+}
+
+#[tokio::test]
+async fn configured_app_registry_is_served_without_source_changes() {
+    let settings = ServerSettings::try_from_values(&values_with_registry(APP_REGISTRY))
+        .expect("configured registry is valid");
+    assert!(format!("{settings:?}").contains("apps: 1"));
+    let service = build_platform_service(&settings).expect("service composes");
+    service
+        .get_current_session(Request::new(GetCurrentSessionRequest {}))
+        .await
+        .expect("transport succeeds");
+
+    let registry = service
+        .get_app_registry(Request::new(GetAppRegistryRequest {}))
+        .await
+        .expect("transport succeeds")
+        .into_inner();
+    let Some(get_app_registry_response::Result::Registry(registry)) = registry.result else {
+        panic!("configured loopback subject receives registry");
+    };
+    assert_eq!(registry.apps.len(), 1);
+    let app = &registry.apps[0];
+    assert_eq!(app.app_id, "research.workbench");
+    assert_eq!(app.display_name, "Research workbench");
+    assert_eq!(app.entrypoint, "/research/index.html");
+    assert_eq!(app.allowed_origin, "https://apps.example.test");
+    assert_eq!(app.capabilities, ["artifacts:read", "rates:analyze"]);
+}
+
+#[test]
+fn configured_app_registry_fails_closed_on_invalid_entries() {
+    for (case, registry) in [
+        ("malformed json", "{\"apps\": ["),
+        (
+            "unknown field",
+            &APP_REGISTRY.replace("\"sandbox\"", "\"sandbox_extra\": [], \"sandbox\""),
+        ),
+        (
+            "entrypoint outside origin",
+            &APP_REGISTRY.replace("/research/index.html", "https://evil.example.test/x"),
+        ),
+        (
+            "scope not declared as capability",
+            &APP_REGISTRY.replace("[\"artifacts:read\"]", "[\"portfolio:write\"]"),
+        ),
+        (
+            "missing default-src none",
+            &APP_REGISTRY.replace("\"default-src\": [\"'none'\"], ", ""),
+        ),
+        (
+            "unsafe sandbox",
+            &APP_REGISTRY.replace(
+                "[\"allow-scripts\"]",
+                "[\"allow-scripts\", \"allow-same-origin\"]",
+            ),
+        ),
+        (
+            "duplicate app id",
+            &APP_REGISTRY.replace(
+                "  ]\n}",
+                &format!(
+                    "  , {}\n  ]\n}}",
+                    &APP_REGISTRY[APP_REGISTRY.find("    {").expect("entry")
+                        ..APP_REGISTRY.rfind("    }").expect("entry end") + 5]
+                ),
+            ),
+        ),
+    ] {
+        let result = ServerSettings::try_from_values(&values_with_registry(registry))
+            .and_then(|settings| build_platform_service(&settings).map(|_| ()));
+        assert!(result.is_err(), "{case} must be rejected");
+    }
+}
+
+#[test]
+fn empty_app_registry_value_means_no_apps() {
+    let settings = ServerSettings::try_from_values(&values_with_registry("  "))
+        .expect("blank registry is the same as absent");
+    assert!(format!("{settings:?}").contains("apps: 0"));
+}

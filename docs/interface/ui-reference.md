@@ -56,6 +56,33 @@ Shell 已区分以下可观察状态：
 
 gRPC-Web base URL 禁止 userinfo、query 和 fragment，生产使用 HTTPS，本机回环开发可使用 HTTP。Rust transport 只允许配置中的精确 CORS origin；preflight 只开放 POST 和冻结 header 集合。
 
+## 注册 WebApp
+
+WebApp 是平台的客户端，可以有多个、可以私有开发（[ADR-0022](../architecture/adr/0022-portfolio-boundary.md)）。新增或下线一个 WebApp 只改部署配置，不改 ficant 源码：`ficant-server` 从环境变量 `FICANT_APP_REGISTRY_JSON` 读取应用注册。未设置或为空时，注册表为空。
+
+```json
+{
+  "apps": [
+    {
+      "app_id": "research.workbench",
+      "display_name": "研究工作台",
+      "entrypoint": "/research/index.html",
+      "allowed_origin": "https://apps.example.com",
+      "capabilities": ["rates:analyze", "artifacts:read"],
+      "allowed_subjects": ["researcher-a"],
+      "grant_scopes": ["artifacts:read"],
+      "csp": {"default-src": ["'none'"], "connect-src": ["'self'"]},
+      "sandbox": ["allow-scripts"]
+    }
+  ]
+}
+```
+
+- 每一项都经过与下面 iframe 启动边界相同的校验：origin、entrypoint、CSP、sandbox，以及"grant scopes 必须是 capabilities 的子集"。任何一项不合法或出现未知字段，`ficant-server` 拒绝启动，而不是忽略该项。
+- `allowed_subjects` 决定谁能在应用目录里看到它。
+- WebApp 若从自己的 origin 直接调用 gRPC-Web，还要把该 origin 加进 `FICANT_GRPC_WEB_ALLOWED_ORIGINS`。
+- 测试环境的 Compose 目前没有设置这个变量；真正部署某个 WebApp 时再改 `deploy/test/`（受保护路径）。
+
 ## iframe 启动边界
 
 Shell 在创建 iframe 前同时校验 Registry descriptor 与短期 grant：
