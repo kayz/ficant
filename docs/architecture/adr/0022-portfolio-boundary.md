@@ -1,9 +1,9 @@
-# ADR-0022：portfolio 需求边界与 Workbench 接口冻结
+# ADR-0022：WebApp 是平台的客户端；portfolio 需求边界与 Workbench 冻结
 
 - 状态：Accepted
 - 日期：2026-10-23
 - 决策者：Human
-- 范围：相邻 WebApp `kayz/ficant-portfolio` 提出的后台需求；`ficant.portfolio.v1.PortfolioWorkbenchService`
+- 范围：ficant 与 WebApp 的关系；相邻 WebApp `kayz/ficant-portfolio` 提出的后台需求；`ficant.portfolio.v1.PortfolioWorkbenchService`
 
 ## 背景
 
@@ -20,6 +20,16 @@ R8A 还为它加入了 `PortfolioWorkbenchService.GetPage`。它按 `PortfolioWo
 
 ## 决策
 
+**总原则：ficant 是平台，WebApp 是平台上的客户端。**
+
+- 可以同时存在多个 WebApp，彼此独立；任何一个都可以公开或私有开发，放在各自的仓库里。
+- ficant 仓库只放平台本身：后台服务、公共契约、契约包，以及作为宿主的 Platform Shell。WebApp 的页面设计、源码与测试不进 ficant 仓库。
+- 公共契约与具体 WebApp 无关：不按某个应用的页面组织接口，不在契约里出现应用名或页面编号。
+- 新增或下线一个 WebApp 不应要求修改 ficant 源码：注册、授权范围与入口地址属于部署配置。
+- WebApp 只通过已发布、带版本的契约包与平台交互，不引用 ficant 的源码目录。
+
+据此，下面两条是对 portfolio 的具体适用。
+
 **需求准入规则。** portfolio 的需求只有在满足以下之一时才进入 ficant：
 
 1. SPEC 已覆盖；
@@ -35,6 +45,14 @@ R8A 还为它加入了 `PortfolioWorkbenchService.GetPage`。它按 `PortfolioWo
 - 等 portfolio 有自己的后台时，把页面组装迁过去，再从 ficant 删除该服务。
 
 已有实现、契约与测试不变。冻结只约束以后的新增，不修改 `interface/proto/**`。
+
+## 现状差距与后续
+
+对照总原则，现在有三处不满足，按顺序处理：
+
+1. **应用注册写死在代码里。** 生产 `ficant-server` 构造平台时传入空的应用列表（`build_platform_application` 中的 `Vec::new()`），新增 WebApp 只能改源码。改为从部署配置读取应用注册（`app_id`、显示名、入口、允许的 origin、capabilities），沿用 `AppRegistration::try_new` 的校验。
+2. **契约包不能独立消费。** `@ficant/contracts-generated` 是 `private: true`、版本 `0.0.0`，portfolio 通过指向 `../ficant` 源码的路径别名使用。改为随 ficant 版本 tag 发布带版本的包（私有 WebApp 可用 GitHub Packages）；Python SDK 同理。契约兼容性已有 `buf breaking`（FILE 级）把关。
+3. **WebApp 设计稿放在 ficant 仓库里。** `web-dm/webapps/dmquant/design.md` 是 ficant 研究 WebApp 的目标设计，应迁到该 WebApp 自己的仓库；仓库建立前先存放在私有研究资料库。迁出需要同时修改仓库策略脚本里的必需路径（受保护的 `.github/**`）。
 
 ## 代价
 
