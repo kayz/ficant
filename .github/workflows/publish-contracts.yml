@@ -1,0 +1,88 @@
+name: publish-contracts
+
+# Publishes @ficant/contracts-generated as a versioned tarball on the GitHub Release of each
+# Human-created version tag, so WebApps in other (possibly private) repositories can depend on
+# an exact contract version instead of ficant's source tree (ADR-0022). Runs only after the
+# version CI for that tag succeeded, on the same authorization rule as release-test.
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-contracts-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ github.event.workflow_run.head_branch }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_branch }}
+      - name: Authorize exact version tag on current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]
+          git fetch origin main --tags --force
+          sha=$(git rev-parse "refs/tags/$VERSION^{commit}")
+          [[ "$sha" == $(git rev-parse HEAD) ]]
+          [[ "$sha" == $(git rev-parse origin/main) ]]
+          [[ "$sha" == "${{ github.event.workflow_run.head_sha }}" ]]
+      - name: Install pinned Buf and Node
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker create --name ficant-buf-tool bufbuild/buf@sha256:89fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26
+          docker cp ficant-buf-tool:/usr/local/bin/buf /tmp/buf
+          docker rm ficant-buf-tool
+          sudo install -m 0755 /tmp/buf /usr/local/bin/buf
+          [[ "$(buf --version)" == '1.56.0' ]]
+          curl --retry 5 --retry-all-errors -fL -o /tmp/node-v22.17.0-linux-x64.tar.xz https://nodejs.org/dist/v22.17.0/node-v22.17.0-linux-x64.tar.xz
+          [[ $(stat -c %s /tmp/node-v22.17.0-linux-x64.tar.xz) == '30482736' ]]
+          echo '325c0f1261e0c61bcae369a1274028e9cfb7ab7949c05512c5b1e630f7e80e12  /tmp/node-v22.17.0-linux-x64.tar.xz' | sha256sum -c -
+          tar -xJf /tmp/node-v22.17.0-linux-x64.tar.xz -C /tmp
+          echo '/tmp/node-v22.17.0-linux-x64/bin' >> "$GITHUB_PATH"
+      - name: Pack versioned contracts
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          out="${{ runner.temp }}/contracts"
+          mkdir -p "$out"
+          pwsh -NoProfile -NonInteractive -File scripts/package-contracts.ps1 \
+            -Version "${VERSION#v}" -OutputDirectory "$out" | tee "$out/evidence.json"
+          tarball="$out/ficant-contracts-generated-${VERSION#v}.tgz"
+          [[ -f "$tarball" ]]
+          (cd "$out" && sha256sum "$(basename "$tarball")" > "$(basename "$tarball").sha256")
+          printf 'tarball=%s\n' "$tarball" >> "$GITHUB_OUTPUT"
+      - name: Attach to the GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$VERSION" >/dev/null 2>&1; then
+            prerelease=()
+            [[ "$VERSION" == *-* ]] && prerelease=(--prerelease)
+            gh release create "$VERSION" --verify-tag "${prerelease[@]}" \
+              --title "$VERSION" --notes "Contracts package for $VERSION."
+          fi
+          # Released assets are immutable: never overwrite an existing tarball.
+          gh release upload "$VERSION" "$TARBALL" "$TARBALL.sha256"

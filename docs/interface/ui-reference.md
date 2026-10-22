@@ -91,9 +91,25 @@ Phase 5A 观测面板能展示既有 Run 中经完整性校验的 `AnalyzeBondRe
 
 ## 相邻 Portfolio WebApp 接线
 
-金证FICC合同管理系统的 24 页工作台不在 `web-dm/webapps/`。FICANT 只提供 `ficant.portfolio.v1` 只读 RPC 与 `portfolio-workbench.v1` PageEnvelope；相邻仓库安装本地 `@ficant/contracts-generated@0.0.0` artifact，不得继续 alias 到本树 `web-dm/packages/contracts-generated/src`。
+金证FICC合同管理系统的 24 页工作台不在 `web-dm/webapps/`。FICANT 只提供 `ficant.portfolio.v1` 只读 RPC 与 `portfolio-workbench.v1` PageEnvelope；相邻仓库安装带版本的 `@ficant/contracts-generated` 发布包（见下节），不得继续 alias 到本树 `web-dm/packages/contracts-generated/src`。
 
 Docker 开发 gRPC-Web 默认 `http://127.0.0.1:18080`，允许 origin 精确包含 `http://127.0.0.1:5173`。`127.0.0.1:50051` 只用于本机 native gRPC。R8A/R8B 已提供 D01/P01/P02/P03/P04 所需的真实 DTO/BFF 合同，但尚未修改或接入相邻 WebApp；下游接线后这五页必须使用真实 DTO，其余页面由 WebApp 自己标 demo/partial。BFF 失败必须呈现 typed error，不得用 mock 冒充 backend success。
+
+## 在其他仓库使用契约包
+
+WebApp 在自己的仓库里开发，可以是私有仓库。它只通过带版本的契约包与平台交互，不引用 ficant 源码。
+
+- Human 创建版本 tag（如 `v0.1.0-alpha.13`）后，版本 CI 通过，`publish-contracts` 工作流在 Linux Runner 上打包 `@ficant/contracts-generated`，版本号取自 tag（去掉开头的 `v`），并把 `ficant-contracts-generated-<版本>.tgz` 与对应的 `.sha256` 附到该 tag 的 GitHub Release。Release 不存在时自动建立，预发布版本标为 prerelease。已发布的文件不会被覆盖。
+- WebApp 按精确版本依赖：
+
+  ```bash
+  pnpm add https://github.com/kayz/ficant/releases/download/v0.1.0-alpha.13/ficant-contracts-generated-0.1.0-alpha.13.tgz
+  ```
+
+  `pnpm-lock.yaml` 会记录 tarball 的 integrity。升级平台版本就是换成新 tag 的 URL。
+- 包里是 TypeScript 源码（`exports` 指向 `src/*.ts`），由 WebApp 自己的构建工具编译。运行时依赖 `@bufbuild/protobuf` 2.5.2。
+- 仓库里提交的 `package.json` 保持 `0.0.0`、`private: true`。版本号只写进打包用的临时副本，因为该目录的内容被 license inventory 绑定。`private` 保留，以防误发到公共 npm。
+- 本地打包同一版本：`pwsh scripts/package-contracts.ps1 -Version 0.1.0-alpha.13`。
 
 ## Validity
 
