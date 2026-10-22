@@ -13,7 +13,7 @@
 - 如何拆分任务、是否使用子 agent、模块内部怎么写，由你自行判断。产品或金融语义不清楚时先问；实现细节自己决定。
 - 不得通过修改 expected、Oracle、golden case、断言或容差制造通过。认为它们有误时，单独提出并说明理由，由 Human 决定。
 - 公共契约（`interface/proto/**`）、数据库 migration、RulePack 内容（`domain-packs/**`）的语义变化需要 Human 同意；纯实现重构不需要。
-- 相邻 WebApp（如 ficant-portfolio）的需求先过 SPEC：只接受 SPEC 已覆盖或能表述成通用研究能力的需求；不新增按页面组织的接口。`PortfolioWorkbenchService` 已冻结，见 [ADR-0022](docs/architecture/adr/0022-portfolio-boundary.md)。
+- ficant 是平台，WebApp 是客户端，可以有多个、可以私有开发，各自独立仓库。公共契约不得按某个 WebApp 的页面组织，新增 WebApp 不应要求改 ficant 源码。相邻 WebApp（如 ficant-portfolio）的需求先过 SPEC：只接受 SPEC 已覆盖或能表述成通用研究能力的需求；不新增按页面组织的接口。`PortfolioWorkbenchService` 已冻结，见 [ADR-0022](docs/architecture/adr/0022-portfolio-boundary.md)。
 - 完成前运行 `.\scripts\check-fast.ps1`；涉及契约、持久化、RulePack 或主流程时运行 `.\scripts\check.ps1`，需要 PostgreSQL/Ceph 的改动再加 `-IncludeIntegration`。先用 `-ListOnly` 查看将执行的命令。没跑或跑不了就直接说明，不要写成已通过。
 - 交付形式是 Pull Request。PR 描述写清：改了什么、对应哪些 AC 或 SPEC 条款、实际运行的命令与 exit code 和可得的 test count、仍有的风险。不再为每个迭代单独写 brief，也不在仓库里建状态台账、任务清单或进度副本。
 - 脚本保持 PowerShell 7 原生语法、参数数组、失败即退出，依赖按锁文件解析（`--locked`）；不得加入 SSH、GitHub、发布、部署或安装工具的行为。开发机只检查工具族与最低版本，精确版本只在 CI 与发布侧锁定，见 [ADR-0020](docs/architecture/adr/0020-dev-toolchain-minimum-versions.md)。
