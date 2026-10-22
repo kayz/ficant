@@ -1,7 +1,11 @@
 [CmdletBinding()]
 param(
     [string]$OutputDirectory = '',
-    [string]$DescriptorPath = ''
+    [string]$DescriptorPath = '',
+    # Release version without the leading 'v', for example '0.1.0-alpha.13'. When given, the package
+    # is packed from a staged copy whose package.json carries this version; the committed
+    # package.json (bound by the license inventory) stays at 0.0.0.
+    [string]$Version = ''
 )
 
 Set-StrictMode -Version Latest
@@ -10,7 +14,11 @@ $ErrorActionPreference = 'Stop'
 $ficantRoot = Split-Path -Parent $PSScriptRoot
 $packageRoot = Join-Path $ficantRoot 'web-dm\packages\contracts-generated'
 $sourceRoot = Join-Path $packageRoot 'src'
-$expectedPackageName = 'ficant-contracts-generated-0.0.0.tgz'
+$packageVersion = if ([string]::IsNullOrWhiteSpace($Version)) { '0.0.0' } else { $Version }
+if ($packageVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$') {
+    throw "Package version must be semantic, without a leading 'v': '$packageVersion'."
+}
+$expectedPackageName = "ficant-contracts-generated-$packageVersion.tgz"
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 
 function Invoke-CapturedNative {
@@ -151,6 +159,7 @@ else {
 [System.IO.Directory]::CreateDirectory($resolvedOutputDirectory) | Out-Null
 
 $temporaryDescriptor = $null
+$temporaryStage = $null
 try {
     $resolvedDescriptor = if ([string]::IsNullOrWhiteSpace($DescriptorPath)) {
         $bufCommand = if ([string]::IsNullOrWhiteSpace($env:FICANT_BUF)) {
@@ -189,19 +198,29 @@ try {
         Remove-Item -LiteralPath $packagePath -Force
     }
 
-    $previousCorepackNetwork = $env:COREPACK_ENABLE_NETWORK
-    $env:COREPACK_ENABLE_NETWORK = '0'
-    try {
-        Invoke-CapturedNative -FilePath 'corepack' -ArgumentList @(
-            'pnpm@10.12.4',
-            'pack',
-            '--pack-destination',
-            $resolvedOutputDirectory
-        ) -WorkingDirectory $packageRoot | Out-Null
+    $packWorkingDirectory = $packageRoot
+    if ($packageVersion -ne '0.0.0') {
+        $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ficant-contracts-stage-$([Guid]::NewGuid().ToString('N'))")
+        $temporaryStage = $stagingRoot
+        [System.IO.Directory]::CreateDirectory($stagingRoot) | Out-Null
+        Copy-Item -LiteralPath $sourceRoot -Destination (Join-Path $stagingRoot 'src') -Recurse
+        Copy-Item -LiteralPath (Join-Path $packageRoot 'README.md') -Destination $stagingRoot
+        $manifest = Get-Content -LiteralPath (Join-Path $packageRoot 'package.json') -Raw | ConvertFrom-Json -AsHashtable
+        $manifest['version'] = $packageVersion
+        [System.IO.File]::WriteAllText(
+            (Join-Path $stagingRoot 'package.json'),
+            (($manifest | ConvertTo-Json -Depth 20) + "`n"),
+            $utf8NoBom
+        )
+        $packWorkingDirectory = $stagingRoot
     }
-    finally {
-        $env:COREPACK_ENABLE_NETWORK = $previousCorepackNetwork
-    }
+
+    Invoke-CapturedNative -FilePath 'corepack' -ArgumentList @(
+        'pnpm@10.12.4',
+        'pack',
+        '--pack-destination',
+        $resolvedOutputDirectory
+    ) -WorkingDirectory $packWorkingDirectory | Out-Null
 
     if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) {
         throw "pnpm pack did not create the expected artifact '$packagePath'."
@@ -209,7 +228,7 @@ try {
 
     [ordered]@{
         schema = 'ficant.contract-package-evidence.v1'
-        package = '@ficant/contracts-generated@0.0.0'
+        package = "@ficant/contracts-generated@$packageVersion"
         descriptor_sha256 = (Get-FileHash -LiteralPath $resolvedDescriptor -Algorithm SHA256).Hash.ToLowerInvariant()
         source_tree_sha256 = $treeIdentity.digest
         source_file_count = $treeIdentity.count
@@ -220,5 +239,8 @@ try {
 finally {
     if ($null -ne $temporaryDescriptor -and (Test-Path -LiteralPath $temporaryDescriptor -PathType Leaf)) {
         Remove-Item -LiteralPath $temporaryDescriptor -Force
+    }
+    if ($null -ne $temporaryStage -and (Test-Path -LiteralPath $temporaryStage -PathType Container)) {
+        Remove-Item -LiteralPath $temporaryStage -Recurse -Force
     }
 }
