@@ -114,7 +114,7 @@ R7B 另提供 clean-candidate 恢复与 private MANUAL 入口：
 | C++ | CMake、Ninja、clang++ ≥ 18。依次使用 `FICANT_CXX`、Visual Studio Build Tools 自带 LLVM、`PATH` 上的 `clang++`。Windows 上要在 VS 开发者环境（`vcvars64.bat` / Developer PowerShell）中运行 `check.ps1`，CMake 需要其中 Windows SDK 的 `rc.exe` | LLVM 19.1.5 |
 | Cross-Clang | 可选：WSL 发行版 `ficant-ubuntu-24.04` 中的 `/usr/bin/clang++-18`，可用 `FICANT_WSL_DISTRO` / `FICANT_LINUX_CXX` 覆盖。没有时该步打印 SKIPPED 警告并跳过，跳过不是数值一致的证据；设 `FICANT_REQUIRE_CROSS_CLANG=1` 则改为失败 | Ubuntu clang 18.1.8 |
 | Python | uv ≥ 0.7；Python 版本与 wheel 由 `python/uv.lock` 决定 | uv 0.7.13 |
-| Web | Node ≥ 22（`web-dm/.npmrc` 设 `engine-strict=false`，`engines` 里的 22.17.0 只作提示），Corepack 按 `web-dm/package.json` 的 `packageManager` 取用 pnpm | Node 22.17.0、pnpm 10.12.4 |
+| Web | Node ≥ 22（`web-dm/.npmrc` 设 `engine-strict=false`，`engines` 里的 22.17.0 只作提示），Corepack 按 `web-dm/package.json` 的 `packageManager` 取用 pnpm。`web-dm` 的脚本会再调用 `pnpm`，所以 `PATH` 上的 `pnpm` 必须是 Corepack 垫片（`corepack enable`），不能是 `npm -g` 装的其他版本 | Node 22.17.0、pnpm 10.12.4 |
 | Protobuf | Buf ≥ 1.56；Windows 可用 `FICANT_BUF` 指定可执行文件 | Buf 1.56.0 |
 | 集成测试 | 仅在 `-IncludeIntegration` 下使用调用者提供的本地一次性 PostgreSQL/Ceph RGW 和固定 runtime image digest | — |
 
