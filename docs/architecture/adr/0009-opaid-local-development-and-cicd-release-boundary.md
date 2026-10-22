@@ -1,6 +1,6 @@
 # ADR-0009：采用 OPAID 本地开发与 CICD 发布边界
 
-- 状态：Accepted；开发侧部分已被 [ADR-0019](0019-lightweight-development-keep-release-boundary.md) 取代（2026-10-19），CICD 发布边界继续有效；本地检查的精确工具版本要求已由 [ADR-0020](0020-dev-toolchain-minimum-versions.md) 放宽为最低版本（2026-10-21）
+- 状态：Accepted；开发侧部分已被 [ADR-0019](0019-lightweight-development-keep-release-boundary.md) 取代（2026-10-19），CICD 发布边界继续有效；本地检查的精确工具版本要求已由 [ADR-0020](0020-dev-toolchain-minimum-versions.md) 放宽为最低版本（2026-10-21）；发布文件改由本仓库拥有，中央不再生成副本，见 [ADR-0021](0021-ficant-owns-release-files.md)（2026-10-23）
 - 日期：2026-07-17
 - 修订：2026-07-20（Human brief 交付与版本 tag 触发）
 - 范围：任务冻结、本地开发与测试、候选交接、CI/CD、发布和历史治理材料

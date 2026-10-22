@@ -1,6 +1,6 @@
 # FICANT 本地开发与测试
 
-FICANT 的日常开发由 agent 自行组织，以 Pull Request 交付可验证的候选；版本发布只由 Human 创建的版本 tag 触发，交给中央 `cicd` 平台。本文只描述本地边界；服务器、GHCR、GitHub Environment、部署和回滚不属于本地入口。开发约定见 [`AGENTS.md`](../AGENTS.md)，决策依据见 [ADR-0019](architecture/adr/0019-lightweight-development-keep-release-boundary.md)。
+FICANT 的日常开发由 agent 自行组织，以 Pull Request 交付可验证的候选；版本发布只由 Human 创建的版本 tag 触发，发布文件由本仓库拥有（[ADR-0021](architecture/adr/0021-ficant-owns-release-files.md)）。本文只描述本地边界；服务器、GHCR、GitHub Environment、部署和回滚不属于本地入口。开发约定见 [`AGENTS.md`](../AGENTS.md)，决策依据见 [ADR-0019](architecture/adr/0019-lightweight-development-keep-release-boundary.md)。
 
 `docs/iterations/` 下的 brief 是 2026-10-19 之前的历史证据，不再新增。
 

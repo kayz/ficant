@@ -1,6 +1,6 @@
 # FICANT 协作边界
 
-本仓库分两条链路：日常开发由 agent 自行组织，按下面的约定交付可验证的候选；版本发布只由 Human 创建的版本 tag 触发，交给中央 `cicd` 平台。两条链路不得互相代替。决策依据见 [ADR-0019](docs/architecture/adr/0019-lightweight-development-keep-release-boundary.md)。
+本仓库分两条链路：日常开发由 agent 自行组织，按下面的约定交付可验证的候选；版本发布只由 Human 创建的版本 tag 触发，由本仓库的发布工作流执行。两条链路不得互相代替。决策依据见 [ADR-0019](docs/architecture/adr/0019-lightweight-development-keep-release-boundary.md)。
 
 ## 权威与边界
 
@@ -13,6 +13,7 @@
 - 如何拆分任务、是否使用子 agent、模块内部怎么写，由你自行判断。产品或金融语义不清楚时先问；实现细节自己决定。
 - 不得通过修改 expected、Oracle、golden case、断言或容差制造通过。认为它们有误时，单独提出并说明理由，由 Human 决定。
 - 公共契约（`interface/proto/**`）、数据库 migration、RulePack 内容（`domain-packs/**`）的语义变化需要 Human 同意；纯实现重构不需要。
+- 相邻 WebApp（如 ficant-portfolio）的需求先过 SPEC：只接受 SPEC 已覆盖或能表述成通用研究能力的需求；不新增按页面组织的接口。`PortfolioWorkbenchService` 已冻结，见 [ADR-0022](docs/architecture/adr/0022-portfolio-boundary.md)。
 - 完成前运行 `.\scripts\check-fast.ps1`；涉及契约、持久化、RulePack 或主流程时运行 `.\scripts\check.ps1`，需要 PostgreSQL/Ceph 的改动再加 `-IncludeIntegration`。先用 `-ListOnly` 查看将执行的命令。没跑或跑不了就直接说明，不要写成已通过。
 - 交付形式是 Pull Request。PR 描述写清：改了什么、对应哪些 AC 或 SPEC 条款、实际运行的命令与 exit code 和可得的 test count、仍有的风险。不再为每个迭代单独写 brief，也不在仓库里建状态台账、任务清单或进度副本。
 - 脚本保持 PowerShell 7 原生语法、参数数组、失败即退出，依赖按锁文件解析（`--locked`）；不得加入 SSH、GitHub、发布、部署或安装工具的行为。开发机只检查工具族与最低版本，精确版本只在 CI 与发布侧锁定，见 [ADR-0020](docs/architecture/adr/0020-dev-toolchain-minimum-versions.md)。
@@ -29,7 +30,7 @@
 
 ## CICD 发布管理
 
-- `.github/**`、`cicd.yml`、`deploy/**` 和中央 `kayz/cicd` 平台定义版本候选的正式 CI/CD 与发布合同。除非 Human 明确要求，不得修改这些路径。
+- `.github/**`、`cicd.yml`、`deploy/**` 定义版本候选的正式 CI/CD 与发布合同，由本仓库自己拥有（[ADR-0021](docs/architecture/adr/0021-ficant-owns-release-files.md)）；中央 `kayz/cicd` 只保留测试机初始化、Nginx 与 Secrets/Environment 说明。除非 Human 明确要求，不得修改这些路径。
 - 普通 branch push、Pull Request 和 `main` 合并不得触发完整 GitHub CI、镜像构建或部署。只有 Human 明确确定版本号并创建指向当前 `main` 精确提交的 `v*` tag，才进入 CICD；创建 tag 即授权自动完成版本 CI、构建、扫描和测试环境交付。
 - 发布制品只能由 Linux GitHub Runner 构建并以 Commit SHA 标识；测试服务器只拉取不可变镜像并部署，不现场编译。
 - 创建版本 tag 前，在已同步且干净的 `main` 上更新本机 Trivy 数据库并运行 `.\scripts\check-release-candidate.ps1`；该入口必须用正式 Dockerfile 构建并扫描与最终拓扑对应的 Server、Worker、UI 三个本地预检应用镜像，复核并扫描锁定的 Ceph RGW 运行时，启动 PostgreSQL、Ceph RGW，串行执行一次性 migration，再启动真实 Worker、Server 与 UI。它不创建 tag、不推送镜像、不连接目标服务器。
