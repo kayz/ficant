@@ -54,7 +54,7 @@
 
 ## 发布
 
-普通 push、Pull Request 和 `main` 合并不触发发布。只有 Human 创建指向当前 `main` 的不可变 `v*` tag，才进入中央 `kayz/cicd` 的版本 CI、镜像构建、扫描与测试环境部署；失败的 tag 不移动，修复后用新的版本号。最近一次是 `v0.1.0-alpha.12`，详见 [`docs/delivery/release-notes.md`](docs/delivery/release-notes.md)。
+普通 push、Pull Request 和 `main` 合并不触发发布。只有 Human 创建指向当前 `main` 的不可变 `v*` tag，才进入版本 CI、镜像构建、扫描与测试环境部署（发布文件由本仓库拥有，见 ADR-0021）；失败的 tag 不移动，修复后用新的版本号。最近一次是 `v0.1.0-alpha.12`，详见 [`docs/delivery/release-notes.md`](docs/delivery/release-notes.md)。
 
 ## 许可证
 
