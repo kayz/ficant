@@ -1,8 +1,8 @@
 # ADR-0024：逐 bar 点时回放
 
-- 状态：Proposed
+- 状态：Accepted
 - 日期：2026-10-23
-- 决策者：Human（待批准）
+- 决策者：Human（2026-10-23 在对话中确认四处选择：内置策略族、下一根 bar 成交、VWAP 否则收盘价、Application 用例）
 - 范围：SPEC v1.4 §4.2「研究闭环」中的点时回放与仿真运行；AC38、AC39，并为 AC40–AC44 定接口
 - 关联：ADR-0012（Subject）、ADR-0014（PolicyArtifact 与共用求值器）、ADR-0023（标准 Bar 与点时读取）
 
@@ -35,6 +35,7 @@ trait PolicyEvaluator {
 
 - `PointInTimeView` 是唯一的数据入口：它由回放引擎在每个决策时点用 `visible_at(t)` 构造，策略拿不到快照本身，也拿不到时钟。看不见未来是结构保证，不靠策略作者自律。
 - 策略输出 `TargetExposure`（每个工具的目标面额），不是订单（AC44）。
+- 策略看到的持仓是"已结算持仓 + 尚在等待执行 bar 的交易"。等待中的交易能否成交取决于一根尚不可见的 bar，所以只按意图计入，不按结果计入；交易结算为未成交后，下一个决策时点看到的持仓自然回退，策略会重新提出。
 - 二期先提供 Rust 内置策略族（参数化，例如"目标久期 / 收益率阈值"类），求值器即 ficant 的库代码，满足 ADR-0014 的"同一份实现"。
 - 用户自写代码（Python）属于三期"生成式研究节点"，需要沙箱与节点契约，不在二期。
 
@@ -63,6 +64,8 @@ trait PolicyEvaluator {
 - 回放是 Application 层的用例，直接在进程内调用领域求值器与快照读取，不经过现有研究图的 Worker 执行。
 - 输出 `SimulationResult`：每个决策时点的目标、每笔仿真成交、每日持仓与损益（AC40 补齐分解），带完整血缘与覆盖度声明。
 - 本 ADR 不改 `interface/proto/**`、不加 migration。持久化与 gRPC 接口另行提出。
+- 数据经端口 `PointInTimeBars` 进入回放；它的 `visible_at(t)` 由 `VerifiedBarSnapshot` 实现。即使端口实现有误、把未来的 bar 交出来，`PointInTimeView` 的构造也会拒绝，回放整体失败。
+- 引擎核心（视图、持仓、成交模拟、结果标识）在 L1 领域层，是纯函数；Application 用例只负责调度。这样 ADR-0014 的"共用求值器"可以直接链接领域库。
 
 ### 5. 第一个实现 PR 的范围
 

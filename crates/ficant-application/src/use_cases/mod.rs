@@ -1,3 +1,4 @@
+pub mod bar_replay;
 pub mod bond_analytics;
 pub mod carry_roll;
 pub mod data_health;

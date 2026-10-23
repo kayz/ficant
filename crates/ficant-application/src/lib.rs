@@ -12,6 +12,7 @@ pub use ports::{
     AccessScope, AeadCursorCodec, AuthorizedPrincipal, Cursor, CursorKey, CursorPage,
     IdempotencyKey, OperationFingerprint, PageRequest,
 };
+pub use use_cases::bar_replay::{BarReplayRequest, PointInTimeBars, replay_bars};
 pub use use_cases::bond_analytics::{
     BOND_ANALYTICS_MEDIA_TYPE, BondAnalyticsReplay, CalculateBondAnalytics, PublishBondAnalytics,
     ReplayBondAnalytics, map_analytics_error,

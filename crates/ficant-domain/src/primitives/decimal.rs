@@ -119,7 +119,7 @@ impl DecimalValue {
         Ok(self.as_decimal().cmp(&other.as_decimal()))
     }
 
-    fn as_decimal(&self) -> Decimal {
+    pub(crate) fn as_decimal(&self) -> Decimal {
         let coefficient = self
             .coefficient
             .parse::<i128>()
