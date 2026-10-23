@@ -101,8 +101,9 @@ I1 要求每条事实都有 `visible_at`。来源情况分两种：
 
 ### 5. 快照与回放的接口
 
-- 标准 Bar 快照沿用 `DataSnapshot`（不可变、内容寻址、血缘），只有 schema 与 manifest 内容不同。打包与读取在下一个 PR 实现。
-- 回放（AC38）按决策时点读取：只返回 `visible_at ≤ 决策时点` 的 Bar。这一条由快照读取层保证，不由策略代码保证。
+- 标准 Bar 快照沿用 `DataSnapshot`（不可变、内容寻址、血缘），只有 schema 与 manifest 内容不同。manifest（`ficant.data.bar-snapshot-manifest.v1`）绑定来源、映射、日历、价格/金额/收益率单位、工具集合、可见时间规则与完整拒绝报告；读取时三方互验（snapshot、Parquet、manifest），并把每一行重新构造成领域 `Bar`，任何漂移都整体失败。
+- 拒绝报告进 manifest 后，"读到的行数 = 接受 + 窗口外 + 拒绝"必须成立，否则视为篡改。
+- 回放（AC38）按决策时点读取：`VerifiedBarSnapshot::visible_at(t)` 只返回 `visible_at ≤ t` 的 Bar。这一条由快照读取层保证，不由策略代码保证。决策时点晚于快照的可见截止时，读取失败而不是返回不完整的数据。
 - `observed_at = bar_end` 保证用不到"未结束的 bar"。
 
 ### 6. 本 ADR 不做的事

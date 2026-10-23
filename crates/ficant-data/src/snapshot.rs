@@ -71,6 +71,14 @@ impl CanonicalImportEvidence {
 }
 
 impl CanonicalSnapshotPackage {
+    pub(crate) fn from_parts(snapshot: DataSnapshot, parquet: Vec<u8>, manifest: Vec<u8>) -> Self {
+        Self {
+            snapshot,
+            parquet,
+            manifest,
+        }
+    }
+
     #[must_use]
     pub fn snapshot(&self) -> &DataSnapshot {
         &self.snapshot
@@ -289,7 +297,7 @@ struct QualityBinding {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ParquetWriterBinding {
+pub(crate) struct ParquetWriterBinding {
     library: String,
     version: String,
     created_by: String,
@@ -442,7 +450,7 @@ impl CanonicalSnapshotCodec {
     }
 }
 
-fn encode_parquet(batch: &RecordBatch) -> DataResult<Vec<u8>> {
+pub(crate) fn encode_parquet(batch: &RecordBatch) -> DataResult<Vec<u8>> {
     let properties = WriterProperties::builder()
         .set_writer_version(WriterVersion::PARQUET_2_0)
         .set_created_by(PARQUET_CREATED_BY.to_owned())
@@ -468,13 +476,21 @@ fn encode_parquet(batch: &RecordBatch) -> DataResult<Vec<u8>> {
 }
 
 fn decode_parquet(bytes: &[u8], row_count: u64) -> DataResult<RecordBatch> {
+    decode_parquet_with_schema(bytes, row_count, &canonical_quote_schema())
+}
+
+pub(crate) fn decode_parquet_with_schema(
+    bytes: &[u8],
+    row_count: u64,
+    expected: &arrow::datatypes::Schema,
+) -> DataResult<RecordBatch> {
     let builder = ParquetRecordBatchReaderBuilder::try_new_with_options(
         Bytes::copy_from_slice(bytes),
         ArrowReaderOptions::new().with_skip_arrow_metadata(false),
     )
     .map_err(|_| DataError::SnapshotIntegrityFailed)?;
     let metadata = builder.metadata();
-    if builder.schema().as_ref() != &canonical_quote_schema()
+    if builder.schema().as_ref() != expected
         || metadata.num_row_groups() != 1
         || metadata.file_metadata().version() != 2
         || metadata.file_metadata().created_by() != Some(PARQUET_CREATED_BY)
@@ -500,11 +516,10 @@ fn decode_parquet(bytes: &[u8], row_count: u64) -> DataResult<RecordBatch> {
     if reader.next().is_some() {
         return Err(DataError::SnapshotIntegrityFailed);
     }
-    let canonical_schema = canonical_quote_schema();
-    if decoded.schema().fields() != canonical_schema.fields() {
+    if decoded.schema().fields() != expected.fields() {
         return Err(DataError::SchemaMismatch);
     }
-    RecordBatch::try_new(Arc::new(canonical_schema), decoded.columns().to_vec())
+    RecordBatch::try_new(Arc::new(expected.clone()), decoded.columns().to_vec())
         .map_err(|_| DataError::SchemaMismatch)
 }
 
@@ -700,7 +715,7 @@ fn project_canonical_quotes(
     Ok(quotes)
 }
 
-fn decimal_column(
+pub(crate) fn decimal_column(
     coefficients: &StringArray,
     scales: &UInt32Array,
     row: usize,
@@ -717,7 +732,7 @@ fn decimal_column(
         .map_err(|_| DataError::SnapshotIntegrityFailed)
 }
 
-fn epoch_date(days: i32) -> DataResult<NaiveDate> {
+pub(crate) fn epoch_date(days: i32) -> DataResult<NaiveDate> {
     let seconds = i64::from(days)
         .checked_mul(86_400)
         .ok_or(DataError::SnapshotIntegrityFailed)?;
@@ -844,7 +859,7 @@ fn manifest_lineage(
     Ok(lineage)
 }
 
-fn writer_binding() -> ParquetWriterBinding {
+pub(crate) fn writer_binding() -> ParquetWriterBinding {
     ParquetWriterBinding {
         library: "apache-arrow-rs-parquet".to_owned(),
         version: PARQUET_LIBRARY_VERSION.to_owned(),
@@ -893,7 +908,7 @@ fn version_ref_with_hash(value: &ExactVersionWithHash) -> DataResult<(VersionRef
     ))
 }
 
-fn string_column(batch: &RecordBatch, index: usize) -> DataResult<&StringArray> {
+pub(crate) fn string_column(batch: &RecordBatch, index: usize) -> DataResult<&StringArray> {
     batch
         .column(index)
         .as_any()
@@ -901,7 +916,7 @@ fn string_column(batch: &RecordBatch, index: usize) -> DataResult<&StringArray> 
         .ok_or(DataError::SchemaMismatch)
 }
 
-fn u64_column(batch: &RecordBatch, index: usize) -> DataResult<&UInt64Array> {
+pub(crate) fn u64_column(batch: &RecordBatch, index: usize) -> DataResult<&UInt64Array> {
     batch
         .column(index)
         .as_any()
@@ -909,7 +924,7 @@ fn u64_column(batch: &RecordBatch, index: usize) -> DataResult<&UInt64Array> {
         .ok_or(DataError::SchemaMismatch)
 }
 
-fn u32_column(batch: &RecordBatch, index: usize) -> DataResult<&UInt32Array> {
+pub(crate) fn u32_column(batch: &RecordBatch, index: usize) -> DataResult<&UInt32Array> {
     batch
         .column(index)
         .as_any()
@@ -917,7 +932,10 @@ fn u32_column(batch: &RecordBatch, index: usize) -> DataResult<&UInt32Array> {
         .ok_or(DataError::SchemaMismatch)
 }
 
-fn timestamp_column(batch: &RecordBatch, index: usize) -> DataResult<&TimestampMicrosecondArray> {
+pub(crate) fn timestamp_column(
+    batch: &RecordBatch,
+    index: usize,
+) -> DataResult<&TimestampMicrosecondArray> {
     batch
         .column(index)
         .as_any()
@@ -925,7 +943,7 @@ fn timestamp_column(batch: &RecordBatch, index: usize) -> DataResult<&TimestampM
         .ok_or(DataError::SchemaMismatch)
 }
 
-fn date_column(batch: &RecordBatch, index: usize) -> DataResult<&Date32Array> {
+pub(crate) fn date_column(batch: &RecordBatch, index: usize) -> DataResult<&Date32Array> {
     batch
         .column(index)
         .as_any()
@@ -933,11 +951,11 @@ fn date_column(batch: &RecordBatch, index: usize) -> DataResult<&Date32Array> {
         .ok_or(DataError::SchemaMismatch)
 }
 
-fn timestamp(value: chrono::DateTime<chrono::Utc>) -> String {
+pub(crate) fn timestamp(value: chrono::DateTime<chrono::Utc>) -> String {
     value.to_rfc3339_opts(SecondsFormat::Micros, true)
 }
 
-fn hash_hex(hash: &ContentHash) -> String {
+pub(crate) fn hash_hex(hash: &ContentHash) -> String {
     hash.as_bytes()
         .iter()
         .fold(String::with_capacity(64), |mut encoded, byte| {
@@ -947,7 +965,7 @@ fn hash_hex(hash: &ContentHash) -> String {
         })
 }
 
-fn parse_hash(value: &str) -> DataResult<ContentHash> {
+pub(crate) fn parse_hash(value: &str) -> DataResult<ContentHash> {
     if value.len() != 64 || !value.bytes().all(|value| value.is_ascii_hexdigit()) {
         return Err(DataError::SnapshotIntegrityFailed);
     }

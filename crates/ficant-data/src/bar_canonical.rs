@@ -48,6 +48,23 @@ pub enum BarRejectionReason {
 }
 
 impl BarRejectionReason {
+    pub const ALL: [Self; 10] = [
+        Self::MissingRequiredField,
+        Self::InvalidValue,
+        Self::OutsideTradingSession,
+        Self::ObservedAfterVisible,
+        Self::UnmappedInstrument,
+        Self::MisalignedInterval,
+        Self::InconsistentOhlc,
+        Self::NegativeVolume,
+        Self::DuplicateBar,
+        Self::PrecisionExceeded,
+    ];
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|value| value.code() == code)
+    }
+
     pub const fn code(self) -> &'static str {
         match self {
             Self::MissingRequiredField => "MISSING_REQUIRED_FIELD",
@@ -85,13 +102,13 @@ pub struct BarIngestReport {
 
 #[derive(Clone, Debug)]
 pub struct CanonicalBarIngestRequest {
-    source: DataSource,
-    mapping: InstrumentMapping,
-    calendar: Calendar,
-    price_unit: Unit,
-    amount_unit: Unit,
-    yield_unit: Option<Unit>,
-    window: PointInTimeWindow,
+    pub(crate) source: DataSource,
+    pub(crate) mapping: InstrumentMapping,
+    pub(crate) calendar: Calendar,
+    pub(crate) price_unit: Unit,
+    pub(crate) amount_unit: Unit,
+    pub(crate) yield_unit: Option<Unit>,
+    pub(crate) window: PointInTimeWindow,
 }
 
 impl CanonicalBarIngestRequest {
@@ -150,9 +167,9 @@ impl CanonicalBarIngestRequest {
 
 #[derive(Clone, Debug)]
 pub struct CanonicalBarBatch {
-    batch: RecordBatch,
-    schema_hash: ContentHash,
-    report: BarIngestReport,
+    pub(crate) batch: RecordBatch,
+    pub(crate) schema_hash: ContentHash,
+    pub(crate) report: BarIngestReport,
 }
 
 impl CanonicalBarBatch {
