@@ -18,6 +18,7 @@ pub mod governance;
 pub mod market;
 pub mod portfolio;
 pub mod primitives;
+pub mod replay;
 pub mod research;
 pub mod subject;
 
