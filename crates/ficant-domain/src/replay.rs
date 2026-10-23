@@ -1,5 +1,8 @@
 //! Point-in-time bar replay building blocks (ADR-0024).
 //!
+//! This module sits beside `research` rather than inside it: the R7A gate freezes the existing
+//! L0 primitives and L1 research sources, and phase-two objects are added as new modules.
+//!
 //! Everything here is pure and deterministic: no clock, no randomness, no I/O, ordered
 //! collections only. The replay loop that schedules decisions lives in the application layer; it
 //! can only hand a policy a [`PointInTimeView`], whose constructor refuses any bar that was not yet
@@ -43,7 +46,11 @@ impl ReplayAmount {
     }
 
     fn of(value: &crate::primitives::DecimalValue) -> Self {
-        Self(value.as_decimal().normalize())
+        let coefficient = value
+            .coefficient()
+            .parse::<i128>()
+            .expect("validated decimal coefficient fits in i128");
+        Self(Decimal::from_i128_with_scale(coefficient, value.scale()).normalize())
     }
 }
 

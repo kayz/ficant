@@ -6,7 +6,6 @@ mod experiment_run;
 mod exposure;
 mod factor_topology;
 mod position_snapshot;
-mod replay;
 mod research_graph;
 mod run_journal;
 mod signal_set;
@@ -35,12 +34,6 @@ pub use factor_topology::{
 pub use position_snapshot::{
     AccountingBook, AccountingClassification, AccountingClassificationState, Position,
     PositionHoldingForm, PositionInput, PositionSnapshot, PositionSnapshotInput,
-};
-pub use replay::{
-    FillPriceBasis, NoFillReason, PointInTimeView, PolicyArtifact, PolicyArtifactInput,
-    PolicyError, PolicyEvaluator, ReplayAmount, ReplayDecision, ReplayIdentity, SimulatedBook,
-    SimulatedFill, SimulationResult, TargetExposure, YIELD_THRESHOLD_FAMILY, YieldThresholdPolicy,
-    apply_fills, policy_period_contains,
 };
 pub use research_graph::{
     DeterminismClass, FilesystemPermission, GraphExternalInput, GraphExternalInputBinding,

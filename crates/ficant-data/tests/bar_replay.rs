@@ -12,7 +12,7 @@ use ficant_data::{BarSnapshotCodec, CanonicalBarIngestor, DataError, VerifiedBar
 use ficant_domain::ContentAddressed;
 use ficant_domain::market::{Bar, BarFrequency, BarSettlement};
 use ficant_domain::primitives::{ContentHash, EffectivePeriod, Ulid, Version, VersionRef};
-use ficant_domain::research::{
+use ficant_domain::replay::{
     FillPriceBasis, NoFillReason, PointInTimeView, PolicyArtifact, PolicyArtifactInput,
     PolicyEvaluator, ReplayAmount, SimulationResult, YIELD_THRESHOLD_FAMILY, YieldThresholdPolicy,
 };
@@ -357,8 +357,8 @@ async fn replay_fails_closed_on_mismatched_evaluator_or_missing_parameters() {
             &self,
             _: &PolicyArtifact,
             _: &PointInTimeView<'_>,
-            _: &ficant_domain::research::SimulatedBook,
-        ) -> Result<ficant_domain::research::TargetExposure, ficant_domain::research::PolicyError>
+            _: &ficant_domain::replay::SimulatedBook,
+        ) -> Result<ficant_domain::replay::TargetExposure, ficant_domain::replay::PolicyError>
         {
             unreachable!("must not be called for a mismatched family")
         }

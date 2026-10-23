@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use chrono::{DateTime, Utc};
 use ficant_domain::market::Bar;
 use ficant_domain::primitives::{ContentHash, Ulid, VersionRef};
-use ficant_domain::research::{
+use ficant_domain::replay::{
     PointInTimeView, PolicyArtifact, PolicyError, PolicyEvaluator, ReplayAmount, ReplayDecision,
     ReplayIdentity, SimulatedBook, SimulatedFill, SimulationResult, apply_fills,
     policy_period_contains,

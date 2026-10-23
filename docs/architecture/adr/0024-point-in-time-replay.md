@@ -65,7 +65,8 @@ trait PolicyEvaluator {
 - 输出 `SimulationResult`：每个决策时点的目标、每笔仿真成交、每日持仓与损益（AC40 补齐分解），带完整血缘与覆盖度声明。
 - 本 ADR 不改 `interface/proto/**`、不加 migration。持久化与 gRPC 接口另行提出。
 - 数据经端口 `PointInTimeBars` 进入回放；它的 `visible_at(t)` 由 `VerifiedBarSnapshot` 实现。即使端口实现有误、把未来的 bar 交出来，`PointInTimeView` 的构造也会拒绝，回放整体失败。
-- 引擎核心（视图、持仓、成交模拟、结果标识）在 L1 领域层，是纯函数；Application 用例只负责调度。这样 ADR-0014 的"共用求值器"可以直接链接领域库。
+- 引擎核心（视图、持仓、成交模拟、结果标识）在 L1 领域层的新模块 `ficant_domain::replay`，是纯函数；Application 用例只负责调度。这样 ADR-0014 的"共用求值器"可以直接链接领域库。
+- 二期新增的 L1 对象放在新模块里，不改 `primitives/` 与 `research/` 已有文件：R7A 门禁冻结了这些文件的精确内容，作为"新增市场不改核心"的证据（AC 证据，不能为了新功能重写）。
 
 ### 5. 第一个实现 PR 的范围
 
