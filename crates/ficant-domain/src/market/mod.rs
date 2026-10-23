@@ -1,3 +1,4 @@
+mod bar;
 mod bond;
 mod calendar;
 mod cashflow;
@@ -12,6 +13,7 @@ mod trade;
 mod unit;
 mod valuation;
 
+pub use bar::{Bar, BarFrequency, BarInput, BarPrices, BarRuleViolation, BarSettlement};
 pub use bond::{
     Bond, BondBusinessDayConvention, BondCouponFrequency, BondDayCountConvention, BondPricingTerms,
     BondTaxAttributes, IncomeTaxStatus, ValueAddedTaxStatus,

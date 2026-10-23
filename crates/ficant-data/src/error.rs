@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::BarRejection;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SourceRowViolationReason {
     ObservedAfterVisible,
@@ -26,6 +28,8 @@ pub enum DataError {
     SchemaMismatch,
     #[error("snapshot integrity validation failed")]
     SnapshotIntegrityFailed,
+    #[error("no bar row was accepted; every row in the window was rejected")]
+    NoAcceptedBars { rejections: Vec<BarRejection> },
 }
 
 impl DataError {

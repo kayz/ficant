@@ -801,7 +801,8 @@ fn map_data_error(error: DataError) -> ApplicationError {
         | DataError::InvalidSourceData
         | DataError::PointInTimeViolation
         | DataError::QualityRuleFailed
-        | DataError::SchemaMismatch => {
+        | DataError::SchemaMismatch
+        | DataError::NoAcceptedBars { .. } => {
             ApplicationError::new(ApplicationErrorCategory::ValidationFailed, false)
         }
         DataError::SourceRowViolation {
