@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'check-common.ps1')
 
 $steps = @(
+    New-FicantCheckStep -Name 'R8B first-party license bindings' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '.github/scripts/verify-license-inventory.py', 'verify-bindings', '--inventory', '.github/scripts/license-inventory.lock.json', '--release-root', '.', '--cargo-lock', 'Cargo.lock', '--uv-lock', 'python/uv.lock', '--pnpm-lock', 'web-dm/pnpm-lock.yaml', '--supply-lock', '.github/scripts/supply-chain.lock.json')
     New-FicantCheckStep -Name 'Coverage descriptor gate' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/check-coverage.ps1')
     New-FicantCheckStep -Name 'Coverage gate fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-coverage-check.ps1')
     New-FicantCheckStep -Name 'R7B MANUAL literal-runner fixture tests' -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-NonInteractive', '-File', 'scripts/test-manual-check.ps1')

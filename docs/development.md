@@ -103,6 +103,19 @@ R7B 另提供 clean-candidate 恢复与 private MANUAL 入口：
 
 恢复入口绑定 clean public commit/tree 与实际 Worker image config digest；MANUAL runner 另绑定 clean authority checkout、manifest 中三份文档 hash 和 marker 顺序，在临时 detached public checkout 原样执行命令。尖括号只用于本页说明，不能出现在获批 MANUAL literal block 中。
 
+## 第一方包绑定
+
+`.github/scripts/license-inventory.lock.json` 记录每个第一方包（各 crate、`binaries/*`、`python/`、`web-dm/packages/contracts-generated`）源码树的哈希。改动其中任何一个包的文件后，`check-fast` 与 `check` 的 "R8B first-party license bindings" 会报 `first-party package binding mismatch`。这是预期行为：在同一个 PR 里重算绑定，并在 PR 描述里写明。
+
+```powershell
+uv run --locked --project python python .github/scripts/verify-license-inventory.py refresh-bindings `
+  --inventory .github/scripts/license-inventory.lock.json --output .github/scripts/license-inventory.lock.json `
+  --release-root . --cargo-lock Cargo.lock --uv-lock python/uv.lock --pnpm-lock web-dm/pnpm-lock.yaml `
+  --supply-lock .github/scripts/supply-chain.lock.json
+```
+
+重算只更新改动包的 `source_integrity` 和两个汇总 digest。如果 diff 里出现别的变化，比如许可证、版本或包列表，说明依赖也变了，要按供应链流程处理，不能只重算绑定。
+
 ## 本地依赖能力
 
 开发机只确认工具链存在、属于正确的工具族且不低于最低版本，不要求小版本与 CI 一致（[ADR-0020](architecture/adr/0020-dev-toolchain-minimum-versions.md)）。检查脚本不安装工具；依赖按锁文件解析（`--locked`），本机缺少的 crate、wheel、npm 包或 pnpm 会从包源取回（本地契约包测试的 consumer 安装改为 `--prefer-offline`：优先用本机缓存，缺了再联网）。精确版本只在 CI 与发布侧锁定，下表最后一列供对照。
