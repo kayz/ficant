@@ -1,8 +1,8 @@
 # ADR-0023：标准 Bar 与外部数据适配器
 
-- 状态：Proposed
+- 状态：Accepted
 - 日期：2026-10-23
-- 决策者：Human（待批准）
+- 决策者：Human（2026-10-23 在对话中确认第 2、3、4 条与结算方式作为键这四处选择）
 - 范围：SPEC v1.4 §4.2「数据转换」；AC45；为 AC38–AC41 的点时回放提供输入
 - 关联：ADR-0012、ADR-0014（Policy / PolicyArtifact）、ADR-0017（数据健康与覆盖度）、ADR-0022（平台与 WebApp）
 
@@ -71,9 +71,14 @@ SPEC 规定：ficant 不自建数据；标准结构由 ficant 定义，适配器
   → 快照打包：Parquet DataSnapshot（schema `ficant.market.bar.canonical.v1`）+ manifest
 ```
 
-- 每种来源格式一个适配器（代码）。字段映射、时区、可见时间规则写在该来源的注册配置里。
+- 每种来源格式一个适配器（代码）。字段映射、时区、可见时间规则写在该来源的适配器注册配置里（数据层配置，不进 `DataSource` 领域对象，不改公共契约）。
+- 第一个适配器是带字段映射的 NDJSON 文件适配器（`FileNdjsonBarSource`），支持点分路径、本地/UTC/毫秒时间戳、字符串或数字小数，以及来源代码到频率/结算方式的翻译。CSV 等其他文件格式需要在 `DataSourceKind` 里新增来源类型，属于公共契约变化（`interface/proto/**`），另行提出。
 - 标准化和校验只在 ingestor 里做一次，适配器之间不重复，也不能放宽。
-- AC45 的测试用两个合成格式的夹具：一个 CSV，本地时间、中文列名；一个 NDJSON，UTC 毫秒时间戳、嵌套字段。两者导入同一组合成成交后，得到逐位相同的 Bar 批；只把频率从 `M1` 换成 `D1` 时，schema 不变。
+- AC45 的测试用两个字段格式不同的合成来源：
+  - 来源 A：扁平字段、本地时间文本、字符串小数、结算方式写作 `T+1`、带发布时间字段；
+  - 来源 B：嵌套字段、UTC 毫秒时间戳、数字小数、结算方式写作 `2`、没有可见时间字段，声明延迟 2 秒。
+
+  同一组合成 bar 经两者导入后，除来源标识列外逐列相同；日线与分钟线的 schema 相同，只有频率列不同。
 - 逐笔成交聚合成 Bar（XBOND 这种来源）是另一种适配器，不在 AC45 范围内，后续单独提出。
 
 ### 3. `visible_at` 从哪里来
@@ -89,13 +94,14 @@ I1 要求每条事实都有 `visible_at`。来源情况分两种：
 
 逐行校验，坏行被拒绝，其余行继续导入。
 
-- 拒绝原因是固定枚举：`MISSING_REQUIRED_FIELD`、`OUTSIDE_TRADING_SESSION`、`OBSERVED_AFTER_VISIBLE`、`UNMAPPED_INSTRUMENT`、`MISALIGNED_INTERVAL`、`INCONSISTENT_OHLC`（如 high < max(open, close)、仅部分价格为空）、`NEGATIVE_VOLUME`、`DUPLICATE_BAR`、`PRECISION_EXCEEDED`。
-- 拒绝报告列出每一行的 `source_record_id` 与原因，写入导入结果和快照 manifest，并计入数据健康（ADR-0017）。
-- 以下情况整批失败（失败关闭）：全部行被拒绝；或违反点时窗口（行的时间超出本次导入的 `as_of` / `visible_at` 截止）。后者表示导入请求本身错了，不是数据脏。
+- 拒绝原因是固定枚举：`MISSING_REQUIRED_FIELD`、`INVALID_VALUE`（字段存在但无法解析）、`OUTSIDE_TRADING_SESSION`、`OBSERVED_AFTER_VISIBLE`、`UNMAPPED_INSTRUMENT`、`MISALIGNED_INTERVAL`、`INCONSISTENT_OHLC`（如 high < max(open, close)、仅部分价格为空）、`NEGATIVE_VOLUME`、`DUPLICATE_BAR`、`PRECISION_EXCEEDED`。
+- 拒绝报告列出每一行的 `source_record_id`（没有可用标识时为 `row:<序号>`）、原因与相关字段，写入导入结果；写入快照 manifest 与计入数据健康（ADR-0017）随 Bar 快照打包一起实现。
+- 晚于本次导入的 `as_of` 或 `visible_at` 截止的行不是坏行，只是"此刻还不知道"：它们不进快照，单独计数（`outside_window_rows`），不算拒绝。
+- 以下情况整批失败（失败关闭）：请求配置不合法（schema、单位、时区、来源未声明价格可信度）；来源不可读；或窗口内没有任何一行被接受。整批失败时仍返回全部拒绝原因。
 
 ### 5. 快照与回放的接口
 
-- 标准 Bar 快照沿用 `DataSnapshot`（不可变、内容寻址、血缘），只有 schema 与 manifest 内容不同。
+- 标准 Bar 快照沿用 `DataSnapshot`（不可变、内容寻址、血缘），只有 schema 与 manifest 内容不同。打包与读取在下一个 PR 实现。
 - 回放（AC38）按决策时点读取：只返回 `visible_at ≤ 决策时点` 的 Bar。这一条由快照读取层保证，不由策略代码保证。
 - `observed_at = bar_end` 保证用不到"未结束的 bar"。
 

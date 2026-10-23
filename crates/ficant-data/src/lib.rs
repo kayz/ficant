@@ -6,6 +6,8 @@
 
 #![allow(clippy::missing_errors_doc, clippy::must_use_candidate)]
 
+mod bar_canonical;
+mod bar_source;
 mod canonical;
 mod catalog;
 mod error;
@@ -16,6 +18,15 @@ mod postgres;
 mod snapshot;
 mod source;
 
+pub use bar_canonical::{
+    BAR_QUALITY_RULE_SET_ID, BarIngestReport, BarRejection, BarRejectionReason,
+    CANONICAL_BAR_SCHEMA_ID, CanonicalBarBatch, CanonicalBarIngestRequest, CanonicalBarIngestor,
+    canonical_bar_schema, canonical_bar_schema_hash,
+};
+pub use bar_source::{
+    BarSourceAdapter, BarVisibilityRule, CodeField, FileNdjsonBarSource, NdjsonBarMapping,
+    RawBarRow, SourceTimeFormat, parse_decimal_text,
+};
 pub use canonical::{
     CANONICAL_QUOTE_SCHEMA_ID, CanonicalIngestRequest, CanonicalQuoteBatch, CanonicalQuoteIngestor,
     QualityReport, canonical_quote_schema, canonical_quote_schema_hash,

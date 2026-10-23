@@ -361,11 +361,11 @@ pub fn canonical_quote_schema_hash() -> ContentHash {
     ContentHash::digest(&schema_contract_bytes(&canonical_quote_schema()))
 }
 
-fn text_field(name: &str, nullable: bool) -> Field {
+pub(crate) fn text_field(name: &str, nullable: bool) -> Field {
     Field::new(name, DataType::Utf8, nullable)
 }
 
-fn timestamp_field(name: &str) -> Field {
+pub(crate) fn timestamp_field(name: &str) -> Field {
     Field::new(
         name,
         DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
@@ -373,7 +373,7 @@ fn timestamp_field(name: &str) -> Field {
     )
 }
 
-fn schema_contract_bytes(schema: &Schema) -> Vec<u8> {
+pub(crate) fn schema_contract_bytes(schema: &Schema) -> Vec<u8> {
     let mut bytes = b"ficant-arrow-schema/v1\0".to_vec();
     for field in schema.fields() {
         append_contract_value(&mut bytes, field.name());

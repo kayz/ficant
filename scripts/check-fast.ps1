@@ -28,6 +28,7 @@ $steps = @(
     New-FicantCheckStep -Name 'Rust storage library tests' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-storage', '--lib')
     New-FicantCheckStep -Name 'Phase 3A canonical data tests' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'canonical_ingestion')
     New-FicantCheckStep -Name 'Phase 3B deterministic snapshot codec' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'snapshot_codec')
+    New-FicantCheckStep -Name 'Phase 2 canonical Bar ingestion (AC45)' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'canonical_bar_ingestion')
     New-FicantCheckStep -Name 'R8A Portfolio Catalog API' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-api', '--test', 'portfolio_catalog_service')
     New-FicantCheckStep -Name 'R8A Portfolio Aggregation API' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-api', '--test', 'portfolio_aggregation_service')
     New-FicantCheckStep -Name 'R8A Portfolio Workbench API' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-api', '--test', 'portfolio_workbench_service')
