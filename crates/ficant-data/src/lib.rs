@@ -7,6 +7,7 @@
 #![allow(clippy::missing_errors_doc, clippy::must_use_candidate)]
 
 mod bar_canonical;
+mod bar_snapshot;
 mod bar_source;
 mod canonical;
 mod catalog;
@@ -22,6 +23,9 @@ pub use bar_canonical::{
     BAR_QUALITY_RULE_SET_ID, BarIngestReport, BarRejection, BarRejectionReason,
     CANONICAL_BAR_SCHEMA_ID, CanonicalBarBatch, CanonicalBarIngestRequest, CanonicalBarIngestor,
     canonical_bar_schema, canonical_bar_schema_hash,
+};
+pub use bar_snapshot::{
+    BAR_SNAPSHOT_MANIFEST_SCHEMA_ID, BarSnapshotCodec, BarSnapshotManifest, VerifiedBarSnapshot,
 };
 pub use bar_source::{
     BarSourceAdapter, BarVisibilityRule, CodeField, FileNdjsonBarSource, NdjsonBarMapping,
