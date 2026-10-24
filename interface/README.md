@@ -12,7 +12,7 @@
 
 `DecimalValue` 的唯一表示是 `coefficient(string) + scale(uint32) + UnitRef`。时间 instant 使用 Protobuf `Timestamp`，并显式携带 IANA 市场时区和本地交易日期。Valuation、CurveSnapshot 与 Cashflow 只登记外部输入事实和来源；CurveSnapshot 的 point blob 也只是经 hash / size / canonical bytes 验证的收益率节点事实。数值 KRD 由独立 PortfolioRiskService 绑定这些事实、definition 与算法 identity 后产生，不能回写或冒充市场事实。
 
-`MarketRulePack.content` 是加法式 `google.protobuf.Any`：`content_hash` 绑定其确定性 `value` bytes，而 `type_url` 只标识 L3 内容 schema。现有内容为 `CgbFuturesDeliveryRulePack`、`FundingRulePack` 与 `TaxRulePack`：前者由 `cgb-futures` adapter 解析，v2 还按 product 提供每百元报价口径下的 exact 合约规模；后两者分别按精确 Subject 的 `FundingTier` 与完整 VAT / income profile pair 解析；`TaxRulePack` 还校验 Bond 的首发日期间与券级税收属性。core 与通用 market 合同不解释其中的市场规则数值。
+`MarketRulePack.content` 是加法式 `google.protobuf.Any`：`content_hash` 绑定其确定性 `value` bytes，而 `type_url` 只标识 L3 内容 schema。现有内容为 `CgbFuturesDeliveryRulePack`、`FundingRulePack`、`TaxRulePack` 与 `RegulatoryRulePack`：第一个由 `cgb-futures` adapter 解析，v2 还按 product 提供每百元报价口径下的 exact 合约规模；资金与税收包分别按精确 Subject 的 `FundingTier` 与完整 VAT / income profile pair 解析；`TaxRulePack` 还校验 Bond 的首发日期间与券级税收属性；`RegulatoryRulePack`（ADR-0026）由 Subject 的 `ConstraintSetRef` 精确绑定，只定义各 `limit_code` 的度量，上限数值属于 `SubjectStateSnapshot`。core 与通用 market 合同不解释其中的市场规则数值。
 
 iteration-3 Phase 2A 生成的现金流、估值和风险结果保持内部 `BondAnalyticsResult` 语义，并以内容寻址 Artifact 绑定输入与算法版本；本小迭代不扩展公共 Protobuf，也不得将派生结果写入上述外部事实消息。依据见 `docs/architecture/adr/0002-fixed-income-kernel-and-ffi-safety-boundary.md`。
 

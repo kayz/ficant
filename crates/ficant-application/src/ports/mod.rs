@@ -24,6 +24,7 @@ mod phase4_execution;
 mod portfolio;
 mod portfolio_performance;
 mod positions;
+mod regulatory_rule_parser;
 mod required_reads;
 mod rule_pack_parser;
 mod rule_pack_resolution;
@@ -118,6 +119,7 @@ pub use portfolio_performance::{
     VisiblePortfolioPerformanceConvention,
 };
 pub use positions::PositionSnapshotRepository;
+pub use regulatory_rule_parser::RegulatoryRulePackParser;
 pub(crate) use required_reads::SnapshotVerifiedReadMetadataParts;
 pub use required_reads::{
     IntegrityEvent, IntegrityEventSeverity, IntegrityEventSink, IntegrityFailureReason,

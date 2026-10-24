@@ -967,6 +967,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ficant-regulatory-pack"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "ficant-application",
+ "ficant-contracts",
+ "ficant-domain",
+ "prost",
+]
+
+[[package]]
 name = "ficant-runtime"
 version = "0.1.0"
 dependencies = [

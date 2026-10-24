@@ -320,13 +320,13 @@ class R5DFirstPartyPolicyTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def test_policy_is_exactly_eighteen_cargo_packages_plus_python_and_contracts(self):
+    def test_policy_is_exactly_nineteen_cargo_packages_plus_python_and_contracts(self):
         supply = json.loads(self.supply_lock.read_text(encoding="utf-8"))
         policy = supply["first_party_packages"]
         purls = [item["purl"] for item in policy]
-        self.assertEqual(len(policy), 20)
-        self.assertEqual(len(set(purls)), 20)
-        self.assertEqual(sum(item["ecosystem"] == "crates.io" for item in policy), 18)
+        self.assertEqual(len(policy), 21)
+        self.assertEqual(len(set(purls)), 21)
+        self.assertEqual(sum(item["ecosystem"] == "crates.io" for item in policy), 19)
         self.assertEqual(
             [item["purl"] for item in policy if item["ecosystem"] == "PyPI"],
             ["pkg:pypi/ficant-sdk@0.1.0"],
@@ -339,7 +339,12 @@ class R5DFirstPartyPolicyTests(unittest.TestCase):
     def test_each_r5d_pack_is_required_by_the_exact_policy(self):
         original = json.loads(self.inventory.read_text(encoding="utf-8"))
         with tempfile.TemporaryDirectory() as temporary:
-            for name in ("ficant-cgb-futures-pack", "ficant-funding-pack", "ficant-tax-pack"):
+            for name in (
+                "ficant-cgb-futures-pack",
+                "ficant-funding-pack",
+                "ficant-regulatory-pack",
+                "ficant-tax-pack",
+            ):
                 purl = f"pkg:cargo/{name}@0.1.0"
                 with self.subTest(purl=purl):
                     path = pathlib.Path(temporary) / f"missing-{name}.json"

@@ -1,6 +1,7 @@
 pub mod bar_replay;
 pub mod bond_analytics;
 pub mod carry_roll;
+pub mod constraint_set;
 pub mod data_health;
 pub mod data_snapshot;
 pub mod data_sources;
