@@ -330,6 +330,7 @@ fn descriptor_inventory_is_unique_and_preserves_phase1_semantics() {
     assert_phase1_objects(&messages);
     assert_cgb_futures_rule_pack_contract(&messages);
     assert_funding_rule_pack_contract(&messages);
+    assert_regulatory_rule_pack_contract(&messages, &top_level_enums(descriptor_set));
     assert_tax_rule_pack_contract(&messages, &top_level_enums(descriptor_set));
     assert_position_snapshot_contract(&messages);
     assert_service_inventory(descriptor_set);
@@ -3330,6 +3331,64 @@ fn assert_funding_rule_pack_contract(messages: &BTreeMap<String, &DescriptorProt
         false,
     );
     assert_eq!(rate.field.len(), 2, "FundingTierRate field drift");
+}
+
+/// ADR-0026: constraint definitions only; ceilings stay Subject state.
+fn assert_regulatory_rule_pack_contract(
+    messages: &BTreeMap<String, &DescriptorProto>,
+    enums: &BTreeMap<String, &EnumDescriptorProto>,
+) {
+    let pack = messages
+        .get("ficant.market.v1.RegulatoryRulePack")
+        .expect("RegulatoryRulePack must exist");
+    assert_exact_field(
+        pack,
+        "constraints",
+        1,
+        Type::Message,
+        Some(".ficant.market.v1.ConstraintDefinition"),
+        true,
+        false,
+    );
+    assert_eq!(pack.field.len(), 1, "RegulatoryRulePack field drift");
+
+    let definition = messages
+        .get("ficant.market.v1.ConstraintDefinition")
+        .expect("ConstraintDefinition must exist");
+    assert_exact_field(
+        definition,
+        "limit_code",
+        1,
+        Type::String,
+        None,
+        false,
+        false,
+    );
+    assert_exact_field(
+        definition,
+        "measure",
+        2,
+        Type::Enum,
+        Some(".ficant.market.v1.ConstraintMeasure"),
+        false,
+        false,
+    );
+    assert_eq!(
+        definition.field.len(),
+        2,
+        "ConstraintDefinition field drift"
+    );
+
+    assert_enum(
+        enums,
+        "ficant.market.v1.ConstraintMeasure",
+        &[
+            ("CONSTRAINT_MEASURE_UNSPECIFIED", 0),
+            ("CONSTRAINT_MEASURE_INSTRUMENT_FACE", 1),
+            ("CONSTRAINT_MEASURE_PORTFOLIO_FACE", 2),
+            ("CONSTRAINT_MEASURE_BORROWED_CASH", 3),
+        ],
+    );
 }
 
 fn assert_tax_rule_pack_contract(

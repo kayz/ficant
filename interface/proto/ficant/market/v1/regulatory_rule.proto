@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package ficant.market.v1;
+
+// RegulatoryRulePack is L3 content naming the constraints a Subject's constraint set binds and
+// what each one measures. It carries no ceilings: those are Subject state
+// (SubjectStateSnapshot.limit_ceilings) matched by limit_code.
+message RegulatoryRulePack {
+  repeated ConstraintDefinition constraints = 1;
+}
+
+message ConstraintDefinition {
+  // Matches SubjectStateSnapshot limit_ceilings[].limit_code exactly.
+  string limit_code = 1;
+  ConstraintMeasure measure = 2;
+}
+
+enum ConstraintMeasure {
+  CONSTRAINT_MEASURE_UNSPECIFIED = 0;
+  // Absolute face amount of each single instrument position.
+  CONSTRAINT_MEASURE_INSTRUMENT_FACE = 1;
+  // Sum of absolute face amounts across all positions.
+  CONSTRAINT_MEASURE_PORTFOLIO_FACE = 2;
+  // Cash borrowed to fund positions: max(0, -cash).
+  CONSTRAINT_MEASURE_BORROWED_CASH = 3;
+}

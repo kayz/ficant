@@ -1264,6 +1264,57 @@ pub struct FundingTierRate {
     #[prost(message, optional, tag="2")]
     pub annual_financing_rate: ::core::option::Option<super::super::core::v1::DecimalValue>,
 }
+/// RegulatoryRulePack is L3 content naming the constraints a Subject's constraint set binds and
+/// what each one measures. It carries no ceilings: those are Subject state
+/// (SubjectStateSnapshot.limit_ceilings) matched by limit_code.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RegulatoryRulePack {
+    #[prost(message, repeated, tag="1")]
+    pub constraints: ::prost::alloc::vec::Vec<ConstraintDefinition>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ConstraintDefinition {
+    /// Matches SubjectStateSnapshot limit_ceilings\[\].limit_code exactly.
+    #[prost(string, tag="1")]
+    pub limit_code: ::prost::alloc::string::String,
+    #[prost(enumeration="ConstraintMeasure", tag="2")]
+    pub measure: i32,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ConstraintMeasure {
+    Unspecified = 0,
+    /// Absolute face amount of each single instrument position.
+    InstrumentFace = 1,
+    /// Sum of absolute face amounts across all positions.
+    PortfolioFace = 2,
+    /// Cash borrowed to fund positions: max(0, -cash).
+    BorrowedCash = 3,
+}
+impl ConstraintMeasure {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "CONSTRAINT_MEASURE_UNSPECIFIED",
+            Self::InstrumentFace => "CONSTRAINT_MEASURE_INSTRUMENT_FACE",
+            Self::PortfolioFace => "CONSTRAINT_MEASURE_PORTFOLIO_FACE",
+            Self::BorrowedCash => "CONSTRAINT_MEASURE_BORROWED_CASH",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CONSTRAINT_MEASURE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CONSTRAINT_MEASURE_INSTRUMENT_FACE" => Some(Self::InstrumentFace),
+            "CONSTRAINT_MEASURE_PORTFOLIO_FACE" => Some(Self::PortfolioFace),
+            "CONSTRAINT_MEASURE_BORROWED_CASH" => Some(Self::BorrowedCash),
+            _ => None,
+        }
+    }
+}
 /// TaxRulePack is L3 content. It selects a coupon tax rate from the Bond's
 /// first issuance interval, its L2 tax attributes, and the exact Subject tax
 /// treatment pair. It contains no Subject identity or market-specific rate in
