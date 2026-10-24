@@ -34,6 +34,7 @@ $steps = @(
     New-FicantCheckStep -Name 'Phase 2 replay P&L breakdown and participation cap (AC40/AC41)' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'replay_pnl')
     New-FicantCheckStep -Name 'Phase 2 replay constraints (AC42)' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'replay_constraints')
     New-FicantCheckStep -Name 'Phase 2 policy calibration (AC43)' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'policy_calibration')
+    New-FicantCheckStep -Name 'Phase 2 replay outputs and lineage (AC44)' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'replay_outputs')
     New-FicantCheckStep -Name 'R8A Portfolio Catalog API' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-api', '--test', 'portfolio_catalog_service')
     New-FicantCheckStep -Name 'R8A Portfolio Aggregation API' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-api', '--test', 'portfolio_aggregation_service')
     New-FicantCheckStep -Name 'R8A Portfolio Workbench API' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-api', '--test', 'portfolio_workbench_service')

@@ -39,7 +39,9 @@ pub use ledger::{
 };
 
 use crate::market::{Bar, BarFrequency, BarSettlement, PriceSourceType};
-use crate::primitives::{ContentHash, EffectivePeriod, FixedDecimal, OwnerRef, Ulid, VersionRef};
+use crate::primitives::{
+    ContentHash, EffectivePeriod, FixedDecimal, LineageRef, OwnerRef, Ulid, VersionRef,
+};
 use crate::subject::FundingTier;
 use crate::{DomainErrorCode, DomainResult};
 
@@ -449,20 +451,65 @@ pub struct ReplayDecision {
     pub target: TargetExposure,
 }
 
+/// What an input object was to a replay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum LineageRole {
+    Policy,
+    DataSnapshot,
+    Subject,
+    SubjectState,
+    ConstraintSet,
+    FundingRulePack,
+    CouponData,
+}
+
+/// One input of a replay result: its role and exact reference.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReplayLineage {
+    pub role: LineageRole,
+    pub reference: LineageRef,
+}
+
+/// Content hash of a Subject state snapshot: identity, Subject, net capital, ceilings and times.
+pub fn subject_state_hash(state: &crate::subject::SubjectStateSnapshot) -> ContentHash {
+    let mut bytes = Canonical::new("ficant-subject-state-snapshot/v1");
+    bytes.text(state.id().as_str());
+    bytes.version_ref(state.subject_ref());
+    bytes.text(state.net_capital().coefficient());
+    bytes.number(u64::from(state.net_capital().scale()));
+    let mut ceilings: Vec<_> = state.limit_ceilings().iter().collect();
+    ceilings.sort_by(|left, right| left.limit_code().cmp(right.limit_code()));
+    bytes.number(ceilings.len() as u64);
+    for ceiling in ceilings {
+        bytes.text(ceiling.limit_code());
+        bytes.text(ceiling.ceiling().coefficient());
+        bytes.number(u64::from(ceiling.ceiling().scale()));
+    }
+    bytes.time(state.observed_at());
+    bytes.time(state.visible_at());
+    bytes.text(state.market_timezone());
+    ContentHash::digest(&bytes.0)
+}
+
 /// Everything that identifies a replay's inputs (AC39). Replacing any field changes the result ID.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReplayIdentity {
+    pub policy_id: Ulid,
     pub policy: ContentHash,
     pub data_snapshot: Ulid,
     pub data_snapshot_content: ContentHash,
     pub subject: VersionRef,
     /// The Subject state snapshot the constraint ceilings come from.
     pub subject_state: Ulid,
+    /// Content hash of that snapshot ([`subject_state_hash`]).
+    pub subject_state_content: ContentHash,
     /// The regulatory `RulePack` version of the Subject's constraint set, if it binds one.
     pub constraint_set: Option<VersionRef>,
     /// Every enforced constraint with its measure, ceiling and handling.
     pub constraints: Vec<ReplayConstraint>,
     pub funding: ReplayFunding,
+    /// Version of the coupon reference data behind the carry source.
+    pub carry_source: VersionRef,
     /// Content hash of the coupon data source.
     pub carry: ContentHash,
     pub cost_model: String,
@@ -539,6 +586,56 @@ impl SimulationResult {
     /// One P&L row per replay step (AC40).
     pub fn pnl(&self) -> &[BarPnl] {
         &self.pnl
+    }
+
+    /// Every input object the result was computed from, each as an exact reference (AC44).
+    pub fn lineage(&self) -> Vec<ReplayLineage> {
+        let identity = &self.identity;
+        let hashed = |object: &Ulid, hash: &ContentHash| {
+            LineageRef::content_addressed(object.clone(), hash.clone())
+        };
+        let versioned = |reference: &VersionRef| {
+            LineageRef::versioned(reference.id().clone(), reference.version())
+        };
+        let mut lineage = vec![
+            ReplayLineage {
+                role: LineageRole::Policy,
+                reference: hashed(&identity.policy_id, &identity.policy),
+            },
+            ReplayLineage {
+                role: LineageRole::DataSnapshot,
+                reference: hashed(&identity.data_snapshot, &identity.data_snapshot_content),
+            },
+            ReplayLineage {
+                role: LineageRole::Subject,
+                reference: versioned(&identity.subject),
+            },
+            ReplayLineage {
+                role: LineageRole::SubjectState,
+                reference: hashed(&identity.subject_state, &identity.subject_state_content),
+            },
+        ];
+        if let Some(constraint_set) = &identity.constraint_set {
+            lineage.push(ReplayLineage {
+                role: LineageRole::ConstraintSet,
+                reference: versioned(constraint_set),
+            });
+        }
+        lineage.push(ReplayLineage {
+            role: LineageRole::FundingRulePack,
+            reference: versioned(identity.funding.rule_pack()),
+        });
+        lineage.push(ReplayLineage {
+            role: LineageRole::CouponData,
+            // With a version present the reference is always valid; the fallback is unreachable.
+            reference: LineageRef::new(
+                identity.carry_source.id().clone(),
+                Some(identity.carry_source.version()),
+                Some(identity.carry.clone()),
+            )
+            .unwrap_or_else(|_| versioned(&identity.carry_source)),
+        });
+        lineage
     }
 
     pub fn book(&self) -> &SimulatedBook {
@@ -712,11 +809,13 @@ fn result_bytes(
 }
 
 fn identity_bytes(bytes: &mut Canonical, identity: &ReplayIdentity) {
+    bytes.text(identity.policy_id.as_str());
     bytes.hash(&identity.policy);
     bytes.text(identity.data_snapshot.as_str());
     bytes.hash(&identity.data_snapshot_content);
     bytes.version_ref(&identity.subject);
     bytes.text(identity.subject_state.as_str());
+    bytes.hash(&identity.subject_state_content);
     bytes.optional(identity.constraint_set.as_ref(), Canonical::version_ref);
     bytes.number(identity.constraints.len() as u64);
     for constraint in &identity.constraints {
@@ -732,6 +831,7 @@ fn identity_bytes(bytes: &mut Canonical, identity: &ReplayIdentity) {
     });
     bytes.amount(identity.funding.annual_rate());
     bytes.number(u64::from(identity.funding.day_basis()));
+    bytes.version_ref(&identity.carry_source);
     bytes.hash(&identity.carry);
     bytes.text(&identity.cost_model);
     bytes.number(identity.cost_parameters.len() as u64);

@@ -125,6 +125,9 @@ impl ReplayFunding {
 /// Coupon data for held bonds. Values are per 100 face; the implementation owns the bond terms,
 /// day count and settlement-date rules (ADR-0013 keeps those out of the core).
 pub trait BondCarry {
+    /// Version of the coupon reference data (e.g. the bond terms definition) this source reads.
+    fn source(&self) -> VersionRef;
+
     /// Content hash of the data behind this source, bound into the result identity.
     fn identity(&self) -> ContentHash;
 
