@@ -65,6 +65,7 @@ $steps = @(
     New-FicantCheckStep -Name 'Phase 2 point-in-time bar replay (AC38/AC39)' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'bar_replay')
     New-FicantCheckStep -Name 'Phase 2 replay P&L breakdown and participation cap (AC40/AC41)' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'replay_pnl')
     New-FicantCheckStep -Name 'Phase 2 replay constraints (AC42)' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'replay_constraints')
+    New-FicantCheckStep -Name 'Phase 2 policy calibration (AC43)' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'policy_calibration')
     New-FicantCheckStep -Name 'Web type check' -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', 'typecheck') -WorkingDirectory $webDirectory
     New-FicantCheckStep -Name 'Web production build' -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', 'build') -WorkingDirectory $webDirectory
     New-FicantCheckStep -Name 'Web unit and component tests' -FilePath 'corepack' -ArgumentList @('pnpm@10.12.4', 'test', '--run') -WorkingDirectory $webDirectory

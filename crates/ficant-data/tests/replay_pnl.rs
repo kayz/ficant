@@ -64,6 +64,7 @@ fn policy_input(execution: ExecutionRules) -> PolicyArtifactInput {
         .unwrap(),
         execution,
         constraints: BTreeMap::new(),
+        calibration: None,
     }
 }
 
