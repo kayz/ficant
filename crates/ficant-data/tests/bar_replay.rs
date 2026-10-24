@@ -10,7 +10,7 @@ use ficant_application::{ApplicationError, BarReplayRequest, PointInTimeBars, re
 use ficant_data::VerifiedBarSnapshot;
 use ficant_domain::ContentAddressed;
 use ficant_domain::market::{Bar, BarFrequency, BarSettlement, PriceSourceType};
-use ficant_domain::primitives::{ContentHash, EffectivePeriod, Ulid, Version, VersionRef};
+use ficant_domain::primitives::{ContentHash, EffectivePeriod, Ulid};
 use ficant_domain::replay::{
     ExecutionRules, FillPriceBasis, NoFillReason, PointInTimeView, PolicyArtifact,
     PolicyArtifactInput, PolicyEvaluator, RemainderHandling, ReplayAmount, SimulationResult,
@@ -96,6 +96,7 @@ fn policy(entry_yield: &str) -> PolicyArtifact {
         )
         .unwrap(),
         execution: full_fills(),
+        constraints: BTreeMap::new(),
     })
     .unwrap()
 }
@@ -104,7 +105,7 @@ fn policy(entry_yield: &str) -> PolicyArtifact {
 struct Inputs {
     policy: PolicyArtifact,
     subject: SubjectVersion,
-    subject_state: VersionRef,
+    subject_state: String,
     cost_parameters: BTreeMap<String, ReplayAmount>,
     seed: u64,
     code: ContentHash,
@@ -115,10 +116,7 @@ fn base_inputs() -> Inputs {
     Inputs {
         policy: policy("1.84"),
         subject: subject(1, FundingTier::DrAvailable),
-        subject_state: VersionRef::new(
-            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5FV1").unwrap(),
-            Version::new(1).unwrap(),
-        ),
+        subject_state: "01ARZ3NDEKTSV4RRFFQ69G5FV1".to_owned(),
         cost_parameters: BTreeMap::from([("spread_bp".to_owned(), amount("0"))]),
         seed: 7,
         code: ContentHash::digest(b"code"),
@@ -132,7 +130,8 @@ fn run(data: &dyn PointInTimeBars, inputs: &Inputs) -> Result<SimulationResult, 
         evaluator: &YieldThresholdPolicy,
         data,
         subject: &inputs.subject,
-        subject_state: inputs.subject_state.clone(),
+        subject_state: &state(&inputs.subject, &inputs.subject_state),
+        constraints: None,
         funding: funding("0.0365", 365),
         carry: &same_day_carry(),
         cost_model: "ficant.cost.none".to_owned(),
@@ -261,8 +260,7 @@ async fn identical_inputs_give_identical_results_and_any_change_changes_the_id()
     variants.push((
         "subject state",
         change(|inputs| {
-            inputs.subject_state =
-                VersionRef::new(inputs.subject_state.id().clone(), Version::new(2).unwrap());
+            inputs.subject_state = "01ARZ3NDEKTSV4RRFFQ69G5FV2".to_owned();
         }),
     ));
     variants.push((
@@ -331,7 +329,8 @@ async fn replay_fails_closed_on_mismatched_evaluator_or_missing_parameters() {
         evaluator: &OtherFamily,
         data: &data,
         subject: &inputs.subject,
-        subject_state: inputs.subject_state.clone(),
+        subject_state: &state(&inputs.subject, &inputs.subject_state),
+        constraints: None,
         funding: funding("0.0365", 365),
         carry: &same_day_carry(),
         cost_model: "ficant.cost.none".to_owned(),
@@ -367,5 +366,6 @@ fn policy_input() -> PolicyArtifactInput {
         )
         .unwrap(),
         execution: full_fills(),
+        constraints: BTreeMap::new(),
     }
 }

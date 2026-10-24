@@ -11,6 +11,7 @@
 //! Execution with a participation cap lives in [`execution`]; the book, equity and the per-bar
 //! P&L breakdown in [`ledger`] (ADR-0025; AC40, AC41).
 
+mod constraints;
 mod execution;
 mod ledger;
 
@@ -19,9 +20,13 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 
+pub use constraints::{
+    ConstraintAction, ConstraintHandling, ConstraintOutcome, ExecutionContext, ReplayConstraint,
+    bind_constraints, check_execution,
+};
 pub use execution::{
     ExecutionRules, FillPriceBasis, NoFillReason, Remainder, RemainderHandling, RemainderOutcome,
-    SimulatedFill, simulate_trade,
+    SimulatedFill, attempt_in_bar, no_later_bar,
 };
 pub use ledger::{
     BarPnl, BondCarry, COST_NONE, COST_RATE_PLUS_FIXED, CostModel, InstrumentPnl, ReplayFunding,
@@ -121,6 +126,8 @@ pub struct PolicyArtifactInput {
     pub valid: EffectivePeriod,
     /// Participation cap and remainder handling for simulated execution (AC41).
     pub execution: ExecutionRules,
+    /// How each constraint of the bound Subject's constraint set is enforced (AC42).
+    pub constraints: BTreeMap<String, ConstraintHandling>,
 }
 
 impl PolicyArtifact {
@@ -134,6 +141,7 @@ impl PolicyArtifact {
             || input
                 .parameters
                 .keys()
+                .chain(input.constraints.keys())
                 .any(|key| key.trim().is_empty() || key != key.trim())
         {
             return Err(DomainErrorCode::InvalidValue);
@@ -183,6 +191,10 @@ impl PolicyArtifact {
 
     pub const fn execution(&self) -> ExecutionRules {
         self.input.execution
+    }
+
+    pub fn constraint_handling(&self) -> &BTreeMap<String, ConstraintHandling> {
+        &self.input.constraints
     }
 
     pub fn content_hash(&self) -> &ContentHash {
@@ -420,7 +432,12 @@ pub struct ReplayIdentity {
     pub data_snapshot: Ulid,
     pub data_snapshot_content: ContentHash,
     pub subject: VersionRef,
-    pub subject_state: VersionRef,
+    /// The Subject state snapshot the constraint ceilings come from.
+    pub subject_state: Ulid,
+    /// The regulatory `RulePack` version of the Subject's constraint set, if it binds one.
+    pub constraint_set: Option<VersionRef>,
+    /// Every enforced constraint with its measure, ceiling and handling.
+    pub constraints: Vec<ReplayConstraint>,
     pub funding: ReplayFunding,
     /// Content hash of the coupon data source.
     pub carry: ContentHash,
@@ -573,7 +590,7 @@ impl Canonical {
 }
 
 fn policy_bytes(input: &PolicyArtifactInput) -> Vec<u8> {
-    let mut bytes = Canonical::new("ficant-policy-artifact/v2");
+    let mut bytes = Canonical::new("ficant-policy-artifact/v3");
     bytes.text(input.policy_artifact_id.as_str());
     bytes.text(input.owner.tenant_id().as_str());
     bytes.text(input.owner.owner_id().as_str());
@@ -594,6 +611,11 @@ fn policy_bytes(input: &PolicyArtifactInput) -> Vec<u8> {
     bytes.time(input.valid.to().instant());
     bytes.amount(input.execution.participation_cap());
     bytes.text(input.execution.remainder().code());
+    bytes.number(input.constraints.len() as u64);
+    for (code, handling) in &input.constraints {
+        bytes.text(code);
+        bytes.text(handling.code());
+    }
     bytes.0
 }
 
@@ -604,7 +626,7 @@ fn result_bytes(
     pnl: &[BarPnl],
     book: &SimulatedBook,
 ) -> Vec<u8> {
-    let mut bytes = Canonical::new("ficant-simulation-result/v2");
+    let mut bytes = Canonical::new("ficant-simulation-result/v3");
     identity_bytes(&mut bytes, identity);
     bytes.number(decisions.len() as u64);
     for decision in decisions {
@@ -639,7 +661,15 @@ fn identity_bytes(bytes: &mut Canonical, identity: &ReplayIdentity) {
     bytes.text(identity.data_snapshot.as_str());
     bytes.hash(&identity.data_snapshot_content);
     bytes.version_ref(&identity.subject);
-    bytes.version_ref(&identity.subject_state);
+    bytes.text(identity.subject_state.as_str());
+    bytes.optional(identity.constraint_set.as_ref(), Canonical::version_ref);
+    bytes.number(identity.constraints.len() as u64);
+    for constraint in &identity.constraints {
+        bytes.text(&constraint.limit_code);
+        bytes.text(constraint.measure.code());
+        bytes.amount(constraint.ceiling);
+        bytes.text(constraint.handling.code());
+    }
     bytes.version_ref(identity.funding.rule_pack());
     bytes.text(match identity.funding.tier() {
         FundingTier::DrAvailable => "DR_AVAILABLE",
@@ -675,6 +705,14 @@ fn fill_bytes(bytes: &mut Canonical, fill: &SimulatedFill) {
         bytes.amount(remainder.quantity);
         bytes.text(remainder.reason.code());
         bytes.text(remainder.outcome.code());
+    });
+    bytes.optional(fill.constraint.as_ref(), |bytes, outcome| {
+        bytes.amount(outcome.unconstrained);
+        bytes.number(outcome.triggered.len() as u64);
+        for code in &outcome.triggered {
+            bytes.text(code);
+        }
+        bytes.text(outcome.action.code());
     });
 }
 
