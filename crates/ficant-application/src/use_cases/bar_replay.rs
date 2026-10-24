@@ -20,6 +20,7 @@ use ficant_domain::replay::{
     PolicyEvaluator, RemainderOutcome, ReplayAmount, ReplayConstraint, ReplayDecision,
     ReplayFunding, ReplayIdentity, ReplayLedger, SimulatedBook, SimulatedFill, SimulationResult,
     attempt_in_bar, bind_constraints, check_execution, no_later_bar, policy_period_contains,
+    subject_state_hash,
 };
 use ficant_domain::subject::{SubjectStateSnapshot, SubjectVersion};
 
@@ -207,14 +208,17 @@ fn replay_identity(
 ) -> ReplayIdentity {
     let (snapshot, snapshot_content) = request.data.snapshot();
     ReplayIdentity {
+        policy_id: request.policy.id().clone(),
         policy: request.policy.content_hash().clone(),
         data_snapshot: snapshot,
         data_snapshot_content: snapshot_content,
         subject: request.subject.reference().clone(),
         subject_state: request.subject_state.id().clone(),
+        subject_state_content: subject_state_hash(request.subject_state),
         constraint_set: request.constraints.map(|set| set.rule_pack().clone()),
         constraints,
         funding: request.funding.clone(),
+        carry_source: request.carry.source(),
         carry: request.carry.identity(),
         cost_model: request.cost_model.clone(),
         cost_parameters: request.cost_parameters.clone(),

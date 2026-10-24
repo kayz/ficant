@@ -227,6 +227,13 @@ impl TableCarry {
 }
 
 impl BondCarry for TableCarry {
+    fn source(&self) -> VersionRef {
+        VersionRef::new(
+            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5FB2").unwrap(),
+            Version::new(1).unwrap(),
+        )
+    }
+
     fn identity(&self) -> ContentHash {
         ContentHash::digest(format!("{:?}|{:?}", self.accrued, self.payments).as_bytes())
     }
