@@ -1,23 +1,25 @@
 //! AC38 and AC39: point-in-time bar replay over verified Bar snapshots.
 
 mod bar_support;
+mod replay_support;
 
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
-use ficant_application::{
-    ApplicationError, ApplicationErrorCategory, BarReplayRequest, PointInTimeBars, replay_bars,
-};
-use ficant_data::{BarSnapshotCodec, CanonicalBarIngestor, DataError, VerifiedBarSnapshot};
+use ficant_application::{ApplicationError, BarReplayRequest, PointInTimeBars, replay_bars};
+use ficant_data::VerifiedBarSnapshot;
 use ficant_domain::ContentAddressed;
-use ficant_domain::market::{Bar, BarFrequency, BarSettlement};
+use ficant_domain::market::{Bar, BarFrequency, BarSettlement, PriceSourceType};
 use ficant_domain::primitives::{ContentHash, EffectivePeriod, Ulid, Version, VersionRef};
 use ficant_domain::replay::{
-    FillPriceBasis, NoFillReason, PointInTimeView, PolicyArtifact, PolicyArtifactInput,
-    PolicyEvaluator, ReplayAmount, SimulationResult, YIELD_THRESHOLD_FAMILY, YieldThresholdPolicy,
+    ExecutionRules, FillPriceBasis, NoFillReason, PointInTimeView, PolicyArtifact,
+    PolicyArtifactInput, PolicyEvaluator, RemainderHandling, ReplayAmount, SimulationResult,
+    YIELD_THRESHOLD_FAMILY, YieldThresholdPolicy,
 };
+use ficant_domain::subject::{FundingTier, SubjectVersion};
 
 use bar_support::*;
+use replay_support::*;
 
 /// Minute bars for 260011.IB (T+1), each visible two seconds after it ends. Entry yield 1.84,
 /// exit 1.82, target 10m face. Expected path:
@@ -40,27 +42,6 @@ const ROWS: &str = r#"
 /// One more bar, visible at 09:40:02, whose yield would make the policy buy again.
 const LATER_BAR: &str = r#"{"id":"b0939","code":"260011.IB","freq":"1min","settle":"T+1","start":"2026-07-20 09:39:00","pub":"2026-07-20 09:40:02","o":"100.05","h":"100.05","l":"100.05","c":"100.05","vw":"100.05","vol":"10000000","ytm":"1.850"}"#;
 
-struct SnapshotBars(VerifiedBarSnapshot);
-
-impl PointInTimeBars for SnapshotBars {
-    fn snapshot(&self) -> (Ulid, ContentHash) {
-        (
-            self.0.snapshot().id().clone(),
-            self.0.snapshot().content_hash().clone(),
-        )
-    }
-
-    fn all_bars(&self) -> &[Bar] {
-        self.0.bars()
-    }
-
-    fn visible_at(&self, decision_time: DateTime<Utc>) -> Result<Vec<&Bar>, ApplicationError> {
-        self.0.visible_at(decision_time).map_err(|_: DataError| {
-            ApplicationError::new(ApplicationErrorCategory::ValidationFailed, false)
-        })
-    }
-}
-
 /// A broken data port that hands the policy every bar, including future ones.
 struct LeakyBars<'a>(&'a VerifiedBarSnapshot);
 
@@ -72,6 +53,10 @@ impl PointInTimeBars for LeakyBars<'_> {
         )
     }
 
+    fn price_source_type(&self) -> PriceSourceType {
+        self.0.price_source_type()
+    }
+
     fn all_bars(&self) -> &[Bar] {
         self.0.bars()
     }
@@ -81,38 +66,14 @@ impl PointInTimeBars for LeakyBars<'_> {
     }
 }
 
-async fn snapshot(rows: &str, snapshot_id: &str) -> VerifiedBarSnapshot {
-    let mut mapping = vendor_a_mapping();
-    mapping.vwap = Some("vw".to_owned());
-    let source = file_source(mapping, SOURCE_A, rows);
-    let request = request(SOURCE_A, "260011.IB");
-    let batch = CanonicalBarIngestor
-        .ingest(&source, &request)
-        .await
-        .unwrap();
-    assert!(
-        batch.report().rejections.is_empty(),
-        "{:?}",
-        batch.report().rejections
-    );
-    let package = BarSnapshotCodec
-        .build(Ulid::new(snapshot_id).unwrap(), &request, &batch)
-        .unwrap();
-    BarSnapshotCodec
-        .decode_verified(
-            package.snapshot().clone(),
-            package.parquet(),
-            package.manifest(),
-        )
-        .unwrap()
+/// Full fills only (cap 1) and cancelled remainders: the ADR-0024 behaviour.
+fn full_fills() -> ExecutionRules {
+    ExecutionRules::new(amount("1"), RemainderHandling::Cancel).unwrap()
 }
 
-fn amount(text: &str) -> ReplayAmount {
-    ReplayAmount::parse(text).unwrap()
-}
-
-fn instrument() -> VersionRef {
-    VersionRef::new(Ulid::new(INSTRUMENT).unwrap(), Version::new(7).unwrap())
+/// All trades here happen on one trading date, so accrued interest cancels between buy and sell.
+fn same_day_carry() -> TableCarry {
+    TableCarry::new(&[("2026-07-20", "1.00")], &[])
 }
 
 fn policy(entry_yield: &str) -> PolicyArtifact {
@@ -134,6 +95,7 @@ fn policy(entry_yield: &str) -> PolicyArtifact {
             market_time("2026-08-01T00:00:00Z"),
         )
         .unwrap(),
+        execution: full_fills(),
     })
     .unwrap()
 }
@@ -141,7 +103,7 @@ fn policy(entry_yield: &str) -> PolicyArtifact {
 #[derive(Clone)]
 struct Inputs {
     policy: PolicyArtifact,
-    subject: VersionRef,
+    subject: SubjectVersion,
     subject_state: VersionRef,
     cost_parameters: BTreeMap<String, ReplayAmount>,
     seed: u64,
@@ -152,10 +114,7 @@ struct Inputs {
 fn base_inputs() -> Inputs {
     Inputs {
         policy: policy("1.84"),
-        subject: VersionRef::new(
-            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5FV0").unwrap(),
-            Version::new(1).unwrap(),
-        ),
+        subject: subject(1, FundingTier::DrAvailable),
         subject_state: VersionRef::new(
             Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5FV1").unwrap(),
             Version::new(1).unwrap(),
@@ -172,8 +131,10 @@ fn run(data: &dyn PointInTimeBars, inputs: &Inputs) -> Result<SimulationResult, 
         policy: &inputs.policy,
         evaluator: &YieldThresholdPolicy,
         data,
-        subject: inputs.subject.clone(),
+        subject: &inputs.subject,
         subject_state: inputs.subject_state.clone(),
+        funding: funding("0.0365", 365),
+        carry: &same_day_carry(),
         cost_model: "ficant.cost.none".to_owned(),
         cost_parameters: inputs.cost_parameters.clone(),
         seed: inputs.seed,
@@ -294,7 +255,7 @@ async fn identical_inputs_give_identical_results_and_any_change_changes_the_id()
     variants.push((
         "subject",
         change(|inputs| {
-            inputs.subject = VersionRef::new(inputs.subject.id().clone(), Version::new(2).unwrap());
+            inputs.subject = subject(2, FundingTier::DrAvailable);
         }),
     ));
     variants.push((
@@ -369,8 +330,10 @@ async fn replay_fails_closed_on_mismatched_evaluator_or_missing_parameters() {
         policy: &inputs.policy,
         evaluator: &OtherFamily,
         data: &data,
-        subject: inputs.subject.clone(),
+        subject: &inputs.subject,
         subject_state: inputs.subject_state.clone(),
+        funding: funding("0.0365", 365),
+        carry: &same_day_carry(),
         cost_model: "ficant.cost.none".to_owned(),
         cost_parameters: inputs.cost_parameters.clone(),
         seed: inputs.seed,
@@ -403,5 +366,6 @@ fn policy_input() -> PolicyArtifactInput {
             market_time("2026-08-01T00:00:00Z"),
         )
         .unwrap(),
+        execution: full_fills(),
     }
 }

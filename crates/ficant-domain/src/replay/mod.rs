@@ -7,14 +7,30 @@
 //! collections only. The replay loop that schedules decisions lives in the application layer; it
 //! can only hand a policy a [`PointInTimeView`], whose constructor refuses any bar that was not yet
 //! visible at the decision time (I1, AC38).
+//!
+//! Execution with a participation cap lives in [`execution`]; the book, equity and the per-bar
+//! P&L breakdown in [`ledger`] (ADR-0025; AC40, AC41).
+
+mod execution;
+mod ledger;
 
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 
-use crate::market::{Bar, BarFrequency, BarSettlement};
-use crate::primitives::{ContentHash, EffectivePeriod, OwnerRef, Ulid, VersionRef};
+pub use execution::{
+    ExecutionRules, FillPriceBasis, NoFillReason, Remainder, RemainderHandling, RemainderOutcome,
+    SimulatedFill, simulate_trade,
+};
+pub use ledger::{
+    BarPnl, BondCarry, COST_NONE, COST_RATE_PLUS_FIXED, CostModel, InstrumentPnl, ReplayFunding,
+    ReplayLedger,
+};
+
+use crate::market::{Bar, BarFrequency, BarSettlement, PriceSourceType};
+use crate::primitives::{ContentHash, EffectivePeriod, FixedDecimal, OwnerRef, Ulid, VersionRef};
+use crate::subject::FundingTier;
 use crate::{DomainErrorCode, DomainResult};
 
 /// Built-in policy family: hold `target_face` of each universe instrument while its latest close
@@ -40,17 +56,48 @@ impl ReplayAmount {
         self.0.is_zero()
     }
 
+    #[must_use]
+    pub fn plus(self, other: Self) -> Self {
+        Self::from_decimal(self.0 + other.0)
+    }
+
+    #[must_use]
+    pub fn minus(self, other: Self) -> Self {
+        Self::from_decimal(self.0 - other.0)
+    }
+
+    #[must_use]
+    pub fn abs(self) -> Self {
+        Self(self.0.abs())
+    }
+
     /// Canonical text: no trailing zeros, no exponent.
     pub fn canonical(self) -> String {
         self.0.normalize().to_string()
     }
 
-    fn of(value: &crate::primitives::DecimalValue) -> Self {
+    /// Exact conversion from the platform's fixed-scale decimal (e.g. a resolved funding rate).
+    pub fn from_fixed(value: FixedDecimal) -> Self {
+        Self::from_decimal(Decimal::from_i128_with_scale(
+            value.scaled(),
+            crate::primitives::DECIMAL_SCALE,
+        ))
+    }
+
+    pub(crate) fn of(value: &crate::primitives::DecimalValue) -> Self {
         let coefficient = value
             .coefficient()
             .parse::<i128>()
             .expect("validated decimal coefficient fits in i128");
         Self(Decimal::from_i128_with_scale(coefficient, value.scale()).normalize())
+    }
+
+    pub(crate) fn from_decimal(value: Decimal) -> Self {
+        Self(value.normalize())
+    }
+
+    pub(crate) const fn value(self) -> Decimal {
+        self.0
     }
 }
 
@@ -72,6 +119,8 @@ pub struct PolicyArtifactInput {
     pub frequency: BarFrequency,
     pub settlement: BarSettlement,
     pub valid: EffectivePeriod,
+    /// Participation cap and remainder handling for simulated execution (AC41).
+    pub execution: ExecutionRules,
 }
 
 impl PolicyArtifact {
@@ -130,6 +179,10 @@ impl PolicyArtifact {
 
     pub fn valid(&self) -> &EffectivePeriod {
         &self.input.valid
+    }
+
+    pub const fn execution(&self) -> ExecutionRules {
+        self.input.execution
     }
 
     pub fn content_hash(&self) -> &ContentHash {
@@ -211,7 +264,8 @@ impl TargetExposure {
     }
 }
 
-/// Simulated positions (face amount) and cash. Cash moves by `face × price / 100`.
+/// Simulated positions (face amount) and cash. Trades settle at dirty price; costs, funding and
+/// coupons move cash too (ADR-0025).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SimulatedBook {
     positions: BTreeMap<VersionRef, ReplayAmount>,
@@ -238,17 +292,13 @@ impl SimulatedBook {
     /// pending trade will actually fill is decided by a bar that is not visible yet, so it must
     /// not influence what the policy sees.
     #[must_use]
-    pub fn with_pending<'a>(&self, pending: impl IntoIterator<Item = &'a SimulatedFill>) -> Self {
+    pub fn with_pending<'a>(
+        &self,
+        intents: impl IntoIterator<Item = (&'a VersionRef, ReplayAmount)>,
+    ) -> Self {
         let mut projected = self.clone();
-        for fill in pending {
-            let position = projected.position(&fill.instrument).0 + fill.quantity.0;
-            if position.is_zero() {
-                projected.positions.remove(&fill.instrument);
-            } else {
-                projected
-                    .positions
-                    .insert(fill.instrument.clone(), ReplayAmount(position.normalize()));
-            }
+        for (instrument, face) in intents {
+            projected.add_position(instrument, face.0);
         }
         projected
     }
@@ -264,19 +314,18 @@ impl SimulatedBook {
             .collect()
     }
 
-    fn apply(&mut self, fill: &SimulatedFill) {
-        let (Some(price), true) = (fill.price, fill.filled()) else {
-            return;
-        };
-        let position = self.position(&fill.instrument).0 + fill.quantity.0;
+    pub(crate) fn add_position(&mut self, instrument: &VersionRef, face: Decimal) {
+        let position = self.position(instrument).0 + face;
         if position.is_zero() {
-            self.positions.remove(&fill.instrument);
+            self.positions.remove(instrument);
         } else {
             self.positions
-                .insert(fill.instrument.clone(), ReplayAmount(position.normalize()));
+                .insert(instrument.clone(), ReplayAmount(position.normalize()));
         }
-        let notional = fill.quantity.0 * price.0 / Decimal::ONE_HUNDRED;
-        self.cash = ReplayAmount((self.cash.0 - notional).normalize());
+    }
+
+    pub(crate) fn add_cash(&mut self, amount: Decimal) {
+        self.cash = ReplayAmount((self.cash.0 + amount).normalize());
     }
 }
 
@@ -355,88 +404,6 @@ impl PolicyEvaluator for YieldThresholdPolicy {
     }
 }
 
-/// Which price a simulated fill used (I9 travels with the snapshot's price source type).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum FillPriceBasis {
-    Vwap,
-    Close,
-}
-
-/// Why a requested trade did not fill.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum NoFillReason {
-    /// The execution bar had no trades (AC41).
-    NoPriceInBar,
-    /// The snapshot has no bar after the decision for this instrument.
-    NoLaterBar,
-}
-
-/// One simulated execution of a decision's delta. Never an order (AC44).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SimulatedFill {
-    pub decision_time: DateTime<Utc>,
-    pub instrument: VersionRef,
-    pub quantity: ReplayAmount,
-    /// When the fill became part of the book: end of the execution bar, or the decision time when
-    /// nothing could be executed.
-    pub effective_at: DateTime<Utc>,
-    pub execution_bar: Option<String>,
-    pub price: Option<ReplayAmount>,
-    pub basis: Option<FillPriceBasis>,
-    pub no_fill: Option<NoFillReason>,
-}
-
-impl SimulatedFill {
-    pub fn filled(&self) -> bool {
-        self.no_fill.is_none()
-    }
-
-    /// Simulates executing `quantity` in `execution_bar`, the first bar starting at or after the
-    /// decision time. Price is the bar's VWAP, else its close; no trades means no fill.
-    pub fn simulate(
-        decision_time: DateTime<Utc>,
-        instrument: VersionRef,
-        quantity: ReplayAmount,
-        execution_bar: Option<&Bar>,
-    ) -> Self {
-        let Some(bar) = execution_bar else {
-            return Self {
-                decision_time,
-                instrument,
-                quantity,
-                effective_at: decision_time,
-                execution_bar: None,
-                price: None,
-                basis: None,
-                no_fill: Some(NoFillReason::NoLaterBar),
-            };
-        };
-        let (price, basis, no_fill) = match (bar.vwap(), bar.prices()) {
-            (Some(vwap), _) => (
-                Some(ReplayAmount::of(vwap)),
-                Some(FillPriceBasis::Vwap),
-                None,
-            ),
-            (None, Some(prices)) => (
-                Some(ReplayAmount::of(&prices.close)),
-                Some(FillPriceBasis::Close),
-                None,
-            ),
-            (None, None) => (None, None, Some(NoFillReason::NoPriceInBar)),
-        };
-        Self {
-            decision_time,
-            instrument,
-            quantity,
-            effective_at: bar.bar_end(),
-            execution_bar: Some(bar.source_record_id().to_owned()),
-            price,
-            basis,
-            no_fill,
-        }
-    }
-}
-
 /// One decision: when it was made, the newest visibility time among its inputs, and the target.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReplayDecision {
@@ -454,6 +421,9 @@ pub struct ReplayIdentity {
     pub data_snapshot_content: ContentHash,
     pub subject: VersionRef,
     pub subject_state: VersionRef,
+    pub funding: ReplayFunding,
+    /// Content hash of the coupon data source.
+    pub carry: ContentHash,
     pub cost_model: String,
     pub cost_parameters: BTreeMap<String, ReplayAmount>,
     pub seed: u64,
@@ -461,13 +431,15 @@ pub struct ReplayIdentity {
     pub runtime: ContentHash,
 }
 
-/// Outcome of one replay. Decisions and fills are in time order; the ID binds inputs and outputs.
+/// Outcome of one replay. Decisions, fills and P&L rows are in time order; the ID binds inputs and
+/// outputs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SimulationResult {
     result_id: ContentHash,
     identity: ReplayIdentity,
     decisions: Vec<ReplayDecision>,
     fills: Vec<SimulatedFill>,
+    pnl: Vec<BarPnl>,
     book: SimulatedBook,
 }
 
@@ -476,6 +448,7 @@ impl SimulationResult {
         identity: ReplayIdentity,
         decisions: Vec<ReplayDecision>,
         fills: Vec<SimulatedFill>,
+        pnl: Vec<BarPnl>,
         book: SimulatedBook,
     ) -> DomainResult<Self> {
         let ordered = decisions
@@ -484,7 +457,8 @@ impl SimulationResult {
             && fills.windows(2).all(|pair| {
                 (pair[0].effective_at, &pair[0].instrument)
                     <= (pair[1].effective_at, &pair[1].instrument)
-            });
+            })
+            && pnl.windows(2).all(|pair| pair[0].bar_end < pair[1].bar_end);
         let visible = decisions.iter().all(|decision| {
             decision
                 .inputs_visible_through
@@ -493,12 +467,14 @@ impl SimulationResult {
         if !ordered || !visible {
             return Err(DomainErrorCode::InvalidValue);
         }
-        let result_id = ContentHash::digest(&result_bytes(&identity, &decisions, &fills, &book));
+        let result_id =
+            ContentHash::digest(&result_bytes(&identity, &decisions, &fills, &pnl, &book));
         Ok(Self {
             result_id,
             identity,
             decisions,
             fills,
+            pnl,
             book,
         })
     }
@@ -519,13 +495,21 @@ impl SimulationResult {
         &self.fills
     }
 
+    /// One P&L row per replay step (AC40).
+    pub fn pnl(&self) -> &[BarPnl] {
+        &self.pnl
+    }
+
     pub fn book(&self) -> &SimulatedBook {
         &self.book
     }
 
-    /// The part of the result fixed by time `t`: decisions made and fills effective at or before
-    /// it (AC38 compares these between snapshots).
-    pub fn through(&self, t: DateTime<Utc>) -> (Vec<&ReplayDecision>, Vec<&SimulatedFill>) {
+    /// The part of the result fixed by time `t`: decisions made, fills effective and P&L rows known
+    /// at or before it (AC38 compares these between snapshots).
+    pub fn through(
+        &self,
+        t: DateTime<Utc>,
+    ) -> (Vec<&ReplayDecision>, Vec<&SimulatedFill>, Vec<&BarPnl>) {
         (
             self.decisions
                 .iter()
@@ -535,17 +519,8 @@ impl SimulationResult {
                 .iter()
                 .filter(|fill| fill.effective_at <= t)
                 .collect(),
+            self.pnl.iter().filter(|row| row.known_at <= t).collect(),
         )
-    }
-}
-
-/// Applies fills to a book in order; used by the replay loop.
-pub fn apply_fills<'a>(
-    book: &mut SimulatedBook,
-    fills: impl IntoIterator<Item = &'a SimulatedFill>,
-) {
-    for fill in fills {
-        book.apply(fill);
     }
 }
 
@@ -598,7 +573,7 @@ impl Canonical {
 }
 
 fn policy_bytes(input: &PolicyArtifactInput) -> Vec<u8> {
-    let mut bytes = Canonical::new("ficant-policy-artifact/v1");
+    let mut bytes = Canonical::new("ficant-policy-artifact/v2");
     bytes.text(input.policy_artifact_id.as_str());
     bytes.text(input.owner.tenant_id().as_str());
     bytes.text(input.owner.owner_id().as_str());
@@ -617,6 +592,8 @@ fn policy_bytes(input: &PolicyArtifactInput) -> Vec<u8> {
     bytes.text(input.settlement.code());
     bytes.time(input.valid.from().instant());
     bytes.time(input.valid.to().instant());
+    bytes.amount(input.execution.participation_cap());
+    bytes.text(input.execution.remainder().code());
     bytes.0
 }
 
@@ -624,23 +601,11 @@ fn result_bytes(
     identity: &ReplayIdentity,
     decisions: &[ReplayDecision],
     fills: &[SimulatedFill],
+    pnl: &[BarPnl],
     book: &SimulatedBook,
 ) -> Vec<u8> {
-    let mut bytes = Canonical::new("ficant-simulation-result/v1");
-    bytes.hash(&identity.policy);
-    bytes.text(identity.data_snapshot.as_str());
-    bytes.hash(&identity.data_snapshot_content);
-    bytes.version_ref(&identity.subject);
-    bytes.version_ref(&identity.subject_state);
-    bytes.text(&identity.cost_model);
-    bytes.number(identity.cost_parameters.len() as u64);
-    for (name, value) in &identity.cost_parameters {
-        bytes.text(name);
-        bytes.amount(*value);
-    }
-    bytes.number(identity.seed);
-    bytes.hash(&identity.code);
-    bytes.hash(&identity.runtime);
+    let mut bytes = Canonical::new("ficant-simulation-result/v2");
+    identity_bytes(&mut bytes, identity);
     bytes.number(decisions.len() as u64);
     for decision in decisions {
         bytes.time(decision.decision_time);
@@ -654,24 +619,11 @@ fn result_bytes(
     }
     bytes.number(fills.len() as u64);
     for fill in fills {
-        bytes.time(fill.decision_time);
-        bytes.version_ref(&fill.instrument);
-        bytes.amount(fill.quantity);
-        bytes.time(fill.effective_at);
-        bytes.optional(fill.execution_bar.as_deref(), Canonical::text);
-        bytes.optional(fill.price, Canonical::amount);
-        bytes.optional(fill.basis, |bytes, basis| {
-            bytes.text(match basis {
-                FillPriceBasis::Vwap => "VWAP",
-                FillPriceBasis::Close => "CLOSE",
-            });
-        });
-        bytes.optional(fill.no_fill, |bytes, reason| {
-            bytes.text(match reason {
-                NoFillReason::NoPriceInBar => "NO_PRICE_IN_BAR",
-                NoFillReason::NoLaterBar => "NO_LATER_BAR",
-            });
-        });
+        fill_bytes(&mut bytes, fill);
+    }
+    bytes.number(pnl.len() as u64);
+    for row in pnl {
+        pnl_bytes(&mut bytes, row);
     }
     bytes.number(book.positions.len() as u64);
     for (instrument, face) in book.positions() {
@@ -680,6 +632,84 @@ fn result_bytes(
     }
     bytes.amount(book.cash);
     bytes.0
+}
+
+fn identity_bytes(bytes: &mut Canonical, identity: &ReplayIdentity) {
+    bytes.hash(&identity.policy);
+    bytes.text(identity.data_snapshot.as_str());
+    bytes.hash(&identity.data_snapshot_content);
+    bytes.version_ref(&identity.subject);
+    bytes.version_ref(&identity.subject_state);
+    bytes.version_ref(identity.funding.rule_pack());
+    bytes.text(match identity.funding.tier() {
+        FundingTier::DrAvailable => "DR_AVAILABLE",
+        FundingTier::ROnly => "R_ONLY",
+    });
+    bytes.amount(identity.funding.annual_rate());
+    bytes.number(u64::from(identity.funding.day_basis()));
+    bytes.hash(&identity.carry);
+    bytes.text(&identity.cost_model);
+    bytes.number(identity.cost_parameters.len() as u64);
+    for (name, value) in &identity.cost_parameters {
+        bytes.text(name);
+        bytes.amount(*value);
+    }
+    bytes.number(identity.seed);
+    bytes.hash(&identity.code);
+    bytes.hash(&identity.runtime);
+}
+
+fn fill_bytes(bytes: &mut Canonical, fill: &SimulatedFill) {
+    bytes.time(fill.decision_time);
+    bytes.version_ref(&fill.instrument);
+    bytes.amount(fill.requested);
+    bytes.amount(fill.quantity);
+    bytes.optional(fill.limit, Canonical::amount);
+    bytes.time(fill.effective_at);
+    bytes.optional(fill.execution_bar.as_deref(), Canonical::text);
+    bytes.optional(fill.price, Canonical::amount);
+    bytes.optional(fill.basis, |bytes, basis| bytes.text(basis.code()));
+    bytes.text(price_source_code(fill.price_source));
+    bytes.optional(fill.no_fill, |bytes, reason| bytes.text(reason.code()));
+    bytes.optional(fill.remainder, |bytes, remainder| {
+        bytes.amount(remainder.quantity);
+        bytes.text(remainder.reason.code());
+        bytes.text(remainder.outcome.code());
+    });
+}
+
+fn pnl_bytes(bytes: &mut Canonical, row: &BarPnl) {
+    bytes.time(row.bar_start);
+    bytes.time(row.bar_end);
+    bytes.time(row.known_at);
+    bytes.text(&row.trading_date.to_string());
+    bytes.number(row.instruments.len() as u64);
+    for (instrument, item) in &row.instruments {
+        bytes.version_ref(instrument);
+        for value in [
+            item.position_start,
+            item.position_end,
+            item.mark,
+            item.accrued_interest,
+            item.price,
+            item.coupon,
+            item.transaction_cost,
+        ] {
+            bytes.amount(value);
+        }
+    }
+    for value in [row.funding, row.total, row.cash, row.equity] {
+        bytes.amount(value);
+    }
+}
+
+const fn price_source_code(value: PriceSourceType) -> &'static str {
+    match value {
+        PriceSourceType::RealTrade => "REAL_TRADE",
+        PriceSourceType::ActiveQuote => "ACTIVE_QUOTE",
+        PriceSourceType::ModelValuation => "MODEL_VALUATION",
+        PriceSourceType::CurveInterpolation => "CURVE_INTERPOLATION",
+    }
 }
 
 /// Convenience used by policies and tests.

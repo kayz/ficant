@@ -177,6 +177,23 @@ pub fn build_request(
     source: DataSource,
     instrument_key: &str,
 ) -> ficant_data::DataResult<CanonicalBarIngestRequest> {
+    build_request_in_window(
+        source,
+        instrument_key,
+        PointInTimeWindow::new(
+            market_time("2026-07-20T09:00:00Z"),
+            market_time("2026-07-21T09:00:00Z"),
+        )
+        .unwrap(),
+    )
+}
+
+/// Like [`build_request`], with an explicit point-in-time window.
+pub fn build_request_in_window(
+    source: DataSource,
+    instrument_key: &str,
+    window: PointInTimeWindow,
+) -> ficant_data::DataResult<CanonicalBarIngestRequest> {
     let effective = EffectivePeriod::new(
         market_time("2026-07-01T00:00:00Z"),
         market_time("2026-08-01T00:00:00Z"),
@@ -239,11 +256,7 @@ pub fn build_request(
         ),
         unit("01ARZ3NDEKTSV4RRFFQ69G5F41", "CNY_FACE", "amount", 2, 18),
         Some(unit("01ARZ3NDEKTSV4RRFFQ69G5F42", "PCT_YTM", "yield", 4, 8)),
-        PointInTimeWindow::new(
-            market_time("2026-07-20T09:00:00Z"),
-            market_time("2026-07-21T09:00:00Z"),
-        )
-        .unwrap(),
+        window,
     )
 }
 

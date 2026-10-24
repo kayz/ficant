@@ -9,7 +9,9 @@ use std::collections::BTreeSet;
 
 use arrow::array::{Array, RecordBatch, StringArray, UInt32Array, UInt64Array};
 use chrono::{DateTime, Utc};
-use ficant_domain::market::{Bar, BarFrequency, BarInput, BarPrices, BarSettlement};
+use ficant_domain::market::{
+    Bar, BarFrequency, BarInput, BarPrices, BarSettlement, PriceSourceType,
+};
 use ficant_domain::primitives::{
     ContentHash, DecimalValue, LineageRef, Ulid, UnitRef, Version, VersionRef,
 };
@@ -17,6 +19,7 @@ use ficant_domain::research::{DataSnapshot, DataSnapshotInput};
 use ficant_domain::{ContentAddressed, Lineaged, VersionedDefinition};
 use serde::{Deserialize, Serialize};
 
+use crate::bar_canonical::price_source_from_code;
 use crate::snapshot::{
     ParquetWriterBinding, decimal_column, decode_parquet_with_schema, encode_parquet, epoch_date,
     hash_hex, parse_hash, timestamp, writer_binding,
@@ -140,6 +143,7 @@ pub struct VerifiedBarSnapshot {
     snapshot: DataSnapshot,
     manifest: BarSnapshotManifest,
     bars: Vec<Bar>,
+    price_source_type: PriceSourceType,
 }
 
 impl VerifiedBarSnapshot {
@@ -153,6 +157,11 @@ impl VerifiedBarSnapshot {
 
     pub fn bars(&self) -> &[Bar] {
         &self.bars
+    }
+
+    /// Price source type of every bar in the snapshot (I9); one snapshot has exactly one.
+    pub const fn price_source_type(&self) -> PriceSourceType {
+        self.price_source_type
     }
 
     /// Bars known at `decision_time` (I1): `visible_at ≤ decision_time`, which also implies the
@@ -328,12 +337,29 @@ impl BarSnapshotCodec {
             snapshot.as_of().instant(),
             snapshot.visible_at().instant(),
         )?;
+        let price_source_type = single_price_source(&batch)?;
         Ok(VerifiedBarSnapshot {
             snapshot,
             manifest,
             bars,
+            price_source_type,
         })
     }
+}
+
+/// The one price source type all rows carry; mixed, unknown or missing values fail closed.
+fn single_price_source(batch: &RecordBatch) -> DataResult<PriceSourceType> {
+    let values = strings(batch, "price_source_type")?;
+    let mut found = None;
+    for index in 0..values.len() {
+        let value = price_source_from_code(values.value(index))
+            .ok_or(DataError::SnapshotIntegrityFailed)?;
+        if found.is_some_and(|previous| previous != value) {
+            return Err(DataError::SnapshotIntegrityFailed);
+        }
+        found = Some(value);
+    }
+    found.ok_or(DataError::SnapshotIntegrityFailed)
 }
 
 fn count(value: usize) -> DataResult<u64> {

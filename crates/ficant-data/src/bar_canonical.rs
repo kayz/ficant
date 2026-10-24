@@ -549,6 +549,17 @@ fn reject_duplicates(accepted: Vec<Bar>, rejections: &mut Vec<BarRejection>) -> 
     kept
 }
 
+pub(crate) fn price_source_from_code(code: &str) -> Option<PriceSourceType> {
+    [
+        PriceSourceType::RealTrade,
+        PriceSourceType::ActiveQuote,
+        PriceSourceType::ModelValuation,
+        PriceSourceType::CurveInterpolation,
+    ]
+    .into_iter()
+    .find(|value| price_source_code(*value) == code)
+}
+
 fn price_source_code(value: PriceSourceType) -> &'static str {
     match value {
         PriceSourceType::RealTrade => "REAL_TRADE",
