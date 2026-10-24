@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::{Decimal, RoundingStrategy};
 
-use super::{ReplayAmount, SimulatedBook, SimulatedFill};
+use super::{ExecutionContext, ReplayAmount, SimulatedBook, SimulatedFill};
 use crate::market::{Bar, BarSettlement};
 use crate::primitives::{ContentHash, DECIMAL_SCALE, VersionRef};
 use crate::subject::FundingTier;
@@ -221,6 +221,7 @@ pub struct ReplayLedger<'a> {
     date: Option<NaiveDate>,
     equity: Decimal,
     rows: Vec<BarPnl>,
+    open: Option<OpenStep>,
 }
 
 #[derive(Default)]
@@ -248,6 +249,7 @@ impl<'a> ReplayLedger<'a> {
             date: None,
             equity: Decimal::ZERO,
             rows: Vec::new(),
+            open: None,
         }
     }
 
@@ -264,22 +266,39 @@ impl<'a> ReplayLedger<'a> {
         (self.book, self.rows)
     }
 
-    /// Closes one step: the bars sharing one `bar_end`, and the executions effective at it.
+    /// Closes one step in one call: the bars sharing one `bar_end`, and the executions effective
+    /// at it, in order.
     ///
     /// Fails when the step is inconsistent, a held bond has no coupon data for the date, or the
     /// components do not add up to the equity change.
     pub fn close_step(&mut self, bars: &[&Bar], fills: &[&SimulatedFill]) -> DomainResult<()> {
+        self.open_step(bars)?;
+        for fill in fills {
+            self.settle(fill)?;
+        }
+        self.finish_step()
+    }
+
+    /// Opens one step: rolls the date (funding, coupon carry) and marks positions held into it.
+    /// Executions are then settled one by one with [`Self::settle`], each seeing the book the
+    /// previous ones left, and [`Self::finish_step`] books the row.
+    ///
+    /// Fails when the bars do not form one step, a step is already open, the date goes back, or a
+    /// held bond has no coupon data for the date.
+    pub fn open_step(&mut self, bars: &[&Bar]) -> DomainResult<()> {
         let first = bars.first().ok_or(DomainErrorCode::InvalidValue)?;
         let (bar_start, bar_end, date) = (
             first.bar_start(),
             first.bar_end(),
             first.local_trading_date(),
         );
-        if bars.iter().any(|bar| {
-            bar.bar_end() != bar_end
-                || bar.bar_start() != bar_start
-                || bar.local_trading_date() != date
-        }) || self.date.is_some_and(|previous| previous > date)
+        if self.open.is_some()
+            || bars.iter().any(|bar| {
+                bar.bar_end() != bar_end
+                    || bar.bar_start() != bar_start
+                    || bar.local_trading_date() != date
+            })
+            || self.date.is_some_and(|previous| previous > date)
         {
             return Err(DomainErrorCode::InvalidValue);
         }
@@ -294,14 +313,16 @@ impl<'a> ReplayLedger<'a> {
             .map(|(instrument, face)| (instrument.clone(), face.value()))
             .collect();
         let mut parts: BTreeMap<VersionRef, Parts> = BTreeMap::new();
-
         let funding = self.roll_date(date, &start, &mut parts)?;
-
-        let closes: BTreeMap<&VersionRef, Decimal> = bars
+        let closes: BTreeMap<VersionRef, Decimal> = bars
             .iter()
             .filter_map(|bar| {
-                bar.prices()
-                    .map(|prices| (bar.instrument(), ReplayAmount::of(&prices.close).value()))
+                bar.prices().map(|prices| {
+                    (
+                        bar.instrument().clone(),
+                        ReplayAmount::of(&prices.close).value(),
+                    )
+                })
             })
             .collect();
         for (instrument, face) in &start {
@@ -313,13 +334,92 @@ impl<'a> ReplayLedger<'a> {
             parts.entry(instrument.clone()).or_default().price +=
                 *face * (mark - previous) / Decimal::ONE_HUNDRED;
         }
-        for fill in fills.iter().filter(|fill| !fill.quantity.is_zero()) {
-            self.execute(fill, bars, bar_end, date, &closes, &mut parts)?;
-        }
-        for (instrument, close) in &closes {
-            self.marks.insert((*instrument).clone(), *close);
-        }
+        self.open = Some(OpenStep {
+            bar_start,
+            bar_end,
+            date,
+            known_at,
+            records: bars
+                .iter()
+                .map(|bar| (bar.instrument().clone(), bar.source_record_id().to_owned()))
+                .collect(),
+            start,
+            parts,
+            funding,
+            closes,
+        });
+        Ok(())
+    }
 
+    /// The context a constraint check needs for an execution of `instrument` at `price` in the
+    /// open step.
+    ///
+    /// Fails without an open step or without accrued interest for the bond on the step's date.
+    pub fn execution_context<'c>(
+        &'c self,
+        instrument: &'c VersionRef,
+        price: ReplayAmount,
+    ) -> DomainResult<ExecutionContext<'c>> {
+        let date = self
+            .open
+            .as_ref()
+            .ok_or(DomainErrorCode::InvalidValue)?
+            .date;
+        let accrued = self
+            .carry
+            .accrued_interest(instrument, self.settlement, date)
+            .ok_or(DomainErrorCode::BrokenLineage)?
+            .value();
+        let (cost_per_face, fee_per_fill) = match self.costs {
+            CostModel::None => (Decimal::ZERO, Decimal::ZERO),
+            CostModel::RatePlusFixed {
+                face_rate_bp,
+                fee_per_fill,
+            } => (face_rate_bp.value() / BASIS_POINTS, fee_per_fill.value()),
+        };
+        Ok(ExecutionContext {
+            book: &self.book,
+            instrument,
+            dirty_per_face: (price.value() + accrued) / Decimal::ONE_HUNDRED,
+            cost_per_face,
+            fee_per_fill,
+        })
+    }
+
+    /// Settles one execution attempt of the open step; attempts that executed nothing are
+    /// ignored.
+    ///
+    /// Fails without an open step, or when the attempt is not effective at the step's end in one
+    /// of its bars.
+    pub fn settle(&mut self, fill: &SimulatedFill) -> DomainResult<()> {
+        let mut open = self.open.take().ok_or(DomainErrorCode::InvalidValue)?;
+        let result = if fill.quantity.is_zero() {
+            Ok(())
+        } else {
+            self.execute(fill, &mut open)
+        };
+        self.open = Some(open);
+        result
+    }
+
+    /// Books the row of the open step.
+    ///
+    /// Fails without an open step, or when the components do not add up to the equity change.
+    pub fn finish_step(&mut self) -> DomainResult<()> {
+        let OpenStep {
+            bar_start,
+            bar_end,
+            date,
+            known_at,
+            start,
+            parts,
+            funding,
+            closes,
+            ..
+        } = self.open.take().ok_or(DomainErrorCode::InvalidValue)?;
+        for (instrument, close) in closes {
+            self.marks.insert(instrument, close);
+        }
         let equity = self.equity_now()?;
         let total = equity - self.equity;
         let components = funding
@@ -438,39 +538,43 @@ impl<'a> ReplayLedger<'a> {
     }
 
     /// Settles one execution at dirty price and charges its cost.
-    fn execute(
-        &mut self,
-        fill: &SimulatedFill,
-        bars: &[&Bar],
-        bar_end: DateTime<Utc>,
-        date: NaiveDate,
-        closes: &BTreeMap<&VersionRef, Decimal>,
-        parts: &mut BTreeMap<VersionRef, Parts>,
-    ) -> DomainResult<()> {
-        let in_step = bars.iter().any(|bar| {
-            bar.instrument() == &fill.instrument
-                && Some(bar.source_record_id()) == fill.execution_bar.as_deref()
+    fn execute(&mut self, fill: &SimulatedFill, open: &mut OpenStep) -> DomainResult<()> {
+        let in_step = open.records.iter().any(|(instrument, record)| {
+            instrument == &fill.instrument && Some(record.as_str()) == fill.execution_bar.as_deref()
         });
         let price = fill.price.ok_or(DomainErrorCode::InvalidValue)?.value();
-        if fill.effective_at != bar_end || !in_step {
+        if fill.effective_at != open.bar_end || !in_step {
             return Err(DomainErrorCode::InvalidValue);
         }
         let accrued = self
             .carry
-            .accrued_interest(&fill.instrument, self.settlement, date)
+            .accrued_interest(&fill.instrument, self.settlement, open.date)
             .ok_or(DomainErrorCode::BrokenLineage)?
             .value();
         let face = fill.quantity.value();
-        let mark = closes.get(&fill.instrument).copied().unwrap_or(price);
+        let mark = open.closes.get(&fill.instrument).copied().unwrap_or(price);
         let cost = self.costs.cost(fill.quantity).value();
         self.book
             .add_cash(-(face * (price + accrued) / Decimal::ONE_HUNDRED) + cost);
         self.book.add_position(&fill.instrument, face);
         self.accrued.insert(fill.instrument.clone(), accrued);
         self.marks.entry(fill.instrument.clone()).or_insert(mark);
-        let part = parts.entry(fill.instrument.clone()).or_default();
+        let part = open.parts.entry(fill.instrument.clone()).or_default();
         part.price += face * (mark - price) / Decimal::ONE_HUNDRED;
         part.cost += cost;
         Ok(())
     }
+}
+
+/// A step between [`ReplayLedger::open_step`] and [`ReplayLedger::finish_step`].
+struct OpenStep {
+    bar_start: DateTime<Utc>,
+    bar_end: DateTime<Utc>,
+    date: NaiveDate,
+    known_at: DateTime<Utc>,
+    records: Vec<(VersionRef, String)>,
+    start: BTreeMap<VersionRef, Decimal>,
+    parts: BTreeMap<VersionRef, Parts>,
+    funding: Decimal,
+    closes: BTreeMap<VersionRef, Decimal>,
 }

@@ -1,23 +1,27 @@
-//! Point-in-time bar replay (ADR-0024, ADR-0025; AC38–AC41).
+//! Point-in-time bar replay (ADR-0024, ADR-0025, ADR-0027; AC38–AC42).
 //!
 //! The loop decides at the visibility time of every bar the policy covers, gives the policy only
-//! a [`PointInTimeView`] built from the data port's point-in-time read, and simulates each
-//! resulting trade from the first bar of that instrument that starts at or after the decision,
-//! within the policy's participation cap. A ledger closes every step of the bar grid (one
-//! `bar_end`) and books its P&L as price change, coupon, funding and transaction cost. Nothing
-//! here reads a clock or uses randomness, so identical inputs give identical results.
+//! a [`PointInTimeView`] built from the data port's point-in-time read, and registers each
+//! resulting trade. Trades execute bar by bar from the first bar of that instrument that starts at
+//! or after the decision: each attempt is capped by the policy's participation cap, then checked
+//! against the Subject's constraints on the book as it stands at that moment, then settled. A
+//! ledger closes every step of the bar grid (one `bar_end`) and books its P&L as price change,
+//! coupon, funding and transaction cost. Nothing here reads a clock or uses randomness, so
+//! identical inputs give identical results.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use chrono::{DateTime, Utc};
+use ficant_domain::constraint::ConstraintSet;
 use ficant_domain::market::{Bar, PriceSourceType};
 use ficant_domain::primitives::{ContentHash, Ulid, VersionRef};
 use ficant_domain::replay::{
-    BarPnl, BondCarry, CostModel, PointInTimeView, PolicyArtifact, PolicyError, PolicyEvaluator,
-    ReplayAmount, ReplayDecision, ReplayFunding, ReplayIdentity, ReplayLedger, SimulatedBook,
-    SimulatedFill, SimulationResult, policy_period_contains, simulate_trade,
+    BarPnl, BondCarry, CostModel, ExecutionRules, PointInTimeView, PolicyArtifact, PolicyError,
+    PolicyEvaluator, RemainderOutcome, ReplayAmount, ReplayConstraint, ReplayDecision,
+    ReplayFunding, ReplayIdentity, ReplayLedger, SimulatedBook, SimulatedFill, SimulationResult,
+    attempt_in_bar, bind_constraints, check_execution, no_later_bar, policy_period_contains,
 };
-use ficant_domain::subject::SubjectVersion;
+use ficant_domain::subject::{SubjectStateSnapshot, SubjectVersion};
 
 use crate::{ApplicationError, ApplicationErrorCategory};
 
@@ -43,7 +47,11 @@ pub struct BarReplayRequest<'a> {
     pub evaluator: &'a dyn PolicyEvaluator,
     pub data: &'a dyn PointInTimeBars,
     pub subject: &'a SubjectVersion,
-    pub subject_state: VersionRef,
+    /// The Subject state snapshot the constraint ceilings come from.
+    pub subject_state: &'a SubjectStateSnapshot,
+    /// The Subject's constraint set (`ResolveConstraintSet`); `None` exactly when the Subject
+    /// binds none.
+    pub constraints: Option<&'a ConstraintSet>,
     /// Funding terms resolved for the Subject's funding tier (`ResolveFundingRule`).
     pub funding: ReplayFunding,
     pub carry: &'a dyn BondCarry,
@@ -58,12 +66,14 @@ fn invalid() -> ApplicationError {
     ApplicationError::new(ApplicationErrorCategory::ValidationFailed, false)
 }
 
-/// A trade waiting for its executions to settle. `intent` is what the policy still counts on:
-/// the face not yet executed, until the last execution attempt settles.
-struct PendingTrade {
+/// A trade still executing. `intent` is what the policy counts on: the face not yet executed,
+/// until the trade's last attempt settles.
+struct PendingTrade<'a> {
+    decision_time: DateTime<Utc>,
     instrument: VersionRef,
     intent: ReplayAmount,
-    attempts: VecDeque<SimulatedFill>,
+    remaining: ReplayAmount,
+    bars: VecDeque<&'a Bar>,
 }
 
 /// Runs one deterministic replay.
@@ -71,9 +81,11 @@ struct PendingTrade {
 /// # Errors
 ///
 /// Fails closed when the evaluator does not implement the artifact's family, the funding tier is
-/// not the Subject's, the cost model is unknown or mis-parameterised, the policy needs a missing
-/// parameter, a view would contain a bar not yet visible, a held bond has no coupon data, or the
-/// snapshot has no bar the policy covers.
+/// not the Subject's, the constraint set is not the one the Subject binds, the state snapshot
+/// belongs to another Subject or was not visible before the first decision, a constraint has no
+/// ceiling or no declared handling, the cost model is unknown or mis-parameterised, the policy
+/// needs a missing parameter, a view would contain a bar not yet visible, a held bond has no
+/// coupon data, or the snapshot has no bar the policy covers.
 pub fn replay_bars(request: &BarReplayRequest<'_>) -> Result<SimulationResult, ApplicationError> {
     let policy = request.policy;
     if request.evaluator.family() != policy.family()
@@ -96,10 +108,8 @@ pub fn replay_bars(request: &BarReplayRequest<'_>) -> Result<SimulationResult, A
     }
     let decision_times: BTreeSet<DateTime<Utc>> =
         covered.iter().map(|bar| bar.visible_at()).collect();
-    if decision_times.is_empty() {
-        return Err(invalid());
-    }
-    let price_source = request.data.price_source_type();
+    let first_decision = *decision_times.first().ok_or_else(invalid)?;
+    let constraints = enforced_constraints(request, first_decision)?;
 
     let mut replay = Replay {
         ledger: ReplayLedger::new(
@@ -111,6 +121,9 @@ pub fn replay_bars(request: &BarReplayRequest<'_>) -> Result<SimulationResult, A
         steps: steps.into_iter().collect(),
         pending: Vec::new(),
         fills: Vec::new(),
+        constraints: &constraints,
+        rules: policy.execution(),
+        price_source: request.data.price_source_type(),
     };
     let mut decisions = Vec::with_capacity(decision_times.len());
     for decision_time in decision_times {
@@ -137,25 +150,13 @@ pub fn replay_bars(request: &BarReplayRequest<'_>) -> Result<SimulationResult, A
                 PolicyError::MissingParameter(_) | PolicyError::UnsupportedFamily => invalid(),
             })?;
         for (instrument, quantity) in projected.deltas_toward(&target) {
-            let mut execution_bars: Vec<&Bar> = covered
+            let mut bars: Vec<&Bar> = covered
                 .iter()
                 .copied()
                 .filter(|bar| bar.instrument() == &instrument && bar.bar_start() >= decision_time)
                 .collect();
-            execution_bars.sort_by_key(|bar| (bar.bar_start(), bar.source_record_id().to_owned()));
-            let attempts = simulate_trade(
-                decision_time,
-                &instrument,
-                quantity,
-                &execution_bars,
-                policy.execution(),
-                price_source,
-            );
-            replay.pending.push(PendingTrade {
-                instrument,
-                intent: quantity,
-                attempts: attempts.into(),
-            });
+            bars.sort_by_key(|bar| (bar.bar_start(), bar.source_record_id().to_owned()));
+            replay.register(decision_time, instrument, quantity, bars);
         }
         decisions.push(ReplayDecision {
             decision_time,
@@ -167,19 +168,52 @@ pub fn replay_bars(request: &BarReplayRequest<'_>) -> Result<SimulationResult, A
     replay.advance(None)?;
 
     let (fills, book, pnl) = replay.finish();
-    let identity = replay_identity(request);
+    let identity = replay_identity(request, constraints);
     SimulationResult::new(identity, decisions, fills, pnl, book).map_err(|_| invalid())
 }
 
+/// Binds the Subject's constraint set to its state snapshot and the policy's declarations.
+fn enforced_constraints(
+    request: &BarReplayRequest<'_>,
+    first_decision: DateTime<Utc>,
+) -> Result<Vec<ReplayConstraint>, ApplicationError> {
+    let bound = request
+        .subject
+        .constraint_set_ref()
+        .map(ficant_domain::subject::ConstraintSetRef::reference);
+    let state = request.subject_state;
+    if state.subject_ref() != request.subject.reference()
+        || state.visible_at() > first_decision
+        || bound != request.constraints.map(ConstraintSet::rule_pack)
+    {
+        return Err(invalid());
+    }
+    match request.constraints {
+        None => Ok(Vec::new()),
+        Some(set) => bind_constraints(
+            set,
+            request.subject.reference(),
+            state,
+            request.policy.constraint_handling(),
+        )
+        .map_err(|_| invalid()),
+    }
+}
+
 /// Everything the result ID binds on the input side (AC39).
-fn replay_identity(request: &BarReplayRequest<'_>) -> ReplayIdentity {
+fn replay_identity(
+    request: &BarReplayRequest<'_>,
+    constraints: Vec<ReplayConstraint>,
+) -> ReplayIdentity {
     let (snapshot, snapshot_content) = request.data.snapshot();
     ReplayIdentity {
         policy: request.policy.content_hash().clone(),
         data_snapshot: snapshot,
         data_snapshot_content: snapshot_content,
         subject: request.subject.reference().clone(),
-        subject_state: request.subject_state.clone(),
+        subject_state: request.subject_state.id().clone(),
+        constraint_set: request.constraints.map(|set| set.rule_pack().clone()),
+        constraints,
         funding: request.funding.clone(),
         carry: request.carry.identity(),
         cost_model: request.cost_model.clone(),
@@ -193,11 +227,41 @@ fn replay_identity(request: &BarReplayRequest<'_>) -> ReplayIdentity {
 struct Replay<'a> {
     ledger: ReplayLedger<'a>,
     steps: VecDeque<(DateTime<Utc>, Vec<&'a Bar>)>,
-    pending: Vec<PendingTrade>,
+    pending: Vec<PendingTrade<'a>>,
     fills: Vec<SimulatedFill>,
+    constraints: &'a [ReplayConstraint],
+    rules: ExecutionRules,
+    price_source: PriceSourceType,
 }
 
-impl Replay<'_> {
+impl<'a> Replay<'a> {
+    /// Registers a trade; with no bar left to execute in, it is recorded at once.
+    fn register(
+        &mut self,
+        decision_time: DateTime<Utc>,
+        instrument: VersionRef,
+        quantity: ReplayAmount,
+        bars: Vec<&'a Bar>,
+    ) {
+        if bars.is_empty() {
+            self.fills.push(no_later_bar(
+                decision_time,
+                &instrument,
+                quantity,
+                decision_time,
+                self.price_source,
+            ));
+            return;
+        }
+        self.pending.push(PendingTrade {
+            decision_time,
+            instrument,
+            intent: quantity,
+            remaining: quantity,
+            bars: bars.into(),
+        });
+    }
+
     /// Fills in time order, the final book and the P&L rows.
     fn finish(self) -> (Vec<SimulatedFill>, SimulatedBook, Vec<BarPnl>) {
         let mut fills = self.fills;
@@ -212,59 +276,88 @@ impl Replay<'_> {
         (fills, book, pnl)
     }
 
-    /// Closes every step ending at or before `until` (all of them when `None`), settling the
-    /// execution attempts effective by then.
+    /// Closes every step ending at or before `until` (all of them when `None`), executing the
+    /// attempts that fall into each.
     fn advance(&mut self, until: Option<DateTime<Utc>>) -> Result<(), ApplicationError> {
-        let due = |time: DateTime<Utc>| until.is_none_or(|limit| time <= limit);
         while let Some((step_end, _)) = self.steps.front() {
-            if !due(*step_end) {
+            if until.is_some_and(|limit| *step_end > limit) {
                 break;
             }
             let (step_end, bars) = self.steps.pop_front().expect("front exists");
-            let settled = self.settle(step_end);
-            let executions: Vec<&SimulatedFill> = settled
-                .iter()
-                .filter(|fill| fill.execution_bar.is_some())
-                .collect();
-            if executions.iter().any(|fill| fill.effective_at != step_end) {
-                return Err(invalid());
+            self.ledger.open_step(&bars).map_err(|_| invalid())?;
+            let mut pending = std::mem::take(&mut self.pending);
+            // Face already executed per bar, so all attempts in one bar share its cap (AC41).
+            let mut used: BTreeMap<String, ReplayAmount> = BTreeMap::new();
+            for trade in &mut pending {
+                self.execute_due(trade, step_end, &mut used)?;
             }
-            self.ledger
-                .close_step(&bars, &executions)
-                .map_err(|_| invalid())?;
-            self.fills.extend(settled);
+            pending.retain(|trade| !trade.remaining.is_zero());
+            self.pending = pending;
+            self.ledger.finish_step().map_err(|_| invalid())?;
         }
-        // Attempts with no bar to execute in settle at their own time and move no cash.
-        let settled = match until {
-            Some(limit) => self.settle(limit),
-            None => self.settle(DateTime::<Utc>::MAX_UTC),
-        };
-        if settled.iter().any(|fill| fill.execution_bar.is_some()) {
-            return Err(invalid());
-        }
-        self.fills.extend(settled);
         Ok(())
     }
 
-    /// Takes every attempt effective at or before `time` off the pending trades.
-    fn settle(&mut self, time: DateTime<Utc>) -> Vec<SimulatedFill> {
-        let mut settled = Vec::new();
-        for trade in &mut self.pending {
-            while trade
-                .attempts
-                .front()
-                .is_some_and(|attempt| attempt.effective_at <= time)
-            {
-                let attempt = trade.attempts.pop_front().expect("front exists");
-                trade.intent = if trade.attempts.is_empty() {
-                    ReplayAmount::ZERO
-                } else {
-                    trade.intent.minus(attempt.quantity)
-                };
-                settled.push(attempt);
+    /// Executes the trade's attempt in the bar ending at `step_end`, if it has one: participation
+    /// cap first, then the constraints on the current book, then settlement.
+    fn execute_due(
+        &mut self,
+        trade: &mut PendingTrade<'a>,
+        step_end: DateTime<Utc>,
+        used: &mut BTreeMap<String, ReplayAmount>,
+    ) -> Result<(), ApplicationError> {
+        let Some(bar) = trade.bars.front().copied() else {
+            return Ok(());
+        };
+        if bar.bar_end() != step_end || trade.remaining.is_zero() {
+            return Ok(());
+        }
+        trade.bars.pop_front();
+        let record = bar.source_record_id().to_owned();
+        let mut attempt = attempt_in_bar(
+            trade.decision_time,
+            &trade.instrument,
+            trade.remaining,
+            bar,
+            used.get(&record).copied().unwrap_or(ReplayAmount::ZERO),
+            self.rules,
+            self.price_source,
+        );
+        if let (Some(price), false) = (attempt.price, attempt.quantity.is_zero()) {
+            let context = self
+                .ledger
+                .execution_context(&trade.instrument, price)
+                .map_err(|_| invalid())?;
+            let (allowed, outcome) = check_execution(self.constraints, &context, attempt.quantity);
+            if let Some(outcome) = outcome {
+                attempt.constrain(allowed, outcome);
             }
         }
-        self.pending.retain(|trade| !trade.attempts.is_empty());
-        settled
+        self.ledger.settle(&attempt).map_err(|_| invalid())?;
+        let consumed = used.entry(record).or_insert(ReplayAmount::ZERO);
+        *consumed = consumed.plus(attempt.quantity.abs());
+        trade.remaining = trade.remaining.minus(attempt.quantity);
+        let carried = attempt
+            .remainder
+            .is_some_and(|remainder| remainder.outcome == RemainderOutcome::Carried);
+        let effective_at = attempt.effective_at;
+        self.fills.push(attempt);
+        if carried && trade.bars.is_empty() {
+            self.fills.push(no_later_bar(
+                trade.decision_time,
+                &trade.instrument,
+                trade.remaining,
+                effective_at,
+                self.price_source,
+            ));
+        }
+        if carried && !trade.bars.is_empty() {
+            trade.intent = trade.remaining;
+        } else {
+            trade.intent = ReplayAmount::ZERO;
+            trade.remaining = ReplayAmount::ZERO;
+            trade.bars.clear();
+        }
+        Ok(())
     }
 }

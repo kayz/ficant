@@ -15,7 +15,7 @@ use ficant_domain::replay::{
     RemainderOutcome, ReplayAmount, ReplayFunding, SimulatedBook, SimulationResult, TargetExposure,
     YIELD_THRESHOLD_FAMILY, YieldThresholdPolicy,
 };
-use ficant_domain::subject::{FundingTier, SubjectVersion};
+use ficant_domain::subject::{FundingTier, SubjectStateSnapshot, SubjectVersion};
 use rust_decimal::Decimal;
 
 use bar_support::*;
@@ -33,20 +33,6 @@ const TWO_DAYS: &str = r#"
 {"id":"d2-0930","code":"260011.IB","freq":"1min","settle":"T+1","start":"2026-07-21 09:30:00","pub":"2026-07-21 09:31:02","o":"100.40","h":"100.40","l":"100.40","c":"100.40","vw":"100.40","vol":"20000000","ytm":"1.815"}
 {"id":"d2-0931","code":"260011.IB","freq":"1min","settle":"T+1","start":"2026-07-21 09:31:00","pub":"2026-07-21 09:32:02","o":"100.50","h":"100.50","l":"100.50","c":"100.50","vw":"100.50","vol":"20000000","ytm":"1.814"}
 {"id":"d2-0932","code":"260011.IB","freq":"1min","settle":"T+1","start":"2026-07-21 09:32:00","pub":"2026-07-21 09:33:02","o":"100.50","h":"100.60","l":"100.50","c":"100.60","vw":"100.55","vol":"20000000","ytm":"1.810"}
-"#;
-
-/// The ADR-0024 single-day path (same rows as `bar_replay`): traded face per bar is 20m, 20m,
-/// 30m, 0, 10m, 10m, 0, 10m, 10m.
-const ONE_DAY: &str = r#"
-{"id":"b0930","code":"260011.IB","freq":"1min","settle":"T+1","start":"2026-07-20 09:30:00","pub":"2026-07-20 09:31:02","o":"100.10","h":"100.10","l":"100.10","c":"100.10","vw":"100.10","vol":"20000000","ytm":"1.845"}
-{"id":"b0931","code":"260011.IB","freq":"1min","settle":"T+1","start":"2026-07-20 09:31:00","pub":"2026-07-20 09:32:02","o":"100.12","h":"100.12","l":"100.12","c":"100.12","vw":"100.12","vol":"20000000","ytm":"1.838"}
-{"id":"b0932","code":"260011.IB","freq":"1min","settle":"T+1","start":"2026-07-20 09:32:00","pub":"2026-07-20 09:33:02","o":"100.12","h":"100.14","l":"100.12","c":"100.14","vw":"100.13","vol":"30000000","ytm":"1.836"}
-{"id":"b0933","code":"260011.IB","freq":"1min","settle":"T+1","start":"2026-07-20 09:33:00","pub":"2026-07-20 09:34:02","vol":"0"}
-{"id":"b0934","code":"260011.IB","freq":"1min","settle":"T+1","start":"2026-07-20 09:34:00","pub":"2026-07-20 09:35:02","o":"100.30","h":"100.30","l":"100.30","c":"100.30","vol":"10000000","ytm":"1.815"}
-{"id":"b0935","code":"260011.IB","freq":"1min","settle":"T+1","start":"2026-07-20 09:35:00","pub":"2026-07-20 09:36:02","o":"100.29","h":"100.29","l":"100.29","c":"100.29","vol":"10000000","ytm":"1.816"}
-{"id":"b0936","code":"260011.IB","freq":"1min","settle":"T+1","start":"2026-07-20 09:36:00","pub":"2026-07-20 09:37:02","vol":"0"}
-{"id":"b0937","code":"260011.IB","freq":"1min","settle":"T+1","start":"2026-07-20 09:37:00","pub":"2026-07-20 09:38:02","o":"100.31","h":"100.31","l":"100.31","c":"100.31","vw":"100.31","vol":"10000000","ytm":"1.814"}
-{"id":"b0938","code":"260011.IB","freq":"1min","settle":"T+1","start":"2026-07-20 09:38:00","pub":"2026-07-20 09:39:02","o":"100.32","h":"100.32","l":"100.32","c":"100.32","vol":"10000000","ytm":"1.813"}
 "#;
 
 fn rules(cap: &str, remainder: RemainderHandling) -> ExecutionRules {
@@ -77,6 +63,7 @@ fn policy_input(execution: ExecutionRules) -> PolicyArtifactInput {
         )
         .unwrap(),
         execution,
+        constraints: BTreeMap::new(),
     }
 }
 
@@ -92,6 +79,7 @@ fn coupon_carry() -> TableCarry {
 struct Inputs {
     policy: PolicyArtifact,
     subject: SubjectVersion,
+    state: SubjectStateSnapshot,
     funding: ReplayFunding,
     carry: TableCarry,
     cost_model: String,
@@ -110,6 +98,10 @@ fn two_day_inputs() -> Inputs {
     Inputs {
         policy: policy(rules("1", RemainderHandling::Cancel)),
         subject: subject(1, FundingTier::DrAvailable),
+        state: state(
+            &subject(1, FundingTier::DrAvailable),
+            "01ARZ3NDEKTSV4RRFFQ69G5FV1",
+        ),
         funding: funding("0.0365", 365),
         carry: coupon_carry(),
         cost_model: COST_RATE_PLUS_FIXED.to_owned(),
@@ -121,6 +113,10 @@ fn one_day_inputs(execution: ExecutionRules) -> Inputs {
     Inputs {
         policy: policy(execution),
         subject: subject(1, FundingTier::DrAvailable),
+        state: state(
+            &subject(1, FundingTier::DrAvailable),
+            "01ARZ3NDEKTSV4RRFFQ69G5FV1",
+        ),
         funding: funding("0.0365", 365),
         carry: TableCarry::new(&[("2026-07-20", "1.00")], &[]),
         cost_model: COST_NONE.to_owned(),
@@ -134,10 +130,8 @@ fn request<'a>(data: &'a SnapshotBars, inputs: &'a Inputs) -> BarReplayRequest<'
         evaluator: &YieldThresholdPolicy,
         data,
         subject: &inputs.subject,
-        subject_state: VersionRef::new(
-            Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5FV1").unwrap(),
-            Version::new(1).unwrap(),
-        ),
+        subject_state: &inputs.state,
+        constraints: None,
         funding: inputs.funding.clone(),
         carry: &inputs.carry,
         cost_model: inputs.cost_model.clone(),

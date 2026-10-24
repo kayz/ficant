@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 
-use super::ReplayAmount;
+use super::{ConstraintOutcome, ReplayAmount};
 use crate::market::{Bar, PriceSourceType};
 use crate::primitives::VersionRef;
 use crate::{DomainErrorCode, DomainResult};
@@ -83,6 +83,8 @@ pub enum NoFillReason {
     NoLaterBar,
     /// The bar's traded face times the participation cap was smaller than the request (AC41).
     ParticipationCap,
+    /// A constraint of the Subject's constraint set would have been breached (AC42).
+    Constraint,
 }
 
 impl NoFillReason {
@@ -91,6 +93,7 @@ impl NoFillReason {
             Self::NoPriceInBar => "NO_PRICE_IN_BAR",
             Self::NoLaterBar => "NO_LATER_BAR",
             Self::ParticipationCap => "PARTICIPATION_CAP",
+            Self::Constraint => "CONSTRAINT",
         }
     }
 }
@@ -128,7 +131,8 @@ pub struct SimulatedFill {
     pub requested: ReplayAmount,
     /// Signed face actually executed; zero when nothing filled.
     pub quantity: ReplayAmount,
-    /// Bar traded face × participation cap; `None` when there was no bar to execute in.
+    /// Bar traded face × participation cap, less what earlier attempts in the same bar used;
+    /// `None` when there was no bar to execute in.
     pub limit: Option<ReplayAmount>,
     /// When the attempt became part of the book: end of the execution bar, or, with no bar left,
     /// the end of the previous attempt (the decision time for the first one).
@@ -142,6 +146,8 @@ pub struct SimulatedFill {
     pub no_fill: Option<NoFillReason>,
     /// Set when less than `requested` executed.
     pub remainder: Option<Remainder>,
+    /// Set when a constraint rejected or reduced the attempt (AC42).
+    pub constraint: Option<ConstraintOutcome>,
 }
 
 impl SimulatedFill {
@@ -150,92 +156,116 @@ impl SimulatedFill {
     }
 }
 
-/// Simulates executing `quantity` of `instrument` decided at `decision_time`.
+/// One execution attempt of `remaining` face in `bar`, before constraints.
 ///
-/// `bars` are the instrument's bars starting at or after the decision, in time order; the first
-/// is the execution bar. Each bar fills at most `traded face × participation cap` at its VWAP,
-/// else its close; a bar without trades fills nothing. What a bar cannot absorb is cancelled or
-/// carried to the next bar as the rules declare.
-pub fn simulate_trade(
+/// The bar fills at most `traded face × participation cap`, less the face `used` by attempts
+/// already executed in it, at its VWAP, else its close; a bar
+/// without trades fills nothing. The shortfall is marked cancelled or carried as the rules
+/// declare; the caller decides whether a carried shortfall still has a bar to go to.
+pub fn attempt_in_bar(
     decision_time: DateTime<Utc>,
     instrument: &VersionRef,
-    quantity: ReplayAmount,
-    bars: &[&Bar],
+    remaining: ReplayAmount,
+    bar: &Bar,
+    used: ReplayAmount,
     rules: ExecutionRules,
     price_source: PriceSourceType,
-) -> Vec<SimulatedFill> {
-    let mut attempts = Vec::new();
-    let mut remaining = quantity.value();
-    let mut last_effective = decision_time;
-    for bar in bars {
-        let priced = match (bar.vwap(), bar.prices()) {
-            (Some(vwap), _) => Some((ReplayAmount::of(vwap), FillPriceBasis::Vwap)),
-            (None, Some(prices)) => Some((ReplayAmount::of(&prices.close), FillPriceBasis::Close)),
-            (None, None) => None,
-        };
-        let limit = ReplayAmount::of(bar.volume()).value() * rules.participation_cap().value();
-        let executed = if priced.is_some() {
-            let size = remaining.abs().min(limit);
-            if remaining.is_sign_negative() {
-                -size
-            } else {
-                size
-            }
-        } else {
-            Decimal::ZERO
-        };
-        let left = remaining - executed;
-        let shortfall_reason = if priced.is_some() {
-            NoFillReason::ParticipationCap
-        } else {
-            NoFillReason::NoPriceInBar
-        };
-        let outcome = match rules.remainder() {
-            RemainderHandling::Cancel => RemainderOutcome::Cancelled,
-            RemainderHandling::Carry => RemainderOutcome::Carried,
-        };
-        attempts.push(SimulatedFill {
-            decision_time,
-            instrument: instrument.clone(),
-            requested: ReplayAmount::from_decimal(remaining),
-            quantity: ReplayAmount::from_decimal(executed),
-            limit: Some(ReplayAmount::from_decimal(limit)),
-            effective_at: bar.bar_end(),
-            execution_bar: Some(bar.source_record_id().to_owned()),
-            price: priced.map(|(price, _)| price),
-            basis: priced.map(|(_, basis)| basis),
-            price_source,
-            no_fill: executed.is_zero().then_some(shortfall_reason),
-            remainder: (!left.is_zero()).then_some(Remainder {
-                quantity: ReplayAmount::from_decimal(left),
-                reason: shortfall_reason,
-                outcome,
-            }),
-        });
-        last_effective = bar.bar_end();
-        if left.is_zero() || outcome == RemainderOutcome::Cancelled {
-            return attempts;
-        }
-        remaining = left;
-    }
-    let left = ReplayAmount::from_decimal(remaining);
-    attempts.push(SimulatedFill {
+) -> SimulatedFill {
+    let remaining = remaining.value();
+    let priced = match (bar.vwap(), bar.prices()) {
+        (Some(vwap), _) => Some((ReplayAmount::of(vwap), FillPriceBasis::Vwap)),
+        (None, Some(prices)) => Some((ReplayAmount::of(&prices.close), FillPriceBasis::Close)),
+        (None, None) => None,
+    };
+    let limit = (ReplayAmount::of(bar.volume()).value() * rules.participation_cap().value()
+        - used.value())
+    .max(Decimal::ZERO);
+    let executed = if priced.is_some() {
+        signed_like(remaining, remaining.abs().min(limit))
+    } else {
+        Decimal::ZERO
+    };
+    let left = remaining - executed;
+    let shortfall_reason = if priced.is_some() {
+        NoFillReason::ParticipationCap
+    } else {
+        NoFillReason::NoPriceInBar
+    };
+    let outcome = match rules.remainder() {
+        RemainderHandling::Cancel => RemainderOutcome::Cancelled,
+        RemainderHandling::Carry => RemainderOutcome::Carried,
+    };
+    SimulatedFill {
         decision_time,
         instrument: instrument.clone(),
-        requested: left,
+        requested: ReplayAmount::from_decimal(remaining),
+        quantity: ReplayAmount::from_decimal(executed),
+        limit: Some(ReplayAmount::from_decimal(limit)),
+        effective_at: bar.bar_end(),
+        execution_bar: Some(bar.source_record_id().to_owned()),
+        price: priced.map(|(price, _)| price),
+        basis: priced.map(|(_, basis)| basis),
+        price_source,
+        no_fill: executed.is_zero().then_some(shortfall_reason),
+        remainder: (!left.is_zero()).then_some(Remainder {
+            quantity: ReplayAmount::from_decimal(left),
+            reason: shortfall_reason,
+            outcome,
+        }),
+        constraint: None,
+    }
+}
+
+/// The record of a trade (or its carried remainder) that has no bar left to execute in.
+/// `effective_at` is the end of the previous attempt, or the decision time for a new trade.
+pub fn no_later_bar(
+    decision_time: DateTime<Utc>,
+    instrument: &VersionRef,
+    remaining: ReplayAmount,
+    effective_at: DateTime<Utc>,
+    price_source: PriceSourceType,
+) -> SimulatedFill {
+    SimulatedFill {
+        decision_time,
+        instrument: instrument.clone(),
+        requested: remaining,
         quantity: ReplayAmount::ZERO,
         limit: None,
-        effective_at: last_effective,
+        effective_at,
         execution_bar: None,
         price: None,
         basis: None,
         price_source,
         no_fill: Some(NoFillReason::NoLaterBar),
         remainder: Some(Remainder {
-            quantity: left,
+            quantity: remaining,
             reason: NoFillReason::NoLaterBar,
             outcome: RemainderOutcome::Cancelled,
         }),
-    });
-    attempts
+        constraint: None,
+    }
+}
+
+impl SimulatedFill {
+    /// Applies a constraint decision: the attempt executes `allowed` instead, and whatever it no
+    /// longer executes is cancelled, because a constraint does not relax in the next bar.
+    pub fn constrain(&mut self, allowed: ReplayAmount, outcome: ConstraintOutcome) {
+        self.quantity = allowed;
+        self.no_fill = allowed.is_zero().then_some(NoFillReason::Constraint);
+        let left = self.requested.minus(allowed);
+        self.remainder = (!left.is_zero()).then_some(Remainder {
+            quantity: left,
+            reason: NoFillReason::Constraint,
+            outcome: RemainderOutcome::Cancelled,
+        });
+        self.constraint = Some(outcome);
+    }
+}
+
+pub(crate) fn signed_like(sign_of: Decimal, magnitude: Decimal) -> Decimal {
+    if sign_of.is_sign_negative() {
+        -magnitude
+    } else {
+        magnitude
+    }
 }

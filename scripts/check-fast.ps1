@@ -32,6 +32,7 @@ $steps = @(
     New-FicantCheckStep -Name 'Phase 2 Bar snapshots and point-in-time reads' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'bar_snapshot_codec')
     New-FicantCheckStep -Name 'Phase 2 point-in-time bar replay (AC38/AC39)' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'bar_replay')
     New-FicantCheckStep -Name 'Phase 2 replay P&L breakdown and participation cap (AC40/AC41)' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'replay_pnl')
+    New-FicantCheckStep -Name 'Phase 2 replay constraints (AC42)' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-data', '--test', 'replay_constraints')
     New-FicantCheckStep -Name 'R8A Portfolio Catalog API' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-api', '--test', 'portfolio_catalog_service')
     New-FicantCheckStep -Name 'R8A Portfolio Aggregation API' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-api', '--test', 'portfolio_aggregation_service')
     New-FicantCheckStep -Name 'R8A Portfolio Workbench API' -FilePath 'cargo' -ArgumentList @('test', '--locked', '-p', 'ficant-api', '--test', 'portfolio_workbench_service')
