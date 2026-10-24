@@ -97,6 +97,7 @@ fn policy(entry_yield: &str) -> PolicyArtifact {
         .unwrap(),
         execution: full_fills(),
         constraints: BTreeMap::new(),
+        calibration: None,
     })
     .unwrap()
 }
@@ -367,5 +368,6 @@ fn policy_input() -> PolicyArtifactInput {
         .unwrap(),
         execution: full_fills(),
         constraints: BTreeMap::new(),
+        calibration: None,
     }
 }

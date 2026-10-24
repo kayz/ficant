@@ -13,6 +13,7 @@ pub mod futures_hedge;
 pub mod governed_inputs;
 pub mod phase1_business_loop;
 pub mod phase4_submission;
+pub mod policy_calibration;
 pub mod portfolio_aggregation;
 pub mod portfolio_catalog;
 pub mod portfolio_performance;

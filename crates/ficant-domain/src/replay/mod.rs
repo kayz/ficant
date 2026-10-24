@@ -11,6 +11,7 @@
 //! Execution with a participation cap lives in [`execution`]; the book, equity and the per-bar
 //! P&L breakdown in [`ledger`] (ADR-0025; AC40, AC41).
 
+mod calibration;
 mod constraints;
 mod execution;
 mod ledger;
@@ -20,6 +21,10 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 
+pub use calibration::{
+    CalibrationObjective, CalibrationRecord, CandidateResult, MAX_CALIBRATION_CANDIDATES,
+    ParameterGrid, WindowResult, best_training_candidate, check_windows,
+};
 pub use constraints::{
     ConstraintAction, ConstraintHandling, ConstraintOutcome, ExecutionContext, ReplayConstraint,
     bind_constraints, check_execution,
@@ -128,6 +133,8 @@ pub struct PolicyArtifactInput {
     pub execution: ExecutionRules,
     /// How each constraint of the bound Subject's constraint set is enforced (AC42).
     pub constraints: BTreeMap<String, ConstraintHandling>,
+    /// How these parameters were calibrated, for a calibrated artifact (AC43).
+    pub calibration: Option<CalibrationRecord>,
 }
 
 impl PolicyArtifact {
@@ -143,6 +150,14 @@ impl PolicyArtifact {
                 .keys()
                 .chain(input.constraints.keys())
                 .any(|key| key.trim().is_empty() || key != key.trim())
+        {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        // A calibrated artifact carries exactly the parameters of the selected candidate.
+        if input
+            .calibration
+            .as_ref()
+            .is_some_and(|record| record.selected_candidate().parameters != input.parameters)
         {
             return Err(DomainErrorCode::InvalidValue);
         }
@@ -195,6 +210,15 @@ impl PolicyArtifact {
 
     pub fn constraint_handling(&self) -> &BTreeMap<String, ConstraintHandling> {
         &self.input.constraints
+    }
+
+    pub fn calibration(&self) -> Option<&CalibrationRecord> {
+        self.input.calibration.as_ref()
+    }
+
+    /// The input this artifact was built from, for deriving a related artifact.
+    pub fn input(&self) -> &PolicyArtifactInput {
+        &self.input
     }
 
     pub fn content_hash(&self) -> &ContentHash {
@@ -590,7 +614,7 @@ impl Canonical {
 }
 
 fn policy_bytes(input: &PolicyArtifactInput) -> Vec<u8> {
-    let mut bytes = Canonical::new("ficant-policy-artifact/v3");
+    let mut bytes = Canonical::new("ficant-policy-artifact/v4");
     bytes.text(input.policy_artifact_id.as_str());
     bytes.text(input.owner.tenant_id().as_str());
     bytes.text(input.owner.owner_id().as_str());
@@ -616,7 +640,38 @@ fn policy_bytes(input: &PolicyArtifactInput) -> Vec<u8> {
         bytes.text(code);
         bytes.text(handling.code());
     }
+    bytes.optional(input.calibration.as_ref(), calibration_bytes);
     bytes.0
+}
+
+fn calibration_bytes(bytes: &mut Canonical, record: &CalibrationRecord) {
+    bytes.hash(record.base_policy());
+    for window in [record.training(), record.validation()] {
+        bytes.time(window.from().instant());
+        bytes.time(window.to().instant());
+    }
+    bytes.text(record.objective().code());
+    bytes.number(record.grid().axes().len() as u64);
+    for (name, values) in record.grid().axes() {
+        bytes.text(name);
+        bytes.number(values.len() as u64);
+        for value in values {
+            bytes.amount(*value);
+        }
+    }
+    bytes.number(record.candidates().len() as u64);
+    for candidate in record.candidates() {
+        bytes.number(candidate.parameters.len() as u64);
+        for (name, value) in &candidate.parameters {
+            bytes.text(name);
+            bytes.amount(*value);
+        }
+        for window in [&candidate.training, &candidate.validation] {
+            bytes.hash(&window.result_id);
+            bytes.amount(window.objective);
+        }
+    }
+    bytes.number(record.selected() as u64);
 }
 
 fn result_bytes(
