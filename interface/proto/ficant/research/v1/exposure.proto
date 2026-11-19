@@ -3,8 +3,6 @@ syntax = "proto3";
 package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
-import "ficant/core/v1/error.proto";
-import "ficant/core/v1/evidence.proto";
 import "ficant/research/v1/coverage.proto";
 
 message RiskAlgorithmBinding {
@@ -38,25 +36,4 @@ message PortfolioKeyRateExposure {
   ficant.core.v1.Ulid futures_data_snapshot_id = 8;
   PriceSourceSummary source_confidence = 9;
   CoverageDeclaration coverage = 10;
-  ficant.core.v1.FormalOutputEvidence formal_evidence = 11;
-}
-
-message CalculateKeyRateDv01Request {
-  ficant.core.v1.Ulid position_snapshot_id = 1;
-  ficant.core.v1.MarketTime knowledge_at = 2;
-  ficant.core.v1.MarketTime valuation_at = 3;
-  ficant.core.v1.Ulid curve_snapshot_id = 4;
-  ficant.core.v1.UnitRef dv01_unit = 5;
-  ficant.core.v1.Ulid futures_data_snapshot_id = 6;
-}
-
-message CalculateKeyRateDv01Response {
-  oneof result {
-    PortfolioKeyRateExposure exposure = 1;
-    ficant.core.v1.ErrorDetail error = 2;
-  }
-}
-
-service PortfolioRiskService {
-  rpc CalculateKeyRateDv01(CalculateKeyRateDv01Request) returns (CalculateKeyRateDv01Response);
 }

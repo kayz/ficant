@@ -7,31 +7,19 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
-async-trait = { workspace = true }
-chrono = { workspace = true }
-chrono-tz = { workspace = true }
-ficant-application = { path = "../../crates/ficant-application" }
 ficant-api = { path = "../../crates/ficant-api" }
 ficant-cgb-futures-pack = { path = "../../crates/ficant-cgb-futures-pack" }
+ficant-contracts = { path = "../../crates/ficant-contracts" }
+ficant-fixed-income-native = { path = "../../crates/ficant-fixed-income-native" }
 ficant-funding-pack = { path = "../../crates/ficant-funding-pack" }
 ficant-tax-pack = { path = "../../crates/ficant-tax-pack" }
-ficant-fixed-income-native = { path = "../../crates/ficant-fixed-income-native" }
-ficant-native-nodes = { path = "../../crates/ficant-native-nodes" }
-ficant-runtime = { path = "../../crates/ficant-runtime" }
-ficant-storage = { path = "../../crates/ficant-storage" }
-ficant-domain = { path = "../../crates/ficant-domain" }
-serde_json = { workspace = true }
-serde = { workspace = true }
-sqlx = { workspace = true }
 tokio = { workspace = true }
+tonic = { workspace = true, features = ["router"] }
+tonic-web = { workspace = true }
 
 [dev-dependencies]
-ficant-contracts = { path = "../../crates/ficant-contracts" }
 ficant-domain = { path = "../../crates/ficant-domain" }
-object_store = { workspace = true }
 prost = { workspace = true }
-prost-types = { workspace = true }
-tonic = { workspace = true }
 
 [lints]
 workspace = true

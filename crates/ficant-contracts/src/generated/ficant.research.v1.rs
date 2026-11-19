@@ -84,37 +84,168 @@ pub struct PortfolioKeyRateExposure {
     pub source_confidence: ::core::option::Option<PriceSourceSummary>,
     #[prost(message, optional, tag="10")]
     pub coverage: ::core::option::Option<CoverageDeclaration>,
-    #[prost(message, optional, tag="11")]
-    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct CalculateKeyRateDv01Request {
+pub struct SensitivityConvention {
     #[prost(message, optional, tag="1")]
-    pub position_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    pub bump: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    #[prost(enumeration="SensitivityDirection", tag="2")]
+    pub direction: i32,
+    #[prost(enumeration="CurveRebuildPolicy", tag="3")]
+    pub curve_rebuild: i32,
+    #[prost(enumeration="SecondOrderPolicy", tag="4")]
+    pub second_order: i32,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FactorDefinition {
+    #[prost(string, tag="1")]
+    pub factor_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag="2")]
-    pub knowledge_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    pub factor_unit: ::core::option::Option<super::super::core::v1::UnitRef>,
     #[prost(message, optional, tag="3")]
-    pub valuation_at: ::core::option::Option<super::super::core::v1::MarketTime>,
+    pub sensitivity_convention: ::core::option::Option<SensitivityConvention>,
     #[prost(message, optional, tag="4")]
-    pub curve_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CurveNodeDefinition {
+    #[prost(string, tag="1")]
+    pub curve_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub curve_family_id: ::prost::alloc::string::String,
+    #[prost(string, tag="3")]
+    pub tenor: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="4")]
+    pub factor_unit: ::core::option::Option<super::super::core::v1::UnitRef>,
     #[prost(message, optional, tag="5")]
-    pub dv01_unit: ::core::option::Option<super::super::core::v1::UnitRef>,
-    #[prost(message, optional, tag="6")]
-    pub futures_data_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CalculateKeyRateDv01Response {
-    #[prost(oneof="calculate_key_rate_dv01_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<calculate_key_rate_dv01_response::Result>,
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CurveNodeRef {
+    #[prost(string, tag="1")]
+    pub curve_node_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
 }
-/// Nested message and enum types in `CalculateKeyRateDv01Response`.
-pub mod calculate_key_rate_dv01_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct InstrumentFactorTarget {
+    #[prost(message, optional, tag="1")]
+    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
+    #[prost(message, optional, tag="2")]
+    pub instrument: ::core::option::Option<super::super::core::v1::VersionRef>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FactorTargetRef {
+    #[prost(oneof="factor_target_ref::Target", tags="1, 2")]
+    pub target: ::core::option::Option<factor_target_ref::Target>,
+}
+/// Nested message and enum types in `FactorTargetRef`.
+pub mod factor_target_ref {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Target {
         #[prost(message, tag="1")]
-        Exposure(super::PortfolioKeyRateExposure),
+        Instrument(super::InstrumentFactorTarget),
         #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
+        CurveNode(super::CurveNodeRef),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FactorTargetBinding {
+    #[prost(string, tag="1")]
+    pub factor_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub target: ::core::option::Option<FactorTargetRef>,
+    #[prost(message, optional, tag="3")]
+    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SensitivityDirection {
+    Unspecified = 0,
+    Central = 1,
+    Up = 2,
+    Down = 3,
+}
+impl SensitivityDirection {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SENSITIVITY_DIRECTION_UNSPECIFIED",
+            Self::Central => "SENSITIVITY_DIRECTION_CENTRAL",
+            Self::Up => "SENSITIVITY_DIRECTION_UP",
+            Self::Down => "SENSITIVITY_DIRECTION_DOWN",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SENSITIVITY_DIRECTION_UNSPECIFIED" => Some(Self::Unspecified),
+            "SENSITIVITY_DIRECTION_CENTRAL" => Some(Self::Central),
+            "SENSITIVITY_DIRECTION_UP" => Some(Self::Up),
+            "SENSITIVITY_DIRECTION_DOWN" => Some(Self::Down),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum CurveRebuildPolicy {
+    Unspecified = 0,
+    Rebuild = 1,
+    Hold = 2,
+}
+impl CurveRebuildPolicy {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "CURVE_REBUILD_POLICY_UNSPECIFIED",
+            Self::Rebuild => "CURVE_REBUILD_POLICY_REBUILD",
+            Self::Hold => "CURVE_REBUILD_POLICY_HOLD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CURVE_REBUILD_POLICY_UNSPECIFIED" => Some(Self::Unspecified),
+            "CURVE_REBUILD_POLICY_REBUILD" => Some(Self::Rebuild),
+            "CURVE_REBUILD_POLICY_HOLD" => Some(Self::Hold),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SecondOrderPolicy {
+    Unspecified = 0,
+    Include = 1,
+    Exclude = 2,
+}
+impl SecondOrderPolicy {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SECOND_ORDER_POLICY_UNSPECIFIED",
+            Self::Include => "SECOND_ORDER_POLICY_INCLUDE",
+            Self::Exclude => "SECOND_ORDER_POLICY_EXCLUDE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SECOND_ORDER_POLICY_UNSPECIFIED" => Some(Self::Unspecified),
+            "SECOND_ORDER_POLICY_INCLUDE" => Some(Self::Include),
+            "SECOND_ORDER_POLICY_EXCLUDE" => Some(Self::Exclude),
+            _ => None,
+        }
     }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -164,76 +295,6 @@ pub struct PositionSnapshot {
     #[prost(message, repeated, tag="8")]
     pub positions: ::prost::alloc::vec::Vec<Position>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishPositionSnapshotRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub snapshot: ::core::option::Option<PositionSnapshot>,
-    #[prost(message, optional, tag="3")]
-    pub change: ::core::option::Option<super::super::core::v1::ChangeJustification>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishPositionSnapshotResponse {
-    #[prost(oneof="publish_position_snapshot_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<publish_position_snapshot_response::Result>,
-}
-/// Nested message and enum types in `PublishPositionSnapshotResponse`.
-pub mod publish_position_snapshot_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        Snapshot(super::PositionSnapshot),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetPositionSnapshotRequest {
-    #[prost(message, optional, tag="1")]
-    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub knowledge_at: ::core::option::Option<super::super::core::v1::MarketTime>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetPositionSnapshotResponse {
-    #[prost(oneof="get_position_snapshot_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<get_position_snapshot_response::Result>,
-}
-/// Nested message and enum types in `GetPositionSnapshotResponse`.
-pub mod get_position_snapshot_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        Snapshot(super::PositionSnapshot),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ResolvePositionSnapshotRequest {
-    #[prost(message, optional, tag="1")]
-    pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
-    #[prost(message, optional, tag="2")]
-    pub observed_at: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(message, optional, tag="3")]
-    pub knowledge_at: ::core::option::Option<super::super::core::v1::MarketTime>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ResolvePositionSnapshotResponse {
-    #[prost(oneof="resolve_position_snapshot_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<resolve_position_snapshot_response::Result>,
-}
-/// Nested message and enum types in `ResolvePositionSnapshotResponse`.
-pub mod resolve_position_snapshot_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        Snapshot(super::PositionSnapshot),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PositionView {
     #[prost(message, optional, tag="1")]
@@ -263,67 +324,6 @@ pub struct PositionViews {
     pub positions: ::prost::alloc::vec::Vec<PositionView>,
     #[prost(message, optional, tag="5")]
     pub coverage: ::core::option::Option<CoverageDeclaration>,
-    #[prost(message, optional, tag="6")]
-    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetPositionViewsRequest {
-    #[prost(message, optional, tag="1")]
-    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub knowledge_at: ::core::option::Option<super::super::core::v1::MarketTime>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetPositionViewsResponse {
-    #[prost(oneof="get_position_views_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<get_position_views_response::Result>,
-}
-/// Nested message and enum types in `GetPositionViewsResponse`.
-pub mod get_position_views_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        Views(super::PositionViews),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CapitalUse {
-    #[prost(message, optional, tag="1")]
-    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, repeated, tag="3")]
-    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="4")]
-    pub total_capital_requirement: ::core::option::Option<super::super::core::v1::DecimalValue>,
-    #[prost(message, optional, tag="5")]
-    pub coverage: ::core::option::Option<CoverageDeclaration>,
-    #[prost(message, optional, tag="6")]
-    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct CalculateCapitalUseRequest {
-    #[prost(message, optional, tag="1")]
-    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub knowledge_at: ::core::option::Option<super::super::core::v1::MarketTime>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CalculateCapitalUseResponse {
-    #[prost(oneof="calculate_capital_use_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<calculate_capital_use_response::Result>,
-}
-/// Nested message and enum types in `CalculateCapitalUseResponse`.
-pub mod calculate_capital_use_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        CapitalUse(super::CapitalUse),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -419,1547 +419,6 @@ impl PositionHoldingForm {
             "POSITION_HOLDING_FORM_REVERSE_REPO_COLLATERAL" => Some(Self::ReverseRepoCollateral),
             _ => None,
         }
-    }
-}
-/// SignalSet is an immutable, lineaged artifact subtype; it is not an Order.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SignalSet {
-    #[prost(message, optional, tag="1")]
-    pub signal_set_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
-    #[prost(message, optional, tag="3")]
-    pub artifact: ::core::option::Option<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="4")]
-    pub experiment_run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="5")]
-    pub data_snapshot: ::core::option::Option<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="6")]
-    pub universe_snapshot: ::core::option::Option<super::super::core::v1::LineageRef>,
-    #[prost(message, repeated, tag="7")]
-    pub rule_packs: ::prost::alloc::vec::Vec<super::super::core::v1::VersionRef>,
-    #[prost(message, repeated, tag="8")]
-    pub input_artifacts: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="9")]
-    pub valid_from: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(message, optional, tag="10")]
-    pub valid_to: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(message, optional, tag="11")]
-    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Artifact {
-    #[prost(message, optional, tag="1")]
-    pub artifact_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
-    #[prost(enumeration="ArtifactKind", tag="3")]
-    pub kind: i32,
-    #[prost(string, tag="4")]
-    pub media_type: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="5")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(uint64, tag="6")]
-    pub blob_size: u64,
-    #[prost(message, repeated, tag="7")]
-    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="8")]
-    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetArtifactRequest {
-    #[prost(message, optional, tag="1")]
-    pub artifact_id: ::core::option::Option<super::super::core::v1::Ulid>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetArtifactResponse {
-    #[prost(oneof="get_artifact_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<get_artifact_response::Result>,
-}
-/// Nested message and enum types in `GetArtifactResponse`.
-pub mod get_artifact_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        Artifact(super::Artifact),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetSignalSetRequest {
-    #[prost(message, optional, tag="1")]
-    pub signal_set_id: ::core::option::Option<super::super::core::v1::Ulid>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetSignalSetResponse {
-    #[prost(oneof="get_signal_set_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<get_signal_set_response::Result>,
-}
-/// Nested message and enum types in `GetSignalSetResponse`.
-pub mod get_signal_set_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        SignalSet(super::SignalSet),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct LineagePage {
-    #[prost(message, repeated, tag="1")]
-    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="2")]
-    pub page: ::core::option::Option<super::super::core::v1::PageResponse>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ReadArtifactLineageRequest {
-    #[prost(message, optional, tag="1")]
-    pub artifact_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub page: ::core::option::Option<super::super::core::v1::PageRequest>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ReadArtifactLineageResponse {
-    #[prost(oneof="read_artifact_lineage_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<read_artifact_lineage_response::Result>,
-}
-/// Nested message and enum types in `ReadArtifactLineageResponse`.
-pub mod read_artifact_lineage_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        LineagePage(super::LineagePage),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ReadSignalSetLineageRequest {
-    #[prost(message, optional, tag="1")]
-    pub signal_set_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub page: ::core::option::Option<super::super::core::v1::PageRequest>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ReadSignalSetLineageResponse {
-    #[prost(oneof="read_signal_set_lineage_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<read_signal_set_lineage_response::Result>,
-}
-/// Nested message and enum types in `ReadSignalSetLineageResponse`.
-pub mod read_signal_set_lineage_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        LineagePage(super::LineagePage),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum ArtifactKind {
-    Unspecified = 0,
-    Generic = 1,
-    SignalSet = 5,
-}
-impl ArtifactKind {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "ARTIFACT_KIND_UNSPECIFIED",
-            Self::Generic => "ARTIFACT_KIND_GENERIC",
-            Self::SignalSet => "ARTIFACT_KIND_SIGNAL_SET",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "ARTIFACT_KIND_UNSPECIFIED" => Some(Self::Unspecified),
-            "ARTIFACT_KIND_GENERIC" => Some(Self::Generic),
-            "ARTIFACT_KIND_SIGNAL_SET" => Some(Self::SignalSet),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct TypedValue {
-    #[prost(string, tag="1")]
-    pub type_id: ::prost::alloc::string::String,
-    #[prost(uint64, tag="2")]
-    pub type_version: u64,
-    #[prost(message, optional, tag="3")]
-    pub schema_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct PortType {
-    #[prost(string, tag="1")]
-    pub port_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub value_type: ::core::option::Option<TypedValue>,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct NodePermissions {
-    #[prost(bool, tag="1")]
-    pub network: bool,
-    #[prost(bool, tag="2")]
-    pub database: bool,
-    #[prost(enumeration="FilesystemPermission", tag="3")]
-    pub filesystem: i32,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ResourceLimits {
-    #[prost(uint32, tag="1")]
-    pub cpu_cores: u32,
-    #[prost(uint32, tag="2")]
-    pub memory_mb: u32,
-    #[prost(uint32, tag="3")]
-    pub timeout_seconds: u32,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ResearchNodeContract {
-    #[prost(string, tag="1")]
-    pub contract_id: ::prost::alloc::string::String,
-    #[prost(uint64, tag="2")]
-    pub contract_version: u64,
-    #[prost(message, repeated, tag="3")]
-    pub input_types: ::prost::alloc::vec::Vec<PortType>,
-    #[prost(message, repeated, tag="4")]
-    pub output_types: ::prost::alloc::vec::Vec<PortType>,
-    #[prost(message, optional, tag="5")]
-    pub state_schema: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="6")]
-    pub parameter_schema: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(enumeration="DeterminismClass", tag="7")]
-    pub determinism_class: i32,
-    #[prost(message, optional, tag="8")]
-    pub permissions: ::core::option::Option<NodePermissions>,
-    #[prost(message, optional, tag="9")]
-    pub resource_limits: ::core::option::Option<ResourceLimits>,
-    #[prost(string, repeated, tag="10")]
-    pub required_invariants: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(message, optional, tag="11")]
-    pub digest: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ExternalInputDeclaration {
-    #[prost(string, tag="1")]
-    pub input_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub value_type: ::core::option::Option<TypedValue>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ResearchNode {
-    #[prost(message, optional, tag="1")]
-    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub contract: ::core::option::Option<ResearchNodeContract>,
-    #[prost(message, optional, tag="3")]
-    pub parameters_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ResearchEdge {
-    #[prost(message, optional, tag="1")]
-    pub from_node_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(string, tag="2")]
-    pub from_port: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="3")]
-    pub to_node_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(string, tag="4")]
-    pub to_port: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ExternalInputBinding {
-    #[prost(string, tag="1")]
-    pub input_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub to_node_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(string, tag="3")]
-    pub to_port: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ResearchGraph {
-    #[prost(message, optional, tag="1")]
-    pub graph_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(uint64, tag="2")]
-    pub version: u64,
-    #[prost(message, optional, tag="3")]
-    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
-    #[prost(message, repeated, tag="4")]
-    pub nodes: ::prost::alloc::vec::Vec<ResearchNode>,
-    #[prost(message, repeated, tag="5")]
-    pub edges: ::prost::alloc::vec::Vec<ResearchEdge>,
-    #[prost(message, repeated, tag="6")]
-    pub external_inputs: ::prost::alloc::vec::Vec<ExternalInputDeclaration>,
-    #[prost(message, repeated, tag="7")]
-    pub external_input_bindings: ::prost::alloc::vec::Vec<ExternalInputBinding>,
-    #[prost(message, repeated, tag="8")]
-    pub topological_order: ::prost::alloc::vec::Vec<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="9")]
-    pub digest: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum DeterminismClass {
-    Unspecified = 0,
-    Deterministic = 1,
-    Seeded = 2,
-}
-impl DeterminismClass {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "DETERMINISM_CLASS_UNSPECIFIED",
-            Self::Deterministic => "DETERMINISM_CLASS_DETERMINISTIC",
-            Self::Seeded => "DETERMINISM_CLASS_SEEDED",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "DETERMINISM_CLASS_UNSPECIFIED" => Some(Self::Unspecified),
-            "DETERMINISM_CLASS_DETERMINISTIC" => Some(Self::Deterministic),
-            "DETERMINISM_CLASS_SEEDED" => Some(Self::Seeded),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum FilesystemPermission {
-    Unspecified = 0,
-    None = 1,
-    TemporaryOnly = 2,
-}
-impl FilesystemPermission {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "FILESYSTEM_PERMISSION_UNSPECIFIED",
-            Self::None => "FILESYSTEM_PERMISSION_NONE",
-            Self::TemporaryOnly => "FILESYSTEM_PERMISSION_TEMPORARY_ONLY",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "FILESYSTEM_PERMISSION_UNSPECIFIED" => Some(Self::Unspecified),
-            "FILESYSTEM_PERMISSION_NONE" => Some(Self::None),
-            "FILESYSTEM_PERMISSION_TEMPORARY_ONLY" => Some(Self::TemporaryOnly),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct NodeImplementationBinding {
-    #[prost(message, optional, tag="1")]
-    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub implementation_digest: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RulePackBinding {
-    #[prost(message, optional, tag="1")]
-    pub rule_pack_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(uint64, tag="2")]
-    pub version: u64,
-    #[prost(message, optional, tag="3")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ExecutionExternalInput {
-    #[prost(string, tag="1")]
-    pub input_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub value_type: ::core::option::Option<TypedValue>,
-    #[prost(message, optional, tag="3")]
-    pub resolved_artifact: ::core::option::Option<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="4")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct UpstreamNodeOutput {
-    #[prost(message, optional, tag="1")]
-    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(string, tag="2")]
-    pub port_name: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct NodeInputBinding {
-    #[prost(message, optional, tag="1")]
-    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(string, tag="2")]
-    pub port_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="3")]
-    pub value_type: ::core::option::Option<TypedValue>,
-    #[prost(message, optional, tag="6")]
-    pub resolved_artifact: ::core::option::Option<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="7")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(oneof="node_input_binding::DeclaredSource", tags="4, 5")]
-    pub declared_source: ::core::option::Option<node_input_binding::DeclaredSource>,
-}
-/// Nested message and enum types in `NodeInputBinding`.
-pub mod node_input_binding {
-    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
-    pub enum DeclaredSource {
-        #[prost(string, tag="4")]
-        ExternalInputId(::prost::alloc::string::String),
-        #[prost(message, tag="5")]
-        UpstreamOutput(super::UpstreamNodeOutput),
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ReproducibilityIdentity {
-    #[prost(message, optional, tag="1")]
-    pub graph_digest: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="2")]
-    pub data_snapshot_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="3")]
-    pub universe_snapshot_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="4")]
-    pub parameters_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="5")]
-    pub runtime_image_digest: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="6")]
-    pub environment_digest: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(uint64, tag="7")]
-    pub seed: u64,
-    #[prost(message, repeated, tag="8")]
-    pub rule_packs: ::prost::alloc::vec::Vec<RulePackBinding>,
-    #[prost(message, repeated, tag="9")]
-    pub node_implementations: ::prost::alloc::vec::Vec<NodeImplementationBinding>,
-    #[prost(message, repeated, tag="10")]
-    pub external_inputs: ::prost::alloc::vec::Vec<ExecutionExternalInput>,
-    #[prost(message, optional, tag="11")]
-    pub digest: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="12")]
-    pub subject: ::core::option::Option<super::super::core::v1::FormalInputBinding>,
-    #[prost(message, optional, tag="13")]
-    pub code: ::core::option::Option<super::super::core::v1::CodeBinding>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ExecutionInstanceIdentity {
-    #[prost(message, optional, tag="1")]
-    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub reproducibility: ::core::option::Option<ReproducibilityIdentity>,
-    #[prost(message, optional, tag="3")]
-    pub digest: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NodeOutputBinding {
-    #[prost(string, tag="1")]
-    pub port_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub value_type: ::core::option::Option<TypedValue>,
-    #[prost(message, optional, tag="3")]
-    pub artifact: ::core::option::Option<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="4")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="5")]
-    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NodeOutputManifestContent {
-    #[prost(message, optional, tag="1")]
-    pub reproducibility_digest: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="2")]
-    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="3")]
-    pub node_contract_digest: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="4")]
-    pub implementation_digest: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, repeated, tag="5")]
-    pub inputs: ::prost::alloc::vec::Vec<NodeInputBinding>,
-    #[prost(message, repeated, tag="6")]
-    pub outputs: ::prost::alloc::vec::Vec<NodeOutputBinding>,
-    #[prost(message, optional, tag="7")]
-    pub manifest_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NodeOutputManifest {
-    #[prost(message, optional, tag="1")]
-    pub execution: ::core::option::Option<ExecutionInstanceIdentity>,
-    #[prost(uint32, tag="2")]
-    pub attempt: u32,
-    #[prost(message, optional, tag="3")]
-    pub content: ::core::option::Option<NodeOutputManifestContent>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NodeCheckpoint {
-    #[prost(message, optional, tag="1")]
-    pub execution: ::core::option::Option<ExecutionInstanceIdentity>,
-    #[prost(message, optional, tag="2")]
-    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(uint32, tag="3")]
-    pub attempt: u32,
-    #[prost(message, optional, tag="4")]
-    pub output_manifest: ::core::option::Option<NodeOutputManifest>,
-    #[prost(uint64, tag="5")]
-    pub journal_sequence: u64,
-    #[prost(message, optional, tag="6")]
-    pub journal_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="7")]
-    pub checkpoint_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RunJournal {
-    #[prost(message, optional, tag="1")]
-    pub journal_event_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(uint64, tag="3")]
-    pub sequence: u64,
-    #[prost(enumeration="JournalEventType", tag="4")]
-    pub event_type: i32,
-    #[prost(message, optional, tag="5")]
-    pub occurred_at: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(string, tag="6")]
-    pub payload_type: ::prost::alloc::string::String,
-    #[prost(string, tag="7")]
-    pub payload_schema: ::prost::alloc::string::String,
-    #[prost(bytes="vec", tag="8")]
-    pub payload: ::prost::alloc::vec::Vec<u8>,
-    #[prost(message, optional, tag="9")]
-    pub prev_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="10")]
-    pub event_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum JournalEventType {
-    Unspecified = 0,
-    RunCreated = 1,
-    RunStarted = 2,
-    RunSucceeded = 3,
-    RunFailed = 4,
-    RunCancelled = 5,
-    ArtifactPublished = 6,
-    SignalSetPublished = 7,
-    NodeStarted = 8,
-    NodeSucceeded = 9,
-    NodeFailed = 10,
-    NodeCheckpointed = 11,
-}
-impl JournalEventType {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "JOURNAL_EVENT_TYPE_UNSPECIFIED",
-            Self::RunCreated => "JOURNAL_EVENT_TYPE_RUN_CREATED",
-            Self::RunStarted => "JOURNAL_EVENT_TYPE_RUN_STARTED",
-            Self::RunSucceeded => "JOURNAL_EVENT_TYPE_RUN_SUCCEEDED",
-            Self::RunFailed => "JOURNAL_EVENT_TYPE_RUN_FAILED",
-            Self::RunCancelled => "JOURNAL_EVENT_TYPE_RUN_CANCELLED",
-            Self::ArtifactPublished => "JOURNAL_EVENT_TYPE_ARTIFACT_PUBLISHED",
-            Self::SignalSetPublished => "JOURNAL_EVENT_TYPE_SIGNAL_SET_PUBLISHED",
-            Self::NodeStarted => "JOURNAL_EVENT_TYPE_NODE_STARTED",
-            Self::NodeSucceeded => "JOURNAL_EVENT_TYPE_NODE_SUCCEEDED",
-            Self::NodeFailed => "JOURNAL_EVENT_TYPE_NODE_FAILED",
-            Self::NodeCheckpointed => "JOURNAL_EVENT_TYPE_NODE_CHECKPOINTED",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "JOURNAL_EVENT_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
-            "JOURNAL_EVENT_TYPE_RUN_CREATED" => Some(Self::RunCreated),
-            "JOURNAL_EVENT_TYPE_RUN_STARTED" => Some(Self::RunStarted),
-            "JOURNAL_EVENT_TYPE_RUN_SUCCEEDED" => Some(Self::RunSucceeded),
-            "JOURNAL_EVENT_TYPE_RUN_FAILED" => Some(Self::RunFailed),
-            "JOURNAL_EVENT_TYPE_RUN_CANCELLED" => Some(Self::RunCancelled),
-            "JOURNAL_EVENT_TYPE_ARTIFACT_PUBLISHED" => Some(Self::ArtifactPublished),
-            "JOURNAL_EVENT_TYPE_SIGNAL_SET_PUBLISHED" => Some(Self::SignalSetPublished),
-            "JOURNAL_EVENT_TYPE_NODE_STARTED" => Some(Self::NodeStarted),
-            "JOURNAL_EVENT_TYPE_NODE_SUCCEEDED" => Some(Self::NodeSucceeded),
-            "JOURNAL_EVENT_TYPE_NODE_FAILED" => Some(Self::NodeFailed),
-            "JOURNAL_EVENT_TYPE_NODE_CHECKPOINTED" => Some(Self::NodeCheckpointed),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ExperimentRun {
-    #[prost(message, optional, tag="1")]
-    pub experiment_run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
-    #[prost(message, optional, tag="3")]
-    pub data_snapshot: ::core::option::Option<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="4")]
-    pub universe_snapshot: ::core::option::Option<super::super::core::v1::LineageRef>,
-    #[prost(message, repeated, tag="5")]
-    pub rule_packs: ::prost::alloc::vec::Vec<super::super::core::v1::VersionRef>,
-    #[prost(message, optional, tag="6")]
-    pub runtime_image_digest: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="7")]
-    pub parameters_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(uint64, tag="8")]
-    pub seed: u64,
-    #[prost(enumeration="RunState", tag="9")]
-    pub state: i32,
-    #[prost(uint64, tag="10")]
-    pub revision: u64,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CreateRunRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub run: ::core::option::Option<ExperimentRun>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CreateRunResponse {
-    #[prost(message, optional, tag="1")]
-    pub run: ::core::option::Option<ExperimentRun>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct TransitionRunRequest {
-    #[prost(message, optional, tag="1")]
-    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(uint64, tag="2")]
-    pub expected_revision: u64,
-    #[prost(enumeration="RunState", tag="3")]
-    pub next_state: i32,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TransitionRunResponse {
-    #[prost(message, optional, tag="1")]
-    pub run: ::core::option::Option<ExperimentRun>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetRunRequest {
-    #[prost(message, optional, tag="1")]
-    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetRunResponse {
-    #[prost(message, optional, tag="1")]
-    pub run: ::core::option::Option<ExperimentRun>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ReadRunJournalRequest {
-    #[prost(message, optional, tag="1")]
-    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(uint64, tag="2")]
-    pub from_sequence: u64,
-    #[prost(message, optional, tag="3")]
-    pub page: ::core::option::Option<super::super::core::v1::PageRequest>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ReadRunJournalResponse {
-    #[prost(message, repeated, tag="1")]
-    pub events: ::prost::alloc::vec::Vec<RunJournal>,
-    #[prost(message, optional, tag="2")]
-    pub page: ::core::option::Option<super::super::core::v1::PageResponse>,
-}
-/// Submits one fully frozen graph run. Tenant, owner and deployment attestation are
-/// derived from the authenticated server boundary and therefore are deliberately
-/// absent from this request.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SubmitGraphRunRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="3")]
-    pub graph: ::core::option::Option<ResearchGraph>,
-    #[prost(message, optional, tag="4")]
-    pub data_snapshot: ::core::option::Option<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="5")]
-    pub data_snapshot_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="6")]
-    pub universe_snapshot: ::core::option::Option<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="7")]
-    pub universe_snapshot_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="8")]
-    pub parameters_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(uint64, tag="9")]
-    pub seed: u64,
-    #[prost(message, repeated, tag="10")]
-    pub rule_packs: ::prost::alloc::vec::Vec<RulePackBinding>,
-    #[prost(message, repeated, tag="11")]
-    pub external_inputs: ::prost::alloc::vec::Vec<ExecutionExternalInput>,
-    #[prost(message, optional, tag="12")]
-    pub subject: ::core::option::Option<super::super::core::v1::FormalInputBinding>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SubmitGraphRunResponse {
-    #[prost(message, optional, tag="1")]
-    pub run: ::core::option::Option<ExperimentRun>,
-    #[prost(message, optional, tag="2")]
-    pub execution: ::core::option::Option<ExecutionInstanceIdentity>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetGraphRunRequest {
-    #[prost(message, optional, tag="1")]
-    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GraphRun {
-    #[prost(message, optional, tag="1")]
-    pub run: ::core::option::Option<ExperimentRun>,
-    #[prost(message, optional, tag="2")]
-    pub graph: ::core::option::Option<ResearchGraph>,
-    #[prost(message, optional, tag="3")]
-    pub execution: ::core::option::Option<ExecutionInstanceIdentity>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetGraphRunResponse {
-    #[prost(message, optional, tag="1")]
-    pub graph_run: ::core::option::Option<GraphRun>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListNodeOutputManifestsRequest {
-    #[prost(message, optional, tag="1")]
-    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StoredNodeOutputManifest {
-    #[prost(message, optional, tag="1")]
-    pub manifest: ::core::option::Option<NodeOutputManifest>,
-    #[prost(message, optional, tag="2")]
-    pub checkpoint: ::core::option::Option<NodeCheckpoint>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListNodeOutputManifestsResponse {
-    #[prost(message, repeated, tag="1")]
-    pub manifests: ::prost::alloc::vec::Vec<StoredNodeOutputManifest>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct TraceGraphOutputRequest {
-    #[prost(message, optional, tag="1")]
-    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GraphOutputTrace {
-    #[prost(message, optional, tag="1")]
-    pub graph_run: ::core::option::Option<GraphRun>,
-    #[prost(message, repeated, tag="2")]
-    pub manifests: ::prost::alloc::vec::Vec<StoredNodeOutputManifest>,
-    #[prost(message, repeated, tag="3")]
-    pub external_inputs: ::prost::alloc::vec::Vec<ExecutionExternalInput>,
-    #[prost(message, repeated, tag="4")]
-    pub formal_outputs: ::prost::alloc::vec::Vec<super::super::core::v1::FormalOutputEvidence>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TraceGraphOutputResponse {
-    #[prost(message, optional, tag="1")]
-    pub trace: ::core::option::Option<GraphOutputTrace>,
-}
-/// Reads one persisted node's canonical output envelope through the same required
-/// Artifact/Ceph integrity boundary used by execution. This is a bounded
-/// observability surface; it does not publish, mutate, or reinterpret results.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ReadNodeOutputRequest {
-    #[prost(message, optional, tag="1")]
-    pub run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub node_id: ::core::option::Option<super::super::core::v1::Ulid>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ObservedNodeOutput {
-    #[prost(string, tag="1")]
-    pub port_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub value_type: ::core::option::Option<TypedValue>,
-    #[prost(message, optional, tag="3")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(bytes="vec", tag="4")]
-    pub payload: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ReadNodeOutputResponse {
-    #[prost(message, optional, tag="1")]
-    pub manifest: ::core::option::Option<NodeOutputManifest>,
-    #[prost(message, repeated, tag="2")]
-    pub outputs: ::prost::alloc::vec::Vec<ObservedNodeOutput>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct CompareGraphRunsRequest {
-    #[prost(message, optional, tag="1")]
-    pub left_run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub right_run_id: ::core::option::Option<super::super::core::v1::Ulid>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct CompareGraphRunsResponse {
-    #[prost(enumeration="GraphRunComparisonDimension", repeated, tag="1")]
-    pub differing_dimensions: ::prost::alloc::vec::Vec<i32>,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum RunState {
-    Unspecified = 0,
-    Created = 1,
-    Running = 2,
-    Succeeded = 3,
-    Failed = 4,
-    Cancelled = 5,
-}
-impl RunState {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "RUN_STATE_UNSPECIFIED",
-            Self::Created => "RUN_STATE_CREATED",
-            Self::Running => "RUN_STATE_RUNNING",
-            Self::Succeeded => "RUN_STATE_SUCCEEDED",
-            Self::Failed => "RUN_STATE_FAILED",
-            Self::Cancelled => "RUN_STATE_CANCELLED",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "RUN_STATE_UNSPECIFIED" => Some(Self::Unspecified),
-            "RUN_STATE_CREATED" => Some(Self::Created),
-            "RUN_STATE_RUNNING" => Some(Self::Running),
-            "RUN_STATE_SUCCEEDED" => Some(Self::Succeeded),
-            "RUN_STATE_FAILED" => Some(Self::Failed),
-            "RUN_STATE_CANCELLED" => Some(Self::Cancelled),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum GraphRunComparisonDimension {
-    Unspecified = 0,
-    Data = 1,
-    Universe = 2,
-    Graph = 3,
-    Parameters = 4,
-    Runtime = 5,
-    Environment = 6,
-    Seed = 7,
-    RulePack = 8,
-    Implementation = 9,
-    ExternalInput = 10,
-    Result = 11,
-    Subject = 12,
-    Code = 13,
-}
-impl GraphRunComparisonDimension {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "GRAPH_RUN_COMPARISON_DIMENSION_UNSPECIFIED",
-            Self::Data => "GRAPH_RUN_COMPARISON_DIMENSION_DATA",
-            Self::Universe => "GRAPH_RUN_COMPARISON_DIMENSION_UNIVERSE",
-            Self::Graph => "GRAPH_RUN_COMPARISON_DIMENSION_GRAPH",
-            Self::Parameters => "GRAPH_RUN_COMPARISON_DIMENSION_PARAMETERS",
-            Self::Runtime => "GRAPH_RUN_COMPARISON_DIMENSION_RUNTIME",
-            Self::Environment => "GRAPH_RUN_COMPARISON_DIMENSION_ENVIRONMENT",
-            Self::Seed => "GRAPH_RUN_COMPARISON_DIMENSION_SEED",
-            Self::RulePack => "GRAPH_RUN_COMPARISON_DIMENSION_RULE_PACK",
-            Self::Implementation => "GRAPH_RUN_COMPARISON_DIMENSION_IMPLEMENTATION",
-            Self::ExternalInput => "GRAPH_RUN_COMPARISON_DIMENSION_EXTERNAL_INPUT",
-            Self::Result => "GRAPH_RUN_COMPARISON_DIMENSION_RESULT",
-            Self::Subject => "GRAPH_RUN_COMPARISON_DIMENSION_SUBJECT",
-            Self::Code => "GRAPH_RUN_COMPARISON_DIMENSION_CODE",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "GRAPH_RUN_COMPARISON_DIMENSION_UNSPECIFIED" => Some(Self::Unspecified),
-            "GRAPH_RUN_COMPARISON_DIMENSION_DATA" => Some(Self::Data),
-            "GRAPH_RUN_COMPARISON_DIMENSION_UNIVERSE" => Some(Self::Universe),
-            "GRAPH_RUN_COMPARISON_DIMENSION_GRAPH" => Some(Self::Graph),
-            "GRAPH_RUN_COMPARISON_DIMENSION_PARAMETERS" => Some(Self::Parameters),
-            "GRAPH_RUN_COMPARISON_DIMENSION_RUNTIME" => Some(Self::Runtime),
-            "GRAPH_RUN_COMPARISON_DIMENSION_ENVIRONMENT" => Some(Self::Environment),
-            "GRAPH_RUN_COMPARISON_DIMENSION_SEED" => Some(Self::Seed),
-            "GRAPH_RUN_COMPARISON_DIMENSION_RULE_PACK" => Some(Self::RulePack),
-            "GRAPH_RUN_COMPARISON_DIMENSION_IMPLEMENTATION" => Some(Self::Implementation),
-            "GRAPH_RUN_COMPARISON_DIMENSION_EXTERNAL_INPUT" => Some(Self::ExternalInput),
-            "GRAPH_RUN_COMPARISON_DIMENSION_RESULT" => Some(Self::Result),
-            "GRAPH_RUN_COMPARISON_DIMENSION_SUBJECT" => Some(Self::Subject),
-            "GRAPH_RUN_COMPARISON_DIMENSION_CODE" => Some(Self::Code),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct SensitivityConvention {
-    #[prost(message, optional, tag="1")]
-    pub bump: ::core::option::Option<super::super::core::v1::DecimalValue>,
-    #[prost(enumeration="SensitivityDirection", tag="2")]
-    pub direction: i32,
-    #[prost(enumeration="CurveRebuildPolicy", tag="3")]
-    pub curve_rebuild: i32,
-    #[prost(enumeration="SecondOrderPolicy", tag="4")]
-    pub second_order: i32,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct FactorDefinition {
-    #[prost(string, tag="1")]
-    pub factor_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub factor_unit: ::core::option::Option<super::super::core::v1::UnitRef>,
-    #[prost(message, optional, tag="3")]
-    pub sensitivity_convention: ::core::option::Option<SensitivityConvention>,
-    #[prost(message, optional, tag="4")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct CurveNodeDefinition {
-    #[prost(string, tag="1")]
-    pub curve_node_id: ::prost::alloc::string::String,
-    #[prost(string, tag="2")]
-    pub curve_family_id: ::prost::alloc::string::String,
-    #[prost(string, tag="3")]
-    pub tenor: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="4")]
-    pub factor_unit: ::core::option::Option<super::super::core::v1::UnitRef>,
-    #[prost(message, optional, tag="5")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct CurveNodeRef {
-    #[prost(string, tag="1")]
-    pub curve_node_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct InstrumentFactorTarget {
-    #[prost(message, optional, tag="1")]
-    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
-    #[prost(message, optional, tag="2")]
-    pub instrument: ::core::option::Option<super::super::core::v1::VersionRef>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct FactorTargetRef {
-    #[prost(oneof="factor_target_ref::Target", tags="1, 2")]
-    pub target: ::core::option::Option<factor_target_ref::Target>,
-}
-/// Nested message and enum types in `FactorTargetRef`.
-pub mod factor_target_ref {
-    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
-    pub enum Target {
-        #[prost(message, tag="1")]
-        Instrument(super::InstrumentFactorTarget),
-        #[prost(message, tag="2")]
-        CurveNode(super::CurveNodeRef),
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct FactorTargetBinding {
-    #[prost(string, tag="1")]
-    pub factor_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub target: ::core::option::Option<FactorTargetRef>,
-    #[prost(message, optional, tag="3")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RegisterFactorDefinitionRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub definition: ::core::option::Option<FactorDefinition>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RegisterFactorDefinitionResponse {
-    #[prost(oneof="register_factor_definition_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<register_factor_definition_response::Result>,
-}
-/// Nested message and enum types in `RegisterFactorDefinitionResponse`.
-pub mod register_factor_definition_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        Definition(super::FactorDefinition),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RegisterCurveNodeDefinitionRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub definition: ::core::option::Option<CurveNodeDefinition>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RegisterCurveNodeDefinitionResponse {
-    #[prost(oneof="register_curve_node_definition_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<register_curve_node_definition_response::Result>,
-}
-/// Nested message and enum types in `RegisterCurveNodeDefinitionResponse`.
-pub mod register_curve_node_definition_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        Definition(super::CurveNodeDefinition),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct BindFactorTargetRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub binding: ::core::option::Option<FactorTargetBinding>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BindFactorTargetResponse {
-    #[prost(oneof="bind_factor_target_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<bind_factor_target_response::Result>,
-}
-/// Nested message and enum types in `BindFactorTargetResponse`.
-pub mod bind_factor_target_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        Binding(super::FactorTargetBinding),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetFactorDefinitionRequest {
-    #[prost(string, tag="1")]
-    pub factor_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetFactorDefinitionResponse {
-    #[prost(oneof="get_factor_definition_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<get_factor_definition_response::Result>,
-}
-/// Nested message and enum types in `GetFactorDefinitionResponse`.
-pub mod get_factor_definition_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        Definition(super::FactorDefinition),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetFactorTargetsRequest {
-    #[prost(string, tag="1")]
-    pub factor_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetFactorTargetsResponse {
-    #[prost(oneof="get_factor_targets_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<get_factor_targets_response::Result>,
-}
-/// Nested message and enum types in `GetFactorTargetsResponse`.
-pub mod get_factor_targets_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        Bindings(super::FactorTargetBindings),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetTargetFactorsRequest {
-    #[prost(message, optional, tag="1")]
-    pub target: ::core::option::Option<FactorTargetRef>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetTargetFactorsResponse {
-    #[prost(oneof="get_target_factors_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<get_target_factors_response::Result>,
-}
-/// Nested message and enum types in `GetTargetFactorsResponse`.
-pub mod get_target_factors_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        Definitions(super::FactorDefinitions),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FactorTargetBindings {
-    #[prost(message, repeated, tag="1")]
-    pub bindings: ::prost::alloc::vec::Vec<FactorTargetBinding>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FactorDefinitions {
-    #[prost(message, repeated, tag="1")]
-    pub definitions: ::prost::alloc::vec::Vec<FactorDefinition>,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum SensitivityDirection {
-    Unspecified = 0,
-    Central = 1,
-    Up = 2,
-    Down = 3,
-}
-impl SensitivityDirection {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "SENSITIVITY_DIRECTION_UNSPECIFIED",
-            Self::Central => "SENSITIVITY_DIRECTION_CENTRAL",
-            Self::Up => "SENSITIVITY_DIRECTION_UP",
-            Self::Down => "SENSITIVITY_DIRECTION_DOWN",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "SENSITIVITY_DIRECTION_UNSPECIFIED" => Some(Self::Unspecified),
-            "SENSITIVITY_DIRECTION_CENTRAL" => Some(Self::Central),
-            "SENSITIVITY_DIRECTION_UP" => Some(Self::Up),
-            "SENSITIVITY_DIRECTION_DOWN" => Some(Self::Down),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum CurveRebuildPolicy {
-    Unspecified = 0,
-    Rebuild = 1,
-    Hold = 2,
-}
-impl CurveRebuildPolicy {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "CURVE_REBUILD_POLICY_UNSPECIFIED",
-            Self::Rebuild => "CURVE_REBUILD_POLICY_REBUILD",
-            Self::Hold => "CURVE_REBUILD_POLICY_HOLD",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "CURVE_REBUILD_POLICY_UNSPECIFIED" => Some(Self::Unspecified),
-            "CURVE_REBUILD_POLICY_REBUILD" => Some(Self::Rebuild),
-            "CURVE_REBUILD_POLICY_HOLD" => Some(Self::Hold),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum SecondOrderPolicy {
-    Unspecified = 0,
-    Include = 1,
-    Exclude = 2,
-}
-impl SecondOrderPolicy {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "SECOND_ORDER_POLICY_UNSPECIFIED",
-            Self::Include => "SECOND_ORDER_POLICY_INCLUDE",
-            Self::Exclude => "SECOND_ORDER_POLICY_EXCLUDE",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "SECOND_ORDER_POLICY_UNSPECIFIED" => Some(Self::Unspecified),
-            "SECOND_ORDER_POLICY_INCLUDE" => Some(Self::Include),
-            "SECOND_ORDER_POLICY_EXCLUDE" => Some(Self::Exclude),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DataHealthThresholdProfile {
-    #[prost(message, optional, tag="1")]
-    pub profile_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
-    #[prost(uint64, tag="2")]
-    pub max_position_snapshot_age_seconds: u64,
-    #[prost(uint32, tag="3")]
-    pub unknown_accounting_warning_basis_points: u32,
-    #[prost(uint64, tag="4")]
-    pub max_data_snapshot_age_seconds: u64,
-    #[prost(uint32, tag="5")]
-    pub model_valuation_warning_basis_points: u32,
-    #[prost(message, optional, tag="6")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="7")]
-    pub profile_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="8")]
-    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
-    #[prost(message, optional, tag="9")]
-    pub visible_at: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(message, optional, tag="10")]
-    pub effective_from: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(message, optional, tag="11")]
-    pub effective_to: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(message, repeated, tag="12")]
-    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DataHealthIssue {
-    #[prost(enumeration="DataHealthIssueCode", tag="1")]
-    pub code: i32,
-    #[prost(message, repeated, tag="2")]
-    pub affected_position_ids: ::prost::alloc::vec::Vec<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="3")]
-    pub data_source_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
-    #[prost(uint64, tag="4")]
-    pub record_count: u64,
-    #[prost(uint32, tag="5")]
-    pub ratio_basis_points: u32,
-    #[prost(uint64, tag="6")]
-    pub observed_age_seconds: u64,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetDataHealthReportRequest {
-    #[prost(message, optional, tag="1")]
-    pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
-    #[prost(message, optional, tag="2")]
-    pub position_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="3")]
-    pub data_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="4")]
-    pub evaluated_at: ::core::option::Option<super::super::core::v1::MarketTime>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishDataHealthThresholdProfileRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub threshold_profile: ::core::option::Option<DataHealthThresholdProfile>,
-    #[prost(message, optional, tag="3")]
-    pub change: ::core::option::Option<super::super::core::v1::ChangeJustification>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishDataHealthThresholdProfileResponse {
-    #[prost(oneof="publish_data_health_threshold_profile_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<publish_data_health_threshold_profile_response::Result>,
-}
-/// Nested message and enum types in `PublishDataHealthThresholdProfileResponse`.
-pub mod publish_data_health_threshold_profile_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        ThresholdProfile(super::DataHealthThresholdProfile),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DataHealthReport {
-    #[prost(message, optional, tag="1")]
-    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
-    #[prost(message, optional, tag="2")]
-    pub subject_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
-    #[prost(message, optional, tag="3")]
-    pub evaluated_at: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(message, optional, tag="4")]
-    pub position_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="5")]
-    pub position_snapshot_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="6")]
-    pub data_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="7")]
-    pub data_snapshot_manifest_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="8")]
-    pub data_source_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
-    #[prost(message, optional, tag="9")]
-    pub threshold_profile: ::core::option::Option<DataHealthThresholdProfile>,
-    #[prost(enumeration="DataHealthState", tag="10")]
-    pub state: i32,
-    #[prost(message, repeated, tag="11")]
-    pub issues: ::prost::alloc::vec::Vec<DataHealthIssue>,
-    #[prost(bool, tag="12")]
-    pub price_evidence_evaluated: bool,
-    #[prost(enumeration="PositionSetState", tag="13")]
-    pub position_set_state: i32,
-    #[prost(message, optional, tag="14")]
-    pub coverage: ::core::option::Option<CoverageDeclaration>,
-    #[prost(message, optional, tag="15")]
-    pub request_fingerprint: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="16")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, repeated, tag="17")]
-    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="18")]
-    pub formal_evidence: ::core::option::Option<super::super::core::v1::FormalOutputEvidence>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetDataHealthReportResponse {
-    #[prost(oneof="get_data_health_report_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<get_data_health_report_response::Result>,
-}
-/// Nested message and enum types in `GetDataHealthReportResponse`.
-pub mod get_data_health_report_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        Report(super::DataHealthReport),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum DataHealthState {
-    Unspecified = 0,
-    Healthy = 1,
-    Warning = 2,
-}
-impl DataHealthState {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "DATA_HEALTH_STATE_UNSPECIFIED",
-            Self::Healthy => "DATA_HEALTH_STATE_HEALTHY",
-            Self::Warning => "DATA_HEALTH_STATE_WARNING",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "DATA_HEALTH_STATE_UNSPECIFIED" => Some(Self::Unspecified),
-            "DATA_HEALTH_STATE_HEALTHY" => Some(Self::Healthy),
-            "DATA_HEALTH_STATE_WARNING" => Some(Self::Warning),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum PositionSetState {
-    Unspecified = 0,
-    NonEmpty = 1,
-    VerifiedEmpty = 2,
-}
-impl PositionSetState {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "POSITION_SET_STATE_UNSPECIFIED",
-            Self::NonEmpty => "POSITION_SET_STATE_NON_EMPTY",
-            Self::VerifiedEmpty => "POSITION_SET_STATE_VERIFIED_EMPTY",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "POSITION_SET_STATE_UNSPECIFIED" => Some(Self::Unspecified),
-            "POSITION_SET_STATE_NON_EMPTY" => Some(Self::NonEmpty),
-            "POSITION_SET_STATE_VERIFIED_EMPTY" => Some(Self::VerifiedEmpty),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum DataHealthIssueCode {
-    Unspecified = 0,
-    EmptyPositions = 1,
-    UnknownAccountingClassification = 2,
-    StalePositionSnapshot = 3,
-    UntypedPriceSource = 4,
-    ModelValuationShare = 5,
-    StaleDataSnapshot = 6,
-}
-impl DataHealthIssueCode {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "DATA_HEALTH_ISSUE_CODE_UNSPECIFIED",
-            Self::EmptyPositions => "DATA_HEALTH_ISSUE_CODE_EMPTY_POSITIONS",
-            Self::UnknownAccountingClassification => "DATA_HEALTH_ISSUE_CODE_UNKNOWN_ACCOUNTING_CLASSIFICATION",
-            Self::StalePositionSnapshot => "DATA_HEALTH_ISSUE_CODE_STALE_POSITION_SNAPSHOT",
-            Self::UntypedPriceSource => "DATA_HEALTH_ISSUE_CODE_UNTYPED_PRICE_SOURCE",
-            Self::ModelValuationShare => "DATA_HEALTH_ISSUE_CODE_MODEL_VALUATION_SHARE",
-            Self::StaleDataSnapshot => "DATA_HEALTH_ISSUE_CODE_STALE_DATA_SNAPSHOT",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "DATA_HEALTH_ISSUE_CODE_UNSPECIFIED" => Some(Self::Unspecified),
-            "DATA_HEALTH_ISSUE_CODE_EMPTY_POSITIONS" => Some(Self::EmptyPositions),
-            "DATA_HEALTH_ISSUE_CODE_UNKNOWN_ACCOUNTING_CLASSIFICATION" => Some(Self::UnknownAccountingClassification),
-            "DATA_HEALTH_ISSUE_CODE_STALE_POSITION_SNAPSHOT" => Some(Self::StalePositionSnapshot),
-            "DATA_HEALTH_ISSUE_CODE_UNTYPED_PRICE_SOURCE" => Some(Self::UntypedPriceSource),
-            "DATA_HEALTH_ISSUE_CODE_MODEL_VALUATION_SHARE" => Some(Self::ModelValuationShare),
-            "DATA_HEALTH_ISSUE_CODE_STALE_DATA_SNAPSHOT" => Some(Self::StaleDataSnapshot),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DataSnapshot {
-    #[prost(message, optional, tag="1")]
-    pub data_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
-    #[prost(message, optional, tag="3")]
-    pub visible_at: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(message, optional, tag="4")]
-    pub as_of: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(message, optional, tag="5")]
-    pub schema_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="6")]
-    pub manifest_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="7")]
-    pub blob_content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, repeated, tag="8")]
-    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="9")]
-    pub authorization_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
-    #[prost(message, optional, tag="10")]
-    pub actor_id: ::core::option::Option<super::super::core::v1::Ulid>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct UniverseSnapshot {
-    #[prost(message, optional, tag="1")]
-    pub universe_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="2")]
-    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
-    #[prost(message, repeated, tag="3")]
-    pub instrument_versions: ::prost::alloc::vec::Vec<super::super::core::v1::VersionRef>,
-    #[prost(message, optional, tag="4")]
-    pub filter_digest: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, optional, tag="5")]
-    pub content_hash: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, repeated, tag="6")]
-    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="7")]
-    pub actor_id: ::core::option::Option<super::super::core::v1::Ulid>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ImportCanonicalQuoteSnapshotRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub target_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="3")]
-    pub authorization_ref: ::core::option::Option<super::super::core::v1::VersionRef>,
-    #[prost(message, optional, tag="4")]
-    pub mapping: ::core::option::Option<super::super::market::v1::InstrumentMapping>,
-    #[prost(message, optional, tag="5")]
-    pub calendar: ::core::option::Option<super::super::market::v1::Calendar>,
-    #[prost(message, optional, tag="6")]
-    pub unit: ::core::option::Option<super::super::market::v1::Unit>,
-    #[prost(message, optional, tag="7")]
-    pub as_of: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(message, optional, tag="8")]
-    pub visible_at: ::core::option::Option<super::super::core::v1::MarketTime>,
-    #[prost(string, tag="9")]
-    pub import_reason: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ImportCanonicalQuoteSnapshotResponse {
-    #[prost(oneof="import_canonical_quote_snapshot_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<import_canonical_quote_snapshot_response::Result>,
-}
-/// Nested message and enum types in `ImportCanonicalQuoteSnapshotResponse`.
-pub mod import_canonical_quote_snapshot_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        DataSnapshot(super::DataSnapshot),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishUniverseSnapshotRequest {
-    #[prost(string, tag="1")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="3")]
-    pub universe_snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-    #[prost(message, optional, tag="4")]
-    pub owner: ::core::option::Option<super::super::core::v1::OwnerRef>,
-    #[prost(message, repeated, tag="5")]
-    pub instrument_versions: ::prost::alloc::vec::Vec<super::super::core::v1::VersionRef>,
-    #[prost(message, optional, tag="6")]
-    pub filter_digest: ::core::option::Option<super::super::core::v1::Sha256>,
-    #[prost(message, repeated, tag="7")]
-    pub lineage: ::prost::alloc::vec::Vec<super::super::core::v1::LineageRef>,
-    #[prost(message, optional, tag="8")]
-    pub change: ::core::option::Option<super::super::core::v1::ChangeJustification>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishUniverseSnapshotResponse {
-    #[prost(oneof="publish_universe_snapshot_response::Result", tags="1, 2")]
-    pub result: ::core::option::Option<publish_universe_snapshot_response::Result>,
-}
-/// Nested message and enum types in `PublishUniverseSnapshotResponse`.
-pub mod publish_universe_snapshot_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        UniverseSnapshot(super::UniverseSnapshot),
-        #[prost(message, tag="2")]
-        Error(super::super::super::core::v1::ErrorDetail),
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetSnapshotRequest {
-    #[prost(message, optional, tag="1")]
-    pub snapshot_id: ::core::option::Option<super::super::core::v1::Ulid>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetSnapshotResponse {
-    #[prost(oneof="get_snapshot_response::Result", tags="1, 2, 3")]
-    pub result: ::core::option::Option<get_snapshot_response::Result>,
-}
-/// Nested message and enum types in `GetSnapshotResponse`.
-pub mod get_snapshot_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag="1")]
-        DataSnapshot(super::DataSnapshot),
-        #[prost(message, tag="2")]
-        UniverseSnapshot(super::UniverseSnapshot),
-        #[prost(message, tag="3")]
-        Error(super::super::super::core::v1::ErrorDetail),
     }
 }
 // @@protoc_insertion_point(module)

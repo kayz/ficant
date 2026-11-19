@@ -3,11 +3,8 @@ syntax = "proto3";
 package ficant.market.v1;
 
 import "ficant/core/v1/common.proto";
-import "ficant/core/v1/error.proto";
-import "ficant/core/v1/governance.proto";
 import "ficant/market/v1/instrument.proto";
 import "ficant/market/v1/rule.proto";
-import "google/protobuf/timestamp.proto";
 
 enum ValueAddedTaxStatus {
   VALUE_ADDED_TAX_STATUS_UNSPECIFIED = 0;
@@ -37,8 +34,6 @@ enum BondBusinessDayConvention {
   BOND_BUSINESS_DAY_CONVENTION_FOLLOWING = 1;
 }
 
-// BondTaxAttributes are L2 asset facts. They carry no tax rate or cutoff:
-// the exact L3 TaxRulePack validates and consumes them for a calculation.
 message BondTaxAttributes {
   ValueAddedTaxStatus value_added_tax_status = 1;
   IncomeTaxStatus income_tax_status = 2;
@@ -115,68 +110,4 @@ message MarketDefinition {
   }
   reserved 2, 3;
   reserved "bond", "futures_contract";
-}
-
-message AppendDefinitionRequest {
-  string idempotency_key = 1;
-  uint64 expected_latest_version = 2;
-  MarketDefinition definition = 3;
-  ficant.core.v1.ChangeJustification change = 4;
-}
-
-message AppendDefinitionResponse {
-  oneof result {
-    MarketDefinition definition = 1;
-    ficant.core.v1.ErrorDetail error = 2;
-  }
-}
-
-message GetDefinitionVersionRequest {
-  ficant.core.v1.Ulid definition_id = 1;
-  uint64 version = 2;
-}
-
-message GetDefinitionVersionResponse {
-  oneof result {
-    MarketDefinition definition = 1;
-    ficant.core.v1.ErrorDetail error = 2;
-  }
-}
-
-message ResolveDefinitionAsOfRequest {
-  ficant.core.v1.Ulid definition_id = 1;
-  google.protobuf.Timestamp as_of = 2;
-}
-
-message ResolveDefinitionAsOfResponse {
-  oneof result {
-    MarketDefinition definition = 1;
-    ficant.core.v1.ErrorDetail error = 2;
-  }
-}
-
-message ListDefinitionVersionsRequest {
-  ficant.core.v1.Ulid definition_id = 1;
-  ficant.core.v1.PageRequest page = 2;
-}
-
-message DefinitionVersions {
-  repeated MarketDefinition definitions = 1;
-  ficant.core.v1.PageResponse page = 2;
-}
-
-message ListDefinitionVersionsResponse {
-  reserved 1, 2;
-  reserved "definitions", "page";
-  oneof result {
-    DefinitionVersions versions = 3;
-    ficant.core.v1.ErrorDetail error = 4;
-  }
-}
-
-service MarketDefinitionService {
-  rpc AppendDefinition(AppendDefinitionRequest) returns (AppendDefinitionResponse);
-  rpc GetDefinitionVersion(GetDefinitionVersionRequest) returns (GetDefinitionVersionResponse);
-  rpc ResolveDefinitionAsOf(ResolveDefinitionAsOfRequest) returns (ResolveDefinitionAsOfResponse);
-  rpc ListDefinitionVersions(ListDefinitionVersionsRequest) returns (ListDefinitionVersionsResponse);
 }

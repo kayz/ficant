@@ -4,82 +4,11 @@ package ficant.rates.v1;
 
 import "ficant/core/v1/common.proto";
 import "ficant/core/v1/error.proto";
-import "ficant/core/v1/evidence.proto";
+import "ficant/core/v1/subject.proto";
+import "ficant/market/v1/definition.proto";
+import "ficant/market/v1/rule.proto";
 import "ficant/market/v1/tax_rule.proto";
 
-message ObjectBinding {
-  ficant.core.v1.VersionRef object = 1;
-  ficant.core.v1.Sha256 content_hash = 2;
-}
-
-message AlgorithmBinding {
-  string algorithm_id = 1;
-  uint32 algorithm_version = 2;
-  string convention_profile = 3;
-  uint32 abi_version = 4;
-}
-
-message SnapshotBinding {
-  ficant.core.v1.Ulid snapshot_id = 1;
-  ficant.core.v1.Sha256 content_hash = 2;
-}
-
-message ArtifactBinding {
-  ficant.core.v1.Ulid artifact_id = 1;
-  ficant.core.v1.Sha256 content_hash = 2;
-}
-
-message CurveNodeBinding {
-  string curve_node_id = 1;
-  ficant.core.v1.Sha256 content_hash = 2;
-}
-
-enum AnalysisInputRole {
-  ANALYSIS_INPUT_ROLE_UNSPECIFIED = 0;
-  ANALYSIS_INPUT_ROLE_SUBJECT = 1;
-  ANALYSIS_INPUT_ROLE_UNIT = 2;
-  ANALYSIS_INPUT_ROLE_BOND = 3;
-  ANALYSIS_INPUT_ROLE_CALENDAR = 4;
-  ANALYSIS_INPUT_ROLE_CURVE_SNAPSHOT = 5;
-  ANALYSIS_INPUT_ROLE_DATA_SNAPSHOT = 6;
-  ANALYSIS_INPUT_ROLE_DATA_SOURCE = 7;
-  ANALYSIS_INPUT_ROLE_TAX_RULE_PACK = 8;
-  ANALYSIS_INPUT_ROLE_FUNDING_RULE_PACK = 9;
-  ANALYSIS_INPUT_ROLE_DELIVERY_RULE_PACK = 10;
-  ANALYSIS_INPUT_ROLE_FUTURES_CONTRACT = 11;
-  ANALYSIS_INPUT_ROLE_TARGET_RISK_ARTIFACT = 12;
-  ANALYSIS_INPUT_ROLE_DELIVERY_ARTIFACT = 13;
-  ANALYSIS_INPUT_ROLE_CTD_ANALYTICS_ARTIFACT = 14;
-  ANALYSIS_INPUT_ROLE_CURVE_RULE_PACK = 15;
-  ANALYSIS_INPUT_ROLE_CURVE_NODE_DEFINITION = 16;
-}
-
-// AnalysisInputBinding is response evidence built only after the Application
-// layer verifies the bound input. observed_at represents valuation/as-of time
-// for roles whose authoritative object uses those terms.
-message AnalysisInputBinding {
-  AnalysisInputRole role = 1;
-  ficant.core.v1.OwnerRef owner = 2;
-  oneof binding {
-    ObjectBinding object = 3;
-    SnapshotBinding snapshot = 4;
-    ArtifactBinding artifact = 5;
-    CurveNodeBinding curve_node = 10;
-  }
-  ficant.core.v1.MarketTime observed_at = 6;
-  ficant.core.v1.MarketTime visible_at = 7;
-  ficant.core.v1.MarketTime effective_from = 8;
-  ficant.core.v1.MarketTime effective_to = 9;
-}
-
-message ParameterDigest {
-  AlgorithmBinding algorithm = 1;
-  ficant.core.v1.Sha256 canonical_parameters_sha256 = 2;
-}
-
-// AnalysisUnits binds every numerical dimension used by the reference
-// analytics API to an immutable Unit definition. Inputs must use the matching
-// binding and responses echo these identities rather than guessing units.
 message AnalysisUnits {
   ficant.core.v1.UnitRef currency_amount = 1;
   ficant.core.v1.UnitRef price_per_100 = 2;
@@ -90,30 +19,6 @@ message AnalysisUnits {
   ficant.core.v1.UnitRef dv01 = 7;
   ficant.core.v1.UnitRef dimensionless = 8;
   ficant.core.v1.UnitRef contract_count = 9;
-}
-
-message AnalysisContext {
-  ficant.core.v1.OwnerRef owner = 1;
-  reserved 2, 3, 7, 8;
-  reserved "rule_pack", "data_snapshot", "funding_rule_pack", "tax_rule_pack";
-  AlgorithmBinding algorithm = 4;
-  AnalysisUnits units = 5;
-  ficant.core.v1.VersionRef subject_ref = 6;
-  ficant.core.v1.MarketTime knowledge_at = 9;
-}
-
-message ResultMetadata {
-  string schema_id = 1;
-  string engine_id = 2;
-  string engine_version = 3;
-  AlgorithmBinding algorithm = 4;
-  ficant.core.v1.VersionRef subject_ref = 5;
-  reserved 6, 7;
-  reserved "funding_rule_pack", "tax_rule_pack";
-  repeated AnalysisInputBinding consumed_inputs = 8;
-  ParameterDigest parameter_digest = 9;
-  ficant.core.v1.Sha256 request_fingerprint = 10;
-  ficant.core.v1.FormalOutputEvidence formal_evidence = 11;
 }
 
 enum CalendarRequirement {
@@ -148,38 +53,28 @@ message TaxAdjustedBondAnalytics {
   ficant.market.v1.CouponTaxClaimScope claim_scope = 3;
 }
 
+message BondTaxContext {
+  ficant.core.v1.TaxTreatment subject_tax_treatment = 1;
+  ficant.market.v1.MarketRulePack tax_rule_pack = 2;
+}
+
 message AnalyzeBondRequest {
-  AnalysisContext context = 1;
-  ObjectBinding bond = 2;
-  ficant.core.v1.MarketTime valuation_at = 3;
-  string settlement_date = 4;
-  CalendarRequirement calendar_requirement = 5;
-  ObjectBinding calendar = 6;
-  reserved 7, 10;
-  reserved "terms";
+  AnalysisUnits units = 1;
+  ficant.market.v1.Bond bond = 2;
+  string settlement_date = 3;
+  CalendarRequirement calendar_requirement = 4;
+  ficant.market.v1.Calendar calendar = 5;
   oneof input {
-    ficant.core.v1.DecimalValue yield_to_maturity = 8;
-    ficant.core.v1.DecimalValue clean_price = 9;
+    ficant.core.v1.DecimalValue yield_to_maturity = 6;
+    ficant.core.v1.DecimalValue clean_price = 7;
   }
-  SnapshotBinding data_snapshot = 11;
-  ObjectBinding tax_rule_pack = 12;
+  BondTaxContext tax_context = 8;
 }
 
 message AnalyzeBondResult {
   repeated DerivedCashflow cashflows = 1;
   BondAnalyticsMeasures measures = 2;
-  ResultMetadata metadata = 3;
-  TaxAdjustedBondAnalytics after_tax = 4;
-}
-
-// RiskSummary is the deterministic risk-only projection consumed by
-// downstream ResearchGraph nodes. Values retain the exact Unit bindings and
-// source metadata from AnalyzeBondResult; the node must not recompute them.
-message RiskSummary {
-  ficant.core.v1.DecimalValue modified_duration = 1;
-  ficant.core.v1.DecimalValue convexity = 2;
-  ficant.core.v1.DecimalValue dv01 = 3;
-  ResultMetadata source_metadata = 4;
+  TaxAdjustedBondAnalytics after_tax = 3;
 }
 
 message AnalyzeBondResponse {
@@ -189,16 +84,21 @@ message AnalyzeBondResponse {
   }
 }
 
+message YieldCurveNodeInput {
+  string maturity_date = 1;
+  ficant.core.v1.DecimalValue yield_to_maturity = 2;
+}
+
 message InterpolateYieldCurveRequest {
-  AnalysisContext context = 1;
-  SnapshotBinding curve = 2;
-  string query_date = 3;
+  AnalysisUnits units = 1;
+  string as_of_date = 2;
+  repeated YieldCurveNodeInput nodes = 3;
+  string query_date = 4;
 }
 
 message InterpolateYieldCurveResult {
   string query_date = 1;
   ficant.core.v1.DecimalValue yield_to_maturity = 2;
-  ResultMetadata metadata = 3;
 }
 
 message InterpolateYieldCurveResponse {
@@ -209,15 +109,14 @@ message InterpolateYieldCurveResponse {
 }
 
 message AnalyzeCarryRollRequest {
-  AnalysisContext context = 1;
-  ObjectBinding bond = 2;
-  ficant.core.v1.MarketTime valuation_at = 3;
-  string initial_settlement = 4;
-  string horizon_settlement = 5;
-  CalendarRequirement calendar_requirement = 6;
-  reserved 7, 8;
-  reserved "calendar", "terms";
-  SnapshotBinding curve = 9;
+  AnalysisUnits units = 1;
+  ficant.market.v1.Bond bond = 2;
+  string initial_settlement = 3;
+  string horizon_settlement = 4;
+  CalendarRequirement calendar_requirement = 5;
+  ficant.market.v1.Calendar calendar = 6;
+  string curve_as_of_date = 7;
+  repeated YieldCurveNodeInput curve_nodes = 8;
 }
 
 message CarryRollMeasures {
@@ -234,7 +133,6 @@ message CarryRollMeasures {
 
 message AnalyzeCarryRollResult {
   CarryRollMeasures measures = 1;
-  ResultMetadata metadata = 2;
 }
 
 message AnalyzeCarryRollResponse {
@@ -244,16 +142,30 @@ message AnalyzeCarryRollResponse {
   }
 }
 
+message FuturesCandidateInput {
+  ficant.market.v1.Bond bond = 1;
+  ficant.core.v1.DecimalValue spot_clean_price = 2;
+}
+
+message SubjectFundingContext {
+  ficant.core.v1.FundingTier funding_tier = 1;
+  ficant.market.v1.MarketRulePack funding_rule_pack = 2;
+}
+
 message AnalyzeFuturesDeliveryRequest {
-  AnalysisContext context = 1;
-  ObjectBinding futures_contract = 2;
-  ficant.core.v1.MarketTime valuation_at = 3;
+  AnalysisUnits units = 1;
+  string product_code = 2;
+  string delivery_month_first = 3;
   string purchase_date = 4;
-  reserved 5 to 10;
-  reserved "delivery_month_first", "delivery_date", "product", "futures_clean_price", "candidates";
-  SnapshotBinding data_snapshot = 11;
-  ObjectBinding funding_rule_pack = 12;
-  ObjectBinding tax_rule_pack = 13;
+  string delivery_date = 5;
+  ficant.core.v1.DecimalValue futures_clean_price = 6;
+  ficant.market.v1.MarketRulePack delivery_rule_pack = 7;
+  repeated FuturesCandidateInput candidates = 8;
+  oneof financing {
+    ficant.core.v1.DecimalValue annual_financing_rate = 9;
+    SubjectFundingContext subject_funding = 10;
+  }
+  BondTaxContext tax_context = 11;
 }
 
 message FuturesDeliveryMeasures {
@@ -277,7 +189,7 @@ message FuturesDeliveryMeasures {
 }
 
 message FuturesDeliveryCandidateResult {
-  ObjectBinding bond = 1;
+  ficant.core.v1.VersionRef bond = 1;
   FuturesDeliveryMeasures measures = 2;
   ficant.market.v1.CouponTaxClaimScope claim_scope = 3;
 }
@@ -285,8 +197,7 @@ message FuturesDeliveryCandidateResult {
 message AnalyzeFuturesDeliveryResult {
   repeated FuturesDeliveryCandidateResult candidates = 1;
   uint32 ctd_index = 2;
-  ResultMetadata metadata = 3;
-  uint32 subject_ctd_index = 4;
+  optional uint32 subject_ctd_index = 3;
 }
 
 message AnalyzeFuturesDeliveryResponse {
@@ -297,14 +208,11 @@ message AnalyzeFuturesDeliveryResponse {
 }
 
 message AnalyzeFuturesHedgeRequest {
-  AnalysisContext context = 1;
-  ArtifactBinding target_risk_artifact = 2;
-  ArtifactBinding delivery_artifact = 3;
-  ArtifactBinding ctd_analytics_artifact = 4;
-  ObjectBinding futures_contract = 5;
-  reserved 6, 8 to 11;
-  reserved "ctd_bond", "product", "target_dv01", "ctd_dv01_per_100", "conversion_factor";
-  ficant.core.v1.MarketTime valuation_at = 7;
+  AnalysisUnits units = 1;
+  string product_code = 2;
+  ficant.core.v1.DecimalValue target_dv01 = 3;
+  ficant.core.v1.DecimalValue ctd_dv01_per_100 = 4;
+  ficant.core.v1.DecimalValue conversion_factor = 5;
 }
 
 message FuturesHedgeMeasures {
@@ -317,7 +225,6 @@ message FuturesHedgeMeasures {
 
 message AnalyzeFuturesHedgeResult {
   FuturesHedgeMeasures measures = 1;
-  ResultMetadata metadata = 2;
 }
 
 message AnalyzeFuturesHedgeResponse {

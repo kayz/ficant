@@ -1,49 +1,18 @@
-# 后台接口与 Protobuf 合同
+# Ficant Protobuf 契约目录
 
-本目录是 ficant 后台跨边界合同的唯一来源。Rust、Python 和 TypeScript 生成物均由这里的同一份 descriptor 派生；各语言不得手写同名 DTO、Decimal、时间、错误或对象结构。
+本目录是 Ficant 跨语言（Rust / Python，后续可扩展新前端客户端）后台协议的唯一权威来源。
 
-## 包与边界
+## 包结构
 
-- `ficant.core.v1`：ULID、版本引用、SHA-256、所有者、单位、Decimal、市场时间、血缘、分页与稳定错误。
-- `ficant.market.v1`：Instrument、带完整 fixed-rate 定价条款的 Bond、带显式 product / 报价 Unit 风险选择器的 exact FuturesContract、Cashflow、Calendar、Unit、Quote、Trade、Valuation、带 `visible_at` / 稳定曲线族的 CurveSnapshot、canonical CurvePointSet、MarketRulePack，以及由 MarketRulePack 内容引用的强类型市场规则包。immutable DataSource exact version 通过 DataSourceRegistryService 声明并查询 `REAL_TRADE`、`ACTIVE_QUOTE` 或 `MODEL_VALUATION`；FactSource 只携带 exact DataSource ref，不复制类型。`CURVE_INTERPOLATION` 只表示 ficant 内部算法形成的价格，不可注册为外部数据源。legacy FuturesContract 与未标型 DataSource 仍可读取，但分别不能进入组合 KRD 或 typed price calculation。
-- `ficant.research.v1`：DataSnapshot、UniverseSnapshot、PositionSnapshot、ExperimentRun、Artifact、SignalSet、RunJournal，以及全局 immutable FactorDefinition、稳定 CurveNodeDefinition、append-only FactorTargetBinding、PortfolioRiskService 和 DataHealthService。PositionSnapshot 以完整 `observed_at` / `visible_at`、Subject version、owner、canonical content hash 与 lineage 固定外部导入持仓事实；其 PositionSnapshotService 只按明确 knowledge time 读取或解析已验证快照，并将会计三态、持仓敞口、可用流动性与担保品事实保持为分离视图。DataHealthService 由平台管理员发布不可变、内容寻址且带可见/有效区间的阈值 profile，查询端按 exact PositionSnapshot owner 与 `evaluated_at` 唯一解析 active profile，再对可选 verified DataSnapshot 做同步无状态检查；调用方不能提交或选择阈值。它把空持仓、UNKNOWN 分类、完整 `MarketTime` 精度的陈旧度及价格来源风险结构化为 warning，携带 coverage、fingerprint、hash 与 lineage，但不进入或降级任何数值计算。FactorRegistryService 只注册因子口径与 exact Instrument / curve-node 静态拓扑并提供双向查询；PortfolioRiskService 才按 verified curve points 与已注册 Factor convention 内部重定价，返回逐 Bond / exact Futures 仓位 KRD、完整 totals，以及按实际价格证据消费次数稳定排序的 `source_confidence`。组合 KRD、PositionViews、CapitalUse 与 DataHealthReport 的成功结果必须携带同一 `CoverageDeclaration` 形状，明示导入/参与仓位数、按 exact UnitRef 分组的 gross economic value、缺失关键字段数、实际消费的价格源分布及 distinct external DataSource exact-version 数；只有 DataHealthReport 能以已验证空 PositionSnapshot 的 `VERIFIED_EMPTY` 正性证明携带 `0 / 0`，其余三个 carrier 保持非空分母。顶层 KRD `source_confidence` 与 coverage 内副本由同一次解析产生且必须相等。PositionViews、CapitalUse 与 DataHealthReport 的健康 coverage 尚无 typed price evidence，因此其 source summary 缺席、external source count 为零；DataHealthReport 可选检查的 DataSnapshot 由独立 exact ref、issue 与 lineage 表达，不作为金融结果来源。bond-only KRD 结果只含内部 `CURVE_INTERPOLATION`；含 Futures 时还必须绑定实际消费的 verified DataSnapshot 与 `ACTIVE_QUOTE` DataSource exact version，并在混合时结构化标记 `mixed = true`。服务端从双边 exact midpoint、L3 合约规模及固定 base CTD 生成期货 KRD，不接受调用方提交 price、CTD、conversion factor、DV01、KRD 或权重。
-- `ficant.app.v1`：Platform Shell 使用的 App Registry、Session 与短期应用启动授权；它们不计入 17 个 Phase 1 领域对象。
-- `ficant.rates.v1`：Phase 2E 的固定收益参考分析调用合同；只承载强类型请求/结果并复用 `ficant.core.v1` 身份、Decimal、时间和错误，不把 Python 变成数值实现或控制平面。
+- `ficant.core.v1`：基础十进制数、时间、标识符、错误详情与机构主体（`Subject` / `SubjectStateSnapshot`）。
+- `ficant.market.v1`：债券、国债期货、交易日历、行情事实及各类市场规则包（`TaxRulePackV2`、`CgbFuturesDeliveryRulePack`、`FundingRulePack`、`RegulatoryRulePack`）。
+- `ficant.research.v1`：全局风险因子（`FactorDefinition`）、关键期限 DV01 敞口与持仓会计三态视图（`Position`）。
+- `ficant.rates.v1`：无外部存储依赖的本币利率定价服务（`RatesAnalyticsService`）。
 
-`DecimalValue` 的唯一表示是 `coefficient(string) + scale(uint32) + UnitRef`。时间 instant 使用 Protobuf `Timestamp`，并显式携带 IANA 市场时区和本地交易日期。Valuation、CurveSnapshot 与 Cashflow 只登记外部输入事实和来源；CurveSnapshot 的 point blob 也只是经 hash / size / canonical bytes 验证的收益率节点事实。数值 KRD 由独立 PortfolioRiskService 绑定这些事实、definition 与算法 identity 后产生，不能回写或冒充市场事实。
+## 校验与代码生成
 
-`MarketRulePack.content` 是加法式 `google.protobuf.Any`：`content_hash` 绑定其确定性 `value` bytes，而 `type_url` 只标识 L3 内容 schema。现有内容为 `CgbFuturesDeliveryRulePack`、`FundingRulePack`、`TaxRulePack` 与 `RegulatoryRulePack`：第一个由 `cgb-futures` adapter 解析，v2 还按 product 提供每百元报价口径下的 exact 合约规模；资金与税收包分别按精确 Subject 的 `FundingTier` 与完整 VAT / income profile pair 解析；`TaxRulePack` 还校验 Bond 的首发日期间与券级税收属性；`RegulatoryRulePack`（ADR-0026）由 Subject 的 `ConstraintSetRef` 精确绑定，只定义各 `limit_code` 的度量，上限数值属于 `SubjectStateSnapshot`。core 与通用 market 合同不解释其中的市场规则数值。
-
-iteration-3 Phase 2A 生成的现金流、估值和风险结果保持内部 `BondAnalyticsResult` 语义，并以内容寻址 Artifact 绑定输入与算法版本；本小迭代不扩展公共 Protobuf，也不得将派生结果写入上述外部事实消息。依据见 `docs/architecture/adr/0002-fixed-income-kernel-and-ffi-safety-boundary.md`。
-
-## 查询与平台安全切片
-
-- Definition 支持按 ID + version 精确读取、按 UTC instant 解析 as-of 版本，以及用 cursor 稳定分页读取历史版本。
-- Market Fact 支持按精确 Instrument version + 时间窗口分页查询，并支持按 ID 读取已发布 CurveSnapshot。
-- Artifact 与 SignalSet 分别支持读取对象及其分页血缘；不暴露 Ceph RGW/S3 凭据或物理对象存储接口。
-- `ficant.research.v1.ExperimentService.ReadNodeOutput` 是 Phase 5A 的加法式只读观测合同：只按 Run/Node 读取已持久化且经 Artifact/Ceph required-read、envelope hash 与 manifest 端口绑定共同校验的有界输出，不发布、修改或重新解释研究结果，也不暴露对象存储凭据。
-- `ficant.app.v1.PlatformService` 固定为 Registry、当前会话、会话刷新/撤销、应用启动授权/刷新/撤销七个 RPC。启动授权只在成功分支返回短期 credential、服务端裁剪 scopes、精确 origin、CSP、sandbox 与签发/过期时间；安全失败统一走 `SafeError`。
-- 为严格遵循 Interface 冻结的授权响应复用，Buf lint 仅对 `proto/ficant/app/v1/registry.proto` 忽略 `RPC_REQUEST_RESPONSE_UNIQUE` 和 `RPC_RESPONSE_STANDARD_NAME`；descriptor test 仍精确固定七个方法及输入/输出。
-
-## 固定生成器
-
-| 语言 | BSR remote plugin | revision | 上游与许可证 |
-|---|---|---:|---|
-| Rust message | `buf.build/community/neoeinstein-prost:v0.5.0` | 2 | `neoeinstein/protoc-gen-prost`；Apache-2.0；对应 prost 0.14.x。 |
-| Rust gRPC | `buf.build/community/neoeinstein-tonic:v0.5.0` | 4 | `neoeinstein/protoc-gen-prost`；Apache-2.0；对应 tonic/tonic-prost 0.14.x。 |
-| Python | `buf.build/protocolbuffers/python:v31.1` | 2 | `protocolbuffers/protobuf`；BSD-3-Clause。 |
-| Python gRPC | `buf.build/grpc/python:v1.73.1` | 1 | `grpc/grpc`；Apache-2.0。 |
-| TypeScript | `buf.build/bufbuild/es:v2.5.2` | 1 | `bufbuild/protobuf-es`；Apache-2.0；`target=ts`。 |
-
-version 与 revision 同时固定，禁止省略版本、改用 `latest` 或浮动 branch。插件元数据以 Buf 1.56.0 的 `buf registry sdk info` 和 `bufbuild/plugins` 对应版本清单为来源。
-
-## 验证合同
-
-1. 在 Ubuntu 24.04 固定工具环境运行 `buf format --diff --exit-code interface` 与 `buf lint interface`。
-2. 先把 `interface/buf.gen.yaml` 机械改写为 WSL 内部 `/tmp/ficant-task2d-*` 输出，连续生成两棵树并比较规范化 SHA-256；不得直接把未核对输出写入工作树。
-3. 确定性成立后，只把三种语言的生成目录机械同步到其分配路径。
-4. Rust descriptor inventory 必须从本目录重新构建 descriptor，验证 17 个对象、共享类型、字段类型、禁止浮点和平行包。
-5. Python consumer 必须真实导入生成 message；若需要共享 Python runtime/test 依赖，只能由 W1 更新 `python/pyproject.toml` 与 `uv.lock`。
-6. TypeScript 生成树在本任务验证确定性；consumer 编译由 W4 的 pnpm workspace/lock gate 完成。
-
-首次合同前的 `main` 为 `42f570f309e20c867f65cffbce76e7f6d64d65d5`，该提交不存在 `interface/buf.yaml`，因此首次 breaking 状态只能是 `not-applicable-initial-contract-baseline`，不能记作通过。
+```powershell
+buf format -w interface
+buf lint interface
+buf generate interface --template interface/buf.gen.yaml
+```

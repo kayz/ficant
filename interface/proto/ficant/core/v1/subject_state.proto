@@ -3,8 +3,6 @@ syntax = "proto3";
 package ficant.core.v1;
 
 import "ficant/core/v1/common.proto";
-import "ficant/core/v1/error.proto";
-import "ficant/core/v1/governance.proto";
 import "google/protobuf/timestamp.proto";
 
 message SubjectStateSnapshot {
@@ -21,29 +19,4 @@ message SubjectStateSnapshot {
 message LimitCeiling {
   string limit_code = 1;
   DecimalValue ceiling = 2;
-}
-
-message RegisterSubjectStateRequest {
-  SubjectStateSnapshot snapshot = 1;
-  ChangeJustification change = 2;
-  string idempotency_key = 3;
-}
-
-message RegisterSubjectStateResponse {
-  oneof result {
-    SubjectStateSnapshot snapshot = 1;
-    ErrorDetail error = 2;
-  }
-}
-
-message GetSubjectStateRequest {
-  Ulid snapshot_id = 1;
-  google.protobuf.Timestamp knowledge_at = 2;
-}
-
-message GetSubjectStateResponse {
-  oneof result {
-    SubjectStateSnapshot snapshot = 1;
-    ErrorDetail error = 2;
-  }
 }

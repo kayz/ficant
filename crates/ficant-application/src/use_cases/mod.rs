@@ -1,26 +1,20 @@
-pub mod bar_replay;
 pub mod bond_analytics;
 pub mod carry_roll;
-pub mod constraint_set;
-pub mod data_health;
-pub mod data_snapshot;
-pub mod data_sources;
-pub mod factor_topology;
-pub mod formal_outputs;
-pub mod funding_rule;
 pub mod futures_delivery;
 pub mod futures_hedge;
-pub mod governed_inputs;
-pub mod phase1_business_loop;
-pub mod phase4_submission;
-pub mod policy_calibration;
-pub mod portfolio_aggregation;
-pub mod portfolio_catalog;
-pub mod portfolio_performance;
-pub mod portfolio_risk;
-pub mod portfolio_workbench;
 pub mod position_views;
-pub mod rates_materialization;
-pub mod subject_resolution;
-pub mod tax_rule;
-pub mod verified_reads;
+pub mod rule_packs;
+
+pub use bond_analytics::{CalculateBondAnalytics, TaxAdjustedBondAnalytics, map_analytics_error};
+pub use carry_roll::{CalculateCarryRoll, InterpolateYieldCurve};
+pub use futures_delivery::{
+    CalculateFuturesDeliveryBasket, SubjectCandidateMeasures, subject_delivery_irr,
+};
+pub use futures_hedge::CalculateFuturesHedge;
+pub use position_views::{
+    CapitalUse, PositionView, PositionViews, calculate_capital_use, project_position_views,
+};
+pub use rule_packs::{
+    parse_verified_delivery_rule, parse_verified_funding_rule, parse_verified_regulatory_rule,
+    parse_verified_tax_rule,
+};

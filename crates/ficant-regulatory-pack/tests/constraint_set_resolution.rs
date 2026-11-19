@@ -1,17 +1,9 @@
 //! ADR-0026: a Subject's constraint set resolves from its exact regulatory `RulePack`, parses
 //! fail-closed, and binds to the ceilings of the Subject's state snapshot.
 
-use std::collections::BTreeMap;
-use std::future::Future;
-use std::task::{Context, Poll, Waker};
-
-use async_trait::async_trait;
-use ficant_application::ports::{
-    AccessScope, AppendDefinitionVersion, DefinitionIdentity, DefinitionRepository,
-    DefinitionValue, RegulatoryRulePackParser,
-};
-use ficant_application::use_cases::constraint_set::ResolveConstraintSet;
-use ficant_application::{ApplicationError, ApplicationErrorCategory, ApplicationErrorDetail};
+use ficant_application::ports::RegulatoryRulePackParser;
+use ficant_application::use_cases::parse_verified_regulatory_rule;
+use ficant_application::{ApplicationError, ApplicationErrorDetail};
 use ficant_contracts::ficant::market::v1::{
     ConstraintDefinition as ProtoDefinition, ConstraintMeasure as ProtoMeasure, RegulatoryRulePack,
 };
@@ -70,7 +62,7 @@ fn pack(version_value: u64, rule_type: &str, bytes: &[u8]) -> MarketRulePack {
 fn subject(constraint_set: Option<u64>) -> SubjectVersion {
     SubjectVersion::new(
         VersionRef::new(id('S'), version(1)),
-        AccessSet::new(["CN"], ["bond-replay"]).unwrap(),
+        AccessSet::new(["CN"], ["bond-pricing"]).unwrap(),
         FundingTier::DrAvailable,
         TaxTreatment::new("synthetic-vat", "synthetic-income").unwrap(),
         "synthetic-assessment",
@@ -80,24 +72,12 @@ fn subject(constraint_set: Option<u64>) -> SubjectVersion {
     .unwrap()
 }
 
-fn resolve(
-    definitions: &Definitions,
-    subject: &SubjectVersion,
-    at: MarketTime,
-) -> Result<ConstraintSet, ApplicationError> {
-    block_on(
-        ResolveConstraintSet::new(definitions, &RegulatoryRulePackV1Parser).execute(
-            &scope(),
-            subject,
-            at,
-        ),
-    )
-}
-
 #[test]
 fn the_subjects_exact_pack_resolves_into_ordered_definitions() {
-    let definitions = Definitions::new([pack(1, RULE_TYPE, &payload(three_constraints()))]);
-    let set = resolve(&definitions, &subject(Some(1)), time(12)).unwrap();
+    let rule_pack = pack(1, RULE_TYPE, &payload(three_constraints()));
+    let set =
+        parse_verified_regulatory_rule(&rule_pack, Some(&time(12)), &RegulatoryRulePackV1Parser)
+            .unwrap();
     assert_eq!(set.rule_pack(), &VersionRef::new(id('R'), version(1)));
     let parsed: Vec<(&str, ConstraintMeasure)> = set
         .definitions()
@@ -115,33 +95,18 @@ fn the_subjects_exact_pack_resolves_into_ordered_definitions() {
 }
 
 #[test]
-fn a_subject_without_a_constraint_set_fails_closed_naming_it() {
-    let definitions = Definitions::new([pack(1, RULE_TYPE, &payload(three_constraints()))]);
-    let error = resolve(&definitions, &subject(None), time(12)).unwrap_err();
-    assert_eq!(error.category(), ApplicationErrorCategory::ValidationFailed);
-    assert_eq!(
-        error.detail(),
-        Some(&ApplicationErrorDetail::RulePackItemMissing {
-            path: "subject.constraint_set_ref".to_owned(),
-        })
-    );
-}
-
-#[test]
-fn binding_drift_and_envelope_mismatch_fail_closed() {
+fn effective_window_and_envelope_mismatch_fail_closed() {
     let bytes = payload(three_constraints());
-    let definitions = Definitions::new([pack(1, RULE_TYPE, &bytes), pack(2, "funding", &bytes)]);
-    // Bound version does not exist.
-    assert_eq!(
-        resolve(&definitions, &subject(Some(3)), time(12))
-            .unwrap_err()
-            .category(),
-        ApplicationErrorCategory::LineageIncomplete
+    let valid_pack = pack(1, RULE_TYPE, &bytes);
+    let wrong_type = pack(2, "funding", &bytes);
+    assert!(
+        parse_verified_regulatory_rule(&valid_pack, Some(&time(15)), &RegulatoryRulePackV1Parser)
+            .is_err()
     );
-    // Not effective at the valuation time (the pack is effective 01:00-15:00, end exclusive).
-    assert!(resolve(&definitions, &subject(Some(1)), time(15)).is_err());
-    // Another rule type behind the bound reference.
-    assert!(resolve(&definitions, &subject(Some(2)), time(12)).is_err());
+    assert!(
+        parse_verified_regulatory_rule(&wrong_type, Some(&time(12)), &RegulatoryRulePackV1Parser)
+            .is_err()
+    );
 }
 
 #[test]
@@ -158,7 +123,6 @@ fn invalid_payloads_fail_closed_with_the_offending_item() {
         Some(ApplicationErrorDetail::RulePackItemMissing { path }) => path.clone(),
         other => panic!("unexpected detail {other:?}"),
     };
-    // A pack without constraints encodes to zero bytes, which is not valid RulePack content.
     assert!(RulePackContent::new(TYPE_URL, payload(vec![])).is_err());
     assert_eq!(
         item(parse(payload(vec![
@@ -181,7 +145,6 @@ fn invalid_payloads_fail_closed_with_the_offending_item() {
         )]))),
         "context.regulatory_rule_pack.content.constraints[0].limit_code"
     );
-    // Duplicate limit codes, garbage bytes and a foreign type URL are invalid.
     assert!(
         parse(payload(vec![
             definition("bond.total_face", ProtoMeasure::PortfolioFace),
@@ -206,9 +169,11 @@ fn invalid_payloads_fail_closed_with_the_offending_item() {
 
 #[test]
 fn the_set_binds_to_the_subjects_ceilings_by_limit_code() {
-    let definitions = Definitions::new([pack(1, RULE_TYPE, &payload(three_constraints()))]);
+    let rule_pack = pack(1, RULE_TYPE, &payload(three_constraints()));
     let subject = subject(Some(1));
-    let set = resolve(&definitions, &subject, time(12)).unwrap();
+    let set =
+        parse_verified_regulatory_rule(&rule_pack, Some(&time(12)), &RegulatoryRulePackV1Parser)
+            .unwrap();
     let ceiling = |code: &str, coefficient: &str| {
         LimitCeiling::new(code, DecimalValue::new(coefficient, 0, unit()).unwrap()).unwrap()
     };
@@ -254,7 +219,6 @@ fn the_set_binds_to_the_subjects_ceilings_by_limit_code() {
         "ceilings the set does not define are ignored"
     );
 
-    // A defined constraint without a ceiling, a negative ceiling, or another Subject's snapshot.
     let missing = state(
         subject.reference(),
         vec![
@@ -289,61 +253,6 @@ fn state(subject: &VersionRef, ceilings: Vec<LimitCeiling>) -> SubjectStateSnaps
     .unwrap()
 }
 
-struct Definitions {
-    values: BTreeMap<(String, u64), DefinitionValue>,
-}
-
-impl Definitions {
-    fn new(values: impl IntoIterator<Item = MarketRulePack>) -> Self {
-        Self {
-            values: values
-                .into_iter()
-                .map(DefinitionValue::MarketRulePack)
-                .map(|value| ((value.identity().to_owned(), value.version()), value))
-                .collect(),
-        }
-    }
-}
-
-#[async_trait]
-impl DefinitionRepository for Definitions {
-    async fn create_identity(&self, _: DefinitionIdentity) -> Result<(), ApplicationError> {
-        unreachable!("resolver performs only exact reads")
-    }
-
-    async fn append_version(
-        &self,
-        _: AppendDefinitionVersion,
-    ) -> Result<DefinitionValue, ApplicationError> {
-        unreachable!("resolver performs only exact reads")
-    }
-
-    async fn get_version(
-        &self,
-        _: &AccessScope,
-        definition_id: Ulid,
-        version: Version,
-    ) -> Result<Option<DefinitionValue>, ApplicationError> {
-        Ok(self
-            .values
-            .get(&(definition_id.as_str().to_owned(), version.get()))
-            .cloned())
-    }
-
-    async fn resolve_as_of(
-        &self,
-        _: &AccessScope,
-        _: Ulid,
-        _: MarketTime,
-    ) -> Result<Option<DefinitionValue>, ApplicationError> {
-        unreachable!("the constraint set is bound to an exact RulePack version")
-    }
-}
-
-fn scope() -> AccessScope {
-    AccessScope::new(id('T'), id('A'), vec![id('B')]).unwrap()
-}
-
 fn owner() -> OwnerRef {
     OwnerRef::new(id('T'), id('B'))
 }
@@ -367,15 +276,4 @@ fn time(hour: u32) -> MarketTime {
         "2026-03-04".parse().unwrap(),
     )
     .unwrap()
-}
-
-fn block_on<F: Future>(future: F) -> F::Output {
-    let mut context = Context::from_waker(Waker::noop());
-    let mut future = Box::pin(future);
-    loop {
-        match future.as_mut().poll(&mut context) {
-            Poll::Ready(output) => return output,
-            Poll::Pending => std::thread::yield_now(),
-        }
-    }
 }
