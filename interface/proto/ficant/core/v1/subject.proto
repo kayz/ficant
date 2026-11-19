@@ -3,9 +3,6 @@ syntax = "proto3";
 package ficant.core.v1;
 
 import "ficant/core/v1/common.proto";
-import "ficant/core/v1/error.proto";
-import "ficant/core/v1/governance.proto";
-import "ficant/core/v1/subject_state.proto";
 
 message Subject {
   Ulid subject_id = 1;
@@ -46,38 +43,4 @@ message TaxTreatment {
 
 message ConstraintSetRef {
   VersionRef ref = 1;
-}
-
-message RegisterSubjectRequest {
-  Subject subject = 1;
-  SubjectVersion subject_version = 2;
-  ChangeJustification change = 3;
-  string idempotency_key = 4;
-}
-
-message RegisterSubjectResponse {
-  oneof result {
-    SubjectRecord subject = 1;
-    ErrorDetail error = 2;
-  }
-}
-
-message GetSubjectRequest {
-  VersionRef subject_ref = 1;
-}
-
-message GetSubjectResponse {
-  oneof result {
-    SubjectRecord subject = 1;
-    ErrorDetail error = 2;
-  }
-}
-
-// RegistryService requires registry:write for registration and registry:read
-// for lookup. Scope is carried by the transport credential, not this API.
-service RegistryService {
-  rpc RegisterSubject(RegisterSubjectRequest) returns (RegisterSubjectResponse);
-  rpc GetSubject(GetSubjectRequest) returns (GetSubjectResponse);
-  rpc RegisterSubjectState(RegisterSubjectStateRequest) returns (RegisterSubjectStateResponse);
-  rpc GetSubjectState(GetSubjectStateRequest) returns (GetSubjectStateResponse);
 }

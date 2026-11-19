@@ -15,7 +15,6 @@
 !/rustfmt.toml
 !/clippy.toml
 !/cicd.yml
-!/iteration-*-checklist.md
 !/.config/
 !/.config/**
 !/.github/
@@ -30,33 +29,20 @@
 !/deploy/**
 !/docs/
 !/docs/**
-/docs/review/r1-acceptance-2026-07-27.md
 !/domain-packs/
 !/domain-packs/**
 !/interface/
 !/interface/**
-!/migrations/
-!/migrations/**
 !/python/
 !/python/**
 !/tests/
 !/tests/**
-!/web-dm/
-!/web-dm/**
 
-# Superseded governance roots, private material, worker state, and stale UI design roots.
-**/.[Pp][Rr][Oo][Qq][Aa][Ii][Dd]/
-**/.[Ss][Uu][Pp][Ee][Rr][Pp][Oo][Ww][Ee][Rr][Ss]/
-**/.[Pp][Ll][Aa][Nn][Nn][Ii][Nn][Gg]/
+# Local agent/IDE directories and temporary workspaces.
+**/.[Qq][Oo][Dd][Ee][Rr]/
 **/.[Cc][Oo][Dd][Ee][Xx]/
 **/.[Cc][Ll][Aa][Uu][Dd][Ee]/
-**/[Hh][Ii][Dd][Dd][Ee][Nn]/
-**/[Uu][Ii]-[Dd][Mm]/
 **/.[Ww][Oo][Rr][Kk][Tt][Rr][Ee][Ee][Ss]/
-**/[Ww][Oo][Rr][Kk][Ee][Rr]/
-**/[Ww][Oo][Rr][Kk][Ee][Rr][Ss]/
-**/.[Ww][Oo][Rr][Kk][Ee][Rr]/
-**/[Ww][Oo][Rr][Kk][Tt][Rr][Ee][Ee]/
 **/[Ww][Oo][Rr][Kk][Tt][Rr][Ee][Ee][Ss]/
 **/[Tt][Ee][Mm][Pp]/
 **/[Tt][Mm][Pp]/
@@ -71,8 +57,6 @@
 **/[Kk][Ee][Yy][Ss]/
 **/[Ss][Ee][Cc][Rr][Ee][Tt]/
 **/[Ss][Ee][Cc][Rr][Ee][Tt][Ss]/
-!/.github/scripts/tests/fixtures/secret/
-!/.github/scripts/tests/fixtures/secret/**
 **/id_rsa
 **/id_ed25519
 **/*.pem
@@ -84,12 +68,7 @@
 # Build and tool caches.
 **/target/
 **/build/
-**/.cache/
 **/.pytest_cache/
 **/.venv/
-**/node_modules/
 **/__pycache__/
 **/*.py[cod]
-**/playwright-report/
-**/test-results/
-**/.pnpm-store/

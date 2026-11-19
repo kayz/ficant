@@ -1,4 +1,4 @@
-"""Synchronous gRPC client for the Phase 2 reference analytics service."""
+"""Synchronous gRPC client for the Ficant onshore rates pricing service."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ _Result = TypeVar("_Result")
 
 
 class RatesError(Exception):
-    """Safe structured business failure returned by ``ficant-server``."""
+    """Structured business failure returned by ``ficant-server``."""
 
     def __init__(self, detail: ErrorDetail) -> None:
         super().__init__(detail.message)
@@ -24,27 +24,31 @@ class RatesError(Exception):
 
 
 class RatesClient:
-    """Authenticated synchronous client for all Phase 2A–2D calculations."""
+    """Synchronous client for onshore RMB bond, curve, delivery, and hedge pricing."""
 
     def __init__(
         self,
         endpoint: str,
-        bearer_token: str,
+        bearer_token: str | None = None,
         *,
         insecure: bool = False,
         timeout_seconds: float = 30.0,
         root_certificates: bytes | None = None,
     ) -> None:
-        if not endpoint or not bearer_token:
-            raise ValueError("endpoint and bearer_token are required")
+        if not endpoint:
+            raise ValueError("endpoint is required")
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
-        self._metadata = (("authorization", f"Bearer {bearer_token}"),)
+        self._metadata = (
+            (("authorization", f"Bearer {bearer_token}"),) if bearer_token else ()
+        )
         self._timeout = timeout_seconds
         if insecure:
             self._channel: grpc.Channel = grpc.insecure_channel(endpoint)
         else:
-            credentials = grpc.ssl_channel_credentials(root_certificates=root_certificates)
+            credentials = grpc.ssl_channel_credentials(
+                root_certificates=root_certificates
+            )
             self._channel = grpc.secure_channel(endpoint, credentials)
         self._stub = RatesAnalyticsServiceStub(self._channel)
 

@@ -16,24 +16,8 @@
       "name": "ficant-server",
       "dockerfile": "deploy/dev/RustService.Dockerfile",
       "build_arg": "ficant-server"
-    },
-    {
-      "name": "ficant-worker",
-      "dockerfile": "deploy/dev/RustService.Dockerfile",
-      "build_arg": "ficant-worker"
-    },
-    {
-      "name": "ficant-ui",
-      "dockerfile": "deploy/test/FicantUi.Dockerfile",
-      "build_arg": null
     }
   ],
-  "storage_runtime": {
-    "lock_file": "deploy/storage-runtime.lock.json",
-    "prepare_workflow": "prepare-storage-runtime.yml",
-    "application_release_build": false,
-    "application_release_scan": true
-  },
   "deploy": {
     "environment": "test",
     "trigger": "tag",

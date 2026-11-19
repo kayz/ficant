@@ -1,5 +1,4 @@
 .git
 build
 target
-**/node_modules
 python/.venv

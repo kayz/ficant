@@ -142,7 +142,8 @@ function Invoke-FicantCheckPlan {
         Write-Host ('==> {0}' -f $step.Name)
         Push-Location -LiteralPath $step.WorkingDirectory
         try {
-            & $step.FilePath @($step.ArgumentList)
+            $stepArgs = $step.ArgumentList
+            & $step.FilePath @stepArgs
             $exitCode = $LASTEXITCODE
         }
         finally {

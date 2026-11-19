@@ -63,20 +63,6 @@ sha256 = "6f98805688d19672bd699fbbfa2c2cf0fc054ac3df1f0e6a47664d963d530255"
 size = 123084
 license = "Apache-2.0"
 
-[node]
-version = "22.17.0"
-url = "https://nodejs.org/dist/v22.17.0/node-v22.17.0-linux-x64.tar.xz"
-sha256 = "325c0f1261e0c61bcae369a1274028e9cfb7ab7949c05512c5b1e630f7e80e12"
-size = 30482736
-image = "node@sha256:b04ce4ae4e95b522112c2e5c52f781471a5cbc3b594527bcddedee9bc48c03a0"
-license = "MIT"
-
-[pnpm]
-version = "10.12.4"
-url = "https://registry.npmjs.org/pnpm/-/pnpm-10.12.4.tgz"
-sha512 = "5ea8b0deed94ed68691c9bad4c955492705c5eeb8a87ef86bc62c74a26b037b08ff9570f108b2e4dbd1dd1a9186fea925e527f141c648e85af45631074680184"
-license = "MIT"
-
 [buf]
 version = "1.56.0"
 image = "bufbuild/buf@sha256:89fa92931e7873021a75f8233b27f5a1f59f0397a526d2f8d256dde82e21dc26"
@@ -91,24 +77,3 @@ compose_url = "https://github.com/docker/compose/releases/download/v2.32.4/docke
 compose_sha256_url = "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64.sha256"
 compose_sha256 = "ed1917fb54db184192ea9d0717bcd59e3662ea79db48bff36d3475516c480a6b"
 license = "Apache-2.0"
-
-[docker.host_runtime]
-client_version = "27.5.1"
-server_version = "27.5.1"
-server_os = "linux"
-server_architecture = "amd64"
-compose_version = "2.32.4-desktop.1"
-verification = "Host runtime evidence only; the desktop suffix is distinct from the frozen standalone Compose artifact"
-
-[docker.images.postgres]
-source_tag = "postgres:16.10-bookworm"
-repo_digest = "postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74"
-
-[docker.images.ceph]
-source_tag = "quay.io/ceph/ceph:v20.2.2"
-repo_digest = "quay.io/ceph/ceph@sha256:6b4b5ae33acd3d736eb26d2a19238bce71a22f9cfb99cca887ba6312d0957644"
-linux_amd64_manifest = "sha256:55a5c2014b4db34589ad8886606409727f633319131bb663d37e0d489e350703"
-runtime_image = "ficant/ceph-rgw-runtime:dev"
-dockerfile = "deploy/dev/Ceph.Dockerfile"
-runtime_user = "167:167"
-license = "LGPL-2.1-only OR LGPL-3.0-only"

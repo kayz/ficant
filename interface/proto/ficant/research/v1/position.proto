@@ -3,9 +3,6 @@ syntax = "proto3";
 package ficant.research.v1;
 
 import "ficant/core/v1/common.proto";
-import "ficant/core/v1/error.proto";
-import "ficant/core/v1/evidence.proto";
-import "ficant/core/v1/governance.proto";
 import "ficant/research/v1/coverage.proto";
 
 enum AccountingClassificationState {
@@ -57,44 +54,6 @@ message PositionSnapshot {
   repeated Position positions = 8;
 }
 
-message PublishPositionSnapshotRequest {
-  string idempotency_key = 1;
-  PositionSnapshot snapshot = 2;
-  ficant.core.v1.ChangeJustification change = 3;
-}
-
-message PublishPositionSnapshotResponse {
-  oneof result {
-    PositionSnapshot snapshot = 1;
-    ficant.core.v1.ErrorDetail error = 2;
-  }
-}
-
-message GetPositionSnapshotRequest {
-  ficant.core.v1.Ulid snapshot_id = 1;
-  ficant.core.v1.MarketTime knowledge_at = 2;
-}
-
-message GetPositionSnapshotResponse {
-  oneof result {
-    PositionSnapshot snapshot = 1;
-    ficant.core.v1.ErrorDetail error = 2;
-  }
-}
-
-message ResolvePositionSnapshotRequest {
-  ficant.core.v1.VersionRef subject_ref = 1;
-  ficant.core.v1.MarketTime observed_at = 2;
-  ficant.core.v1.MarketTime knowledge_at = 3;
-}
-
-message ResolvePositionSnapshotResponse {
-  oneof result {
-    PositionSnapshot snapshot = 1;
-    ficant.core.v1.ErrorDetail error = 2;
-  }
-}
-
 message PositionView {
   ficant.core.v1.Ulid position_id = 1;
   ficant.core.v1.DecimalValue economic_value = 2;
@@ -111,46 +70,4 @@ message PositionViews {
   repeated ficant.core.v1.LineageRef lineage = 3;
   repeated PositionView positions = 4;
   CoverageDeclaration coverage = 5;
-  ficant.core.v1.FormalOutputEvidence formal_evidence = 6;
-}
-
-message GetPositionViewsRequest {
-  ficant.core.v1.Ulid snapshot_id = 1;
-  ficant.core.v1.MarketTime knowledge_at = 2;
-}
-
-message GetPositionViewsResponse {
-  oneof result {
-    PositionViews views = 1;
-    ficant.core.v1.ErrorDetail error = 2;
-  }
-}
-
-message CapitalUse {
-  ficant.core.v1.Ulid snapshot_id = 1;
-  ficant.core.v1.Sha256 content_hash = 2;
-  repeated ficant.core.v1.LineageRef lineage = 3;
-  ficant.core.v1.DecimalValue total_capital_requirement = 4;
-  CoverageDeclaration coverage = 5;
-  ficant.core.v1.FormalOutputEvidence formal_evidence = 6;
-}
-
-message CalculateCapitalUseRequest {
-  ficant.core.v1.Ulid snapshot_id = 1;
-  ficant.core.v1.MarketTime knowledge_at = 2;
-}
-
-message CalculateCapitalUseResponse {
-  oneof result {
-    CapitalUse capital_use = 1;
-    ficant.core.v1.ErrorDetail error = 2;
-  }
-}
-
-service PositionSnapshotService {
-  rpc PublishPositionSnapshot(PublishPositionSnapshotRequest) returns (PublishPositionSnapshotResponse);
-  rpc GetPositionSnapshot(GetPositionSnapshotRequest) returns (GetPositionSnapshotResponse);
-  rpc ResolvePositionSnapshot(ResolvePositionSnapshotRequest) returns (ResolvePositionSnapshotResponse);
-  rpc GetPositionViews(GetPositionViewsRequest) returns (GetPositionViewsResponse);
-  rpc CalculateCapitalUse(CalculateCapitalUseRequest) returns (CalculateCapitalUseResponse);
 }

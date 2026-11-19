@@ -1,4 +1,4 @@
-//! Pure Phase 1 domain model.
+//! Pure domain model for onshore RMB fixed income pricing, rules, subjects, and positions.
 //!
 //! This crate contains validated values and immutable domain objects only. It
 //! deliberately has no transport, persistence, filesystem, network, async
@@ -15,11 +15,8 @@ pub mod constraint;
 pub mod curves;
 pub mod futures_delivery;
 pub mod futures_hedge;
-pub mod governance;
 pub mod market;
-pub mod portfolio;
 pub mod primitives;
-pub mod replay;
 pub mod research;
 pub mod subject;
 

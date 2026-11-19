@@ -1,12 +1,11 @@
 use chrono::{Duration, TimeZone, Utc};
 use proptest::prelude::*;
 
+use ficant_domain::DomainErrorCode;
 use ficant_domain::market::{Unit, UnitInput};
 use ficant_domain::primitives::{
-    ContentHash, LineageRef, MarketTime, OwnerRef, Ulid, Version, ensure_next_version,
+    ContentHash, MarketTime, OwnerRef, Ulid, Version, ensure_next_version,
 };
-use ficant_domain::research::{DataSnapshot, DataSnapshotInput};
-use ficant_domain::{ContentAddressed, DomainErrorCode};
 
 const ULID_PREFIX: &str = "01ARZ3NDEKTSV4RRFFQ69G5FA";
 
@@ -16,17 +15,6 @@ fn id(suffix: char) -> Ulid {
 
 fn owner() -> OwnerRef {
     OwnerRef::new(id('A'), id('B'))
-}
-
-fn market_time(day: u32) -> MarketTime {
-    let instant = Utc
-        .with_ymd_and_hms(2026, 1, day, 1, 0, 0)
-        .single()
-        .unwrap();
-    let local_date = instant
-        .with_timezone(&chrono_tz::Asia::Shanghai)
-        .date_naive();
-    MarketTime::new(instant, "Asia/Shanghai", local_date).unwrap()
 }
 
 proptest! {
@@ -84,27 +72,16 @@ proptest! {
     }
 
     #[test]
-    fn q2_inv_04_published_snapshot_payload_drift_is_detected(
+    fn q2_inv_04_content_hash_drift_is_detected(
         payload in prop::collection::vec(any::<u8>(), 1..512),
         mutation in any::<u8>(),
     ) {
         let content_hash = ContentHash::digest(&payload);
-        let snapshot = DataSnapshot::new(DataSnapshotInput {
-            data_snapshot_id: id('E'),
-            owner: owner(),
-            visible_at: market_time(2),
-            as_of: market_time(1),
-            schema_hash: ContentHash::digest(b"schema"),
-            manifest_hash: ContentHash::digest(b"manifest"),
-            blob_content_hash: content_hash,
-            lineage: vec![LineageRef::content_addressed(id('F'), ContentHash::digest(b"source"))],
-        })
-        .unwrap();
         let mut changed = payload.clone();
         changed.push(mutation);
 
         prop_assert_eq!(
-            snapshot.verify_content(&changed).unwrap_err(),
+            content_hash.verify(&changed).unwrap_err(),
             DomainErrorCode::ContentHashMismatch
         );
     }
