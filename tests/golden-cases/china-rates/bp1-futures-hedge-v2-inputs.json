@@ -1,0 +1,74 @@
+{
+  "schema": "ficant.bp1-futures-hedge-v2.inputs.v1",
+  "rule_pack": {
+    "bin_path": "domain-packs/cgb-futures/cgb-futures-v2.bin",
+    "bin_sha256": "8d8a0b944557cf87ed3d1f598ab3e02fa7f0aec125c1c26c17280acbd24367c5",
+    "json_path": "domain-packs/cgb-futures/cgb-futures-v2.json",
+    "json_lf_sha256": "38c7dc7f84b2cd864d5981c96afce76ecb2392dc0fd9304307b80c65b1fd50c4",
+    "decimal_unit_id": "01ARZ3NDEKTSV4RRFFQ69G5FAP",
+    "decimal_unit_version": 1,
+    "face_quote_basis": "100.000000000000",
+    "products": {
+      "T": {
+        "contract_size_in_quote_units": 10000,
+        "contract_notional": "1000000.000000000000"
+      },
+      "TF": {
+        "contract_size_in_quote_units": 10000,
+        "contract_notional": "1000000.000000000000"
+      },
+      "TL": {
+        "contract_size_in_quote_units": 10000,
+        "contract_notional": "1000000.000000000000"
+      },
+      "TS": {
+        "contract_size_in_quote_units": 20000,
+        "contract_notional": "2000000.000000000000"
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "TS-2m-long-risk-rounds-short-four",
+      "product": "TS",
+      "target_dv01": "1234.500000000000",
+      "ctd_dv01_per_100": "0.014500000000",
+      "conversion_factor": "0.998700000000"
+    },
+    {
+      "id": "TS-2m-exact-long-two",
+      "product": "TS",
+      "target_dv01": "-750.000000000000",
+      "ctd_dv01_per_100": "0.018000000000",
+      "conversion_factor": "0.960000000000"
+    },
+    {
+      "id": "TS-2m-half-contract-tie-prefers-zero",
+      "product": "TS",
+      "target_dv01": "-187.500000000000",
+      "ctd_dv01_per_100": "0.018000000000",
+      "conversion_factor": "0.960000000000"
+    },
+    {
+      "id": "TF-1m-short-risk-rounds-long-six",
+      "product": "TF",
+      "target_dv01": "-2350.000000000000",
+      "ctd_dv01_per_100": "0.041200000000",
+      "conversion_factor": "0.981500000000"
+    },
+    {
+      "id": "T-1m-long-risk-rounds-short-four",
+      "product": "T",
+      "target_dv01": "3250.000000000000",
+      "ctd_dv01_per_100": "0.082500000000",
+      "conversion_factor": "0.964200000000"
+    },
+    {
+      "id": "TL-1m-short-risk-rounds-long-three",
+      "product": "TL",
+      "target_dv01": "-6400.000000000000",
+      "ctd_dv01_per_100": "0.198500000000",
+      "conversion_factor": "0.912400000000"
+    }
+  ]
+}

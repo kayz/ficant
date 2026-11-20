@@ -1,0 +1,339 @@
+{
+  "schema": "ficant.bp1-policy-bank-pretax.inputs.v1",
+  "calendar": {
+    "calendar_id": "01ARZ3NDEKTSV4RRFFQ69G5FAC",
+    "version": 1,
+    "market": "CFETS",
+    "market_timezone": "Asia/Shanghai",
+    "coverage_start": "2024-01-01",
+    "coverage_end": "2026-12-31",
+    "first_session": {
+      "local_date": "2024-01-01",
+      "closed": true
+    },
+    "last_session": {
+      "local_date": "2026-12-31",
+      "closed": false
+    },
+    "sources": [
+      {
+        "year": 2024,
+        "document_number": "中汇交发〔2023〕301号",
+        "title": "关于2024年全国银行间债券市场节假日休市安排的通知",
+        "url": "https://www.chinamoney.org.cn/chinese/rdgz/20231225/2757785.html",
+        "holidays_closed": [
+          [
+            "2024-01-01",
+            "2024-01-01"
+          ],
+          [
+            "2024-02-10",
+            "2024-02-17"
+          ],
+          [
+            "2024-04-04",
+            "2024-04-06"
+          ],
+          [
+            "2024-05-01",
+            "2024-05-05"
+          ],
+          [
+            "2024-06-10",
+            "2024-06-10"
+          ],
+          [
+            "2024-09-15",
+            "2024-09-17"
+          ],
+          [
+            "2024-10-01",
+            "2024-10-07"
+          ]
+        ],
+        "work_weekends_open": [
+          "2024-02-04",
+          "2024-02-18",
+          "2024-04-07",
+          "2024-04-28",
+          "2024-05-11",
+          "2024-09-14",
+          "2024-09-29",
+          "2024-10-12"
+        ]
+      },
+      {
+        "year": 2025,
+        "document_number": "中汇交发〔2024〕358号",
+        "title": "关于2025年全国银行间债券市场节假日休市安排的通知",
+        "url": "https://www.chinamoney.org.cn/chinese/rdgz/20241212/3017037.html",
+        "holidays_closed": [
+          [
+            "2025-01-01",
+            "2025-01-01"
+          ],
+          [
+            "2025-01-28",
+            "2025-02-04"
+          ],
+          [
+            "2025-04-04",
+            "2025-04-06"
+          ],
+          [
+            "2025-05-01",
+            "2025-05-05"
+          ],
+          [
+            "2025-05-31",
+            "2025-06-02"
+          ],
+          [
+            "2025-10-01",
+            "2025-10-08"
+          ]
+        ],
+        "work_weekends_open": [
+          "2025-01-26",
+          "2025-02-08",
+          "2025-04-27",
+          "2025-09-28",
+          "2025-10-11"
+        ]
+      },
+      {
+        "year": 2026,
+        "document_number": "中汇交发〔2025〕460号",
+        "title": "关于2026年全国银行间债券市场节假日休市安排的通知",
+        "url": "https://www.chinamoney.org.cn/chinese/rdgz/20251219/3254572.html",
+        "holidays_closed": [
+          [
+            "2026-01-01",
+            "2026-01-03"
+          ],
+          [
+            "2026-02-15",
+            "2026-02-23"
+          ],
+          [
+            "2026-04-04",
+            "2026-04-06"
+          ],
+          [
+            "2026-05-01",
+            "2026-05-05"
+          ],
+          [
+            "2026-06-19",
+            "2026-06-21"
+          ],
+          [
+            "2026-09-25",
+            "2026-09-27"
+          ],
+          [
+            "2026-10-01",
+            "2026-10-07"
+          ]
+        ],
+        "work_weekends_open": [
+          "2026-01-04",
+          "2026-02-14",
+          "2026-02-28",
+          "2026-05-09",
+          "2026-09-20",
+          "2026-10-10"
+        ]
+      }
+    ],
+    "non_business_days": [
+      "2024-01-01",
+      "2024-02-12",
+      "2024-02-13",
+      "2024-02-14",
+      "2024-02-15",
+      "2024-02-16",
+      "2024-04-04",
+      "2024-04-05",
+      "2024-05-01",
+      "2024-05-02",
+      "2024-05-03",
+      "2024-06-10",
+      "2024-09-16",
+      "2024-09-17",
+      "2024-10-01",
+      "2024-10-02",
+      "2024-10-03",
+      "2024-10-04",
+      "2024-10-07",
+      "2025-01-01",
+      "2025-01-28",
+      "2025-01-29",
+      "2025-01-30",
+      "2025-01-31",
+      "2025-02-03",
+      "2025-02-04",
+      "2025-04-04",
+      "2025-05-01",
+      "2025-05-02",
+      "2025-05-05",
+      "2025-06-02",
+      "2025-10-01",
+      "2025-10-02",
+      "2025-10-03",
+      "2025-10-06",
+      "2025-10-07",
+      "2025-10-08",
+      "2026-01-01",
+      "2026-01-02",
+      "2026-02-16",
+      "2026-02-17",
+      "2026-02-18",
+      "2026-02-19",
+      "2026-02-20",
+      "2026-02-23",
+      "2026-04-06",
+      "2026-05-01",
+      "2026-05-04",
+      "2026-05-05",
+      "2026-06-19",
+      "2026-09-25",
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07"
+    ],
+    "work_weekends": [
+      "2024-02-04",
+      "2024-02-18",
+      "2024-04-07",
+      "2024-04-28",
+      "2024-05-11",
+      "2024-09-14",
+      "2024-09-29",
+      "2024-10-12",
+      "2025-01-26",
+      "2025-02-08",
+      "2025-04-27",
+      "2025-09-28",
+      "2025-10-11",
+      "2026-01-04",
+      "2026-02-14",
+      "2026-02-28",
+      "2026-05-09",
+      "2026-09-20",
+      "2026-10-10"
+    ]
+  },
+  "bonds": [
+    {
+      "case_id": "CDB-10Y-ANNUAL",
+      "issuer_label": "CDB",
+      "execution_mode": "PRE_TAX",
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "first_issue_date": "2025-07-12",
+      "current_issue_date": "2025-07-12",
+      "maturity_date": "2035-07-12",
+      "coupon_frequency": "ANNUAL",
+      "day_count": "ACT_ACT_BOND_ISMA",
+      "business_day": "FOLLOWING",
+      "coupon_rate": "0.026500000000",
+      "face_value": "100.000000000000",
+      "cumulative_issued_amount": "120000000000.000000000000",
+      "settlement_date": "2026-06-15",
+      "yield_in_input": "0.024200000000",
+      "price_in_input": "101.250000000000"
+    },
+    {
+      "case_id": "CDB-10Y-SEMIANNUAL",
+      "issuer_label": "CDB",
+      "execution_mode": "PRE_TAX",
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "first_issue_date": "2025-03-20",
+      "current_issue_date": "2025-03-20",
+      "maturity_date": "2035-03-20",
+      "coupon_frequency": "SEMIANNUAL",
+      "day_count": "ACT_ACT_BOND_ISMA",
+      "business_day": "FOLLOWING",
+      "coupon_rate": "0.028000000000",
+      "face_value": "100.000000000000",
+      "cumulative_issued_amount": "80000000000.000000000000",
+      "settlement_date": "2026-06-15",
+      "yield_in_input": "0.025800000000",
+      "price_in_input": "99.400000000000"
+    },
+    {
+      "case_id": "EIBC-5Y-ANNUAL",
+      "issuer_label": "EIBC",
+      "execution_mode": "PRE_TAX",
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "first_issue_date": "2025-08-20",
+      "current_issue_date": "2025-08-20",
+      "maturity_date": "2030-08-20",
+      "coupon_frequency": "ANNUAL",
+      "day_count": "ACT_ACT_BOND_ISMA",
+      "business_day": "FOLLOWING",
+      "coupon_rate": "0.022500000000",
+      "face_value": "100.000000000000",
+      "cumulative_issued_amount": "45000000000.000000000000",
+      "settlement_date": "2026-06-15",
+      "yield_in_input": "0.020500000000",
+      "price_in_input": "100.650000000000"
+    },
+    {
+      "case_id": "EIBC-3Y-SEMIANNUAL",
+      "issuer_label": "EIBC",
+      "execution_mode": "PRE_TAX",
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "first_issue_date": "2025-04-01",
+      "current_issue_date": "2025-04-01",
+      "maturity_date": "2028-04-01",
+      "coupon_frequency": "SEMIANNUAL",
+      "day_count": "ACT_ACT_BOND_ISMA",
+      "business_day": "FOLLOWING",
+      "coupon_rate": "0.021000000000",
+      "face_value": "100.000000000000",
+      "cumulative_issued_amount": "30000000000.000000000000",
+      "settlement_date": "2026-09-29",
+      "yield_in_input": "0.019500000000",
+      "price_in_input": "99.850000000000"
+    },
+    {
+      "case_id": "ADBC-1Y-EXACT-ANNUAL",
+      "issuer_label": "ADBC",
+      "execution_mode": "PRE_TAX",
+      "calendar_requirement": "EXACT_MARKET",
+      "first_issue_date": "2025-11-15",
+      "current_issue_date": "2025-11-15",
+      "maturity_date": "2026-11-15",
+      "coupon_frequency": "ANNUAL",
+      "day_count": "ACT_ACT_BOND_ISMA",
+      "business_day": "FOLLOWING",
+      "coupon_rate": "0.018000000000",
+      "face_value": "100.000000000000",
+      "cumulative_issued_amount": "10000000000.000000000000",
+      "settlement_date": "2026-06-15",
+      "yield_in_input": "0.017500000000",
+      "price_in_input": "100.050000000000"
+    },
+    {
+      "case_id": "ADBC-7Y-SEMIANNUAL",
+      "issuer_label": "ADBC",
+      "execution_mode": "PRE_TAX",
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "first_issue_date": "2024-08-18",
+      "current_issue_date": "2025-02-18",
+      "maturity_date": "2031-08-18",
+      "coupon_frequency": "SEMIANNUAL",
+      "day_count": "ACT_ACT_BOND_ISMA",
+      "business_day": "FOLLOWING",
+      "coupon_rate": "0.023500000000",
+      "face_value": "100.000000000000",
+      "cumulative_issued_amount": "25000000000.000000000000",
+      "settlement_date": "2026-06-15",
+      "yield_in_input": "0.021500000000",
+      "price_in_input": "100.800000000000"
+    }
+  ]
+}

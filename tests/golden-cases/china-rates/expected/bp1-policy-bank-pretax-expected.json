@@ -1,0 +1,1101 @@
+{
+  "schema": "ficant.bp1-policy-bank-pretax.expected.v1",
+  "calendar": {
+    "calendar_id": "01ARZ3NDEKTSV4RRFFQ69G5FAC",
+    "version": 1,
+    "market": "CFETS",
+    "market_timezone": "Asia/Shanghai",
+    "coverage_start": "2024-01-01",
+    "coverage_end": "2026-12-31",
+    "first_session": {
+      "local_date": "2024-01-01",
+      "closed": true
+    },
+    "last_session": {
+      "local_date": "2026-12-31",
+      "closed": false
+    },
+    "sources": [
+      {
+        "year": 2024,
+        "document_number": "中汇交发〔2023〕301号",
+        "title": "关于2024年全国银行间债券市场节假日休市安排的通知",
+        "url": "https://www.chinamoney.org.cn/chinese/rdgz/20231225/2757785.html"
+      },
+      {
+        "year": 2025,
+        "document_number": "中汇交发〔2024〕358号",
+        "title": "关于2025年全国银行间债券市场节假日休市安排的通知",
+        "url": "https://www.chinamoney.org.cn/chinese/rdgz/20241212/3017037.html"
+      },
+      {
+        "year": 2026,
+        "document_number": "中汇交发〔2025〕460号",
+        "title": "关于2026年全国银行间债券市场节假日休市安排的通知",
+        "url": "https://www.chinamoney.org.cn/chinese/rdgz/20251219/3254572.html"
+      }
+    ]
+  },
+  "case_results": {
+    "CDB-10Y-ANNUAL:YIELD_IN": {
+      "bond_id": "CDB-10Y-ANNUAL",
+      "mode": "YIELD_IN",
+      "execution_mode": "PRE_TAX",
+      "measures_tax_basis": "PRE_TAX",
+      "after_tax": null,
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+      "settlement_date": "2026-06-15",
+      "input_value": "0.024200000000",
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-07-12",
+          "payment_date": "2026-07-13",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2027-07-12",
+          "payment_date": "2027-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2028-07-12",
+          "payment_date": "2028-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2029-07-12",
+          "payment_date": "2029-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2030-07-12",
+          "payment_date": "2030-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 6,
+          "nominal_date": "2031-07-12",
+          "payment_date": "2031-07-14",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 7,
+          "nominal_date": "2032-07-12",
+          "payment_date": "2032-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 8,
+          "nominal_date": "2033-07-12",
+          "payment_date": "2033-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 9,
+          "nominal_date": "2034-07-12",
+          "payment_date": "2034-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 10,
+          "nominal_date": "2035-07-12",
+          "payment_date": "2035-07-12",
+          "coupon": "2.650000000000",
+          "principal": "100.000000000000",
+          "total": "102.650000000000"
+        }
+      ],
+      "measures": {
+        "accrued_interest": "2.453972602740",
+        "clean_price": "101.851603959681",
+        "dirty_price": "104.305576562421",
+        "yield_to_maturity": "0.024200000000",
+        "macaulay_duration": "8.001735741187",
+        "modified_duration": "7.812669147810",
+        "convexity": "74.161230005165",
+        "dv01": "0.081490509688"
+      }
+    },
+    "CDB-10Y-ANNUAL:PRICE_IN": {
+      "bond_id": "CDB-10Y-ANNUAL",
+      "mode": "PRICE_IN",
+      "execution_mode": "PRE_TAX",
+      "measures_tax_basis": "PRE_TAX",
+      "after_tax": null,
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+      "settlement_date": "2026-06-15",
+      "input_value": "101.250000000000",
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-07-12",
+          "payment_date": "2026-07-13",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2027-07-12",
+          "payment_date": "2027-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2028-07-12",
+          "payment_date": "2028-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2029-07-12",
+          "payment_date": "2029-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2030-07-12",
+          "payment_date": "2030-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 6,
+          "nominal_date": "2031-07-12",
+          "payment_date": "2031-07-14",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 7,
+          "nominal_date": "2032-07-12",
+          "payment_date": "2032-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 8,
+          "nominal_date": "2033-07-12",
+          "payment_date": "2033-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 9,
+          "nominal_date": "2034-07-12",
+          "payment_date": "2034-07-12",
+          "coupon": "2.650000000000",
+          "principal": "0.000000000000",
+          "total": "2.650000000000"
+        },
+        {
+          "sequence": 10,
+          "nominal_date": "2035-07-12",
+          "payment_date": "2035-07-12",
+          "coupon": "2.650000000000",
+          "principal": "100.000000000000",
+          "total": "102.650000000000"
+        }
+      ],
+      "measures": {
+        "accrued_interest": "2.453972602740",
+        "clean_price": "101.250000000000",
+        "dirty_price": "103.703972602740",
+        "yield_to_maturity": "0.024940848633",
+        "macaulay_duration": "7.997559673430",
+        "modified_duration": "7.802947539947",
+        "convexity": "74.007081583770",
+        "dv01": "0.080919679365"
+      }
+    },
+    "CDB-10Y-SEMIANNUAL:YIELD_IN": {
+      "bond_id": "CDB-10Y-SEMIANNUAL",
+      "mode": "YIELD_IN",
+      "execution_mode": "PRE_TAX",
+      "measures_tax_basis": "PRE_TAX",
+      "after_tax": null,
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+      "settlement_date": "2026-06-15",
+      "input_value": "0.025800000000",
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-09-20",
+          "payment_date": "2026-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2027-03-20",
+          "payment_date": "2027-03-22",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2027-09-20",
+          "payment_date": "2027-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2028-03-20",
+          "payment_date": "2028-03-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2028-09-20",
+          "payment_date": "2028-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 6,
+          "nominal_date": "2029-03-20",
+          "payment_date": "2029-03-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 7,
+          "nominal_date": "2029-09-20",
+          "payment_date": "2029-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 8,
+          "nominal_date": "2030-03-20",
+          "payment_date": "2030-03-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 9,
+          "nominal_date": "2030-09-20",
+          "payment_date": "2030-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 10,
+          "nominal_date": "2031-03-20",
+          "payment_date": "2031-03-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 11,
+          "nominal_date": "2031-09-20",
+          "payment_date": "2031-09-22",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 12,
+          "nominal_date": "2032-03-20",
+          "payment_date": "2032-03-22",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 13,
+          "nominal_date": "2032-09-20",
+          "payment_date": "2032-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 14,
+          "nominal_date": "2033-03-20",
+          "payment_date": "2033-03-21",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 15,
+          "nominal_date": "2033-09-20",
+          "payment_date": "2033-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 16,
+          "nominal_date": "2034-03-20",
+          "payment_date": "2034-03-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 17,
+          "nominal_date": "2034-09-20",
+          "payment_date": "2034-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 18,
+          "nominal_date": "2035-03-20",
+          "payment_date": "2035-03-20",
+          "coupon": "1.400000000000",
+          "principal": "100.000000000000",
+          "total": "101.400000000000"
+        }
+      ],
+      "measures": {
+        "accrued_interest": "0.661956521739",
+        "clean_price": "101.713490444602",
+        "dirty_price": "102.375446966341",
+        "yield_to_maturity": "0.025800000000",
+        "macaulay_duration": "7.791808764650",
+        "modified_duration": "7.692574552918",
+        "convexity": "67.678748350642",
+        "dv01": "0.078753086734"
+      }
+    },
+    "CDB-10Y-SEMIANNUAL:PRICE_IN": {
+      "bond_id": "CDB-10Y-SEMIANNUAL",
+      "mode": "PRICE_IN",
+      "execution_mode": "PRE_TAX",
+      "measures_tax_basis": "PRE_TAX",
+      "after_tax": null,
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+      "settlement_date": "2026-06-15",
+      "input_value": "99.400000000000",
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-09-20",
+          "payment_date": "2026-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2027-03-20",
+          "payment_date": "2027-03-22",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2027-09-20",
+          "payment_date": "2027-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2028-03-20",
+          "payment_date": "2028-03-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2028-09-20",
+          "payment_date": "2028-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 6,
+          "nominal_date": "2029-03-20",
+          "payment_date": "2029-03-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 7,
+          "nominal_date": "2029-09-20",
+          "payment_date": "2029-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 8,
+          "nominal_date": "2030-03-20",
+          "payment_date": "2030-03-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 9,
+          "nominal_date": "2030-09-20",
+          "payment_date": "2030-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 10,
+          "nominal_date": "2031-03-20",
+          "payment_date": "2031-03-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 11,
+          "nominal_date": "2031-09-20",
+          "payment_date": "2031-09-22",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 12,
+          "nominal_date": "2032-03-20",
+          "payment_date": "2032-03-22",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 13,
+          "nominal_date": "2032-09-20",
+          "payment_date": "2032-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 14,
+          "nominal_date": "2033-03-20",
+          "payment_date": "2033-03-21",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 15,
+          "nominal_date": "2033-09-20",
+          "payment_date": "2033-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 16,
+          "nominal_date": "2034-03-20",
+          "payment_date": "2034-03-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 17,
+          "nominal_date": "2034-09-20",
+          "payment_date": "2034-09-20",
+          "coupon": "1.400000000000",
+          "principal": "0.000000000000",
+          "total": "1.400000000000"
+        },
+        {
+          "sequence": 18,
+          "nominal_date": "2035-03-20",
+          "payment_date": "2035-03-20",
+          "coupon": "1.400000000000",
+          "principal": "100.000000000000",
+          "total": "101.400000000000"
+        }
+      ],
+      "measures": {
+        "accrued_interest": "0.661956521739",
+        "clean_price": "99.400000000000",
+        "dirty_price": "100.061956521739",
+        "yield_to_maturity": "0.028776254620",
+        "macaulay_duration": "7.777532360831",
+        "modified_duration": "7.667215488272",
+        "convexity": "67.324113927187",
+        "dv01": "0.076719668879"
+      }
+    },
+    "EIBC-5Y-ANNUAL:YIELD_IN": {
+      "bond_id": "EIBC-5Y-ANNUAL",
+      "mode": "YIELD_IN",
+      "execution_mode": "PRE_TAX",
+      "measures_tax_basis": "PRE_TAX",
+      "after_tax": null,
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+      "settlement_date": "2026-06-15",
+      "input_value": "0.020500000000",
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-08-20",
+          "payment_date": "2026-08-20",
+          "coupon": "2.250000000000",
+          "principal": "0.000000000000",
+          "total": "2.250000000000"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2027-08-20",
+          "payment_date": "2027-08-20",
+          "coupon": "2.250000000000",
+          "principal": "0.000000000000",
+          "total": "2.250000000000"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2028-08-20",
+          "payment_date": "2028-08-21",
+          "coupon": "2.250000000000",
+          "principal": "0.000000000000",
+          "total": "2.250000000000"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2029-08-20",
+          "payment_date": "2029-08-20",
+          "coupon": "2.250000000000",
+          "principal": "0.000000000000",
+          "total": "2.250000000000"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2030-08-20",
+          "payment_date": "2030-08-20",
+          "coupon": "2.250000000000",
+          "principal": "100.000000000000",
+          "total": "102.250000000000"
+        }
+      ],
+      "measures": {
+        "accrued_interest": "1.843150684932",
+        "clean_price": "100.790180933689",
+        "dirty_price": "102.633331618621",
+        "yield_to_maturity": "0.020500000000",
+        "macaulay_duration": "3.966741693323",
+        "modified_duration": "3.887057024325",
+        "convexity": "19.495020642457",
+        "dv01": "0.039894163267"
+      }
+    },
+    "EIBC-5Y-ANNUAL:PRICE_IN": {
+      "bond_id": "EIBC-5Y-ANNUAL",
+      "mode": "PRICE_IN",
+      "execution_mode": "PRE_TAX",
+      "measures_tax_basis": "PRE_TAX",
+      "after_tax": null,
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+      "settlement_date": "2026-06-15",
+      "input_value": "100.650000000000",
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-08-20",
+          "payment_date": "2026-08-20",
+          "coupon": "2.250000000000",
+          "principal": "0.000000000000",
+          "total": "2.250000000000"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2027-08-20",
+          "payment_date": "2027-08-20",
+          "coupon": "2.250000000000",
+          "principal": "0.000000000000",
+          "total": "2.250000000000"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2028-08-20",
+          "payment_date": "2028-08-21",
+          "coupon": "2.250000000000",
+          "principal": "0.000000000000",
+          "total": "2.250000000000"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2029-08-20",
+          "payment_date": "2029-08-20",
+          "coupon": "2.250000000000",
+          "principal": "0.000000000000",
+          "total": "2.250000000000"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2030-08-20",
+          "payment_date": "2030-08-20",
+          "coupon": "2.250000000000",
+          "principal": "100.000000000000",
+          "total": "102.250000000000"
+        }
+      ],
+      "measures": {
+        "accrued_interest": "1.843150684932",
+        "clean_price": "100.650000000000",
+        "dirty_price": "102.493150684932",
+        "yield_to_maturity": "0.020851692030",
+        "macaulay_duration": "3.966534596805",
+        "modified_duration": "3.885515033940",
+        "convexity": "19.480400331931",
+        "dv01": "0.039823869789"
+      }
+    },
+    "EIBC-3Y-SEMIANNUAL:YIELD_IN": {
+      "bond_id": "EIBC-3Y-SEMIANNUAL",
+      "mode": "YIELD_IN",
+      "execution_mode": "PRE_TAX",
+      "measures_tax_basis": "PRE_TAX",
+      "after_tax": null,
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+      "settlement_date": "2026-09-29",
+      "input_value": "0.019500000000",
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-10-01",
+          "payment_date": "2026-10-08",
+          "coupon": "1.050000000000",
+          "principal": "0.000000000000",
+          "total": "1.050000000000"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2027-04-01",
+          "payment_date": "2027-04-01",
+          "coupon": "1.050000000000",
+          "principal": "0.000000000000",
+          "total": "1.050000000000"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2027-10-01",
+          "payment_date": "2027-10-01",
+          "coupon": "1.050000000000",
+          "principal": "0.000000000000",
+          "total": "1.050000000000"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2028-04-01",
+          "payment_date": "2028-04-03",
+          "coupon": "1.050000000000",
+          "principal": "100.000000000000",
+          "total": "101.050000000000"
+        }
+      ],
+      "measures": {
+        "accrued_interest": "1.038524590164",
+        "clean_price": "100.221419876415",
+        "dirty_price": "101.259944466579",
+        "yield_to_maturity": "0.019500000000",
+        "macaulay_duration": "1.474559469012",
+        "modified_duration": "1.460321335986",
+        "convexity": "2.890156400659",
+        "dv01": "0.014787205859"
+      }
+    },
+    "EIBC-3Y-SEMIANNUAL:PRICE_IN": {
+      "bond_id": "EIBC-3Y-SEMIANNUAL",
+      "mode": "PRICE_IN",
+      "execution_mode": "PRE_TAX",
+      "measures_tax_basis": "PRE_TAX",
+      "after_tax": null,
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+      "settlement_date": "2026-09-29",
+      "input_value": "99.850000000000",
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-10-01",
+          "payment_date": "2026-10-08",
+          "coupon": "1.050000000000",
+          "principal": "0.000000000000",
+          "total": "1.050000000000"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2027-04-01",
+          "payment_date": "2027-04-01",
+          "coupon": "1.050000000000",
+          "principal": "0.000000000000",
+          "total": "1.050000000000"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2027-10-01",
+          "payment_date": "2027-10-01",
+          "coupon": "1.050000000000",
+          "principal": "0.000000000000",
+          "total": "1.050000000000"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2028-04-01",
+          "payment_date": "2028-04-03",
+          "coupon": "1.050000000000",
+          "principal": "100.000000000000",
+          "total": "101.050000000000"
+        }
+      ],
+      "measures": {
+        "accrued_interest": "1.038524590164",
+        "clean_price": "99.850000000000",
+        "dirty_price": "100.888524590164",
+        "yield_to_maturity": "0.022018026377",
+        "macaulay_duration": "1.474471650872",
+        "modified_duration": "1.458415930657",
+        "convexity": "2.882771903935",
+        "dv01": "0.014713743268"
+      }
+    },
+    "ADBC-1Y-EXACT-ANNUAL:YIELD_IN": {
+      "bond_id": "ADBC-1Y-EXACT-ANNUAL",
+      "mode": "YIELD_IN",
+      "execution_mode": "PRE_TAX",
+      "measures_tax_basis": "PRE_TAX",
+      "after_tax": null,
+      "calendar_requirement": "EXACT_MARKET",
+      "calendar_resolution": "EXACT",
+      "settlement_date": "2026-06-15",
+      "input_value": "0.017500000000",
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-11-15",
+          "payment_date": "2026-11-16",
+          "coupon": "1.800000000000",
+          "principal": "100.000000000000",
+          "total": "101.800000000000"
+        }
+      ],
+      "measures": {
+        "accrued_interest": "1.045479452055",
+        "clean_price": "100.016899054052",
+        "dirty_price": "101.062378506106",
+        "yield_to_maturity": "0.017500000000",
+        "macaulay_duration": "0.419178082192",
+        "modified_duration": "0.411968631147",
+        "convexity": "0.574601328623",
+        "dv01": "0.004163452996"
+      }
+    },
+    "ADBC-1Y-EXACT-ANNUAL:PRICE_IN": {
+      "bond_id": "ADBC-1Y-EXACT-ANNUAL",
+      "mode": "PRICE_IN",
+      "execution_mode": "PRE_TAX",
+      "measures_tax_basis": "PRE_TAX",
+      "after_tax": null,
+      "calendar_requirement": "EXACT_MARKET",
+      "calendar_resolution": "EXACT",
+      "settlement_date": "2026-06-15",
+      "input_value": "100.050000000000",
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-11-15",
+          "payment_date": "2026-11-16",
+          "coupon": "1.800000000000",
+          "principal": "100.000000000000",
+          "total": "101.800000000000"
+        }
+      ],
+      "measures": {
+        "accrued_interest": "1.045479452055",
+        "clean_price": "100.050000000000",
+        "dirty_price": "101.095479452055",
+        "yield_to_maturity": "0.016705404690",
+        "macaulay_duration": "0.419178082192",
+        "modified_duration": "0.412290600854",
+        "convexity": "0.575499826722",
+        "dv01": "0.004168071620"
+      }
+    },
+    "ADBC-7Y-SEMIANNUAL:YIELD_IN": {
+      "bond_id": "ADBC-7Y-SEMIANNUAL",
+      "mode": "YIELD_IN",
+      "execution_mode": "PRE_TAX",
+      "measures_tax_basis": "PRE_TAX",
+      "after_tax": null,
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+      "settlement_date": "2026-06-15",
+      "input_value": "0.021500000000",
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-08-18",
+          "payment_date": "2026-08-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2027-02-18",
+          "payment_date": "2027-02-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2027-08-18",
+          "payment_date": "2027-08-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2028-02-18",
+          "payment_date": "2028-02-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2028-08-18",
+          "payment_date": "2028-08-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 6,
+          "nominal_date": "2029-02-18",
+          "payment_date": "2029-02-19",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 7,
+          "nominal_date": "2029-08-18",
+          "payment_date": "2029-08-20",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 8,
+          "nominal_date": "2030-02-18",
+          "payment_date": "2030-02-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 9,
+          "nominal_date": "2030-08-18",
+          "payment_date": "2030-08-19",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 10,
+          "nominal_date": "2031-02-18",
+          "payment_date": "2031-02-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 11,
+          "nominal_date": "2031-08-18",
+          "payment_date": "2031-08-18",
+          "coupon": "1.175000000000",
+          "principal": "100.000000000000",
+          "total": "101.175000000000"
+        }
+      ],
+      "measures": {
+        "accrued_interest": "0.759530386740",
+        "clean_price": "100.973438762893",
+        "dirty_price": "101.732969149634",
+        "yield_to_maturity": "0.021500000000",
+        "macaulay_duration": "4.870257936434",
+        "modified_duration": "4.818459496843",
+        "convexity": "26.568914517044",
+        "dv01": "0.049019621862"
+      }
+    },
+    "ADBC-7Y-SEMIANNUAL:PRICE_IN": {
+      "bond_id": "ADBC-7Y-SEMIANNUAL",
+      "mode": "PRICE_IN",
+      "execution_mode": "PRE_TAX",
+      "measures_tax_basis": "PRE_TAX",
+      "after_tax": null,
+      "calendar_requirement": "REFERENCE_REPLAY",
+      "calendar_resolution": "PROVISIONAL_WEEKEND_ONLY",
+      "settlement_date": "2026-06-15",
+      "input_value": "100.800000000000",
+      "cashflows": [
+        {
+          "sequence": 1,
+          "nominal_date": "2026-08-18",
+          "payment_date": "2026-08-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 2,
+          "nominal_date": "2027-02-18",
+          "payment_date": "2027-02-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 3,
+          "nominal_date": "2027-08-18",
+          "payment_date": "2027-08-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 4,
+          "nominal_date": "2028-02-18",
+          "payment_date": "2028-02-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 5,
+          "nominal_date": "2028-08-18",
+          "payment_date": "2028-08-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 6,
+          "nominal_date": "2029-02-18",
+          "payment_date": "2029-02-19",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 7,
+          "nominal_date": "2029-08-18",
+          "payment_date": "2029-08-20",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 8,
+          "nominal_date": "2030-02-18",
+          "payment_date": "2030-02-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 9,
+          "nominal_date": "2030-08-18",
+          "payment_date": "2030-08-19",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 10,
+          "nominal_date": "2031-02-18",
+          "payment_date": "2031-02-18",
+          "coupon": "1.175000000000",
+          "principal": "0.000000000000",
+          "total": "1.175000000000"
+        },
+        {
+          "sequence": 11,
+          "nominal_date": "2031-08-18",
+          "payment_date": "2031-08-18",
+          "coupon": "1.175000000000",
+          "principal": "100.000000000000",
+          "total": "101.175000000000"
+        }
+      ],
+      "measures": {
+        "accrued_interest": "0.759530386740",
+        "clean_price": "100.800000000000",
+        "dirty_price": "101.559530386740",
+        "yield_to_maturity": "0.021854160557",
+        "macaulay_duration": "4.869911336105",
+        "modified_duration": "4.817272611556",
+        "convexity": "26.557279618656",
+        "dv01": "0.048923997139"
+      }
+    }
+  }
+}
