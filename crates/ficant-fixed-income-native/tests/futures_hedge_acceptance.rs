@@ -13,7 +13,13 @@ use serde_json::Value;
 
 #[test]
 fn safe_adapter_preserves_direction_exact_hedge_and_zero_hand_tie() {
-    let exact = input("500", "0.045", "0.9");
+    let root = repository_root();
+    let inputs =
+        read_json(&root.join("tests/golden-cases/china-rates/phase2d-futures-hedge-inputs.json"));
+    let contract_notional = fixed(string(&inputs, "contract_notional"));
+    let face_quote_basis = fixed(string(&inputs, "quote_face"));
+
+    let exact = input(contract_notional, face_quote_basis, "500", "0.045", "0.9");
     let result = CalculateFuturesHedge::new(&NativeFuturesHedgeEngine)
         .execute(&exact)
         .unwrap();
@@ -23,12 +29,37 @@ fn safe_adapter_preserves_direction_exact_hedge_and_zero_hand_tie() {
     assert_eq!(result.measures().residual_dv01(), FixedDecimal::ZERO);
     assert_eq!(result.measures().hedge_effectiveness(), fixed("1"));
 
-    let tie = input("-250", "0.045", "0.9");
+    let tie = input(contract_notional, face_quote_basis, "-250", "0.045", "0.9");
     let result = NativeFuturesHedgeEngine.calculate(&tie).unwrap();
     assert_eq!(result.measures().raw_contracts(), fixed("0.5"));
     assert_eq!(result.measures().recommended_contracts(), 0);
     assert_eq!(result.measures().residual_dv01(), fixed("-250"));
     assert_eq!(result.measures().hedge_effectiveness(), FixedDecimal::ZERO);
+
+    let doubled_basis = FuturesHedgeInput::new(
+        OwnerRef::new(id('A'), id('B')),
+        object('C'),
+        object('D'),
+        object('E'),
+        object('F'),
+        object('G'),
+        object('H'),
+        object('J'),
+        None,
+        CgbFuturesProduct::TenYear,
+        contract_notional,
+        face_quote_basis.checked_mul_integer(2).unwrap(),
+        fixed("500"),
+        fixed("0.09"),
+        fixed("0.9"),
+    )
+    .unwrap();
+    let doubled_result = NativeFuturesHedgeEngine.calculate(&doubled_basis).unwrap();
+    assert_eq!(
+        doubled_result.measures().futures_contract_dv01(),
+        fixed("500")
+    );
+    assert_eq!(doubled_result.measures().recommended_contracts(), -1);
 }
 
 #[test]
@@ -40,11 +71,13 @@ fn production_matches_all_four_frozen_decimal_oracle_cases() {
         &root
             .join("tests/golden-cases/china-rates/expected/phase2d-futures-hedge-v1-expected.json"),
     );
+    let contract_notional = fixed(string(&inputs, "contract_notional"));
+    let face_quote_basis = fixed(string(&inputs, "quote_face"));
     let cases = inputs["cases"].as_array().unwrap();
     assert_eq!(cases.len(), 4);
     for case in cases {
         let case_id = string(case, "id");
-        let input = frozen_input(case);
+        let input = frozen_input(case, contract_notional, face_quote_basis);
         let result = NativeFuturesHedgeEngine
             .calculate(&input)
             .unwrap_or_else(|error| panic!("{case_id} failed: {error:?}"));
@@ -76,7 +109,11 @@ fn production_matches_all_four_frozen_decimal_oracle_cases() {
     }
 }
 
-fn frozen_input(case: &Value) -> FuturesHedgeInput {
+fn frozen_input(
+    case: &Value,
+    contract_notional: FixedDecimal,
+    face_quote_basis: FixedDecimal,
+) -> FuturesHedgeInput {
     let product = match string(case, "product") {
         "TS" => CgbFuturesProduct::TwoYear,
         "TF" => CgbFuturesProduct::FiveYear,
@@ -93,13 +130,17 @@ fn frozen_input(case: &Value) -> FuturesHedgeInput {
         object('G'),
         object('H'),
         object('J'),
-        MarketTime::new(
-            Utc.with_ymd_and_hms(2026, 7, 20, 4, 0, 0).single().unwrap(),
-            "Asia/Shanghai",
-            NaiveDate::from_ymd_opt(2026, 7, 20).unwrap(),
-        )
-        .unwrap(),
+        Some(
+            MarketTime::new(
+                Utc.with_ymd_and_hms(2026, 7, 20, 4, 0, 0).single().unwrap(),
+                "Asia/Shanghai",
+                NaiveDate::from_ymd_opt(2026, 7, 20).unwrap(),
+            )
+            .unwrap(),
+        ),
         product,
+        contract_notional,
+        face_quote_basis,
         fixed(string(case, "target_dv01")),
         fixed(string(case, "ctd_dv01_per_100")),
         fixed(string(case, "conversion_factor")),
@@ -123,7 +164,13 @@ fn string<'a>(value: &'a Value, field: &str) -> &'a str {
     value[field].as_str().unwrap()
 }
 
-fn input(target: &str, ctd: &str, factor: &str) -> FuturesHedgeInput {
+fn input(
+    contract_notional: FixedDecimal,
+    face_quote_basis: FixedDecimal,
+    target: &str,
+    ctd: &str,
+    factor: &str,
+) -> FuturesHedgeInput {
     FuturesHedgeInput::new(
         OwnerRef::new(id('A'), id('B')),
         object('C'),
@@ -133,13 +180,17 @@ fn input(target: &str, ctd: &str, factor: &str) -> FuturesHedgeInput {
         object('G'),
         object('H'),
         object('J'),
-        MarketTime::new(
-            Utc.with_ymd_and_hms(2026, 7, 20, 4, 0, 0).single().unwrap(),
-            "Asia/Shanghai",
-            NaiveDate::from_ymd_opt(2026, 7, 20).unwrap(),
-        )
-        .unwrap(),
+        Some(
+            MarketTime::new(
+                Utc.with_ymd_and_hms(2026, 7, 20, 4, 0, 0).single().unwrap(),
+                "Asia/Shanghai",
+                NaiveDate::from_ymd_opt(2026, 7, 20).unwrap(),
+            )
+            .unwrap(),
+        ),
         CgbFuturesProduct::TenYear,
+        contract_notional,
+        face_quote_basis,
         fixed(target),
         fixed(ctd),
         fixed(factor),

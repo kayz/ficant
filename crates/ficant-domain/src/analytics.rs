@@ -25,6 +25,13 @@ pub enum AnalyticsMode {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
+pub enum BondTaxBasis {
+    PreTax = 1,
+    TaxAdjusted = 2,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum CalendarRequirement {
     ReferenceReplay = 1,
     ExactMarket = 2,
@@ -119,24 +126,18 @@ impl BondTerms {
         coupon_rate: FixedDecimal,
         face_amount: FixedDecimal,
     ) -> DomainResult<Self> {
-        if first_issue_date >= maturity_date
-            || !coupon_rate.is_non_negative()
-            || !face_amount.is_positive()
-        {
-            return Err(DomainErrorCode::InvalidValue);
-        }
-        Ok(Self {
+        Self::with_issuance_and_optional_tax(
             first_issue_date,
-            current_issue_date: first_issue_date,
+            first_issue_date,
             maturity_date,
             frequency,
             day_count,
             business_day,
             coupon_rate,
             face_amount,
-            cumulative_issued_amount: face_amount,
-            tax_attributes: None,
-        })
+            face_amount,
+            None,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -151,6 +152,33 @@ impl BondTerms {
         face_amount: FixedDecimal,
         cumulative_issued_amount: FixedDecimal,
         tax_attributes: crate::market::BondTaxAttributes,
+    ) -> DomainResult<Self> {
+        Self::with_issuance_and_optional_tax(
+            first_issue_date,
+            current_issue_date,
+            maturity_date,
+            frequency,
+            day_count,
+            business_day,
+            coupon_rate,
+            face_amount,
+            cumulative_issued_amount,
+            Some(tax_attributes),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_issuance_and_optional_tax(
+        first_issue_date: NaiveDate,
+        current_issue_date: NaiveDate,
+        maturity_date: NaiveDate,
+        frequency: CouponFrequency,
+        day_count: DayCountConvention,
+        business_day: BusinessDayConvention,
+        coupon_rate: FixedDecimal,
+        face_amount: FixedDecimal,
+        cumulative_issued_amount: FixedDecimal,
+        tax_attributes: Option<crate::market::BondTaxAttributes>,
     ) -> DomainResult<Self> {
         if first_issue_date >= maturity_date
             || current_issue_date < first_issue_date
@@ -171,7 +199,7 @@ impl BondTerms {
             coupon_rate,
             face_amount,
             cumulative_issued_amount,
-            tax_attributes: Some(tax_attributes),
+            tax_attributes,
         })
     }
 
@@ -317,6 +345,7 @@ pub struct BondAnalyticsInput {
     terms: BondTerms,
     mode: AnalyticsMode,
     input_value: FixedDecimal,
+    tax_basis: BondTaxBasis,
 }
 
 impl BondAnalyticsInput {
@@ -359,6 +388,7 @@ impl BondAnalyticsInput {
             terms,
             mode,
             input_value,
+            tax_basis: BondTaxBasis::PreTax,
         })
     }
 
@@ -406,6 +436,10 @@ impl BondAnalyticsInput {
     pub const fn input_value(&self) -> FixedDecimal {
         self.input_value
     }
+    #[must_use]
+    pub const fn tax_basis(&self) -> BondTaxBasis {
+        self.tax_basis
+    }
 
     /// Rebuilds the same calculation lineage with adjusted terms and the exact pre-tax price.
     ///
@@ -416,7 +450,7 @@ impl BondAnalyticsInput {
         terms: BondTerms,
         clean_price: FixedDecimal,
     ) -> DomainResult<Self> {
-        Self::new(
+        let mut adjusted = Self::new(
             self.owner.clone(),
             self.bond.clone(),
             self.rule_pack.clone(),
@@ -428,7 +462,9 @@ impl BondAnalyticsInput {
             terms,
             AnalyticsMode::PriceIn,
             clean_price,
-        )
+        )?;
+        adjusted.tax_basis = BondTaxBasis::TaxAdjusted;
+        Ok(adjusted)
     }
 }
 
@@ -623,6 +659,10 @@ impl BondAnalyticsResult {
     #[must_use]
     pub fn input(&self) -> &BondAnalyticsInput {
         &self.input
+    }
+    #[must_use]
+    pub const fn tax_basis(&self) -> BondTaxBasis {
+        self.input.tax_basis()
     }
     #[must_use]
     pub const fn calendar_resolution(&self) -> CalendarResolution {

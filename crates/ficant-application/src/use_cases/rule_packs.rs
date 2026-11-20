@@ -31,6 +31,25 @@ pub fn parse_verified_delivery_rule(
     parser.parse(content, product)
 }
 
+pub fn parse_verified_delivery_rule_for_per_100_hedge(
+    rule_pack: &MarketRulePack,
+    valuation_at: Option<&MarketTime>,
+    product: CgbFuturesProduct,
+    parser: &dyn FuturesDeliveryRuleParser,
+) -> ApplicationResult<FuturesDeliveryRule> {
+    let content = validate_envelope(
+        rule_pack,
+        valuation_at,
+        parser.market(),
+        parser.rule_type(),
+        parser.type_url(),
+        None,
+        None,
+        "context.rule_pack.content",
+    )?;
+    parser.parse_for_per_100_hedge(content, product)
+}
+
 pub fn parse_verified_funding_rule(
     rule_pack: &MarketRulePack,
     valuation_at: Option<&MarketTime>,

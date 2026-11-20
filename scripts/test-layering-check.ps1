@@ -4,15 +4,22 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $gatePath = Join-Path $PSScriptRoot 'check-layering.ps1'
+$fixtureProducerPath = Join-Path $repoRoot 'python\tests\test_layering_invariants.py'
+
 if (-not (Test-Path -LiteralPath $gatePath -PathType Leaf)) {
     throw "Layering gate script is missing: $gatePath"
+}
+if (-not (Test-Path -LiteralPath $fixtureProducerPath -PathType Leaf)) {
+    throw "Shared layering fixture producer is missing: $fixtureProducerPath"
 }
 if ($null -eq (Get-Command 'pwsh' -ErrorAction SilentlyContinue)) {
     throw 'Required command pwsh was not found.'
 }
-
-$script:AssertionCount = 0
+if ($null -eq (Get-Command 'uv' -ErrorAction SilentlyContinue)) {
+    throw 'Required command uv was not found.'
+}
 
 $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
 $tempRoot = [System.IO.Path]::GetFullPath((Join-Path $tempBase ('ficant-layering-gate-' + [Guid]::NewGuid().ToString('N'))))
@@ -22,140 +29,167 @@ if (-not $tempRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnor
 
 function Write-FixtureFile {
     param(
+        [Parameter(Mandatory)][string]$Root,
         [Parameter(Mandatory)][string]$RelativePath,
         [Parameter(Mandatory)][string]$Content
     )
 
-    $path = Join-Path $tempRoot ($RelativePath.Replace('/', '\'))
+    $path = Join-Path $Root ($RelativePath.Replace('/', '\'))
     $parent = Split-Path -Parent $path
     New-Item -ItemType Directory -Path $parent -Force | Out-Null
-    Set-Content -LiteralPath $path -Value $Content -Encoding utf8
+    [System.IO.File]::WriteAllText($path, $Content, [System.Text.UTF8Encoding]::new($false))
     return $path
 }
 
-function Invoke-GateExpect {
-    param(
-        [Parameter(Mandatory)][int]$ExpectedExitCode,
-        [Parameter(Mandatory)][string]$Scenario
-    )
+function Initialize-CleanFixtureRoot {
+    param([Parameter(Mandatory)][string]$Root)
 
-    $output = & pwsh -NoProfile -File $gatePath -RepositoryRoot $tempRoot 2>&1
-    $actualExitCode = $LASTEXITCODE
-    if ($actualExitCode -ne $ExpectedExitCode) {
-        $renderedOutput = ($output | Out-String).Trim()
-        throw "Scenario '$Scenario' expected exit code $ExpectedExitCode but got $actualExitCode. Output: $renderedOutput"
-    }
-
-    $script:AssertionCount++
+    New-Item -ItemType Directory -Path $Root -Force | Out-Null
+    Write-FixtureFile -Root $Root -RelativePath 'scripts/layering-allowlist.json' -Content "[]`n" | Out-Null
+    Write-FixtureFile -Root $Root -RelativePath 'crates/ficant-domain/src/placeholder.rs' -Content "pub const CLEAN: u32 = 1;`n" | Out-Null
 }
 
-$countryCode = [string]::Concat([char]67, [char]78)
-$allowlist = '[]'
-
 try {
+    Push-Location -LiteralPath $repoRoot
+    try {
+        $uvArgs = @(
+            'run', '--locked', '--project', 'python',
+            'python', 'python/tests/test_layering_invariants.py', '--emit-fixtures'
+        )
+        $rawJsonLines = & uv @uvArgs
+        $uvExitCode = $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
+    }
+
+    if ($uvExitCode -ne 0) {
+        throw "Failed to emit shared layering fixtures via uv (exit code $uvExitCode)."
+    }
+
+    $rawJson = ($rawJsonLines -join "`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($rawJson)) {
+        throw 'Shared layering fixture emitter returned empty output.'
+    }
+
+    $catalog = $rawJson | ConvertFrom-Json -Depth 10
+    if ($null -eq $catalog -or $catalog.version -ne 1) {
+        throw "Unsupported shared layering fixture catalog version: $($catalog.version)"
+    }
+
+    $fixtures = @($catalog.fixtures)
+    if ($fixtures.Count -eq 0) {
+        throw 'Shared layering fixture catalog is empty.'
+    }
+
+    $seenIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($fixture in $fixtures) {
+        if ([string]::IsNullOrWhiteSpace($fixture.id)) {
+            throw 'Fixture entry is missing a non-empty id.'
+        }
+        if (-not $seenIds.Add($fixture.id)) {
+            throw "Duplicate fixture id detected in shared catalog: $($fixture.id)"
+        }
+        if ($fixture.expected_exit_code -notin @(0, 1)) {
+            throw "Fixture '$($fixture.id)' has invalid expected_exit_code: $($fixture.expected_exit_code)"
+        }
+    }
+
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
-    Write-FixtureFile -RelativePath 'scripts/layering-allowlist.json' -Content $allowlist | Out-Null
-    Write-FixtureFile -RelativePath 'crates/ficant-domain/src/placeholder.rs' -Content 'pub const CLEAN: u32 = 1;' | Out-Null
-    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'empty allowlist and clean source pass'
 
-    $domainRulePath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/market_rules.rs' -Content 'fn original_term_months() -> u32 { 120 }'
-    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'domain rule table is rejected'
-    Remove-Item -LiteralPath $domainRulePath
-    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'domain rule table removal restores pass'
-
-    $comparison = 'let supported = market == "' + $countryCode + '";'
-    $comparisonPath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/market_comparison.rs' -Content $comparison
-    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'market comparison is rejected'
-    Remove-Item -LiteralPath $comparisonPath
-    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'market comparison removal restores pass'
-
-    $matchBranch = 'match market { "' + $countryCode + '" => 1, _ => 0 }'
-    $matchPath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/market_match.rs' -Content $matchBranch
-    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'market match branch is rejected'
-    Remove-Item -LiteralPath $matchPath
-    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'market match removal restores pass'
-
-    $mapBranch = 'let values = HashMap::from([("' + $countryCode + '", 1)]);'
-    $mapPath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/market_map.rs' -Content $mapBranch
-    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'market keyed map is rejected'
-    Remove-Item -LiteralPath $mapPath
-    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'market map removal restores pass'
-
-    $quote = [char]34
-    $concatenatedBranch = 'let supported = market == (' + $quote + [char]67 + $quote + ' + ' + $quote + [char]78 + $quote + ');'
-    $concatenatedPath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/market_concatenation.rs' -Content $concatenatedBranch
-    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'concatenated market code is rejected'
-    Remove-Item -LiteralPath $concatenatedPath
-    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'concatenated market code removal restores pass'
-
-    $cppPath = Write-FixtureFile -RelativePath 'cpp/market_branch.cpp' -Content ('if (market == "' + $countryCode + '") { return 1; }')
-    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'C++ market branch is rejected'
-    Remove-Item -LiteralPath $cppPath
-    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'C++ market branch removal restores pass'
-
-    $cppRuleFixtures = @(
-        [pscustomobject]@{ Scenario = 'C++ delivery eligibility rule'; Content = 'static const uint32_t original_term_max_months = 120;' },
-        [pscustomobject]@{ Scenario = 'C++ delivery months rule'; Content = 'static const uint32_t delivery_months[] = {3, 6, 9, 12};' },
-        [pscustomobject]@{ Scenario = 'C++ standard coupon rule'; Content = 'static const double nominal_coupon = 0.03;' },
-        [pscustomobject]@{ Scenario = 'C++ face quote basis rule'; Content = 'static const double face_quote_basis = 100.0;' },
-        [pscustomobject]@{ Scenario = 'C++ rounding scale rule'; Content = 'static const uint32_t conversion_factor_rounding_places = 4;' },
-        [pscustomobject]@{ Scenario = 'C++ annual day basis rule'; Content = 'static const uint32_t annual_day_basis = 365;' }
-    )
-    foreach ($fixture in $cppRuleFixtures) {
-        $cppRulePath = Write-FixtureFile -RelativePath 'cpp/fixed-income-kernel/src/futures_rules.cpp' -Content $fixture.Content
-        Invoke-GateExpect -ExpectedExitCode 1 -Scenario ($fixture.Scenario + ' is rejected')
-        Remove-Item -LiteralPath $cppRulePath
-        Invoke-GateExpect -ExpectedExitCode 0 -Scenario ($fixture.Scenario + ' removal restores pass')
+    $preparedFixtures = foreach ($fixture in $fixtures) {
+        $fixtureRoot = Join-Path $tempRoot $fixture.id
+        Initialize-CleanFixtureRoot -Root $fixtureRoot
+        Write-FixtureFile -Root $fixtureRoot -RelativePath $fixture.relative_path -Content $fixture.content | Out-Null
+        [pscustomobject]@{
+            Id = [string]$fixture.id
+            Category = [string]$fixture.category
+            RelativePath = [string]$fixture.relative_path
+            ExpectedExitCode = [int]$fixture.expected_exit_code
+            FixtureRoot = $fixtureRoot
+        }
     }
 
-    $fundingRuleFixtures = @(
-        [pscustomobject]@{ Scenario = 'Subject funding rate'; Path = 'interface/proto/ficant/core/v1/subject.proto'; Content = 'double annual_financing_rate = 0.018;' },
-        [pscustomobject]@{ Scenario = 'SubjectState funding rate'; Path = 'interface/proto/ficant/core/v1/subject_state.proto'; Content = 'double financing_rate = 0.018;' },
-        [pscustomobject]@{ Scenario = 'domain funding rate'; Path = 'crates/ficant-domain/src/subject.rs'; Content = 'let funding_rate = 0.018;' },
-        [pscustomobject]@{ Scenario = 'C++ funding rate'; Path = 'cpp/fixed-income-kernel/src/funding.cpp'; Content = 'const double financing_rate = 0.018;' },
-        [pscustomobject]@{ Scenario = 'FFI funding rate'; Path = 'crates/ficant-kernel-sys/src/lib.rs'; Content = 'let annual_financing_rate = 0.018;' }
-    )
-    foreach ($fixture in $fundingRuleFixtures) {
-        $fundingRulePath = Write-FixtureFile -RelativePath $fixture.Path -Content $fixture.Content
-        Invoke-GateExpect -ExpectedExitCode 1 -Scenario ($fixture.Scenario + ' is rejected')
-        Remove-Item -LiteralPath $fundingRulePath
-        Invoke-GateExpect -ExpectedExitCode 0 -Scenario ($fixture.Scenario + ' removal restores pass')
+    $results = @($preparedFixtures | ForEach-Object -Parallel {
+        $item = $_
+        $output = & pwsh -NoProfile -NonInteractive -File $using:gatePath -RepositoryRoot $item.FixtureRoot 2>&1
+        $actualExitCode = $LASTEXITCODE
+        [pscustomobject]@{
+            Id = $item.Id
+            Category = $item.Category
+            RelativePath = $item.RelativePath
+            ExpectedExitCode = $item.ExpectedExitCode
+            ActualExitCode = $actualExitCode
+            Output = ($output | Out-String).Trim()
+        }
+    } -ThrottleLimit 8)
+
+    $resultsById = @{}
+    foreach ($res in $results) {
+        $resultsById[$res.Id] = $res
     }
 
-    $taxRuleFixtures = @(
-        [pscustomobject]@{ Scenario = 'Subject tax rate'; Path = 'interface/proto/ficant/core/v1/subject.proto'; Content = 'double coupon_tax_rate = 0.13;' },
-        [pscustomobject]@{ Scenario = 'Bond/domain tax rate'; Path = 'crates/ficant-domain/src/market/bond.rs'; Content = 'let coupon_tax_rate = 0.13;' },
-        [pscustomobject]@{ Scenario = 'C++ tax rate'; Path = 'cpp/fixed-income-kernel/src/tax.cpp'; Content = 'const double coupon_tax_rate = 0.13;' },
-        [pscustomobject]@{ Scenario = 'FFI tax rate'; Path = 'crates/ficant-kernel-sys/src/lib.rs'; Content = 'let coupon_tax_rate = 0.13;' }
-    )
-    foreach ($fixture in $taxRuleFixtures) {
-        $taxRulePath = Write-FixtureFile -RelativePath $fixture.Path -Content $fixture.Content
-        Invoke-GateExpect -ExpectedExitCode 1 -Scenario ($fixture.Scenario + ' is rejected')
-        Remove-Item -LiteralPath $taxRulePath
-        Invoke-GateExpect -ExpectedExitCode 0 -Scenario ($fixture.Scenario + ' removal restores pass')
+    if ($resultsById.Count -ne $seenIds.Count) {
+        throw "Fixture result count mismatch: expected $($seenIds.Count), got $($resultsById.Count)."
     }
 
-    $testPath = Write-FixtureFile -RelativePath 'tests/market_branch.rs' -Content ('match market { "' + $countryCode + '" => 1, _ => 0 }')
-    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'test source market branch is rejected'
-    Remove-Item -LiteralPath $testPath
-    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'test source market branch removal restores pass'
+    $assertionCount = 0
+    $positiveCount = 0
+    $negativeCount = 0
+    $failures = [System.Collections.Generic.List[string]]::new()
 
-    $migrationPath = Write-FixtureFile -RelativePath 'migrations/market_branch.sql' -Content ('CASE ''' + $countryCode + ''' WHEN ''x'' THEN 1 END')
-    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'migration market branch is rejected'
-    Remove-Item -LiteralPath $migrationPath
-    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'migration market branch removal restores pass'
+    foreach ($fixture in $fixtures) {
+        $fid = [string]$fixture.id
+        if (-not $resultsById.ContainsKey($fid)) {
+            $failures.Add("Missing execution result for fixture '$fid'.")
+            continue
+        }
 
-    $unallowlistedRulePath = Write-FixtureFile -RelativePath 'crates/ficant-domain/src/other_market_rules.rs' -Content 'fn residual_term_bounds() -> (u32, Option<u32>) { (48, Some(63)) }'
-    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'second domain rule table is rejected'
-    Remove-Item -LiteralPath $unallowlistedRulePath
-    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'second domain rule removal restores pass'
+        $res = $resultsById[$fid]
+        if ($res.ActualExitCode -ne $res.ExpectedExitCode) {
+            $failures.Add(
+                "Fixture '$fid' ($($res.RelativePath)) expected exit code $($res.ExpectedExitCode) but got $($res.ActualExitCode). Output: $($res.Output)"
+            )
+            continue
+        }
 
-    Write-FixtureFile -RelativePath 'scripts/layering-allowlist.json' -Content '[{"path":"crates/ficant-domain/src/futures_delivery.rs","violation":"market-rule-values","removal_round":"R2"}]' | Out-Null
-    Invoke-GateExpect -ExpectedExitCode 1 -Scenario 'nonempty allowlist is rejected'
-    Write-FixtureFile -RelativePath 'scripts/layering-allowlist.json' -Content '[]' | Out-Null
-    Invoke-GateExpect -ExpectedExitCode 0 -Scenario 'empty allowlist restores pass'
+        $assertionCount++
+        if ($res.ExpectedExitCode -eq 0) {
+            $positiveCount++
+        }
+        else {
+            $negativeCount++
+        }
+    }
 
-    Write-Host ("Layering gate fixture tests passed ({0} assertions)." -f $script:AssertionCount)
+    if ($failures.Count -gt 0) {
+        foreach ($failure in $failures) {
+            Write-Error $failure
+        }
+        throw "Shared layering fixture verification failed with $($failures.Count) mismatch(es)."
+    }
+
+    # Verify removal-restores-pass lifecycle in an isolated temp root.
+    $restoreRoot = Join-Path $tempRoot '_lifecycle_restore'
+    Initialize-CleanFixtureRoot -Root $restoreRoot
+    $countryCode = [string]::Concat([char]67, [char]78)
+    $injectedPath = Write-FixtureFile -Root $restoreRoot -RelativePath 'crates/ficant-domain/src/restore_check.rs' -Content ('let flag = market == "' + $countryCode + '";')
+    $out1 = & pwsh -NoProfile -NonInteractive -File $gatePath -RepositoryRoot $restoreRoot 2>&1
+    if ($LASTEXITCODE -ne 1) {
+        throw "Lifecycle restore check expected exit 1 after injection, got $LASTEXITCODE. Output: $(($out1 | Out-String).Trim())"
+    }
+    $assertionCount++
+    Remove-Item -LiteralPath $injectedPath
+    $out2 = & pwsh -NoProfile -NonInteractive -File $gatePath -RepositoryRoot $restoreRoot 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Lifecycle restore check expected exit 0 after removal, got $LASTEXITCODE. Output: $(($out2 | Out-String).Trim())"
+    }
+    $assertionCount++
+
+    Write-Host (
+        "Layering gate shared fixture tests passed: fixtures={0} (positive={1}, negative={2}), assertions={3}." -f
+        $fixtures.Count, $positiveCount, $negativeCount, $assertionCount
+    )
     exit 0
 }
 catch {

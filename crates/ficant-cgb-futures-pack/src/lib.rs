@@ -17,8 +17,12 @@ use prost::Message;
 pub const MARKET: &str = "CFFEX";
 pub const RULE_TYPE: &str = "cgb-futures";
 pub const TYPE_URL: &str = "type.googleapis.com/ficant.market.v1.CgbFuturesDeliveryRulePack";
+pub const EXPECTED_DECIMAL_UNIT_ID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAP";
+pub const EXPECTED_DECIMAL_UNIT_VERSION: u64 = 1;
 
-/// Parses only the exact v1 CGB futures-delivery content schema.
+const PER_100_FACE_QUOTE_BASIS: FixedDecimal = FixedDecimal::from_scaled(100_000_000_000_000);
+
+/// Parses only the exact v1/v2 CGB futures-delivery content schema.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CgbFuturesDeliveryRulePackParser;
 
@@ -56,6 +60,59 @@ impl FuturesDeliveryRuleParser for CgbFuturesDeliveryRulePackParser {
         let payload = CgbFuturesDeliveryRulePack::decode(content.value()).map_err(|_| invalid())?;
         parse_payload(&payload, product)
     }
+
+    fn parse_for_per_100_hedge(
+        &self,
+        content: &RulePackContent,
+        product: CgbFuturesProduct,
+    ) -> ApplicationResult<FuturesDeliveryRule> {
+        if content.type_url() != TYPE_URL {
+            return Err(invalid());
+        }
+        let payload = CgbFuturesDeliveryRulePack::decode(content.value()).map_err(|_| invalid())?;
+        validate_expected_unit(payload.nominal_coupon.as_ref(), "nominal_coupon")?;
+        validate_expected_unit(payload.face_quote_basis.as_ref(), "face_quote_basis")?;
+        let rule = parse_payload(&payload, product)?;
+        if rule.face_quote_basis() != PER_100_FACE_QUOTE_BASIS {
+            return Err(invalid());
+        }
+        if rule.contract_size_in_quote_units().is_none() {
+            return Err(missing(&format!(
+                "products[product_code={}].contract_size_in_quote_units",
+                product.code()
+            )));
+        }
+        let notional = rule
+            .contract_notional()
+            .map_err(map_domain_error)?
+            .ok_or_else(invalid)?;
+        if !notional.is_positive() {
+            return Err(invalid());
+        }
+        Ok(rule)
+    }
+}
+
+fn validate_expected_unit(value: Option<&DecimalValue>, path: &str) -> ApplicationResult<()> {
+    let value = value.ok_or_else(|| missing(path))?;
+    let unit = value
+        .unit
+        .as_ref()
+        .ok_or_else(|| missing(&format!("{path}.unit")))?;
+    let unit_id = unit
+        .unit_id
+        .as_ref()
+        .ok_or_else(|| missing(&format!("{path}.unit.unit_id")))?;
+    let parsed_unit = UnitRef::new(
+        Ulid::new(unit_id.value.clone()).map_err(map_domain_error)?,
+        Version::new(unit.version).map_err(map_domain_error)?,
+    );
+    if parsed_unit.unit_id().as_str() != EXPECTED_DECIMAL_UNIT_ID
+        || parsed_unit.version().get() != EXPECTED_DECIMAL_UNIT_VERSION
+    {
+        return Err(invalid());
+    }
+    Ok(())
 }
 
 fn parse_payload(
@@ -193,9 +250,40 @@ fn invalid() -> ApplicationError {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+
     use super::*;
-    use ficant_application::ApplicationErrorDetail;
+    use ficant_application::{
+        ApplicationErrorDetail, parse_verified_delivery_rule_for_per_100_hedge,
+    };
     use ficant_contracts::ficant::core::v1::{Ulid as ProtoUlid, UnitRef as ProtoUnitRef};
+    use ficant_domain::market::{MarketRulePack, MarketRulePackInput, VerificationStatus};
+    use ficant_domain::primitives::{ContentHash, EffectivePeriod, MarketTime, OwnerRef};
+
+    struct LegacyOnlyParser;
+
+    impl FuturesDeliveryRuleParser for LegacyOnlyParser {
+        fn market(&self) -> &'static str {
+            MARKET
+        }
+
+        fn rule_type(&self) -> &'static str {
+            RULE_TYPE
+        }
+
+        fn type_url(&self) -> &'static str {
+            TYPE_URL
+        }
+
+        fn parse(
+            &self,
+            content: &RulePackContent,
+            product: CgbFuturesProduct,
+        ) -> ApplicationResult<FuturesDeliveryRule> {
+            CgbFuturesDeliveryRulePackParser.parse(content, product)
+        }
+    }
 
     #[test]
     fn parses_complete_sorted_ten_year_rule_and_rejects_missing_item() {
@@ -241,6 +329,239 @@ mod tests {
         );
     }
 
+    #[test]
+    fn default_parse_for_per_100_hedge_fails_closed() {
+        let raw = fs::read(repo_root().join("domain-packs/cgb-futures/cgb-futures-v2.bin"))
+            .expect("v2 bin exists");
+        let pack = verified_pack(raw);
+        let error = parse_verified_delivery_rule_for_per_100_hedge(
+            &pack,
+            None,
+            CgbFuturesProduct::TwoYear,
+            &LegacyOnlyParser,
+        )
+        .expect_err("default trait implementation must reject per-100 hedge");
+        assert_eq!(error.category(), ApplicationErrorCategory::ValidationFailed);
+    }
+
+    #[test]
+    fn authoritative_v2_bin_parses_all_four_products_for_per_100_hedge() {
+        let raw = fs::read(repo_root().join("domain-packs/cgb-futures/cgb-futures-v2.bin"))
+            .expect("v2 bin exists");
+        let pack = verified_pack(raw);
+        let parser = CgbFuturesDeliveryRulePackParser;
+
+        let expected = [
+            (CgbFuturesProduct::TwoYear, 20_000_u32, 2_000_000_i128),
+            (CgbFuturesProduct::FiveYear, 10_000_u32, 1_000_000_i128),
+            (CgbFuturesProduct::TenYear, 10_000_u32, 1_000_000_i128),
+            (CgbFuturesProduct::ThirtyYear, 10_000_u32, 1_000_000_i128),
+        ];
+
+        for (product, size, notional) in expected {
+            let rule =
+                parse_verified_delivery_rule_for_per_100_hedge(&pack, None, product, &parser)
+                    .expect("v2 pack parses for per-100 hedge");
+            assert_eq!(rule.face_quote_basis(), PER_100_FACE_QUOTE_BASIS);
+            assert_eq!(rule.contract_size_in_quote_units(), Some(size));
+            assert_eq!(
+                rule.contract_notional().expect("valid notional"),
+                Some(FixedDecimal::from_scaled(notional * 1_000_000_000_000))
+            );
+        }
+    }
+
+    #[test]
+    fn v1_bin_remains_compatible_for_delivery_and_reports_missing_size_path_for_hedge() {
+        let raw = fs::read(repo_root().join("domain-packs/cgb-futures/cgb-futures-v1.bin"))
+            .expect("v1 bin exists");
+        let pack = verified_pack(raw.clone());
+        let parser = CgbFuturesDeliveryRulePackParser;
+        let v1_content = RulePackContent::new(TYPE_URL, raw).unwrap();
+
+        for product in [
+            CgbFuturesProduct::TwoYear,
+            CgbFuturesProduct::FiveYear,
+            CgbFuturesProduct::TenYear,
+            CgbFuturesProduct::ThirtyYear,
+        ] {
+            let delivery_rule = parser
+                .parse(&v1_content, product)
+                .expect("v1 pack remains readable by delivery parser");
+            assert_eq!(delivery_rule.contract_size_in_quote_units(), None);
+
+            let error =
+                parse_verified_delivery_rule_for_per_100_hedge(&pack, None, product, &parser)
+                    .expect_err("v1 pack lacks contract_size_in_quote_units");
+            assert_eq!(error.category(), ApplicationErrorCategory::ValidationFailed);
+            assert_eq!(
+                error.detail(),
+                Some(&ApplicationErrorDetail::RulePackItemMissing {
+                    path: format!(
+                        "context.rule_pack.content.products[product_code={}].contract_size_in_quote_units",
+                        product.code()
+                    ),
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn per_100_hedge_rejects_non_positive_contract_size_and_non_100_basis() {
+        let parser = CgbFuturesDeliveryRulePackParser;
+        let base = decode_v2_payload();
+
+        let mut zero_size = base.clone();
+        zero_size
+            .products
+            .iter_mut()
+            .find(|p| p.product_code.as_deref() == Some("TS"))
+            .expect("TS exists")
+            .contract_size_in_quote_units = Some(0);
+        let error = parse_verified_delivery_rule_for_per_100_hedge(
+            &verified_pack(zero_size.encode_to_vec()),
+            None,
+            CgbFuturesProduct::TwoYear,
+            &parser,
+        )
+        .expect_err("zero contract size must be rejected");
+        assert_eq!(error.category(), ApplicationErrorCategory::ValidationFailed);
+
+        let mut basis_200 = base;
+        basis_200.face_quote_basis = Some(decimal("200", 0));
+        let error = parse_verified_delivery_rule_for_per_100_hedge(
+            &verified_pack(basis_200.encode_to_vec()),
+            None,
+            CgbFuturesProduct::TwoYear,
+            &parser,
+        )
+        .expect_err("non-100 face_quote_basis must be rejected");
+        assert_eq!(error.category(), ApplicationErrorCategory::ValidationFailed);
+    }
+
+    #[test]
+    fn per_100_hedge_rejects_all_four_rehashed_unit_binding_mutations() {
+        let parser = CgbFuturesDeliveryRulePackParser;
+        let base = decode_v2_payload();
+        let alternate_ulid = "01ARZ3NDEKTSV4RRFFQ69G5FAQ";
+
+        // (a) Replace only face_quote_basis unit_id with another valid ULID.
+        let mut mutated_face_id = base.clone();
+        mutated_face_id.face_quote_basis = Some(decimal_with_unit("100", 0, alternate_ulid, 1));
+        let err_a = parse_verified_delivery_rule_for_per_100_hedge(
+            &verified_pack(mutated_face_id.encode_to_vec()),
+            None,
+            CgbFuturesProduct::TwoYear,
+            &parser,
+        )
+        .expect_err("face_quote_basis unit_id mutation must fail");
+        assert_eq!(err_a.category(), ApplicationErrorCategory::ValidationFailed);
+
+        // (b) Replace only face_quote_basis unit version with 2.
+        let mut mutated_face_ver = base.clone();
+        mutated_face_ver.face_quote_basis =
+            Some(decimal_with_unit("100", 0, EXPECTED_DECIMAL_UNIT_ID, 2));
+        let err_b = parse_verified_delivery_rule_for_per_100_hedge(
+            &verified_pack(mutated_face_ver.encode_to_vec()),
+            None,
+            CgbFuturesProduct::TwoYear,
+            &parser,
+        )
+        .expect_err("face_quote_basis unit version mutation must fail");
+        assert_eq!(err_b.category(), ApplicationErrorCategory::ValidationFailed);
+
+        // (c) Replace only nominal_coupon unit binding (ID and version).
+        let mut mutated_coupon_id = base.clone();
+        mutated_coupon_id.nominal_coupon = Some(decimal_with_unit("3", 2, alternate_ulid, 1));
+        let err_c_id = parse_verified_delivery_rule_for_per_100_hedge(
+            &verified_pack(mutated_coupon_id.encode_to_vec()),
+            None,
+            CgbFuturesProduct::TwoYear,
+            &parser,
+        )
+        .expect_err("nominal_coupon unit_id mutation must fail");
+        assert_eq!(
+            err_c_id.category(),
+            ApplicationErrorCategory::ValidationFailed
+        );
+
+        let mut mutated_coupon_ver = base.clone();
+        mutated_coupon_ver.nominal_coupon =
+            Some(decimal_with_unit("3", 2, EXPECTED_DECIMAL_UNIT_ID, 2));
+        let err_c_ver = parse_verified_delivery_rule_for_per_100_hedge(
+            &verified_pack(mutated_coupon_ver.encode_to_vec()),
+            None,
+            CgbFuturesProduct::TwoYear,
+            &parser,
+        )
+        .expect_err("nominal_coupon unit version mutation must fail");
+        assert_eq!(
+            err_c_ver.category(),
+            ApplicationErrorCategory::ValidationFailed
+        );
+
+        // (d) Replace both nominal_coupon and face_quote_basis unit_id with another valid ULID.
+        let mut mutated_both = base;
+        mutated_both.nominal_coupon = Some(decimal_with_unit("3", 2, alternate_ulid, 1));
+        mutated_both.face_quote_basis = Some(decimal_with_unit("100", 0, alternate_ulid, 1));
+        let err_d = parse_verified_delivery_rule_for_per_100_hedge(
+            &verified_pack(mutated_both.encode_to_vec()),
+            None,
+            CgbFuturesProduct::TwoYear,
+            &parser,
+        )
+        .expect_err("both unit_id mutations must fail");
+        assert_eq!(err_d.category(), ApplicationErrorCategory::ValidationFailed);
+    }
+
+    fn repo_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .to_path_buf()
+    }
+
+    fn decode_v2_payload() -> CgbFuturesDeliveryRulePack {
+        let raw = fs::read(repo_root().join("domain-packs/cgb-futures/cgb-futures-v2.bin"))
+            .expect("v2 bin exists");
+        CgbFuturesDeliveryRulePack::decode(raw.as_slice()).expect("valid v2 payload")
+    }
+
+    fn verified_pack(raw: Vec<u8>) -> MarketRulePack {
+        let hash = ContentHash::digest(&raw);
+        let content = RulePackContent::new(TYPE_URL, raw).unwrap();
+        let owner_id = Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        let from = MarketTime::new(
+            "2025-12-31T16:00:00Z".parse().unwrap(),
+            "Asia/Shanghai",
+            "2026-01-01".parse().unwrap(),
+        )
+        .unwrap();
+        let to = MarketTime::new(
+            "2027-12-31T16:00:00Z".parse().unwrap(),
+            "Asia/Shanghai",
+            "2028-01-01".parse().unwrap(),
+        )
+        .unwrap();
+        MarketRulePack::new_with_content(
+            MarketRulePackInput {
+                rule_pack_id: Ulid::new("01ARZ3NDEKTSV4RRFFQ69G5FAF").unwrap(),
+                version: Version::new(2).unwrap(),
+                owner: OwnerRef::new(owner_id.clone(), owner_id),
+                market: MARKET.to_owned(),
+                rule_type: RULE_TYPE.to_owned(),
+                source: "cffex-rulebook".to_owned(),
+                effective: EffectivePeriod::new(from, to).unwrap(),
+                verification_status: VerificationStatus::Verified,
+                content_hash: hash,
+            },
+            content,
+        )
+        .unwrap()
+    }
+
     fn fixture() -> CgbFuturesDeliveryRulePack {
         CgbFuturesDeliveryRulePack {
             products: Vec::new(),
@@ -273,14 +594,28 @@ mod tests {
     }
 
     fn decimal(coefficient: &str, scale: u32) -> DecimalValue {
+        decimal_with_unit(
+            coefficient,
+            scale,
+            EXPECTED_DECIMAL_UNIT_ID,
+            EXPECTED_DECIMAL_UNIT_VERSION,
+        )
+    }
+
+    fn decimal_with_unit(
+        coefficient: &str,
+        scale: u32,
+        unit_id: &str,
+        version: u64,
+    ) -> DecimalValue {
         DecimalValue {
             coefficient: coefficient.to_owned(),
             scale,
             unit: Some(ProtoUnitRef {
                 unit_id: Some(ProtoUlid {
-                    value: "01ARZ3NDEKTSV4RRFFQ69G5FAP".to_owned(),
+                    value: unit_id.to_owned(),
                 }),
-                version: 1,
+                version,
             }),
         }
     }
