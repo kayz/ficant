@@ -27,6 +27,20 @@ enum CalendarRequirement {
   CALENDAR_REQUIREMENT_EXACT_MARKET = 2;
 }
 
+// BondTaxBasis identifies the explicit execution mode and tax basis for
+// AnalyzeBond requests and results.
+enum BondTaxBasis {
+  // Legacy/inferred on requests (PRE_TAX when tax_context is absent,
+  // TAX_ADJUSTED when tax_context is present). Not valid as a resolved basis
+  // in compliant responses.
+  BOND_TAX_BASIS_UNSPECIFIED = 0;
+  // Pre-tax bond analytics. On requests, tax_context must be absent.
+  BOND_TAX_BASIS_PRE_TAX = 1;
+  // Tax-adjusted bond analytics. On requests, requires a valid tax_context,
+  // bond tax_attributes, and matching tax treatment.
+  BOND_TAX_BASIS_TAX_ADJUSTED = 2;
+}
+
 message DerivedCashflow {
   uint32 sequence = 1;
   string nominal_date = 2;
@@ -51,6 +65,9 @@ message TaxAdjustedBondAnalytics {
   repeated DerivedCashflow cashflows = 1;
   ficant.core.v1.DecimalValue yield_to_maturity = 2;
   ficant.market.v1.CouponTaxClaimScope claim_scope = 3;
+  // Tax basis of this sub-result; always BOND_TAX_BASIS_TAX_ADJUSTED on
+  // compliant responses.
+  BondTaxBasis tax_basis = 4;
 }
 
 message BondTaxContext {
@@ -69,12 +86,33 @@ message AnalyzeBondRequest {
     ficant.core.v1.DecimalValue clean_price = 7;
   }
   BondTaxContext tax_context = 8;
+  // Explicit execution mode.
+  // - BOND_TAX_BASIS_PRE_TAX: rejects any tax_context.
+  // - BOND_TAX_BASIS_TAX_ADJUSTED: requires a valid tax_context, bond
+  //   tax_attributes, and matching tax treatment.
+  // - BOND_TAX_BASIS_UNSPECIFIED: legacy-compatible inference from tax_context
+  //   presence.
+  // - Unknown non-zero values are rejected with ValidationFailed.
+  // Upgrade contract: new clients sending any non-zero execution_mode against
+  // an older server that ignores field 9 must reject responses lacking matching
+  // execution_mode, measures_tax_basis = PRE_TAX, or required after_tax
+  // presence and tax_basis.
+  BondTaxBasis execution_mode = 9;
 }
 
 message AnalyzeBondResult {
+  // Top-level cashflows and measures are always pre-tax
+  // (measures_tax_basis = BOND_TAX_BASIS_PRE_TAX).
   repeated DerivedCashflow cashflows = 1;
   BondAnalyticsMeasures measures = 2;
+  // Present only when resolved execution_mode is BOND_TAX_BASIS_TAX_ADJUSTED;
+  // carries tax_basis = BOND_TAX_BASIS_TAX_ADJUSTED.
   TaxAdjustedBondAnalytics after_tax = 3;
+  // Resolved execution mode echoed by the server (PRE_TAX or TAX_ADJUSTED).
+  BondTaxBasis execution_mode = 4;
+  // Tax basis of top-level cashflows and measures; always
+  // BOND_TAX_BASIS_PRE_TAX on compliant responses.
+  BondTaxBasis measures_tax_basis = 5;
 }
 
 message AnalyzeBondResponse {
@@ -213,6 +251,17 @@ message AnalyzeFuturesHedgeRequest {
   ficant.core.v1.DecimalValue target_dv01 = 3;
   ficant.core.v1.DecimalValue ctd_dv01_per_100 = 4;
   ficant.core.v1.DecimalValue conversion_factor = 5;
+  // Required verified delivery rule pack (with 32-byte SHA-256 content_hash)
+  // supplying contract notional and face quote basis.
+  // Upgrade constraint: legacy clients omitting delivery_rule_pack against new
+  // servers receive ValidationFailed; callers must upgrade or explicitly supply
+  // this field.
+  ficant.market.v1.MarketRulePack delivery_rule_pack = 6;
+  // Optional valuation timestamp with proto3 message presence.
+  // When present, validated for timezone and half-open rule-pack validity
+  // window [effective_from, effective_to). When absent, performs explicit-pack
+  // pro-forma evaluation while still verifying rule-pack validity range.
+  ficant.core.v1.MarketTime valuation_at = 7;
 }
 
 message FuturesHedgeMeasures {
@@ -221,6 +270,11 @@ message FuturesHedgeMeasures {
   int64 recommended_contracts = 3;
   ficant.core.v1.DecimalValue residual_dv01 = 4;
   ficant.core.v1.DecimalValue hedge_effectiveness = 5;
+  // Resolved futures contract notional derived from delivery_rule_pack,
+  // expressed using the request's units.currency_amount.
+  // Upgrade contract: new clients require presence, valid positive finite
+  // decimal value, and unit matching request.units.currency_amount.
+  ficant.core.v1.DecimalValue contract_notional = 6;
 }
 
 message AnalyzeFuturesHedgeResult {

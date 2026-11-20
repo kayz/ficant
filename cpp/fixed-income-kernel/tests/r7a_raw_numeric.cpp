@@ -199,7 +199,7 @@ int main() {
     require(delivery_status == FICANT_KERNEL_STATUS_OK, "delivery analysis failed");
     require(delivery_result.status_code == delivery_status, "delivery statuses disagree");
 
-    const ficant_kernel_cgb_futures_hedge_input_v1 hedge_input{
+    const ficant_kernel_cgb_futures_hedge_input_v1 hedge_v1_input{
         sizeof(ficant_kernel_cgb_futures_hedge_input_v1),
         FICANT_KERNEL_ABI_VERSION,
         FICANT_KERNEL_CGB_FUTURES_T,
@@ -208,13 +208,52 @@ int main() {
         0.045,
         0.9,
     };
+    ficant_kernel_cgb_futures_hedge_result_v1 hedge_v1_result{};
+    hedge_v1_result.struct_size = sizeof(hedge_v1_result);
+    hedge_v1_result.abi_version = FICANT_KERNEL_ABI_VERSION;
+    const std::uint32_t hedge_v1_status =
+        ficant_kernel_calculate_cgb_futures_hedge_v1(&hedge_v1_input, &hedge_v1_result);
+    require(hedge_v1_status == FICANT_KERNEL_STATUS_INVALID_ARGUMENT,
+            "legacy v1 futures hedge did not fail closed with INVALID_ARGUMENT");
+    require(hedge_v1_result.status_code == hedge_v1_status,
+            "legacy v1 hedge statuses disagree");
+    require(hedge_v1_result.recommended_contracts == 0
+                && hedge_v1_result.futures_contract_dv01 == 0.0,
+            "legacy v1 hedge result was not zeroed");
+
+    const ficant_kernel_cgb_futures_hedge_input_v2 hedge_input{
+        sizeof(ficant_kernel_cgb_futures_hedge_input_v2),
+        FICANT_KERNEL_ABI_VERSION,
+        1'000'000.0,
+        100.0,
+        500.0,
+        0.045,
+        0.9,
+    };
     ficant_kernel_cgb_futures_hedge_result_v1 hedge_result{};
     hedge_result.struct_size = sizeof(hedge_result);
     hedge_result.abi_version = FICANT_KERNEL_ABI_VERSION;
     const std::uint32_t hedge_status =
-        ficant_kernel_calculate_cgb_futures_hedge_v1(&hedge_input, &hedge_result);
-    require(hedge_status == FICANT_KERNEL_STATUS_OK, "futures hedge calculation failed");
-    require(hedge_result.status_code == hedge_status, "hedge statuses disagree");
+        ficant_kernel_calculate_cgb_futures_hedge_v2(&hedge_input, &hedge_result);
+    require(hedge_status == FICANT_KERNEL_STATUS_OK, "futures hedge v2 1M calculation failed");
+    require(hedge_result.status_code == hedge_status, "hedge 1M statuses disagree");
+
+    const ficant_kernel_cgb_futures_hedge_input_v2 hedge_2m_input{
+        sizeof(ficant_kernel_cgb_futures_hedge_input_v2),
+        FICANT_KERNEL_ABI_VERSION,
+        2'000'000.0,
+        100.0,
+        1234.50,
+        0.0145,
+        0.9987,
+    };
+    ficant_kernel_cgb_futures_hedge_result_v1 hedge_2m_result{};
+    hedge_2m_result.struct_size = sizeof(hedge_2m_result);
+    hedge_2m_result.abi_version = FICANT_KERNEL_ABI_VERSION;
+    const std::uint32_t hedge_2m_status =
+        ficant_kernel_calculate_cgb_futures_hedge_v2(&hedge_2m_input, &hedge_2m_result);
+    require(hedge_2m_status == FICANT_KERNEL_STATUS_OK, "futures hedge v2 2M calculation failed");
+    require(hedge_2m_result.status_code == hedge_2m_status, "hedge 2M statuses disagree");
 
     emit_u32("i.kernel.abi_version", ficant_kernel_abi_version());
     emit_u32("i.bond.return_status", bond_status);
@@ -287,6 +326,16 @@ int main() {
     emit_f64("f.hedge.raw_contracts", hedge_result.raw_contracts);
     emit_f64("f.hedge.residual_dv01", hedge_result.residual_dv01);
     emit_f64("f.hedge.hedge_effectiveness", hedge_result.hedge_effectiveness);
+
+    emit_u32("i.hedge_2m.return_status", hedge_2m_status);
+    emit_u32("i.hedge_2m.struct_size", hedge_2m_result.struct_size);
+    emit_u32("i.hedge_2m.abi_version", hedge_2m_result.abi_version);
+    emit_u32("i.hedge_2m.status_code", hedge_2m_result.status_code);
+    emit_i64("i.hedge_2m.recommended_contracts", hedge_2m_result.recommended_contracts);
+    emit_f64("f.hedge_2m.futures_contract_dv01", hedge_2m_result.futures_contract_dv01);
+    emit_f64("f.hedge_2m.raw_contracts", hedge_2m_result.raw_contracts);
+    emit_f64("f.hedge_2m.residual_dv01", hedge_2m_result.residual_dv01);
+    emit_f64("f.hedge_2m.hedge_effectiveness", hedge_2m_result.hedge_effectiveness);
 
     require(std::fflush(stdout) == 0, "stdout flush failed");
     return 0;

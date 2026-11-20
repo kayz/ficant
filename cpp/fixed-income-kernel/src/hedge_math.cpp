@@ -1,27 +1,16 @@
 #include "hedge_math.hpp"
 
-#include "ficant_kernel.h"
-
 #include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 
 namespace ficant::hedge_math {
 namespace {
 
-constexpr double CONTRACT_NOTIONAL = 1'000'000.0;
-constexpr double FACE_QUOTE = 100.0;
 constexpr double INT64_MIN_AS_DOUBLE = -9'223'372'036'854'775'808.0;
 constexpr double INT64_MAX_EXCLUSIVE_AS_DOUBLE = 9'223'372'036'854'775'808.0;
-
-bool supported_product(uint32_t product) noexcept {
-    return product == FICANT_KERNEL_CGB_FUTURES_TS
-        || product == FICANT_KERNEL_CGB_FUTURES_TF
-        || product == FICANT_KERNEL_CGB_FUTURES_T
-        || product == FICANT_KERNEL_CGB_FUTURES_TL;
-}
 
 bool better_candidate(int64_t candidate,
                       double candidate_risk,
@@ -42,21 +31,26 @@ bool better_candidate(int64_t candidate,
 
 } // namespace
 
-bool calculate(uint32_t product,
+bool calculate(double contract_notional,
+               double face_quote_basis,
                double target_dv01,
-               double ctd_dv01_per_100,
+               double ctd_dv01_per_quote_unit,
                double conversion_factor,
                HedgeMeasures& output) noexcept {
-    if (!supported_product(product)
+    if (!std::isfinite(contract_notional) || contract_notional <= 0.0
+        || !std::isfinite(face_quote_basis) || face_quote_basis <= 0.0
         || !std::isfinite(target_dv01) || target_dv01 == 0.0
-        || !std::isfinite(ctd_dv01_per_100) || ctd_dv01_per_100 <= 0.0
+        || !std::isfinite(ctd_dv01_per_quote_unit) || ctd_dv01_per_quote_unit <= 0.0
         || !std::isfinite(conversion_factor) || conversion_factor <= 0.0) {
         return false;
     }
     const double futures_dv01 =
-        ctd_dv01_per_100 * (CONTRACT_NOTIONAL / FACE_QUOTE) / conversion_factor;
+        ctd_dv01_per_quote_unit * (contract_notional / face_quote_basis) / conversion_factor;
+    if (!std::isfinite(futures_dv01) || futures_dv01 <= 0.0) {
+        return false;
+    }
     const double raw = -target_dv01 / futures_dv01;
-    if (!std::isfinite(futures_dv01) || futures_dv01 <= 0.0 || !std::isfinite(raw)
+    if (!std::isfinite(raw)
         || raw < INT64_MIN_AS_DOUBLE || raw >= INT64_MAX_EXCLUSIVE_AS_DOUBLE) {
         return false;
     }
@@ -72,11 +66,13 @@ bool calculate(uint32_t product,
     };
     int64_t best = candidates[0];
     double best_residual = target_dv01 + static_cast<double>(best) * futures_dv01;
+    if (!std::isfinite(best_residual)) return false;
     double best_risk = std::fabs(best_residual);
     const double tolerance = 1e-12 * std::max(1.0, std::fabs(target_dv01));
     for (std::size_t index = 1; index < candidates.size(); ++index) {
         const int64_t candidate = candidates[index];
         const double residual = target_dv01 + static_cast<double>(candidate) * futures_dv01;
+        if (!std::isfinite(residual)) return false;
         const double risk = std::fabs(residual);
         if (better_candidate(candidate, risk, best, best_risk, tolerance)) {
             best = candidate;

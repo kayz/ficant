@@ -241,6 +241,16 @@ typedef struct {
 typedef struct {
     uint32_t struct_size;
     uint32_t abi_version;
+    double   contract_notional;         /* positive contract notional */
+    double   face_quote_basis;          /* positive quote face basis */
+    double   target_dv01;               /* non-zero signed target DV01 */
+    double   ctd_dv01_per_quote_unit;   /* positive CTD DV01 per quote unit */
+    double   conversion_factor;         /* positive conversion factor */
+} ficant_kernel_cgb_futures_hedge_input_v2;
+
+typedef struct {
+    uint32_t struct_size;
+    uint32_t abi_version;
     uint32_t status_code;
     uint32_t reserved;
     double   futures_contract_dv01;
@@ -319,9 +329,18 @@ FICANT_KERNEL_API uint32_t ficant_kernel_analyze_cgb_futures_delivery_v1(
 #endif
 ;
 
-/** Calculate one CTD-based CFFEX CGB futures DV01 hedge. */
+/** Legacy v1 futures DV01 hedge entry point; fails closed with INVALID_ARGUMENT for valid v1 headers. */
 FICANT_KERNEL_API uint32_t ficant_kernel_calculate_cgb_futures_hedge_v1(
     const ficant_kernel_cgb_futures_hedge_input_v1* input,
+    ficant_kernel_cgb_futures_hedge_result_v1*      result)
+#if defined(__cplusplus) && __cplusplus >= 201103L
+    noexcept
+#endif
+;
+
+/** Calculate one CTD-based futures DV01 hedge using caller-supplied contract scale. */
+FICANT_KERNEL_API uint32_t ficant_kernel_calculate_cgb_futures_hedge_v2(
+    const ficant_kernel_cgb_futures_hedge_input_v2* input,
     ficant_kernel_cgb_futures_hedge_result_v1*      result)
 #if defined(__cplusplus) && __cplusplus >= 201103L
     noexcept

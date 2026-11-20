@@ -101,8 +101,16 @@ int main() {
           "sizeof(cgb_futures_delivery_result_v1) == 120");
     CHECK(sizeof(ficant_kernel_cgb_futures_hedge_input_v1) == 40,
           "sizeof(cgb_futures_hedge_input_v1) == 40");
+    CHECK(alignof(ficant_kernel_cgb_futures_hedge_input_v1) == 8,
+          "alignof(cgb_futures_hedge_input_v1) == 8");
+    CHECK(sizeof(ficant_kernel_cgb_futures_hedge_input_v2) == 48,
+          "sizeof(cgb_futures_hedge_input_v2) == 48");
+    CHECK(alignof(ficant_kernel_cgb_futures_hedge_input_v2) == 8,
+          "alignof(cgb_futures_hedge_input_v2) == 8");
     CHECK(sizeof(ficant_kernel_cgb_futures_hedge_result_v1) == 56,
           "sizeof(cgb_futures_hedge_result_v1) == 56");
+    CHECK(alignof(ficant_kernel_cgb_futures_hedge_result_v1) == 8,
+          "alignof(cgb_futures_hedge_result_v1) == 8");
 
     /* ── Key offsets (ABI stability) ───────────────────────────── */
     CHECK(offsetof(ficant_kernel_bond_input_v1, struct_size) == 0,
@@ -145,8 +153,38 @@ int main() {
           "futures_delivery_result.conversion_factor offset 24");
     CHECK(offsetof(ficant_kernel_cgb_futures_hedge_input_v1, target_dv01) == 16,
           "futures_hedge_input.target_dv01 offset 16");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_input_v2, struct_size) == 0,
+          "futures_hedge_input_v2.struct_size offset 0");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_input_v2, abi_version) == 4,
+          "futures_hedge_input_v2.abi_version offset 4");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_input_v2, contract_notional) == 8,
+          "futures_hedge_input_v2.contract_notional offset 8");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_input_v2, face_quote_basis) == 16,
+          "futures_hedge_input_v2.face_quote_basis offset 16");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_input_v2, target_dv01) == 24,
+          "futures_hedge_input_v2.target_dv01 offset 24");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_input_v2, ctd_dv01_per_quote_unit) == 32,
+          "futures_hedge_input_v2.ctd_dv01_per_quote_unit offset 32");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_input_v2, conversion_factor) == 40,
+          "futures_hedge_input_v2.conversion_factor offset 40");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_result_v1, struct_size) == 0,
+          "futures_hedge_result.struct_size offset 0");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_result_v1, abi_version) == 4,
+          "futures_hedge_result.abi_version offset 4");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_result_v1, status_code) == 8,
+          "futures_hedge_result.status_code offset 8");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_result_v1, reserved) == 12,
+          "futures_hedge_result.reserved offset 12");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_result_v1, futures_contract_dv01) == 16,
+          "futures_hedge_result.futures_contract_dv01 offset 16");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_result_v1, raw_contracts) == 24,
+          "futures_hedge_result.raw_contracts offset 24");
     CHECK(offsetof(ficant_kernel_cgb_futures_hedge_result_v1, recommended_contracts) == 32,
           "futures_hedge_result.recommended_contracts offset 32");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_result_v1, residual_dv01) == 40,
+          "futures_hedge_result.residual_dv01 offset 40");
+    CHECK(offsetof(ficant_kernel_cgb_futures_hedge_result_v1, hedge_effectiveness) == 48,
+          "futures_hedge_result.hedge_effectiveness offset 48");
 
     if (failures > 0) {
         std::fprintf(stderr, "%d failures\n", failures);
