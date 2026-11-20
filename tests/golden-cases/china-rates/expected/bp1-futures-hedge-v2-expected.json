@@ -1,0 +1,80 @@
+{
+  "schema": "ficant.bp1-futures-hedge-v2.expected.v1",
+  "rule_pack": {
+    "bin_path": "domain-packs/cgb-futures/cgb-futures-v2.bin",
+    "bin_sha256": "8d8a0b944557cf87ed3d1f598ab3e02fa7f0aec125c1c26c17280acbd24367c5",
+    "json_path": "domain-packs/cgb-futures/cgb-futures-v2.json",
+    "json_lf_sha256": "38c7dc7f84b2cd864d5981c96afce76ecb2392dc0fd9304307b80c65b1fd50c4",
+    "decimal_unit_id": "01ARZ3NDEKTSV4RRFFQ69G5FAP",
+    "decimal_unit_version": 1,
+    "face_quote_basis": "100.000000000000",
+    "product_contract_notionals": {
+      "T": "1000000.000000000000",
+      "TF": "1000000.000000000000",
+      "TL": "1000000.000000000000",
+      "TS": "2000000.000000000000"
+    }
+  },
+  "case_results": {
+    "TS-2m-long-risk-rounds-short-four": {
+      "product": "TS",
+      "contract_notional": "2000000.000000000000",
+      "face_quote_basis": "100.000000000000",
+      "futures_contract_dv01": "290.377490737959",
+      "raw_contracts": "-4.251362586207",
+      "recommended_contracts": -4,
+      "residual_dv01": "72.990037048163",
+      "hedge_effectiveness": "0.940874818106"
+    },
+    "TS-2m-exact-long-two": {
+      "product": "TS",
+      "contract_notional": "2000000.000000000000",
+      "face_quote_basis": "100.000000000000",
+      "futures_contract_dv01": "375.000000000000",
+      "raw_contracts": "2.000000000000",
+      "recommended_contracts": 2,
+      "residual_dv01": "0.000000000000",
+      "hedge_effectiveness": "1.000000000000"
+    },
+    "TS-2m-half-contract-tie-prefers-zero": {
+      "product": "TS",
+      "contract_notional": "2000000.000000000000",
+      "face_quote_basis": "100.000000000000",
+      "futures_contract_dv01": "375.000000000000",
+      "raw_contracts": "0.500000000000",
+      "recommended_contracts": 0,
+      "residual_dv01": "-187.500000000000",
+      "hedge_effectiveness": "0.000000000000"
+    },
+    "TF-1m-short-risk-rounds-long-six": {
+      "product": "TF",
+      "contract_notional": "1000000.000000000000",
+      "face_quote_basis": "100.000000000000",
+      "futures_contract_dv01": "419.765664798777",
+      "raw_contracts": "5.598361650485",
+      "recommended_contracts": 6,
+      "residual_dv01": "168.593988792664",
+      "hedge_effectiveness": "0.928257877110"
+    },
+    "T-1m-long-risk-rounds-short-four": {
+      "product": "T",
+      "contract_notional": "1000000.000000000000",
+      "face_quote_basis": "100.000000000000",
+      "futures_contract_dv01": "855.631611698818",
+      "raw_contracts": "-3.798363636364",
+      "recommended_contracts": -4,
+      "residual_dv01": "-172.526446795271",
+      "hedge_effectiveness": "0.946914939448"
+    },
+    "TL-1m-short-risk-rounds-long-three": {
+      "product": "TL",
+      "contract_notional": "1000000.000000000000",
+      "face_quote_basis": "100.000000000000",
+      "futures_contract_dv01": "2175.580885576502",
+      "raw_contracts": "2.941743073048",
+      "recommended_contracts": 3,
+      "residual_dv01": "126.742656729505",
+      "hedge_effectiveness": "0.980196459886"
+    }
+  }
+}
