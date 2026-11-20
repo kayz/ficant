@@ -10,10 +10,6 @@ pub const FUTURES_HEDGE_ALGORITHM_ID: &str = "ficant.cffex.cgb-futures-dv01-hedg
 pub const FUTURES_HEDGE_ALGORITHM_VERSION: u32 = 1;
 pub const FUTURES_HEDGE_CONVENTION_PROFILE: &str = "cffex-cgb-futures-dv01-hedge-v1";
 
-pub const CGB_FUTURES_CONTRACT_NOTIONAL: FixedDecimal =
-    FixedDecimal::from_scaled(1_000_000_000_000_000_000);
-const ONE: FixedDecimal = FixedDecimal::from_scaled(1_000_000_000_000);
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FuturesHedgeInput {
     owner: OwnerRef,
@@ -24,10 +20,12 @@ pub struct FuturesHedgeInput {
     ctd_bond: AnalyticsObjectRef,
     rule_pack: AnalyticsObjectRef,
     snapshot: AnalyticsObjectRef,
-    valuation_at: MarketTime,
+    valuation_at: Option<MarketTime>,
     product: CgbFuturesProduct,
+    contract_notional: FixedDecimal,
+    face_quote_basis: FixedDecimal,
     target_dv01: FixedDecimal,
-    ctd_dv01_per_100: FixedDecimal,
+    ctd_dv01_per_quote_unit: FixedDecimal,
     conversion_factor: FixedDecimal,
 }
 
@@ -42,15 +40,21 @@ impl FuturesHedgeInput {
         ctd_bond: AnalyticsObjectRef,
         rule_pack: AnalyticsObjectRef,
         snapshot: AnalyticsObjectRef,
-        valuation_at: MarketTime,
+        valuation_at: Option<MarketTime>,
         product: CgbFuturesProduct,
+        contract_notional: FixedDecimal,
+        face_quote_basis: FixedDecimal,
         target_dv01: FixedDecimal,
-        ctd_dv01_per_100: FixedDecimal,
+        ctd_dv01_per_quote_unit: FixedDecimal,
         conversion_factor: FixedDecimal,
     ) -> DomainResult<Self> {
-        if valuation_at.market_timezone() != MARKET_TIMEZONE
+        if valuation_at
+            .as_ref()
+            .is_some_and(|time| time.market_timezone() != MARKET_TIMEZONE)
+            || !contract_notional.is_positive()
+            || !face_quote_basis.is_positive()
             || target_dv01 == FixedDecimal::ZERO
-            || !ctd_dv01_per_100.is_positive()
+            || !ctd_dv01_per_quote_unit.is_positive()
             || !conversion_factor.is_positive()
         {
             return Err(DomainErrorCode::InvalidValue);
@@ -66,8 +70,10 @@ impl FuturesHedgeInput {
             snapshot,
             valuation_at,
             product,
+            contract_notional,
+            face_quote_basis,
             target_dv01,
-            ctd_dv01_per_100,
+            ctd_dv01_per_quote_unit,
             conversion_factor,
         })
     }
@@ -105,28 +111,32 @@ impl FuturesHedgeInput {
         &self.snapshot
     }
     #[must_use]
-    pub fn valuation_at(&self) -> &MarketTime {
-        &self.valuation_at
+    pub fn valuation_at(&self) -> Option<&MarketTime> {
+        self.valuation_at.as_ref()
     }
     #[must_use]
     pub const fn product(&self) -> CgbFuturesProduct {
         self.product
     }
     #[must_use]
+    pub const fn contract_notional(&self) -> FixedDecimal {
+        self.contract_notional
+    }
+    #[must_use]
+    pub const fn face_quote_basis(&self) -> FixedDecimal {
+        self.face_quote_basis
+    }
+    #[must_use]
     pub const fn target_dv01(&self) -> FixedDecimal {
         self.target_dv01
     }
     #[must_use]
-    pub const fn ctd_dv01_per_100(&self) -> FixedDecimal {
-        self.ctd_dv01_per_100
+    pub const fn ctd_dv01_per_quote_unit(&self) -> FixedDecimal {
+        self.ctd_dv01_per_quote_unit
     }
     #[must_use]
     pub const fn conversion_factor(&self) -> FixedDecimal {
         self.conversion_factor
-    }
-    #[must_use]
-    pub const fn contract_notional(&self) -> FixedDecimal {
-        CGB_FUTURES_CONTRACT_NOTIONAL
     }
 
     #[must_use]
@@ -152,24 +162,28 @@ impl FuturesHedgeInput {
             );
             field(&mut bytes, reference.content_hash().as_bytes());
         }
-        field(
-            &mut bytes,
-            &self.valuation_at.instant().timestamp_micros().to_be_bytes(),
-        );
-        field(&mut bytes, self.valuation_at.market_timezone().as_bytes());
-        field(
-            &mut bytes,
-            self.valuation_at
-                .local_trading_date()
-                .to_string()
-                .as_bytes(),
-        );
+        match &self.valuation_at {
+            Some(valuation_at) => {
+                field(&mut bytes, &[1]);
+                field(
+                    &mut bytes,
+                    &valuation_at.instant().timestamp_micros().to_be_bytes(),
+                );
+                field(&mut bytes, valuation_at.market_timezone().as_bytes());
+                field(
+                    &mut bytes,
+                    valuation_at.local_trading_date().to_string().as_bytes(),
+                );
+            }
+            None => field(&mut bytes, &[0]),
+        }
         field(&mut bytes, &(self.product as u32).to_be_bytes());
         for value in [
+            self.contract_notional,
+            self.face_quote_basis,
             self.target_dv01,
-            self.ctd_dv01_per_100,
+            self.ctd_dv01_per_quote_unit,
             self.conversion_factor,
-            CGB_FUTURES_CONTRACT_NOTIONAL,
         ] {
             field(&mut bytes, &value.scaled().to_be_bytes());
         }
@@ -202,7 +216,7 @@ impl FuturesHedgeMeasures {
         if !futures_contract_dv01.is_positive()
             || raw_contracts == FixedDecimal::ZERO
             || !hedge_effectiveness.is_non_negative()
-            || hedge_effectiveness > ONE
+            || hedge_effectiveness > FixedDecimal::ONE
         {
             return Err(DomainErrorCode::InvalidValue);
         }

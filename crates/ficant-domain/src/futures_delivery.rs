@@ -180,6 +180,21 @@ impl FuturesDeliveryRule {
     pub const fn contract_size_in_quote_units(&self) -> Option<u32> {
         self.contract_size_in_quote_units
     }
+
+    /// Returns the resolved contract notional (`face_quote_basis * contract_size_in_quote_units`)
+    /// when the rule carries a product contract size.
+    pub fn contract_notional(&self) -> DomainResult<Option<FixedDecimal>> {
+        let Some(units) = self.contract_size_in_quote_units else {
+            return Ok(None);
+        };
+        let notional = self
+            .face_quote_basis
+            .checked_mul_integer(i128::from(units))?;
+        if !notional.is_positive() {
+            return Err(DomainErrorCode::InvalidValue);
+        }
+        Ok(Some(notional))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

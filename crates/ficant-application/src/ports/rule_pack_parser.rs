@@ -61,4 +61,24 @@ pub trait FuturesDeliveryRuleParser: Send + Sync {
         }
         Ok(rule)
     }
+
+    /// Parses the delivery rule for per-100 futures hedging, validating pack-internal unit
+    /// bindings, exact per-100 quote basis, and positive contract size.
+    ///
+    /// Adapters that do not implement per-100 hedge parsing fail closed by default.
+    ///
+    /// # Errors
+    ///
+    /// Returns a non-retryable validation failure when unsupported or when a required rule item,
+    /// unit binding, quote basis, or positive contract size is missing or invalid.
+    fn parse_for_per_100_hedge(
+        &self,
+        _content: &RulePackContent,
+        _product: CgbFuturesProduct,
+    ) -> ApplicationResult<FuturesDeliveryRule> {
+        Err(ApplicationError::new(
+            crate::ApplicationErrorCategory::ValidationFailed,
+            false,
+        ))
+    }
 }

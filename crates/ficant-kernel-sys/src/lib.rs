@@ -166,6 +166,15 @@ pub struct CgbFuturesHedgeInputV1 {
     pub conversion_factor: f64,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct CgbFuturesHedgeInputV2 {
+    pub contract_notional: f64,
+    pub face_quote_basis: f64,
+    pub target_dv01: f64,
+    pub ctd_dv01_per_quote_unit: f64,
+    pub conversion_factor: f64,
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CgbFuturesHedgeResultV1 {
     pub status_code: u32,
@@ -361,6 +370,17 @@ struct RawCgbFuturesHedgeInputV1 {
 }
 
 #[repr(C)]
+struct RawCgbFuturesHedgeInputV2 {
+    struct_size: u32,
+    abi_version: u32,
+    contract_notional: f64,
+    face_quote_basis: f64,
+    target_dv01: f64,
+    ctd_dv01_per_quote_unit: f64,
+    conversion_factor: f64,
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, Default)]
 struct RawCgbFuturesHedgeResultV1 {
     struct_size: u32,
@@ -398,6 +418,10 @@ unsafe extern "C" {
     ) -> c_uint;
     fn ficant_kernel_calculate_cgb_futures_hedge_v1(
         input: *const RawCgbFuturesHedgeInputV1,
+        result: *mut RawCgbFuturesHedgeResultV1,
+    ) -> c_uint;
+    fn ficant_kernel_calculate_cgb_futures_hedge_v2(
+        input: *const RawCgbFuturesHedgeInputV2,
         result: *mut RawCgbFuturesHedgeResultV1,
     ) -> c_uint;
 }
@@ -693,6 +717,42 @@ pub fn calculate_cgb_futures_hedge(
     )
 }
 
+#[must_use]
+pub fn calculate_cgb_futures_hedge_v2(
+    input: &CgbFuturesHedgeInputV2,
+) -> (u32, CgbFuturesHedgeResultV1) {
+    let raw_input = RawCgbFuturesHedgeInputV2 {
+        struct_size: size_of_u32::<RawCgbFuturesHedgeInputV2>(),
+        abi_version: ABI_VERSION,
+        contract_notional: input.contract_notional,
+        face_quote_basis: input.face_quote_basis,
+        target_dv01: input.target_dv01,
+        ctd_dv01_per_quote_unit: input.ctd_dv01_per_quote_unit,
+        conversion_factor: input.conversion_factor,
+    };
+    let mut raw_result = RawCgbFuturesHedgeResultV1 {
+        struct_size: size_of_u32::<RawCgbFuturesHedgeResultV1>(),
+        abi_version: ABI_VERSION,
+        ..RawCgbFuturesHedgeResultV1::default()
+    };
+    // SAFETY: both pointers reference live, correctly-laid-out values for the full call and the
+    // C++ implementation does not retain them.
+    let status = unsafe {
+        ficant_kernel_calculate_cgb_futures_hedge_v2(&raw const raw_input, &raw mut raw_result)
+    };
+    (
+        status,
+        CgbFuturesHedgeResultV1 {
+            status_code: raw_result.status_code,
+            futures_contract_dv01: raw_result.futures_contract_dv01,
+            raw_contracts: raw_result.raw_contracts,
+            recommended_contracts: raw_result.recommended_contracts,
+            residual_dv01: raw_result.residual_dv01,
+            hedge_effectiveness: raw_result.hedge_effectiveness,
+        },
+    )
+}
+
 fn size_of_u32<T>() -> u32 {
     u32::try_from(core::mem::size_of::<T>()).unwrap_or(u32::MAX)
 }
@@ -743,14 +803,17 @@ fn convert_cashflow(value: RawCashflowV1) -> CashflowV1 {
 #[cfg(test)]
 mod tests {
     use super::{
-        RawBondInputV1, RawCalculateInputV1, RawCarryRollInputV1, RawCarryRollResultV1,
-        RawCashflowV1, RawCgbFuturesDeliveryInputV1, RawCgbFuturesDeliveryResultV1,
-        RawCgbFuturesHedgeInputV1, RawCgbFuturesHedgeResultV1, RawResultV1, RawYieldCurveInputV1,
-        RawYieldCurveNodeV1, RawYieldCurveQueryV1, RawYieldCurveResultV1,
+        ABI_VERSION, CGB_FUTURES_T, CgbFuturesHedgeInputV1, CgbFuturesHedgeInputV2, RawBondInputV1,
+        RawCalculateInputV1, RawCarryRollInputV1, RawCarryRollResultV1, RawCashflowV1,
+        RawCgbFuturesDeliveryInputV1, RawCgbFuturesDeliveryResultV1, RawCgbFuturesHedgeInputV1,
+        RawCgbFuturesHedgeInputV2, RawCgbFuturesHedgeResultV1, RawResultV1, RawYieldCurveInputV1,
+        RawYieldCurveNodeV1, RawYieldCurveQueryV1, RawYieldCurveResultV1, STATUS_INVALID_ARGUMENT,
+        STATUS_OK, abi_version, calculate_cgb_futures_hedge, calculate_cgb_futures_hedge_v2,
     };
 
     #[test]
     fn rust_layout_matches_frozen_c_header() {
+        assert_eq!(ABI_VERSION, 1);
         assert_eq!(core::mem::size_of::<RawBondInputV1>(), 48);
         assert_eq!(core::mem::size_of::<RawCalculateInputV1>(), 72);
         assert_eq!(core::mem::size_of::<RawResultV1>(), 88);
@@ -764,7 +827,11 @@ mod tests {
         assert_eq!(core::mem::size_of::<RawCgbFuturesDeliveryInputV1>(), 128);
         assert_eq!(core::mem::size_of::<RawCgbFuturesDeliveryResultV1>(), 120);
         assert_eq!(core::mem::size_of::<RawCgbFuturesHedgeInputV1>(), 40);
+        assert_eq!(core::mem::align_of::<RawCgbFuturesHedgeInputV1>(), 8);
+        assert_eq!(core::mem::size_of::<RawCgbFuturesHedgeInputV2>(), 48);
+        assert_eq!(core::mem::align_of::<RawCgbFuturesHedgeInputV2>(), 8);
         assert_eq!(core::mem::size_of::<RawCgbFuturesHedgeResultV1>(), 56);
+        assert_eq!(core::mem::align_of::<RawCgbFuturesHedgeResultV1>(), 8);
 
         assert_eq!(core::mem::offset_of!(RawBondInputV1, struct_size), 0);
         assert_eq!(core::mem::offset_of!(RawBondInputV1, coupon_rate), 32);
@@ -795,6 +862,34 @@ mod tests {
             16
         );
         assert_eq!(
+            core::mem::offset_of!(RawCgbFuturesHedgeInputV2, struct_size),
+            0
+        );
+        assert_eq!(
+            core::mem::offset_of!(RawCgbFuturesHedgeInputV2, abi_version),
+            4
+        );
+        assert_eq!(
+            core::mem::offset_of!(RawCgbFuturesHedgeInputV2, contract_notional),
+            8
+        );
+        assert_eq!(
+            core::mem::offset_of!(RawCgbFuturesHedgeInputV2, face_quote_basis),
+            16
+        );
+        assert_eq!(
+            core::mem::offset_of!(RawCgbFuturesHedgeInputV2, target_dv01),
+            24
+        );
+        assert_eq!(
+            core::mem::offset_of!(RawCgbFuturesHedgeInputV2, ctd_dv01_per_quote_unit),
+            32
+        );
+        assert_eq!(
+            core::mem::offset_of!(RawCgbFuturesHedgeInputV2, conversion_factor),
+            40
+        );
+        assert_eq!(
             core::mem::offset_of!(RawCgbFuturesHedgeResultV1, recommended_contracts),
             32
         );
@@ -803,5 +898,56 @@ mod tests {
             8
         );
         assert_eq!(core::mem::offset_of!(RawCarryRollResultV1, carry), 16);
+    }
+
+    #[test]
+    fn v1_futures_hedge_fails_closed_without_publishing_measures() {
+        assert_eq!(abi_version(), ABI_VERSION);
+        let (status, result) = calculate_cgb_futures_hedge(&CgbFuturesHedgeInputV1 {
+            product: CGB_FUTURES_T,
+            target_dv01: 500.0,
+            ctd_dv01_per_100: 0.045,
+            conversion_factor: 0.9,
+        });
+        assert_eq!(status, STATUS_INVALID_ARGUMENT);
+        assert_eq!(result.status_code, STATUS_INVALID_ARGUMENT);
+        assert_eq!(result.futures_contract_dv01.to_bits(), 0.0_f64.to_bits());
+        assert_eq!(result.raw_contracts.to_bits(), 0.0_f64.to_bits());
+        assert_eq!(result.recommended_contracts, 0);
+        assert_eq!(result.residual_dv01.to_bits(), 0.0_f64.to_bits());
+        assert_eq!(result.hedge_effectiveness.to_bits(), 0.0_f64.to_bits());
+    }
+
+    #[test]
+    fn v2_futures_hedge_uses_caller_scale_and_preserves_quote_basis_invariance() {
+        let base_notional = 50_000.0;
+        let base_quote = 25.0;
+        let base_ctd_dv01 = 0.225;
+        let (status_a, res_a) = calculate_cgb_futures_hedge_v2(&CgbFuturesHedgeInputV2 {
+            contract_notional: base_notional,
+            face_quote_basis: base_quote,
+            target_dv01: 500.0,
+            ctd_dv01_per_quote_unit: base_ctd_dv01,
+            conversion_factor: 0.9,
+        });
+        assert_eq!(status_a, STATUS_OK);
+        assert_eq!(res_a.status_code, STATUS_OK);
+        assert!((res_a.futures_contract_dv01 - 500.0).abs() <= 1e-12);
+        assert!((res_a.raw_contracts + 1.0).abs() <= 1e-12);
+        assert_eq!(res_a.recommended_contracts, -1);
+        assert!(res_a.residual_dv01.abs() <= 1e-12);
+        assert!((res_a.hedge_effectiveness - 1.0).abs() <= 1e-12);
+
+        let (status_b, res_b) = calculate_cgb_futures_hedge_v2(&CgbFuturesHedgeInputV2 {
+            contract_notional: base_notional,
+            face_quote_basis: base_quote * 2.0,
+            target_dv01: 500.0,
+            ctd_dv01_per_quote_unit: base_ctd_dv01 * 2.0,
+            conversion_factor: 0.9,
+        });
+        assert_eq!(status_b, STATUS_OK);
+        assert_eq!(res_b.status_code, STATUS_OK);
+        assert!((res_b.futures_contract_dv01 - res_a.futures_contract_dv01).abs() <= 1e-12);
+        assert_eq!(res_b.recommended_contracts, res_a.recommended_contracts);
     }
 }

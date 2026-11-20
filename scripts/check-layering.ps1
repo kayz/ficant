@@ -15,6 +15,31 @@ $script:SourceExtensions = @(
 )
 $script:SourceRoots = @('.')
 $script:CountryCode = [string]::Concat([char]67, [char]78)
+$script:Bp1ProductionRoots = @(
+    'cpp/fixed-income-kernel/include',
+    'cpp/fixed-income-kernel/src',
+    'crates/ficant-kernel-sys/src',
+    'crates/ficant-fixed-income-native/src',
+    'crates/ficant-domain/src',
+    'crates/ficant-application/src',
+    'crates/ficant-api/src'
+)
+$script:Bp1ProductionExtensions = @(
+    '.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx', '.rs'
+)
+$script:LegacyNotionalConstName = [string]::Concat('CGB_', 'FUTURES_', 'CONTRACT_', 'NOTIONAL')
+$script:IssuerTokens = @(
+    [string]::Concat([char]67, [char]68, [char]66),
+    [string]::Concat([char]69, [char]73, [char]66, [char]67),
+    [string]::Concat([char]65, [char]68, [char]66, [char]67),
+    [string]::Concat([char]77, [char]79, [char]70)
+)
+$script:FuturesProductTokens = @(
+    [string]::Concat([char]84, [char]83),
+    [string]::Concat([char]84, [char]70),
+    [string]::Concat([char]84, [char]76),
+    [string]::Concat([char]84)
+)
 
 function Get-RepositoryRelativePath {
     param([Parameter(Mandatory)][string]$Path)
@@ -80,7 +105,7 @@ function Get-MarketBranchViolations {
     [void]$patterns.Add('(?i)\bcase\s+["'']' + $script:CountryCode + '["'']')
     [void]$patterns.Add('(?i)["'']' + $script:CountryCode + '["'']\s*:')
     [void]$patterns.Add('(?i)\(\s*["'']' + $script:CountryCode + '["'']\s*,')
-    [void]$patterns.Add('(?i)["'']C["'']\s*\+\s*["'']N["'']')
+    [void]$patterns.Add('(?i)["'']' + [char]67 + '["'']\s*\+\s*["'']' + [char]78 + '["'']')
 
     $violations = foreach ($file in @(Get-ImplementationFiles)) {
         $lineNumber = 0
@@ -300,6 +325,161 @@ function Get-TaxRuleValueViolations {
     return @($violations)
 }
 
+function Get-Bp1ProductionFiles {
+    $files = foreach ($relativeRoot in $script:Bp1ProductionRoots) {
+        $absoluteRoot = Join-Path $script:RepositoryRoot ($relativeRoot.Replace('/', '\'))
+        if (-not (Test-Path -LiteralPath $absoluteRoot -PathType Container)) {
+            continue
+        }
+
+        Get-ChildItem -LiteralPath $absoluteRoot -File -Recurse | Where-Object {
+            $extension = [System.IO.Path]::GetExtension($_.Name).ToLowerInvariant()
+            $extension -in $script:Bp1ProductionExtensions -and -not (Test-ExcludedSourcePath -Path $_.FullName)
+        }
+    }
+
+    return @($files | Sort-Object -Property FullName -Unique)
+}
+
+function Get-LineSnippetAtOffset {
+    param(
+        [Parameter(Mandatory)][string]$Content,
+        [Parameter(Mandatory)][int]$Offset
+    )
+
+    $prefix = $Content.Substring(0, $Offset)
+    $lineNumber = ($prefix.Split("`n")).Length
+    $lineStart = if ($Offset -gt 0) { $Content.LastIndexOf("`n", $Offset - 1) } else { -1 }
+    if ($lineStart -lt 0) {
+        $lineStart = 0
+    }
+    else {
+        $lineStart++
+    }
+    $lineEnd = $Content.IndexOf("`n", $Offset)
+    if ($lineEnd -lt 0) {
+        $lineEnd = $Content.Length
+    }
+
+    return [pscustomobject]@{
+        Line = $lineNumber
+        Text = $Content.Substring($lineStart, $lineEnd - $lineStart).Trim()
+    }
+}
+
+function Get-Bp1ProductionRuleViolations {
+    $ignoreCase = [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    $caseSensitive = [System.Text.RegularExpressions.RegexOptions]::None
+
+    $identPattern = '\b(?:[A-Za-z0-9_]*contract_notional|[A-Za-z0-9_]*face_quote(?:_basis)?|[A-Za-z0-9_]*quote_face(?:_basis)?|[A-Za-z0-9_]*face_per_hundred|[A-Za-z0-9_]*contract_size(?:_in_quote_units)?)\b'
+    $numPattern = '[-+]?(?:\d[\d_'']*(?:\.\d[\d_'']*)?|\.\d[\d_'']*)(?:[eE][-+]?\d[\d_'']*)?(?:_?(?:[iu](?:8|16|32|64|128|size)|f(?:32|64)|[uUlLfF]{1,3}))?'
+    $innerValPattern = '(?:(?:[A-Za-z_][A-Za-z0-9_]*::)*FixedDecimal\s*::\s*from_scaled\s*\(\s*' + $numPattern + '\s*\)|' + $numPattern + ')'
+    $rhsValPattern = '(?:(?:[A-Za-z_][A-Za-z0-9_]*::)*Some\s*\(\s*' + $innerValPattern + '\s*\)|\{\s*' + $innerValPattern + '\s*\}|' + $innerValPattern + ')'
+    $rustTypePattern = '(?:&(?:''[A-Za-z_][A-Za-z0-9_]*\s+)?(?:mut\s+)?)?(?:[A-Za-z_][A-Za-z0-9_]*::)*[A-Za-z_][A-Za-z0-9_]*(?:\s*<\s*[A-Za-z0-9_:<>,&''\s]+\s*>)?'
+    $hardcodedNumericPattern = $identPattern + '(?:(?:\s*(?<!:):(?!:)\s*' + $rustTypePattern + ')?\s*(?<![=!<>])=(?![=>])\s*' + $rhsValPattern + '|\s*(?<!:):(?!:)\s*' + $rhsValPattern + '|\s*\{\s*' + $innerValPattern + '\s*\}|\s*\(\s*' + $innerValPattern + '\s*\))'
+
+    $issuerGroup = '(?:' + ($script:IssuerTokens -join '|') + ')'
+    $issuerEnum = '(?<![A-Za-z0-9_])(?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Bond)?Issuer::' + $issuerGroup + '\b'
+    $productGroup = '(?:' + ($script:FuturesProductTokens -join '|') + ')'
+
+    $rules = @(
+        [pscustomobject]@{
+            Category = 'bp1-legacy-notional-constant'
+            Pattern = '\b' + $script:LegacyNotionalConstName + '\b'
+            Options = $ignoreCase
+        },
+        [pscustomobject]@{
+            Category = 'bp1-hardcoded-futures-rule-value'
+            Pattern = $hardcodedNumericPattern
+            Options = $ignoreCase
+        },
+        [pscustomobject]@{
+            Category = 'bp1-issuer-string-branch'
+            Pattern = '(?:==|===|!=|!==)\s*["'']' + $issuerGroup + '["'']'
+            Options = $ignoreCase
+        },
+        [pscustomobject]@{
+            Category = 'bp1-issuer-string-branch'
+            Pattern = '["'']' + $issuerGroup + '["'']\s*(?:==|===|!=|!==)'
+            Options = $ignoreCase
+        },
+        [pscustomobject]@{
+            Category = 'bp1-issuer-string-branch'
+            Pattern = '["'']' + $issuerGroup + '["''](?:\s*\|\s*(?:["''][^"''\r\n]+["'']|[A-Za-z_][A-Za-z0-9_:]*))*\s*(?:\bif\b[^;{}\r\n]+?)?=>'
+            Options = $ignoreCase
+        },
+        [pscustomobject]@{
+            Category = 'bp1-issuer-string-branch'
+            Pattern = '\bcase\s+["'']' + $issuerGroup + '["'']\s*:'
+            Options = $ignoreCase
+        },
+        [pscustomobject]@{
+            Category = 'bp1-issuer-enum-branch'
+            Pattern = '(?:==|===|!=|!==)\s*' + $issuerEnum
+            Options = $ignoreCase
+        },
+        [pscustomobject]@{
+            Category = 'bp1-issuer-enum-branch'
+            Pattern = $issuerEnum + '\s*(?:==|===|!=|!==)'
+            Options = $ignoreCase
+        },
+        [pscustomobject]@{
+            Category = 'bp1-issuer-enum-branch'
+            Pattern = $issuerEnum + '(?:\s*\|\s*[A-Za-z0-9_:]+)*\s*(?:\bif\b[^;{}\r\n]+?)?=>'
+            Options = $ignoreCase
+        },
+        [pscustomobject]@{
+            Category = 'bp1-issuer-enum-branch'
+            Pattern = '\bcase\s+' + $issuerEnum + '\s*:'
+            Options = $ignoreCase
+        },
+        [pscustomobject]@{
+            Category = 'bp1-futures-product-branch'
+            Pattern = '(?:==|===|!=|!==)\s*"' + $productGroup + '"'
+            Options = $caseSensitive
+        },
+        [pscustomobject]@{
+            Category = 'bp1-futures-product-branch'
+            Pattern = '"' + $productGroup + '"\s*(?:==|===|!=|!==)'
+            Options = $caseSensitive
+        },
+        [pscustomobject]@{
+            Category = 'bp1-futures-product-branch'
+            Pattern = '"' + $productGroup + '"(?:\s*\|\s*"[^"\r\n]+")*\s*(?:\bif\b[^;{}\r\n]+?)?=>'
+            Options = $caseSensitive
+        },
+        [pscustomobject]@{
+            Category = 'bp1-futures-product-branch'
+            Pattern = '\bcase\s+"' + $productGroup + '"\s*:'
+            Options = $caseSensitive
+        }
+    )
+
+    $violations = [System.Collections.Generic.List[object]]::new()
+    foreach ($file in @(Get-Bp1ProductionFiles)) {
+        $content = Get-Content -LiteralPath $file.FullName -Raw
+        if ([string]::IsNullOrEmpty($content)) {
+            continue
+        }
+
+        $relativePath = Get-RepositoryRelativePath -Path $file.FullName
+        foreach ($rule in $rules) {
+            $matches = [regex]::Matches($content, $rule.Pattern, $rule.Options)
+            foreach ($match in $matches) {
+                $location = Get-LineSnippetAtOffset -Content $content -Offset $match.Index
+                $violations.Add([pscustomobject]@{
+                    Path = $relativePath
+                    Line = $location.Line
+                    Category = $rule.Category
+                    Text = $location.Text
+                })
+            }
+        }
+    }
+
+    return @($violations)
+}
+
 try {
     if (-not (Test-Path -LiteralPath $script:RepositoryRoot -PathType Container)) {
         throw "Repository root is missing: $script:RepositoryRoot"
@@ -346,7 +526,15 @@ try {
         throw "Layering gate failed R3b with $($taxRuleViolations.Count) Tax rule value violation(s)."
     }
 
-    Write-Host ("Layering gate passed: AC03=0 market branches; AC01=0 domain rule values; Phase2C production C++/FFI rule values=0; R3a Funding rule values=0; R3b Tax rule values=0; allowlist=$($allowlist.Count).")
+    $bp1ProductionViolations = @(Get-Bp1ProductionRuleViolations)
+    if ($bp1ProductionViolations.Count -gt 0) {
+        foreach ($violation in $bp1ProductionViolations) {
+            Write-Error ("BP-1 7-dir production rule violation at {0}:{1} ({2}): {3}" -f $violation.Path, $violation.Line, $violation.Category, $violation.Text)
+        }
+        throw "Layering gate failed BP-1 7-dir production check with $($bp1ProductionViolations.Count) violation(s)."
+    }
+
+    Write-Host ("Layering gate passed: AC03=0 market branches; AC01=0 domain rule values; Phase2C production C++/FFI rule values=0; R3a Funding rule values=0; R3b Tax rule values=0; BP-1 7-dir production rules=0; allowlist=$($allowlist.Count).")
     exit 0
 }
 catch {

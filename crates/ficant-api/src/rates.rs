@@ -10,7 +10,8 @@ use ficant_application::ports::{
 use ficant_application::use_cases::{
     CalculateBondAnalytics, CalculateCarryRoll, CalculateFuturesDeliveryBasket,
     CalculateFuturesHedge, InterpolateYieldCurve, parse_verified_delivery_rule,
-    parse_verified_funding_rule, parse_verified_tax_rule,
+    parse_verified_delivery_rule_for_per_100_hedge, parse_verified_funding_rule,
+    parse_verified_tax_rule,
 };
 use ficant_application::{ApplicationError, ApplicationErrorCategory, map_domain_error};
 use ficant_contracts::ficant::core::v1 as core_pb;
@@ -18,14 +19,14 @@ use ficant_contracts::ficant::market::v1 as market_pb;
 use ficant_contracts::ficant::rates::v1::rates_analytics_service_server::RatesAnalyticsService;
 use ficant_contracts::ficant::rates::v1::{self as pb};
 use ficant_domain::analytics::{
-    AnalyticsMode, AnalyticsObjectRef, BondAnalyticsInput, BondTerms, BusinessDayConvention,
-    CalendarBinding, CalendarRequirement, CouponFrequency, DECIMAL_SCALE, DayCountConvention,
-    FixedDecimal, MARKET_TIMEZONE,
+    AnalyticsMode, AnalyticsObjectRef, BondAnalyticsInput, BondTaxBasis, BondTerms,
+    BusinessDayConvention, CalendarBinding, CalendarRequirement, CouponFrequency, DECIMAL_SCALE,
+    DayCountConvention, FixedDecimal, MARKET_TIMEZONE,
 };
 use ficant_domain::curves::{
     CarryRollInput, YieldCurveBinding, YieldCurveInterpolation, YieldCurveNode, YieldCurveQuery,
 };
-use ficant_domain::futures_delivery::{CgbFuturesProduct, FuturesDeliverableInput};
+use ficant_domain::futures_delivery::FuturesDeliverableInput;
 use ficant_domain::futures_hedge::FuturesHedgeInput;
 use ficant_domain::market::{
     BondTaxAttributes, IncomeTaxStatus, MarketRulePack, MarketRulePackInput, RulePackContent,
@@ -36,6 +37,7 @@ use ficant_domain::primitives::{
     UnitRef, Version, VersionRef,
 };
 use ficant_domain::subject::{FundingTier, TaxTreatment};
+use ficant_domain::{ContentAddressed, VersionedDefinition};
 use tonic::{Request, Response, Status};
 
 use crate::to_error_detail;
@@ -81,6 +83,8 @@ impl RatesGrpcService {
         &self,
         req: &pb::AnalyzeBondRequest,
     ) -> ApplicationResult<pb::AnalyzeBondResult> {
+        let execution_mode =
+            resolve_bond_execution_mode(req.execution_mode, req.tax_context.is_some())?;
         let units = parse_units(req.units.as_ref())?;
         let bond_pb = req.bond.as_ref().ok_or_else(invalid)?;
         let (bond_ref, terms) = parse_bond(bond_pb, &units)?;
@@ -88,6 +92,7 @@ impl RatesGrpcService {
         let calendar_requirement = parse_calendar_requirement(req.calendar_requirement)?;
         let calendar = parse_calendar(
             req.calendar.as_ref(),
+            calendar_requirement,
             settlement_date,
             terms.maturity_date(),
         )?;
@@ -117,37 +122,39 @@ impl RatesGrpcService {
         )
         .map_err(map_domain_error)?;
 
+        let treatment = match execution_mode {
+            BondTaxBasis::PreTax => None,
+            BondTaxBasis::TaxAdjusted => {
+                let tax_ctx = req.tax_context.as_ref().ok_or_else(invalid)?;
+                let tax_attrs = terms.tax_attributes().ok_or_else(invalid)?;
+                let subject_tax = parse_tax_treatment(tax_ctx.subject_tax_treatment.as_ref())?;
+                let pack = parse_market_rule_pack(tax_ctx.tax_rule_pack.as_ref())?;
+                Some(parse_verified_tax_rule(
+                    &pack,
+                    None,
+                    terms.first_issue_date(),
+                    tax_attrs,
+                    &subject_tax,
+                    self.tax_rule_parser.as_ref(),
+                )?)
+            }
+        };
+
         let calc = CalculateBondAnalytics::new(self.bond_engine.as_ref());
-        if let Some(tax_ctx) = req.tax_context.as_ref() {
-            let tax_attrs = terms.tax_attributes().ok_or_else(invalid)?;
-            let subject_tax = parse_tax_treatment(tax_ctx.subject_tax_treatment.as_ref())?;
-            let pack = parse_market_rule_pack(tax_ctx.tax_rule_pack.as_ref())?;
-            let treatment = parse_verified_tax_rule(
-                &pack,
-                None,
-                terms.first_issue_date(),
-                tax_attrs,
-                &subject_tax,
-                self.tax_rule_parser.as_ref(),
-            )?;
-            let (pre_tax, after_tax) = calc.execute_with_tax(&input, &treatment)?;
-            Ok(pb::AnalyzeBondResult {
-                cashflows: to_pb_cashflows(pre_tax.cashflows(), &units.currency_amount),
-                measures: Some(to_pb_bond_measures(pre_tax.measures(), &units)),
-                after_tax: Some(pb::TaxAdjustedBondAnalytics {
-                    cashflows: to_pb_cashflows(after_tax.cashflows(), &units.currency_amount),
-                    yield_to_maturity: Some(decimal(after_tax.yield_to_maturity(), &units.rate)),
-                    claim_scope: to_pb_claim_scope(after_tax.claim_scope()),
-                }),
-            })
-        } else {
-            let pre_tax = calc.execute(&input)?;
-            Ok(pb::AnalyzeBondResult {
-                cashflows: to_pb_cashflows(pre_tax.cashflows(), &units.currency_amount),
-                measures: Some(to_pb_bond_measures(pre_tax.measures(), &units)),
-                after_tax: None,
-            })
-        }
+        let (pre_tax, after_tax) =
+            calc.execute_for_mode(&input, execution_mode, treatment.as_ref())?;
+        Ok(pb::AnalyzeBondResult {
+            cashflows: to_pb_cashflows(pre_tax.cashflows(), &units.currency_amount),
+            measures: Some(to_pb_bond_measures(pre_tax.measures(), &units)),
+            after_tax: after_tax.map(|adj| pb::TaxAdjustedBondAnalytics {
+                cashflows: to_pb_cashflows(adj.cashflows(), &units.currency_amount),
+                yield_to_maturity: Some(decimal(adj.yield_to_maturity(), &units.rate)),
+                claim_scope: to_pb_claim_scope(adj.claim_scope()),
+                tax_basis: to_pb_tax_basis(adj.tax_basis()),
+            }),
+            execution_mode: to_pb_tax_basis(execution_mode),
+            measures_tax_basis: to_pb_tax_basis(pre_tax.tax_basis()),
+        })
     }
 
     fn execute_curve(
@@ -177,7 +184,12 @@ impl RatesGrpcService {
         let horizon = parse_date(&req.horizon_settlement)?;
         let curve_as_of = parse_date(&req.curve_as_of_date)?;
         let calendar_requirement = parse_calendar_requirement(req.calendar_requirement)?;
-        let calendar = parse_calendar(req.calendar.as_ref(), initial, terms.maturity_date())?;
+        let calendar = parse_calendar(
+            req.calendar.as_ref(),
+            calendar_requirement,
+            initial,
+            terms.maturity_date(),
+        )?;
         let curve = parse_curve_binding(curve_as_of, &req.curve_nodes, &units.rate)?;
 
         let input = CarryRollInput::new(
@@ -352,10 +364,41 @@ impl RatesGrpcService {
         req: &pb::AnalyzeFuturesHedgeRequest,
     ) -> ApplicationResult<pb::AnalyzeFuturesHedgeResult> {
         let units = parse_units(req.units.as_ref())?;
-        let product = parse_product_code(&req.product_code)?;
+        let product = self
+            .delivery_rule_parser
+            .parse_product_code(&req.product_code)?;
         let target_dv01 = parse_required_decimal(req.target_dv01.as_ref(), &units.dv01)?;
         let ctd_dv01 = parse_required_decimal(req.ctd_dv01_per_100.as_ref(), &units.dv01_per_100)?;
         let cf = parse_required_decimal(req.conversion_factor.as_ref(), &units.dimensionless)?;
+        let delivery_pack = parse_strict_market_rule_pack(req.delivery_rule_pack.as_ref())?;
+        let valuation_at = req
+            .valuation_at
+            .as_ref()
+            .map(|mt| {
+                let parsed = parse_market_time(Some(mt))?;
+                if parsed.market_timezone() != MARKET_TIMEZONE {
+                    return Err(invalid());
+                }
+                Ok(parsed)
+            })
+            .transpose()?;
+        let rule = parse_verified_delivery_rule_for_per_100_hedge(
+            &delivery_pack,
+            valuation_at.as_ref(),
+            product,
+            self.delivery_rule_parser.as_ref(),
+        )?;
+        let contract_notional = rule
+            .contract_notional()
+            .map_err(map_domain_error)?
+            .ok_or_else(invalid)?;
+        let pack_ref = AnalyticsObjectRef::new(
+            VersionRef::new(
+                Ulid::new(delivery_pack.identity()).map_err(map_domain_error)?,
+                Version::new(delivery_pack.version()).map_err(map_domain_error)?,
+            ),
+            delivery_pack.content_hash().clone(),
+        );
         let input = FuturesHedgeInput::new(
             default_owner(),
             placeholder_object_ref(),
@@ -363,10 +406,12 @@ impl RatesGrpcService {
             placeholder_object_ref(),
             placeholder_object_ref(),
             placeholder_object_ref(),
+            pack_ref,
             placeholder_object_ref(),
-            placeholder_object_ref(),
-            shanghai_noon(NaiveDate::from_ymd_opt(2026, 1, 5).expect("valid date"))?,
+            valuation_at,
             product,
+            contract_notional,
+            rule.face_quote_basis(),
             target_dv01,
             ctd_dv01,
             cf,
@@ -382,6 +427,7 @@ impl RatesGrpcService {
                 recommended_contracts: m.recommended_contracts(),
                 residual_dv01: Some(decimal(m.residual_dv01(), &units.dv01)),
                 hedge_effectiveness: Some(decimal(m.hedge_effectiveness(), &units.dimensionless)),
+                contract_notional: Some(decimal(input.contract_notional(), &units.currency_amount)),
             }),
         })
     }
@@ -528,50 +574,81 @@ fn parse_bond(
     let coupon_rate = parse_required_decimal(bond.coupon_rate.as_ref(), &units.rate)?;
     let face_value = parse_required_decimal(bond.face_value.as_ref(), &units.price_per_100)
         .or_else(|_| parse_required_decimal(bond.face_value.as_ref(), &units.currency_amount))?;
-
-    let terms = if let Some(tax_pb) = bond.tax_attributes.as_ref() {
-        let vat = match market_pb::ValueAddedTaxStatus::try_from(tax_pb.value_added_tax_status) {
-            Ok(market_pb::ValueAddedTaxStatus::Exempt) => ValueAddedTaxStatus::Exempt,
-            Ok(market_pb::ValueAddedTaxStatus::Taxable) => ValueAddedTaxStatus::Taxable,
-            _ => return Err(invalid()),
-        };
-        let cit = match market_pb::IncomeTaxStatus::try_from(tax_pb.income_tax_status) {
-            Ok(market_pb::IncomeTaxStatus::Exempt) => IncomeTaxStatus::Exempt,
-            Ok(market_pb::IncomeTaxStatus::Taxable) => IncomeTaxStatus::Taxable,
-            _ => return Err(invalid()),
-        };
-        let cum_issued = bond
-            .cumulative_issued_amount
-            .as_ref()
-            .map(parse_fixed_decimal_any_unit)
-            .transpose()?
-            .unwrap_or(face_value);
-        BondTerms::with_issuance(
-            first_issue,
-            current_issue,
-            maturity,
-            freq,
-            dc,
-            bdc,
-            coupon_rate,
-            face_value,
-            cum_issued,
-            BondTaxAttributes::new(vat, cit),
-        )
-        .map_err(map_domain_error)?
-    } else {
-        BondTerms::new(
-            first_issue,
-            maturity,
-            freq,
-            dc,
-            bdc,
-            coupon_rate,
-            face_value,
-        )
-        .map_err(map_domain_error)?
-    };
+    let cum_issued = bond
+        .cumulative_issued_amount
+        .as_ref()
+        .map(parse_fixed_decimal_any_unit)
+        .transpose()?
+        .unwrap_or(face_value);
+    let tax_attributes = bond
+        .tax_attributes
+        .as_ref()
+        .map(|tax_pb| -> ApplicationResult<BondTaxAttributes> {
+            let vat = match market_pb::ValueAddedTaxStatus::try_from(tax_pb.value_added_tax_status)
+            {
+                Ok(market_pb::ValueAddedTaxStatus::Exempt) => ValueAddedTaxStatus::Exempt,
+                Ok(market_pb::ValueAddedTaxStatus::Taxable) => ValueAddedTaxStatus::Taxable,
+                _ => return Err(invalid()),
+            };
+            let cit = match market_pb::IncomeTaxStatus::try_from(tax_pb.income_tax_status) {
+                Ok(market_pb::IncomeTaxStatus::Exempt) => IncomeTaxStatus::Exempt,
+                Ok(market_pb::IncomeTaxStatus::Taxable) => IncomeTaxStatus::Taxable,
+                _ => return Err(invalid()),
+            };
+            Ok(BondTaxAttributes::new(vat, cit))
+        })
+        .transpose()?;
+    let terms = BondTerms::with_issuance_and_optional_tax(
+        first_issue,
+        current_issue,
+        maturity,
+        freq,
+        dc,
+        bdc,
+        coupon_rate,
+        face_value,
+        cum_issued,
+        tax_attributes,
+    )
+    .map_err(map_domain_error)?;
     Ok((inst, terms))
+}
+
+fn resolve_bond_execution_mode(
+    raw_mode: i32,
+    has_tax_context: bool,
+) -> ApplicationResult<BondTaxBasis> {
+    match pb::BondTaxBasis::try_from(raw_mode) {
+        Ok(pb::BondTaxBasis::PreTax) => {
+            if has_tax_context {
+                Err(invalid())
+            } else {
+                Ok(BondTaxBasis::PreTax)
+            }
+        }
+        Ok(pb::BondTaxBasis::TaxAdjusted) => {
+            if has_tax_context {
+                Ok(BondTaxBasis::TaxAdjusted)
+            } else {
+                Err(invalid())
+            }
+        }
+        Ok(pb::BondTaxBasis::Unspecified) => {
+            if has_tax_context {
+                Ok(BondTaxBasis::TaxAdjusted)
+            } else {
+                Ok(BondTaxBasis::PreTax)
+            }
+        }
+        Err(_) => Err(invalid()),
+    }
+}
+
+const fn to_pb_tax_basis(basis: BondTaxBasis) -> i32 {
+    match basis {
+        BondTaxBasis::PreTax => pb::BondTaxBasis::PreTax as i32,
+        BondTaxBasis::TaxAdjusted => pb::BondTaxBasis::TaxAdjusted as i32,
+    }
 }
 
 fn parse_calendar_requirement(raw: i32) -> ApplicationResult<CalendarRequirement> {
@@ -584,10 +661,14 @@ fn parse_calendar_requirement(raw: i32) -> ApplicationResult<CalendarRequirement
 
 fn parse_calendar(
     cal: Option<&market_pb::Calendar>,
+    requirement: CalendarRequirement,
     start_hint: NaiveDate,
     end_hint: NaiveDate,
 ) -> ApplicationResult<CalendarBinding> {
     if let Some(c) = cal {
+        if requirement == CalendarRequirement::ExactMarket && c.sessions.is_empty() {
+            return Err(invalid());
+        }
         let id = c
             .calendar_id
             .as_ref()
@@ -612,8 +693,14 @@ fn parse_calendar(
         holidays.dedup();
         work_weekends.sort();
         work_weekends.dedup();
-        let cov_start = min_date.unwrap_or(start_hint);
-        let cov_end = max_date.unwrap_or(end_hint);
+        let (cov_start, cov_end) = if let (Some(min_d), Some(max_d)) = (min_date, max_date) {
+            (min_d, max_d)
+        } else {
+            if requirement == CalendarRequirement::ExactMarket {
+                return Err(invalid());
+            }
+            (start_hint, end_hint)
+        };
         CalendarBinding::new(
             id,
             ver,
@@ -625,6 +712,9 @@ fn parse_calendar(
         )
         .map_err(map_domain_error)
     } else {
+        if requirement == CalendarRequirement::ExactMarket {
+            return Err(invalid());
+        }
         CalendarBinding::new(
             DEFAULT_ULID,
             Version::new(1).expect("nonzero"),
@@ -660,8 +750,21 @@ fn parse_curve_binding(
     .map_err(map_domain_error)
 }
 
+fn parse_strict_market_rule_pack(
+    pack: Option<&market_pb::MarketRulePack>,
+) -> ApplicationResult<MarketRulePack> {
+    parse_market_rule_pack_inner(pack, true)
+}
+
 fn parse_market_rule_pack(
     pack: Option<&market_pb::MarketRulePack>,
+) -> ApplicationResult<MarketRulePack> {
+    parse_market_rule_pack_inner(pack, false)
+}
+
+fn parse_market_rule_pack_inner(
+    pack: Option<&market_pb::MarketRulePack>,
+    require_content_hash: bool,
 ) -> ApplicationResult<MarketRulePack> {
     let p = pack.ok_or_else(invalid)?;
     let id = Ulid::new(p.rule_pack_id.as_ref().ok_or_else(invalid)?.value.clone())
@@ -693,7 +796,13 @@ fn parse_market_rule_pack(
     let content = RulePackContent::new(content_any.type_url.clone(), content_any.value.clone())
         .map_err(map_domain_error)?;
     let hash = match p.content_hash.as_ref() {
-        Some(h) => ContentHash::from_bytes(&h.value).map_err(map_domain_error)?,
+        Some(h) => {
+            if h.value.len() != 32 {
+                return Err(invalid());
+            }
+            ContentHash::from_bytes(&h.value).map_err(map_domain_error)?
+        }
+        None if require_content_hash => return Err(invalid()),
         None => ContentHash::digest(content.value()),
     };
     MarketRulePack::new_with_content(
@@ -726,16 +835,6 @@ fn parse_funding_tier(raw: i32) -> ApplicationResult<FundingTier> {
     match core_pb::FundingTier::try_from(raw) {
         Ok(core_pb::FundingTier::DrAvailable) => Ok(FundingTier::DrAvailable),
         Ok(core_pb::FundingTier::ROnly) => Ok(FundingTier::ROnly),
-        _ => Err(invalid()),
-    }
-}
-
-fn parse_product_code(code: &str) -> ApplicationResult<CgbFuturesProduct> {
-    match code {
-        "TS" => Ok(CgbFuturesProduct::TwoYear),
-        "TF" => Ok(CgbFuturesProduct::FiveYear),
-        "T" => Ok(CgbFuturesProduct::TenYear),
-        "TL" => Ok(CgbFuturesProduct::ThirtyYear),
         _ => Err(invalid()),
     }
 }

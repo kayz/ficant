@@ -1,6 +1,6 @@
 use ficant_domain::analytics::{
-    AnalyticsError, BondAnalyticsInput, BondAnalyticsResult, CouponFrequency, DerivedCashflow,
-    FixedDecimal,
+    AnalyticsError, BondAnalyticsInput, BondAnalyticsResult, BondTaxBasis, CouponFrequency,
+    DerivedCashflow, FixedDecimal,
 };
 
 use crate::ports::{
@@ -13,6 +13,7 @@ pub struct TaxAdjustedBondAnalytics {
     cashflows: Vec<DerivedCashflow>,
     yield_to_maturity: FixedDecimal,
     claim_scope: CouponTaxClaimScope,
+    tax_basis: BondTaxBasis,
 }
 
 impl TaxAdjustedBondAnalytics {
@@ -30,6 +31,11 @@ impl TaxAdjustedBondAnalytics {
     pub const fn claim_scope(&self) -> CouponTaxClaimScope {
         self.claim_scope
     }
+
+    #[must_use]
+    pub const fn tax_basis(&self) -> BondTaxBasis {
+        self.tax_basis
+    }
 }
 
 pub struct CalculateBondAnalytics<'a> {
@@ -43,7 +49,31 @@ impl<'a> CalculateBondAnalytics<'a> {
     }
 
     pub fn execute(&self, input: &BondAnalyticsInput) -> ApplicationResult<BondAnalyticsResult> {
-        self.engine.calculate(input).map_err(map_analytics_error)
+        if input.tax_basis() != BondTaxBasis::PreTax {
+            return Err(invalid());
+        }
+        let result = self.engine.calculate(input).map_err(map_analytics_error)?;
+        result.validate_against(input).map_err(map_domain_error)?;
+        if result.tax_basis() != BondTaxBasis::PreTax {
+            return Err(invalid());
+        }
+        Ok(result)
+    }
+
+    pub fn execute_for_mode(
+        &self,
+        input: &BondAnalyticsInput,
+        mode: BondTaxBasis,
+        treatment: Option<&CouponTaxTreatment>,
+    ) -> ApplicationResult<(BondAnalyticsResult, Option<TaxAdjustedBondAnalytics>)> {
+        match (mode, treatment) {
+            (BondTaxBasis::PreTax, None) => Ok((self.execute(input)?, None)),
+            (BondTaxBasis::TaxAdjusted, Some(treatment)) => {
+                let (pre_tax, after_tax) = self.execute_with_tax(input, treatment)?;
+                Ok((pre_tax, Some(after_tax)))
+            }
+            (BondTaxBasis::PreTax, Some(_)) | (BondTaxBasis::TaxAdjusted, None) => Err(invalid()),
+        }
     }
 
     pub fn execute_with_tax(
@@ -101,7 +131,16 @@ impl<'a> CalculateBondAnalytics<'a> {
         let after_tax_input = input
             .with_terms_and_price_in(terms, pre_tax.measures().clean_price())
             .map_err(map_domain_error)?;
-        let after_tax = self.execute(&after_tax_input)?;
+        let after_tax = self
+            .engine
+            .calculate(&after_tax_input)
+            .map_err(map_analytics_error)?;
+        after_tax
+            .validate_against(&after_tax_input)
+            .map_err(map_domain_error)?;
+        if after_tax.tax_basis() != BondTaxBasis::TaxAdjusted {
+            return Err(invalid());
+        }
 
         Ok((
             pre_tax,
@@ -109,6 +148,7 @@ impl<'a> CalculateBondAnalytics<'a> {
                 cashflows,
                 yield_to_maturity: after_tax.measures().yield_to_maturity(),
                 claim_scope: treatment.claim_scope(),
+                tax_basis: after_tax.tax_basis(),
             },
         ))
     }

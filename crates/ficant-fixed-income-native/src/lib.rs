@@ -13,7 +13,7 @@ use ficant_domain::curves::{
     YieldCurveQuery,
 };
 use ficant_domain::futures_delivery::{
-    CgbFuturesProduct, FuturesDeliverableInput, FuturesDeliveryMeasures, FuturesDeliveryResult,
+    FuturesDeliverableInput, FuturesDeliveryMeasures, FuturesDeliveryResult,
 };
 use ficant_domain::futures_hedge::{FuturesHedgeInput, FuturesHedgeMeasures, FuturesHedgeResult};
 
@@ -37,16 +37,12 @@ impl FuturesHedgeEngine for NativeFuturesHedgeEngine {
         if ficant_kernel_sys::abi_version() != ABI_VERSION {
             return Err(AnalyticsError::AbiMismatch);
         }
-        let (status, native) = ficant_kernel_sys::calculate_cgb_futures_hedge(
-            &ficant_kernel_sys::CgbFuturesHedgeInputV1 {
-                product: match input.product() {
-                    CgbFuturesProduct::TwoYear => ficant_kernel_sys::CGB_FUTURES_TS,
-                    CgbFuturesProduct::FiveYear => ficant_kernel_sys::CGB_FUTURES_TF,
-                    CgbFuturesProduct::TenYear => ficant_kernel_sys::CGB_FUTURES_T,
-                    CgbFuturesProduct::ThirtyYear => ficant_kernel_sys::CGB_FUTURES_TL,
-                },
+        let (status, native) = ficant_kernel_sys::calculate_cgb_futures_hedge_v2(
+            &ficant_kernel_sys::CgbFuturesHedgeInputV2 {
+                contract_notional: decimal_to_f64(input.contract_notional())?,
+                face_quote_basis: decimal_to_f64(input.face_quote_basis())?,
                 target_dv01: decimal_to_f64(input.target_dv01())?,
-                ctd_dv01_per_100: decimal_to_f64(input.ctd_dv01_per_100())?,
+                ctd_dv01_per_quote_unit: decimal_to_f64(input.ctd_dv01_per_quote_unit())?,
                 conversion_factor: decimal_to_f64(input.conversion_factor())?,
             },
         );
