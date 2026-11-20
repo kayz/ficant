@@ -1,9 +1,10 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [switch]$ListOnly,
     [switch]$Bp1Protected,
     [switch]$Bp1ProtectedFinal,
     [switch]$Bp1ProtectedSelfTest,
+    [switch]$Bp1Docs,
     [switch]$RequireCrossClang
 )
 
@@ -423,6 +424,256 @@ function Invoke-Bp1ProtectedSelfTest {
     }
 }
 
+function Get-Bp1VisibleMarkdownText {
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Content
+    )
+
+    $withoutInlineTargets = [regex]::Replace($Content, '!?\[([^\]]*)\]\([^)]*\)', '$1')
+    $withoutRefTargets = [regex]::Replace($withoutInlineTargets, '(?m)^(\s*\[[^\]]+\]:)\s*\S.*$', '$1')
+    return $withoutRefTargets
+}
+
+function Find-Bp1ForbiddenTermHits {
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$VisibleText
+    )
+
+    $hits = [System.Collections.Generic.List[string]]::new()
+    $lines = $VisibleText -split "`r?`n"
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $lineNum = $i + 1
+        $line = $lines[$i]
+        if ($line -cmatch '\bIBOR\b') {
+            $hits.Add("line ${lineNum}: forbidden standalone uppercase token 'IBOR'")
+        }
+        if ($line -imatch '\bInvestment\s+Book\s+of\s+Record\b') {
+            $hits.Add("line ${lineNum}: forbidden term 'Investment Book of Record'")
+        }
+        if ($line -cmatch '投资记账簿') {
+            $hits.Add("line ${lineNum}: forbidden term '投资记账簿'")
+        }
+    }
+    if ($hits.Count -eq 0 -and ($VisibleText -imatch '\bInvestment\s+Book\s+of\s+Record\b')) {
+        $hits.Add("multi-line: forbidden term 'Investment Book of Record'")
+    }
+    return @($hits.ToArray())
+}
+
+function Get-Bp1MarkdownLocalLinks {
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Content
+    )
+
+    $links = [System.Collections.Generic.List[pscustomobject]]::new()
+    $lines = $Content -split "`r?`n"
+    $inFence = $false
+    $fenceChar = ''
+    $fenceLength = 0
+
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $lineNum = $i + 1
+        $line = $lines[$i]
+
+        if (-not $inFence) {
+            if ($line -match '^\s{0,3}(`{3,}|~{3,})') {
+                $marker = $Matches[1]
+                $inFence = $true
+                $fenceChar = $marker[0]
+                $fenceLength = $marker.Length
+                continue
+            }
+        }
+        else {
+            if ($line -match "^\s{0,3}$([regex]::Escape($fenceChar)){$fenceLength,}\s*$") {
+                $inFence = $false
+                $fenceChar = ''
+                $fenceLength = 0
+            }
+            continue
+        }
+
+        $inlineMatches = [regex]::Matches($line, '!?\[[^\]]*\]\(([^)]+)\)')
+        foreach ($match in $inlineMatches) {
+            $raw = $match.Groups[1].Value.Trim()
+            if ($raw.StartsWith('<') -and $raw.Contains('>')) {
+                $closeIdx = $raw.IndexOf('>')
+                $target = $raw.Substring(1, $closeIdx - 1).Trim()
+            }
+            else {
+                $target = ($raw -split '\s+', 2)[0]
+            }
+            if (-not [string]::IsNullOrWhiteSpace($target)) {
+                $links.Add([pscustomobject]@{
+                    Line = $lineNum
+                    RawTarget = $target
+                })
+            }
+        }
+
+        if ($line -match '^\s*\[[^\]]+\]:\s*(\S+)') {
+            $refTarget = $Matches[1].Trim()
+            if ($refTarget.StartsWith('<') -and $refTarget.EndsWith('>')) {
+                $refTarget = $refTarget.Substring(1, $refTarget.Length - 2).Trim()
+            }
+            if (-not [string]::IsNullOrWhiteSpace($refTarget)) {
+                $links.Add([pscustomobject]@{
+                    Line = $lineNum
+                    RawTarget = $refTarget
+                })
+            }
+        }
+    }
+
+    return @($links.ToArray())
+}
+
+function Invoke-Bp1DocsCheck {
+    param(
+        [Parameter(Mandatory)][string]$RepositoryRoot
+    )
+
+    Assert-FicantCommand 'git'
+    $utf8 = [System.Text.UTF8Encoding]::new($false)
+    $repoRootFull = [System.IO.Path]::GetFullPath($RepositoryRoot)
+    $repoRootWithSep = $repoRootFull.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+    $pathComparer = if ($IsWindows) { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
+
+    # Self-verify matcher boundaries: allow Shibor3M and -ibor.md link target, reject display text IBOR / legacy terms.
+    if (@(Find-Bp1ForbiddenTermHits -VisibleText (Get-Bp1VisibleMarkdownText -Content 'Shibor3M [ADR-0030](docs/architecture/adr/0030-core-reset-and-trading-desk-ibor.md)')).Count -ne 0) {
+        throw 'BP-1 docs check matcher self-assertion failed: Shibor3M or -ibor.md link destination falsely triggered.'
+    }
+    if (@(Find-Bp1ForbiddenTermHits -VisibleText (Get-Bp1VisibleMarkdownText -Content '[实时 IBOR](docs/architecture/adr/0030-core-reset-and-trading-desk-ibor.md)')).Count -eq 0) {
+        throw 'BP-1 docs check matcher self-assertion failed: display text IBOR was not detected.'
+    }
+    if (@(Find-Bp1ForbiddenTermHits -VisibleText 'Investment Book of Record').Count -eq 0) {
+        throw 'BP-1 docs check matcher self-assertion failed: Investment Book of Record was not detected.'
+    }
+    if (@(Find-Bp1ForbiddenTermHits -VisibleText '投资记账簿').Count -eq 0) {
+        throw 'BP-1 docs check matcher self-assertion failed: 投资记账簿 was not detected.'
+    }
+
+    $violations = [System.Collections.Generic.List[string]]::new()
+    $adrRelPath = 'docs/architecture/adr/0030-core-reset-and-trading-desk-ibor.md'
+    $adrFullPath = [System.IO.Path]::GetFullPath((Join-Path $repoRootFull ($adrRelPath.Replace('/', [System.IO.Path]::DirectorySeparatorChar))))
+    $positioningDocs = @(
+        'AGENTS.md',
+        'README.md',
+        $adrRelPath
+    )
+
+    foreach ($docRelPath in $positioningDocs) {
+        if (-not (Test-Bp1RegularDiskFile -RepositoryRoot $repoRootFull -RelativePath $docRelPath)) {
+            $violations.Add("${docRelPath}: required positioning document is missing or not a regular file")
+            continue
+        }
+        $docFullPath = [System.IO.Path]::GetFullPath((Join-Path $repoRootFull ($docRelPath.Replace('/', [System.IO.Path]::DirectorySeparatorChar))))
+        $content = [System.IO.File]::ReadAllText($docFullPath, $utf8)
+        $visible = Get-Bp1VisibleMarkdownText -Content $content
+
+        $hits = @(Find-Bp1ForbiddenTermHits -VisibleText $visible)
+        foreach ($hit in $hits) {
+            $violations.Add("${docRelPath}: $hit")
+        }
+
+        if ($visible -notmatch '盘中实时簿记' -or $visible -notmatch 'Desk Blotter') {
+            $violations.Add("${docRelPath}: missing required new positioning terminology '盘中实时簿记' and 'Desk Blotter'")
+        }
+        if ($visible -notmatch '盘中实时簿记（Desk Blotter）') {
+            $violations.Add("${docRelPath}: missing canonical phrase '盘中实时簿记（Desk Blotter）'")
+        }
+
+        if ($docRelPath -ceq $adrRelPath) {
+            $visibleLines = $visible -split "`r?`n"
+            if ($visibleLines.Count -eq 0) {
+                $violations.Add("${docRelPath}: empty document")
+            }
+            else {
+                $titleLine = $visibleLines[0]
+                if ($titleLine -notmatch '^#\s*ADR-0030' -or $titleLine -notmatch '盘中实时簿记' -or $titleLine -notmatch 'Desk Blotter') {
+                    $violations.Add("${docRelPath}: line 1 title must switch to '盘中实时簿记' / 'Desk Blotter'")
+                }
+                $decisionMatch = [regex]::Match($visible, '(?ms)^##\s+决策\s*$(.*?)(?=^##\s+|\z)')
+                if (-not $decisionMatch.Success -or $decisionMatch.Groups[1].Value -notmatch '盘中实时簿记（Desk Blotter）') {
+                    $violations.Add("${docRelPath}: '## 决策' positioning section must switch to '盘中实时簿记（Desk Blotter）'")
+                }
+                $consequenceMatch = [regex]::Match($visible, '(?ms)^##\s+后果\s*$(.*?)(?=^##\s+|\z)')
+                if (-not $consequenceMatch.Success -or $consequenceMatch.Groups[1].Value -notmatch '盘中实时簿记' -or $consequenceMatch.Groups[1].Value -notmatch 'Desk Blotter') {
+                    $violations.Add("${docRelPath}: '## 后果' section must switch to '盘中实时簿记' / 'Desk Blotter'")
+                }
+            }
+        }
+    }
+
+    $trackedMdRaw = Invoke-Bp1GitRaw -ArgumentList @('-C', $repoRootFull, 'ls-files', '-z', '--', '*.md')
+    $trackedMdFiles = @(Split-Bp1NulTokens -Raw $trackedMdRaw -Label 'ls-files *.md')
+    if ($trackedMdFiles.Count -eq 0) {
+        $violations.Add('repository has no tracked Markdown files')
+    }
+
+    $localLinksChecked = 0
+    $brokenLinkCount = 0
+    $agentsAdrIncomingLinks = 0
+
+    foreach ($mdRelPath in $trackedMdFiles) {
+        $mdFullPath = [System.IO.Path]::GetFullPath((Join-Path $repoRootFull ($mdRelPath.Replace('/', [System.IO.Path]::DirectorySeparatorChar))))
+        if (-not (Test-Path -LiteralPath $mdFullPath -PathType Leaf)) {
+            $violations.Add("${mdRelPath}: tracked Markdown file is missing on disk")
+            continue
+        }
+        $mdDir = Split-Path -Parent $mdFullPath
+        $mdContent = [System.IO.File]::ReadAllText($mdFullPath, $utf8)
+        $links = @(Get-Bp1MarkdownLocalLinks -Content $mdContent)
+        foreach ($link in $links) {
+            $rawTarget = $link.RawTarget
+            if ($rawTarget.StartsWith('#') -or $rawTarget -imatch '^(https?|mailto|tel|ftp|data):') {
+                continue
+            }
+            $pathPart = ($rawTarget -split '[#?]', 2)[0]
+            if ([string]::IsNullOrWhiteSpace($pathPart)) {
+                continue
+            }
+            $decodedPath = [System.Uri]::UnescapeDataString($pathPart)
+            $normalizedRel = $decodedPath.Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+            $resolvedTarget = if ($decodedPath.StartsWith('/')) {
+                [System.IO.Path]::GetFullPath((Join-Path $repoRootFull $normalizedRel.TrimStart([System.IO.Path]::DirectorySeparatorChar)))
+            }
+            else {
+                [System.IO.Path]::GetFullPath((Join-Path $mdDir $normalizedRel))
+            }
+
+            $localLinksChecked += 1
+            $insideRepo = $resolvedTarget.Equals($repoRootFull, $pathComparer) -or $resolvedTarget.StartsWith($repoRootWithSep, $pathComparer)
+            if (-not $insideRepo -or -not (Test-Path -LiteralPath $resolvedTarget)) {
+                $brokenLinkCount += 1
+                $violations.Add("${mdRelPath}:$($link.Line): broken local relative link '$rawTarget' (resolved: '$resolvedTarget')")
+                continue
+            }
+
+            if ($mdRelPath -ceq 'AGENTS.md' -and $resolvedTarget.Equals($adrFullPath, $pathComparer)) {
+                $agentsAdrIncomingLinks += 1
+            }
+        }
+    }
+
+    if ($agentsAdrIncomingLinks -lt 1) {
+        $violations.Add("AGENTS.md: missing valid incoming link to '$adrRelPath'")
+    }
+
+    if ($violations.Count -gt 0) {
+        $details = ($violations | ForEach-Object { "  - $_" }) -join [Environment]::NewLine
+        throw "BP-1 docs check failed with $($violations.Count) violation(s) (broken_links=$brokenLinkCount):`n$details"
+    }
+
+    Write-Host "BP-1 docs check passed (docs=$($positioningDocs.Count), agents_adr_incoming_links=$agentsAdrIncomingLinks, tracked_md_files=$($trackedMdFiles.Count), local_links_checked=$localLinksChecked, broken_links=0)."
+}
+
 $visualStudioClang = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin\clang++.exe'
 $cppCompiler = if (-not [string]::IsNullOrWhiteSpace($env:FICANT_CXX)) {
     $env:FICANT_CXX
@@ -475,13 +726,15 @@ $steps = @(
     New-FicantCheckStep -Name 'Phase 2D independent Oracle' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_phase2d_manual_oracle.py', '-q')
     New-FicantCheckStep -Name 'Portfolio KRD independent Decimal Oracle' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_r5d_portfolio_krd_decimal_oracle.py', '-q')
     New-FicantCheckStep -Name 'Tax-adjusted independent Decimal Oracle' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_r5e_tax_adjusted_decimal_oracle.py', '-q')
+    New-FicantCheckStep -Name 'BP-1 CGB futures v2 independent Decimal Oracle' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_bp1_futures_hedge_v2_decimal_oracle.py', '-q')
+    New-FicantCheckStep -Name 'BP-1 policy bank PRE_TAX independent Decimal Oracle' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '-m', 'pytest', 'tests/oracle/china-rates/test_bp1_policy_bank_pretax_decimal_oracle.py', '-q')
     New-FicantCheckStep -Name 'Python contracts and live SDK' -FilePath 'uv' -ArgumentList @('run', '--locked', '--project', 'python', 'python', '-m', 'pytest', '-q', 'python/tests')
 )
 
 try {
-    $selectedModes = @(@($ListOnly.IsPresent, $Bp1Protected.IsPresent, $Bp1ProtectedFinal.IsPresent, $Bp1ProtectedSelfTest.IsPresent) | Where-Object { $_ })
+    $selectedModes = @(@($ListOnly.IsPresent, $Bp1Protected.IsPresent, $Bp1ProtectedFinal.IsPresent, $Bp1ProtectedSelfTest.IsPresent, $Bp1Docs.IsPresent) | Where-Object { $_ })
     if ($selectedModes.Count -gt 1) {
-        throw 'Specify at most one of -ListOnly, -Bp1Protected, -Bp1ProtectedFinal, or -Bp1ProtectedSelfTest.'
+        throw 'Specify at most one of -ListOnly, -Bp1Protected, -Bp1ProtectedFinal, -Bp1ProtectedSelfTest, or -Bp1Docs.'
     }
 
     if ($Bp1ProtectedSelfTest) {
@@ -496,6 +749,10 @@ try {
     if ($Bp1ProtectedFinal) {
         Invoke-Bp1ProtectedCheck -RepositoryRoot $script:FicantRoot -BaseCommit $script:Bp1BaselineCommit -Final
         Write-Host "BP-1 protected roots check passed (final mode, base=$script:Bp1BaselineCommit, 8/8 allowlisted files present)."
+        exit 0
+    }
+    if ($Bp1Docs) {
+        Invoke-Bp1DocsCheck -RepositoryRoot $script:FicantRoot
         exit 0
     }
     if ($ListOnly) {
