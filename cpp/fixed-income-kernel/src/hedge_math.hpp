@@ -13,9 +13,10 @@ struct HedgeMeasures {
     double hedge_effectiveness = 0.0;
 };
 
-bool calculate(uint32_t product,
+bool calculate(double contract_notional,
+               double face_quote_basis,
                double target_dv01,
-               double ctd_dv01_per_100,
+               double ctd_dv01_per_quote_unit,
                double conversion_factor,
                HedgeMeasures& output) noexcept;
 

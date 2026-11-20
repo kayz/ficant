@@ -63,6 +63,10 @@ pub struct TaxAdjustedBondAnalytics {
     pub yield_to_maturity: ::core::option::Option<super::super::core::v1::DecimalValue>,
     #[prost(enumeration="super::super::market::v1::CouponTaxClaimScope", tag="3")]
     pub claim_scope: i32,
+    /// Tax basis of this sub-result; always BOND_TAX_BASIS_TAX_ADJUSTED on
+    /// compliant responses.
+    #[prost(enumeration="BondTaxBasis", tag="4")]
+    pub tax_basis: i32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BondTaxContext {
@@ -85,6 +89,19 @@ pub struct AnalyzeBondRequest {
     pub calendar: ::core::option::Option<super::super::market::v1::Calendar>,
     #[prost(message, optional, tag="8")]
     pub tax_context: ::core::option::Option<BondTaxContext>,
+    /// Explicit execution mode.
+    /// - BOND_TAX_BASIS_PRE_TAX: rejects any tax_context.
+    /// - BOND_TAX_BASIS_TAX_ADJUSTED: requires a valid tax_context, bond
+    ///    tax_attributes, and matching tax treatment.
+    /// - BOND_TAX_BASIS_UNSPECIFIED: legacy-compatible inference from tax_context
+    ///    presence.
+    /// - Unknown non-zero values are rejected with ValidationFailed.
+    /// Upgrade contract: new clients sending any non-zero execution_mode against
+    /// an older server that ignores field 9 must reject responses lacking matching
+    /// execution_mode, measures_tax_basis = PRE_TAX, or required after_tax
+    /// presence and tax_basis.
+    #[prost(enumeration="BondTaxBasis", tag="9")]
+    pub execution_mode: i32,
     #[prost(oneof="analyze_bond_request::Input", tags="6, 7")]
     pub input: ::core::option::Option<analyze_bond_request::Input>,
 }
@@ -100,12 +117,23 @@ pub mod analyze_bond_request {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AnalyzeBondResult {
+    /// Top-level cashflows and measures are always pre-tax
+    /// (measures_tax_basis = BOND_TAX_BASIS_PRE_TAX).
     #[prost(message, repeated, tag="1")]
     pub cashflows: ::prost::alloc::vec::Vec<DerivedCashflow>,
     #[prost(message, optional, tag="2")]
     pub measures: ::core::option::Option<BondAnalyticsMeasures>,
+    /// Present only when resolved execution_mode is BOND_TAX_BASIS_TAX_ADJUSTED;
+    /// carries tax_basis = BOND_TAX_BASIS_TAX_ADJUSTED.
     #[prost(message, optional, tag="3")]
     pub after_tax: ::core::option::Option<TaxAdjustedBondAnalytics>,
+    /// Resolved execution mode echoed by the server (PRE_TAX or TAX_ADJUSTED).
+    #[prost(enumeration="BondTaxBasis", tag="4")]
+    pub execution_mode: i32,
+    /// Tax basis of top-level cashflows and measures; always
+    /// BOND_TAX_BASIS_PRE_TAX on compliant responses.
+    #[prost(enumeration="BondTaxBasis", tag="5")]
+    pub measures_tax_basis: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AnalyzeBondResponse {
@@ -351,6 +379,19 @@ pub struct AnalyzeFuturesHedgeRequest {
     pub ctd_dv01_per_100: ::core::option::Option<super::super::core::v1::DecimalValue>,
     #[prost(message, optional, tag="5")]
     pub conversion_factor: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    /// Required verified delivery rule pack (with 32-byte SHA-256 content_hash)
+    /// supplying contract notional and face quote basis.
+    /// Upgrade constraint: legacy clients omitting delivery_rule_pack against new
+    /// servers receive ValidationFailed; callers must upgrade or explicitly supply
+    /// this field.
+    #[prost(message, optional, tag="6")]
+    pub delivery_rule_pack: ::core::option::Option<super::super::market::v1::MarketRulePack>,
+    /// Optional valuation timestamp with proto3 message presence.
+    /// When present, validated for timezone and half-open rule-pack validity
+    /// window [effective_from, effective_to). When absent, performs explicit-pack
+    /// pro-forma evaluation while still verifying rule-pack validity range.
+    #[prost(message, optional, tag="7")]
+    pub valuation_at: ::core::option::Option<super::super::core::v1::MarketTime>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct FuturesHedgeMeasures {
@@ -364,6 +405,12 @@ pub struct FuturesHedgeMeasures {
     pub residual_dv01: ::core::option::Option<super::super::core::v1::DecimalValue>,
     #[prost(message, optional, tag="5")]
     pub hedge_effectiveness: ::core::option::Option<super::super::core::v1::DecimalValue>,
+    /// Resolved futures contract notional derived from delivery_rule_pack,
+    /// expressed using the request's units.currency_amount.
+    /// Upgrade contract: new clients require presence, valid positive finite
+    /// decimal value, and unit matching request.units.currency_amount.
+    #[prost(message, optional, tag="6")]
+    pub contract_notional: ::core::option::Option<super::super::core::v1::DecimalValue>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AnalyzeFuturesHedgeResult {
@@ -410,6 +457,43 @@ impl CalendarRequirement {
             "CALENDAR_REQUIREMENT_UNSPECIFIED" => Some(Self::Unspecified),
             "CALENDAR_REQUIREMENT_REFERENCE_REPLAY" => Some(Self::ReferenceReplay),
             "CALENDAR_REQUIREMENT_EXACT_MARKET" => Some(Self::ExactMarket),
+            _ => None,
+        }
+    }
+}
+/// BondTaxBasis identifies the explicit execution mode and tax basis for
+/// AnalyzeBond requests and results.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum BondTaxBasis {
+    /// Legacy/inferred on requests (PRE_TAX when tax_context is absent,
+    /// TAX_ADJUSTED when tax_context is present). Not valid as a resolved basis
+    /// in compliant responses.
+    Unspecified = 0,
+    /// Pre-tax bond analytics. On requests, tax_context must be absent.
+    PreTax = 1,
+    /// Tax-adjusted bond analytics. On requests, requires a valid tax_context,
+    /// bond tax_attributes, and matching tax treatment.
+    TaxAdjusted = 2,
+}
+impl BondTaxBasis {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "BOND_TAX_BASIS_UNSPECIFIED",
+            Self::PreTax => "BOND_TAX_BASIS_PRE_TAX",
+            Self::TaxAdjusted => "BOND_TAX_BASIS_TAX_ADJUSTED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "BOND_TAX_BASIS_UNSPECIFIED" => Some(Self::Unspecified),
+            "BOND_TAX_BASIS_PRE_TAX" => Some(Self::PreTax),
+            "BOND_TAX_BASIS_TAX_ADJUSTED" => Some(Self::TaxAdjusted),
             _ => None,
         }
     }

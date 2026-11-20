@@ -2,7 +2,8 @@
 param(
     [switch]$CompareOnly,
     [string]$WindowsOutput,
-    [string]$LinuxOutput
+    [string]$LinuxOutput,
+    [switch]$RequireCrossClang
 )
 
 Set-StrictMode -Version Latest
@@ -24,6 +25,22 @@ else {
 $linuxDistribution = if ([string]::IsNullOrWhiteSpace($env:FICANT_WSL_DISTRO)) { 'ficant-ubuntu-24.04' } else { $env:FICANT_WSL_DISTRO }
 $linuxCompiler = if ([string]::IsNullOrWhiteSpace($env:FICANT_LINUX_CXX)) { '/usr/bin/clang++-18' } else { $env:FICANT_LINUX_CXX }
 $minimumClang = [version]'18.0.0'
+$effectiveRequireCrossClang = $RequireCrossClang -or ($env:FICANT_REQUIRE_CROSS_CLANG -eq '1')
+
+$script:RequiredHedgeGroups = @('hedge', 'hedge_2m')
+$script:RequiredHedgeIntegerSuffixes = @(
+    'return_status',
+    'struct_size',
+    'abi_version',
+    'status_code',
+    'recommended_contracts'
+)
+$script:RequiredHedgeFloatSuffixes = @(
+    'futures_contract_dv01',
+    'raw_contracts',
+    'residual_dv01',
+    'hedge_effectiveness'
+)
 
 function Read-ValidatedManifest {
     param([Parameter(Mandatory)][string]$Path)
@@ -65,6 +82,45 @@ function Read-ValidatedManifest {
             throw "Integer output is not canonical decimal: $line"
         }
     }
+
+    foreach ($group in $script:RequiredHedgeGroups) {
+        $expectedKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+        $orderedExpected = [System.Collections.Generic.List[string]]::new()
+        foreach ($suffix in $script:RequiredHedgeIntegerSuffixes) {
+            $expectedKey = "i.$group.$suffix"
+            [void]$expectedKeys.Add($expectedKey)
+            $orderedExpected.Add($expectedKey)
+        }
+        foreach ($suffix in $script:RequiredHedgeFloatSuffixes) {
+            $expectedKey = "f.$group.$suffix"
+            [void]$expectedKeys.Add($expectedKey)
+            $orderedExpected.Add($expectedKey)
+        }
+
+        $intPrefix = "i.$group."
+        $floatPrefix = "f.$group."
+        foreach ($key in $keys) {
+            if (($key.StartsWith($intPrefix, [System.StringComparison]::Ordinal) -or
+                 $key.StartsWith($floatPrefix, [System.StringComparison]::Ordinal)) -and
+                -not $expectedKeys.Contains($key)) {
+                throw "Raw numeric manifest contains unexpected key for hedge group '$group': $key ($resolved)"
+            }
+        }
+
+        $missing = [System.Collections.Generic.List[string]]::new()
+        foreach ($expectedKey in $orderedExpected) {
+            if (-not $keys.Contains($expectedKey)) {
+                $missing.Add($expectedKey)
+            }
+        }
+        if ($missing.Count -eq $orderedExpected.Count) {
+            throw "Raw numeric manifest is missing required hedge group '$group': $resolved"
+        }
+        if ($missing.Count -gt 0) {
+            throw "Raw numeric manifest is missing required key(s) for hedge group '$group': $($missing -join ', ') ($resolved)"
+        }
+    }
+
     return $lines
 }
 
@@ -94,18 +150,42 @@ function Invoke-CheckedExternal {
         [switch]$Capture
     )
 
+    if ($Capture) {
+        $stderrFile = [System.IO.Path]::GetTempFileName()
+        try {
+            $stdout = @(& $FilePath @ArgumentList 2> $stderrFile)
+            $exitCode = $LASTEXITCODE
+            if ($exitCode -ne 0) {
+                $stderrText = Get-Content -LiteralPath $stderrFile -Raw -ErrorAction SilentlyContinue
+                $combined = [System.Collections.Generic.List[string]]::new()
+                foreach ($item in $stdout) {
+                    $combined.Add($item.ToString())
+                }
+                if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
+                    $combined.Add($stderrText.TrimEnd())
+                }
+                throw "Command failed (${exitCode}): $FilePath $($ArgumentList -join ' ')`n$($combined -join [Environment]::NewLine)"
+            }
+            return @($stdout | ForEach-Object { $_.ToString() })
+        }
+        finally {
+            Remove-Item -LiteralPath $stderrFile -Force -ErrorAction SilentlyContinue
+        }
+    }
+
     $output = @(& $FilePath @ArgumentList 2>&1)
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
         throw "Command failed (${exitCode}): $FilePath $($ArgumentList -join ' ')`n$($output -join [Environment]::NewLine)"
     }
-    if ($Capture) {
-        return @($output | ForEach-Object { $_.ToString() })
-    }
     if ($output.Count -gt 0) {
         $output | ForEach-Object { Write-Host $_ }
     }
 }
+
+$tempBase = $null
+$tempRoot = $null
+$linuxTempRoot = $null
 
 try {
     if ($CompareOnly) {
@@ -121,23 +201,31 @@ try {
 
     [void](Assert-FicantMinimumVersion -Name 'Windows clang++' -FilePath $windowsCompiler -ArgumentList @('--version') -Minimum $minimumClang -Pinned '19.1.5')
 
-    # The Linux half needs a WSL distribution with clang. Without one the gate is skipped and says so;
-    # set FICANT_REQUIRE_CROSS_CLANG=1 to make a missing Linux side fail instead.
+    # The Linux half needs a WSL distribution with clang. Without one the gate is skipped unless
+    # -RequireCrossClang or FICANT_REQUIRE_CROSS_CLANG=1 is active.
     $linuxUnavailable = $null
+    $probe = @()
     if ($null -eq (Get-Command 'wsl.exe' -ErrorAction SilentlyContinue)) {
         $linuxUnavailable = 'wsl.exe was not found'
     }
     else {
-        $probe = & wsl.exe -d $linuxDistribution -- $linuxCompiler --version 2>&1
-        if ($LASTEXITCODE -ne 0) {
+        $probeStderrFile = [System.IO.Path]::GetTempFileName()
+        try {
+            $probe = @(& wsl.exe -d $linuxDistribution -- $linuxCompiler --version 2> $probeStderrFile)
+            $probeExitCode = $LASTEXITCODE
+        }
+        finally {
+            Remove-Item -LiteralPath $probeStderrFile -Force -ErrorAction SilentlyContinue
+        }
+        if ($probeExitCode -ne 0 -or $probe.Count -eq 0) {
             $linuxUnavailable = "WSL distribution '$linuxDistribution' with '$linuxCompiler' is not available"
         }
     }
     if ($null -ne $linuxUnavailable) {
-        if ($env:FICANT_REQUIRE_CROSS_CLANG -eq '1') {
+        if ($effectiveRequireCrossClang) {
             throw "Cross-Clang check requires a Linux compiler: $linuxUnavailable."
         }
-        Write-Warning "Cross-Clang raw numeric identity SKIPPED: $linuxUnavailable. This is not evidence of identity. Set FICANT_WSL_DISTRO / FICANT_LINUX_CXX, or FICANT_REQUIRE_CROSS_CLANG=1 to fail."
+        Write-Warning "Cross-Clang raw numeric identity SKIPPED: $linuxUnavailable. This is not evidence of identity. Set FICANT_WSL_DISTRO / FICANT_LINUX_CXX, or pass -RequireCrossClang / set FICANT_REQUIRE_CROSS_CLANG=1 to fail."
         exit 0
     }
     $linuxFirstLine = (($probe | Out-String).Trim() -split "`r?`n")[0].Trim()
@@ -213,14 +301,15 @@ catch {
 }
 finally {
     if (-not $CompareOnly) {
-        if ($null -ne (Get-Variable -Name linuxTempRoot -ErrorAction SilentlyContinue) -and
+        if (-not [string]::IsNullOrWhiteSpace($linuxTempRoot) -and
             $linuxTempRoot -match '^/tmp/ficant-r7a-cross-clang-[0-9a-f]{32}$') {
             & wsl.exe -d $linuxDistribution -- /usr/bin/rm -rf -- $linuxTempRoot 2>$null
             if ($LASTEXITCODE -ne 0) {
                 Write-Warning "Could not remove Linux temporary directory: $linuxTempRoot"
             }
         }
-        if ($null -ne (Get-Variable -Name tempRoot -ErrorAction SilentlyContinue) -and
+        if (-not [string]::IsNullOrWhiteSpace($tempRoot) -and
+            -not [string]::IsNullOrWhiteSpace($tempBase) -and
             (Test-Path -LiteralPath $tempRoot -PathType Container)) {
             $resolvedRoot = (Resolve-Path -LiteralPath $tempRoot).Path
             if (-not $resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -or
