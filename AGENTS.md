@@ -4,7 +4,7 @@
 
 ## 权威与边界
 
-- **产品与架构定位**：`ficant` 是开源的中国本币市场固收及衍生品「实时估值定价 + 轻量级实时 IBOR（投资记账簿）」内核，面向机构交易内网交付「投资经理与交易台盘中副屏」（见 [ADR-0030](docs/architecture/adr/0030-core-reset-and-trading-desk-ibor.md)）。凡 T-1 盘后即可静态算清的工作、柜台报单（OMS/EMS）、清算结算与中后台会计总账均不在本仓库范围内。原外围仓库（`ficant-authority`、`ficant-fixin`、`ficant-portfolio`、`ficant-research`）已归档，本仓库为唯一活跃权威源。
+- **产品与架构定位**：`ficant` 是开源的中国本币市场固收及衍生品「实时估值定价 + 盘中实时簿记（Desk Blotter）」内核，面向机构交易内网交付「投资经理与交易台盘中副屏」（见 [ADR-0030](docs/architecture/adr/0030-core-reset-and-trading-desk-ibor.md)）。凡 T-1 盘后即可静态算清的工作、柜台报单（OMS/EMS）、清算结算与中后台会计总账均不在本仓库范围内。原外围仓库（`ficant-authority`、`ficant-fixin`、`ficant-portfolio`、`ficant-research`）已归档，本仓库为唯一活跃权威源。
 - **分层法则**：依赖只能向下、定价原语不得内嵌具体市场规则数值、规则包必须被解析而不只是被引用、新增市场不改 L0/L1/L2 源码，见 [ADR-0013](docs/architecture/adr/0013-layering-law-shape-in-core-content-in-rulepack.md)。`scripts/check-layering.ps1` 会机械检查其中关键不变量。
 
 ## 开发约定
