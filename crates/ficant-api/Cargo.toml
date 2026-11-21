@@ -8,6 +8,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+bytes = { workspace = true }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
 ficant-application = { path = "../ficant-application" }
@@ -15,17 +16,26 @@ ficant-contracts = { path = "../ficant-contracts" }
 ficant-domain = { path = "../ficant-domain" }
 prost = { workspace = true }
 prost-types = { workspace = true }
-tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true, features = ["net", "io-util"] }
+tokio-stream = { workspace = true }
 tonic = { workspace = true, features = ["router"] }
 tonic-web = { workspace = true }
 ulid = { workspace = true }
 
 [dev-dependencies]
+ficant-blotter-store = { path = "../ficant-blotter-store" }
 ficant-cgb-futures-pack = { path = "../ficant-cgb-futures-pack" }
 ficant-fixed-income-native = { path = "../ficant-fixed-income-native" }
 ficant-funding-pack = { path = "../ficant-funding-pack" }
+ficant-regulatory-pack = { path = "../ficant-regulatory-pack" }
 ficant-tax-pack = { path = "../ficant-tax-pack" }
+http = { workspace = true }
+http-body-util = { workspace = true }
 rust_decimal = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true
