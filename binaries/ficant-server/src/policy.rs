@@ -1,4 +1,4 @@
-//! External desk-blotter policy loader (embedded Policy A JSON + runtime override).
+//! External desk-blotter policy loader (embedded Policy B JSON + runtime override).
 //!
 //! Product allowlists, tolerances, and regulatory rule-pack bindings live strictly in external
 //! JSON configuration rather than hardcoded in Rust source.
@@ -24,7 +24,7 @@ use ficant_domain::primitives::{
 };
 use serde::{Deserialize, Serialize};
 
-/// Embedded Policy A default configuration loaded strictly from external JSON.
+/// Embedded Policy B default configuration loaded strictly from external JSON.
 pub const EMBEDDED_DEFAULT_POLICY_JSON: &str =
     include_str!("../policy/desk-blotter-policy-v1.json");
 
@@ -122,7 +122,7 @@ pub struct DeskBlotterPolicyRuntime {
 }
 
 impl DeskBlotterPolicyRuntime {
-    /// Loads and validates the embedded default Policy A JSON.
+    /// Loads and validates the embedded default Policy B JSON.
     pub fn from_embedded_default() -> Result<Self, String> {
         Self::from_json_str(EMBEDDED_DEFAULT_POLICY_JSON, None)
     }
@@ -461,15 +461,15 @@ mod tests {
     use super::DeskBlotterPolicyRuntime;
 
     #[test]
-    fn embedded_policy_a_loads_cleanly_and_rejects_invalid_json() {
-        let policy = DeskBlotterPolicyRuntime::from_embedded_default().expect("embedded Policy A");
-        assert_eq!(policy.policy_profile, "A");
+    fn embedded_policy_default_loads_cleanly_and_rejects_invalid_json() {
+        let policy = DeskBlotterPolicyRuntime::from_embedded_default().expect("embedded Policy B");
+        assert_eq!(policy.policy_profile, "B");
         assert_eq!(
             policy
                 .default_account_policy
                 .allowed_hedge_product_codes
                 .len(),
-            3
+            4
         );
         assert!(DeskBlotterPolicyRuntime::from_json_str(r#"{"schema_version": 2}"#, None).is_err());
         assert!(

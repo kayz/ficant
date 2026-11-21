@@ -3204,32 +3204,32 @@ def test_live_7_gate3_policy_a_vs_policy_b_embedded_default_and_invalid_policy_e
         sources=["FEED-1", "primary-quote-feed"],
     )
 
-    # Verify embedded default Policy A JSON on disk matches Policy A contract
+    # Verify embedded default Policy B JSON on disk matches Policy B contract
     embedded_doc = json.loads(EMBEDDED_POLICY_PATH.read_text(encoding="utf-8"))
-    assert embedded_doc["policy_profile"] == "A"
-    assert embedded_doc["allowed_hedge_product_codes"] == ["T", "TF", "TL"]
+    assert embedded_doc["policy_profile"] == "B"
+    assert embedded_doc["allowed_hedge_product_codes"] == ["T", "TF", "TL", "TS"]
 
-    # 1. Start server with NO FICANT_BLOTTER_POLICY_PATH -> uses embedded default Policy A!
+    # 1. Start server with NO FICANT_BLOTTER_POLICY_PATH -> uses embedded default Policy B (includes "TS")!
     with _run_server(ephemeral=True, policy_path=None, creds_path=creds_path) as (
-        _proc_a,
-        ep_a,
-        _port_a,
+        _proc_b,
+        ep_b,
+        _port_b,
     ):
         with (
-            DeskBlotterClient(ep_a, bearer_token=OPERATOR_TOK, insecure=True) as op,
-            DeskBlotterClient(ep_a, bearer_token=TRADER_TOK, insecure=True) as tr,
+            DeskBlotterClient(ep_b, bearer_token=OPERATOR_TOK, insecure=True) as op,
+            DeskBlotterClient(ep_b, bearer_token=TRADER_TOK, insecure=True) as tr,
         ):
-            imp = op.import_opening_base(
+            imp_b = op.import_opening_base(
                 service_pb2.ImportOpeningBaseRequest(
-                    idempotency_key="g3-imp-a",
+                    idempotency_key="g3-imp-b",
                     opening_base=_make_opening_base("acct-gate3", base_suffix="G1"),
                     expected_account_version=0,
                 )
             )
-            assert list(imp.snapshot.allowed_hedge_product_codes) == ["T", "TF", "TL"]
+            assert list(imp_b.snapshot.allowed_hedge_product_codes) == ["T", "TF", "TL", "TS"]
             tr.ingest_market_quotes(
                 service_pb2.IngestMarketQuotesRequest(
-                    idempotency_key="g3-q-a",
+                    idempotency_key="g3-q-b",
                     account_id="acct-gate3",
                     source_id="primary-quote-feed",
                     ticks=[
@@ -3254,7 +3254,71 @@ def test_live_7_gate3_policy_a_vs_policy_b_embedded_default_and_invalid_policy_e
             )
             assert _to_dec(res_t.measures.contract_notional) == Decimal("1000000")
 
-            # "TS" rejected under Policy A!
+            # "TS" allowed under embedded Policy B + real cgb-futures-v2.bin -> 2M notional!
+            res_ts = tr.preview_covered_hedge(
+                service_pb2.PreviewCoveredHedgeRequest(
+                    account_id="acct-gate3",
+                    scope=model_pb2.PREVIEW_HEDGE_SCOPE_WHOLE_ACCOUNT,
+                    product_code="TS",
+                    contract_code="TS2609",
+                    ctd_dv01_per_100=_dec("0.0145", UNITS.dv01_per_100),
+                    conversion_factor=_dec("0.9987", UNITS.dimensionless),
+                    delivery_rule_pack=_futures_v2_pack(),
+                    valuation_at=_shanghai_time(2026, 6, 15, 10, 0, 0),
+                )
+            )
+            assert _to_dec(res_ts.measures.contract_notional) == Decimal("2000000")
+
+    # 2. Start server with Policy A runtime override (excludes "TS") -> "T" ok, "TS" rejected!
+    policy_a = _write_policy(
+        tmp_path / "policy-a.json",
+        profile="A",
+        allowed_hedge_codes=["T", "TF", "TL"],
+        default_quote_source_id="primary-quote-feed",
+    )
+    with _run_server(ephemeral=True, policy_path=policy_a, creds_path=creds_path) as (
+        _proc_a,
+        ep_a,
+        _port_a,
+    ):
+        with (
+            DeskBlotterClient(ep_a, bearer_token=OPERATOR_TOK, insecure=True) as op,
+            DeskBlotterClient(ep_a, bearer_token=TRADER_TOK, insecure=True) as tr,
+        ):
+            imp_a = op.import_opening_base(
+                service_pb2.ImportOpeningBaseRequest(
+                    idempotency_key="g3-imp-a",
+                    opening_base=_make_opening_base("acct-gate3", base_suffix="G2"),
+                    expected_account_version=0,
+                )
+            )
+            assert list(imp_a.snapshot.allowed_hedge_product_codes) == ["T", "TF", "TL"]
+            tr.ingest_market_quotes(
+                service_pb2.IngestMarketQuotesRequest(
+                    idempotency_key="g3-q-a",
+                    account_id="acct-gate3",
+                    source_id="primary-quote-feed",
+                    ticks=[
+                        _make_quote_tick(
+                            source_id="primary-quote-feed", quote_seq=1, ytm="0.025", seconds_ago=5
+                        )
+                    ],
+                )
+            )
+            res_t_a = tr.preview_covered_hedge(
+                service_pb2.PreviewCoveredHedgeRequest(
+                    account_id="acct-gate3",
+                    scope=model_pb2.PREVIEW_HEDGE_SCOPE_WHOLE_ACCOUNT,
+                    product_code="T",
+                    contract_code="T2609",
+                    ctd_dv01_per_100=_dec("0.075", UNITS.dv01_per_100),
+                    conversion_factor=_dec("0.985", UNITS.dimensionless),
+                    delivery_rule_pack=_futures_v2_pack(),
+                    valuation_at=_shanghai_time(2026, 6, 15, 10, 0, 0),
+                )
+            )
+            assert _to_dec(res_t_a.measures.contract_notional) == Decimal("1000000")
+
             with pytest.raises(BlotterError) as ts_rej:
                 tr.preview_covered_hedge(
                     service_pb2.PreviewCoveredHedgeRequest(
@@ -3270,56 +3334,6 @@ def test_live_7_gate3_policy_a_vs_policy_b_embedded_default_and_invalid_policy_e
                 )
             assert ts_rej.value.code == error_pb2.ERROR_CODE_VALIDATION_FAILED
             assert any(fv.field == "product_code" for fv in ts_rej.value.field_violations)
-
-    # 2. Start server with Policy B (includes "TS") + real cgb-futures-v2.bin -> 2M notional!
-    policy_b = _write_policy(
-        tmp_path / "policy-b.json",
-        profile="B",
-        allowed_hedge_codes=["TS", "T", "TF", "TL"],
-        default_quote_source_id="primary-quote-feed",
-    )
-    with _run_server(ephemeral=True, policy_path=policy_b, creds_path=creds_path) as (
-        _proc_b,
-        ep_b,
-        _port_b,
-    ):
-        with (
-            DeskBlotterClient(ep_b, bearer_token=OPERATOR_TOK, insecure=True) as op,
-            DeskBlotterClient(ep_b, bearer_token=TRADER_TOK, insecure=True) as tr,
-        ):
-            imp_b = op.import_opening_base(
-                service_pb2.ImportOpeningBaseRequest(
-                    idempotency_key="g3-imp-b",
-                    opening_base=_make_opening_base("acct-gate3", base_suffix="G2"),
-                    expected_account_version=0,
-                )
-            )
-            assert list(imp_b.snapshot.allowed_hedge_product_codes) == ["TS", "T", "TF", "TL"]
-            tr.ingest_market_quotes(
-                service_pb2.IngestMarketQuotesRequest(
-                    idempotency_key="g3-q-b",
-                    account_id="acct-gate3",
-                    source_id="primary-quote-feed",
-                    ticks=[
-                        _make_quote_tick(
-                            source_id="primary-quote-feed", quote_seq=1, ytm="0.025", seconds_ago=5
-                        )
-                    ],
-                )
-            )
-            res_ts = tr.preview_covered_hedge(
-                service_pb2.PreviewCoveredHedgeRequest(
-                    account_id="acct-gate3",
-                    scope=model_pb2.PREVIEW_HEDGE_SCOPE_WHOLE_ACCOUNT,
-                    product_code="TS",
-                    contract_code="TS2609",
-                    ctd_dv01_per_100=_dec("0.0145", UNITS.dv01_per_100),
-                    conversion_factor=_dec("0.9987", UNITS.dimensionless),
-                    delivery_rule_pack=_futures_v2_pack(),
-                    valuation_at=_shanghai_time(2026, 6, 15, 10, 0, 0),
-                )
-            )
-            assert _to_dec(res_ts.measures.contract_notional) == Decimal("2000000")
 
     # 3. Invalid policy path & malformed policy JSON -> immediate non-zero exit
     bad_json_path = tmp_path / "malformed-policy.json"
