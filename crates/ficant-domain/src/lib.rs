@@ -11,6 +11,7 @@
 )]
 
 pub mod analytics;
+pub mod blotter;
 pub mod constraint;
 pub mod curves;
 pub mod futures_delivery;

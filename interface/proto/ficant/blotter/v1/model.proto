@@ -1,0 +1,469 @@
+syntax = "proto3";
+
+package ficant.blotter.v1;
+
+import "ficant/core/v1/common.proto";
+import "ficant/market/v1/definition.proto";
+import "ficant/rates/v1/analytics.proto";
+
+enum SettlementBucket {
+  SETTLEMENT_BUCKET_UNSPECIFIED = 0;
+  SETTLEMENT_BUCKET_T_PLUS_0 = 1;
+  SETTLEMENT_BUCKET_T_PLUS_1 = 2;
+}
+
+enum TradeSide {
+  TRADE_SIDE_UNSPECIFIED = 0;
+  TRADE_SIDE_BUY = 1;
+  TRADE_SIDE_SELL = 2;
+}
+
+enum EarmarkState {
+  EARMARK_STATE_UNSPECIFIED = 0;
+  EARMARK_STATE_HOLD = 1;
+  EARMARK_STATE_COMMITTED = 2;
+  EARMARK_STATE_EXPIRED = 3;
+  EARMARK_STATE_RELEASED = 4;
+  EARMARK_STATE_CANCELLED = 5;
+  EARMARK_STATE_RECONCILED = 6;
+}
+
+enum PendingMatchState {
+  PENDING_MATCH_STATE_UNSPECIFIED = 0;
+  PENDING_MATCH_STATE_OPEN = 1;
+  PENDING_MATCH_STATE_RESOLVED_MATCHED = 2;
+  PENDING_MATCH_STATE_RESOLVED_ORPHAN_ACCEPTED = 3;
+  PENDING_MATCH_STATE_RELEASED = 4;
+  PENDING_MATCH_STATE_REVERSED_BY_FEED = 5;
+  PENDING_MATCH_STATE_RESOLVED_BASELINE_DELTA = 6;
+}
+
+enum PendingMatchReason {
+  PENDING_MATCH_REASON_UNSPECIFIED = 0;
+  PENDING_MATCH_REASON_AMBIGUOUS_CANDIDATES = 1;
+  PENDING_MATCH_REASON_NOTIONAL_MISMATCH_OR_SPLIT = 2;
+  PENDING_MATCH_REASON_PRICE_OUT_OF_TOLERANCE = 3;
+  PENDING_MATCH_REASON_ORPHAN_NO_COMMITMENT = 4;
+  PENDING_MATCH_REASON_BURST_REPEAT = 5;
+  PENDING_MATCH_REASON_EXISTING_PENDING_ON_KEY = 6;
+  PENDING_MATCH_REASON_AMENDMENT_MISMATCH = 7;
+  PENDING_MATCH_REASON_BASELINE_REVISION_MANUAL = 8;
+  PENDING_MATCH_REASON_INCOMPARABLE_BASIS = 9;
+  PENDING_MATCH_REASON_REVISION_HOLD = 10;
+  PENDING_MATCH_REASON_GAP_HOLD = 11;
+}
+
+enum PendingMatchResolutionAction {
+  PENDING_MATCH_RESOLUTION_ACTION_UNSPECIFIED = 0;
+  PENDING_MATCH_RESOLUTION_ACTION_MATCH_FULL = 1;
+  PENDING_MATCH_RESOLUTION_ACTION_SPLIT_OFFSET = 2;
+  PENDING_MATCH_RESOLUTION_ACTION_ACCEPT_ORPHAN = 3;
+  PENDING_MATCH_RESOLUTION_ACTION_RELEASE_REJECT = 4;
+  PENDING_MATCH_RESOLUTION_ACTION_APPLY_BASELINE_DELTA = 5;
+}
+
+enum TradeFeedRecordAction {
+  TRADE_FEED_RECORD_ACTION_UNSPECIFIED = 0;
+  TRADE_FEED_RECORD_ACTION_NEW_FILL = 1;
+  TRADE_FEED_RECORD_ACTION_AMEND = 2;
+  TRADE_FEED_RECORD_ACTION_CANCEL_REVERSAL = 3;
+}
+
+enum RateCoverageEligibility {
+  RATE_COVERAGE_ELIGIBILITY_UNSPECIFIED = 0;
+  RATE_COVERAGE_ELIGIBILITY_SOVEREIGN_OR_POLICY_FIXED = 1;
+  RATE_COVERAGE_ELIGIBILITY_CREDIT_OR_SPREAD_PRODUCT = 2;
+  RATE_COVERAGE_ELIGIBILITY_FLOATING_OR_INDEXED = 3;
+  RATE_COVERAGE_ELIGIBILITY_EMBEDDED_OPTION_OR_SINKING = 4;
+}
+
+enum CoverageStatus {
+  COVERAGE_STATUS_UNSPECIFIED = 0;
+  COVERAGE_STATUS_COVERED_PRE_TAX = 1;
+  COVERAGE_STATUS_UNCOVERED = 2;
+  COVERAGE_STATUS_INACTIVE_ZERO_POSITION = 3;
+}
+
+enum UncoveredReason {
+  UNCOVERED_REASON_UNSPECIFIED = 0;
+  UNCOVERED_REASON_INSTRUMENT_SPEC_MISSING = 1;
+  UNCOVERED_REASON_UNSUPPORTED_COUPON_STRUCTURE = 2;
+  UNCOVERED_REASON_EMBEDDED_OPTION_OR_CALLABLE = 3;
+  UNCOVERED_REASON_UNSUPPORTED_CONVENTION = 4;
+  UNCOVERED_REASON_MISSING_MARKET_QUOTE = 5;
+  UNCOVERED_REASON_CALENDAR_COVERAGE_MISSING = 6;
+  UNCOVERED_REASON_KERNEL_PRICING_FAILED = 7;
+  UNCOVERED_REASON_ELIGIBILITY_UNVERIFIED = 8;
+  UNCOVERED_REASON_CREDIT_OR_NON_RATES_ISSUER = 9;
+  UNCOVERED_REASON_STALE_QUOTE = 10;
+}
+
+enum CalendarResolutionMode {
+  CALENDAR_RESOLUTION_MODE_UNSPECIFIED = 0;
+  CALENDAR_RESOLUTION_MODE_EXACT = 1;
+  CALENDAR_RESOLUTION_MODE_PROVISIONAL_WEEKEND_BEYOND_COVERAGE = 2;
+}
+
+enum FundingPrecision {
+  FUNDING_PRECISION_UNSPECIFIED = 0;
+  FUNDING_PRECISION_EXACT_SETTLEMENT_AMOUNT = 1;
+  FUNDING_PRECISION_EXACT_DIRTY_PRICE = 2;
+  FUNDING_PRECISION_CLEAN_PRICE_ESTIMATE = 3;
+  FUNDING_PRECISION_UNPRICED_YIELD_ONLY = 4;
+}
+
+enum PreviewHedgeScope {
+  PREVIEW_HEDGE_SCOPE_UNSPECIFIED = 0;
+  PREVIEW_HEDGE_SCOPE_WHOLE_ACCOUNT = 1;
+  PREVIEW_HEDGE_SCOPE_COVERED_SUBSET_ONLY = 2;
+}
+
+enum DraftTargetState {
+  DRAFT_TARGET_STATE_UNSPECIFIED = 0;
+  DRAFT_TARGET_STATE_HOLD = 1;
+  DRAFT_TARGET_STATE_COMMITTED = 2;
+}
+
+enum DraftEarmarkStatus {
+  DRAFT_EARMARK_STATUS_UNSPECIFIED = 0;
+  DRAFT_EARMARK_STATUS_PENDING_CONFIRMATION = 1;
+  DRAFT_EARMARK_STATUS_CONFIRMED = 2;
+  DRAFT_EARMARK_STATUS_DISCARDED = 3;
+}
+
+enum FeedHealthState {
+  FEED_HEALTH_STATE_UNSPECIFIED = 0;
+  FEED_HEALTH_STATE_HEALTHY = 1;
+  FEED_HEALTH_STATE_STALE = 2;
+  FEED_HEALTH_STATE_GAP_DETECTED = 3;
+  FEED_HEALTH_STATE_PAUSED_BY_OPERATOR = 4;
+}
+
+enum PrincipalRole {
+  PRINCIPAL_ROLE_UNSPECIFIED = 0;
+  PRINCIPAL_ROLE_TRADER = 1;
+  PRINCIPAL_ROLE_NLP_PARSER = 2;
+  PRINCIPAL_ROLE_FEED_ADAPTER = 3;
+  PRINCIPAL_ROLE_OPERATOR = 4;
+}
+
+message QuoteTerms {
+  oneof price_or_yield {
+    ficant.core.v1.DecimalValue clean_price_per_100 = 1;
+    ficant.core.v1.DecimalValue yield_to_maturity = 2;
+  }
+  ficant.core.v1.DecimalValue settlement_amount = 3;
+}
+
+message InstrumentCatalogEntry {
+  string instrument_code = 1;
+  ficant.market.v1.Bond bond = 2;
+  RateCoverageEligibility eligibility_class = 3;
+  ficant.rates.v1.CalendarRequirement calendar_requirement = 4;
+}
+
+message OpeningInstrumentBalance {
+  string instrument_code = 1;
+  ficant.core.v1.DecimalValue opening_economic_notional = 2;
+  ficant.core.v1.DecimalValue opening_available_notional = 3;
+  ficant.core.v1.DecimalValue opening_net_t0_notional = 4;
+  ficant.core.v1.DecimalValue opening_net_t1_notional = 5;
+}
+
+message BaseEvidence {
+  string source_id = 1;
+  string external_trade_id = 2;
+  uint64 original_feed_seq = 3;
+  ficant.core.v1.MarketTime original_executed_at = 4;
+  ficant.core.v1.DecimalValue old_notional = 5;
+  ficant.core.v1.DecimalValue old_signed_cash = 6;
+  SettlementBucket settlement_bucket = 7;
+  string evidence_ref = 8;
+  ficant.core.v1.Sha256 evidence_hash = 9;
+  string instrument_code = 10;
+  TradeSide side = 11;
+  uint64 original_revision = 12;
+}
+
+message OpeningPositionBase {
+  string account_id = 1;
+  ficant.core.v1.Ulid base_id = 2;
+  string trading_date = 3;
+  string next_settlement_date = 4;
+  ficant.core.v1.MarketTime effective_from = 5;
+  ficant.core.v1.MarketTime watermark_time = 6;
+  optional uint64 watermark_source_seq = 7;
+  string source_id = 8;
+  ficant.core.v1.DecimalValue opening_cash_t0 = 9;
+  ficant.core.v1.DecimalValue opening_net_cash_delta_t1 = 10;
+  repeated OpeningInstrumentBalance balances = 11;
+  repeated InstrumentCatalogEntry instruments = 12;
+  ficant.market.v1.Calendar calendar = 13;
+  ficant.rates.v1.CalendarRequirement default_calendar_requirement = 14;
+  ficant.rates.v1.AnalysisUnits units = 15;
+  repeated BaseEvidence baseline_evidence = 16;
+  uint64 source_start_after_feed_seq = 17;
+}
+
+message BaselineDelta {
+  ficant.core.v1.DecimalValue delta_notional = 1;
+  ficant.core.v1.DecimalValue delta_cash = 2;
+  SettlementBucket settlement_bucket = 3;
+  BaseEvidence evidence = 4;
+  string reason = 5;
+}
+
+message BucketBalanceView {
+  SettlementBucket settlement_bucket = 1;
+  string settlement_date = 2;
+  ficant.core.v1.DecimalValue available_notional = 3;
+  ficant.core.v1.DecimalValue hold_buy_notional = 4;
+  ficant.core.v1.DecimalValue hold_sell_notional = 5;
+  ficant.core.v1.DecimalValue committed_buy_unreconciled_notional = 6;
+  ficant.core.v1.DecimalValue committed_sell_unreconciled_notional = 7;
+  ficant.core.v1.DecimalValue reconciled_buy_notional = 8;
+  ficant.core.v1.DecimalValue reconciled_sell_notional = 9;
+  ficant.core.v1.DecimalValue pending_match_buy_unresolved_notional = 10;
+  ficant.core.v1.DecimalValue pending_match_sell_unresolved_notional = 11;
+  bool sell_ambiguity_locked = 12;
+}
+
+message InstrumentPositionView {
+  string account_id = 1;
+  string instrument_code = 2;
+  uint64 position_version = 3;
+  ficant.core.v1.DecimalValue economic_net_notional = 4;
+  ficant.core.v1.DecimalValue available_t0_notional = 5;
+  ficant.core.v1.DecimalValue available_t1_notional = 6;
+  BucketBalanceView bucket_t0 = 7;
+  BucketBalanceView bucket_t1 = 8;
+  CoverageStatus coverage_status = 9;
+  ficant.rates.v1.BondTaxBasis tax_basis = 10;
+  ficant.core.v1.DecimalValue pre_tax_dv01 = 11;
+  ficant.core.v1.DecimalValue valuation_clean_price_per_100 = 12;
+  ficant.core.v1.DecimalValue valuation_yield_to_maturity = 13;
+  CalendarResolutionMode calendar_resolution = 14;
+  UncoveredReason uncovered_reason = 15;
+  string uncovered_detail = 16;
+  string valuation_settlement_date = 17;
+  string active_quote_source_id = 18;
+  optional uint64 active_quote_seq = 19;
+}
+
+message EarmarkRecord {
+  ficant.core.v1.Ulid earmark_id = 1;
+  uint64 earmark_revision = 2;
+  string account_id = 3;
+  string instrument_code = 4;
+  TradeSide side = 5;
+  SettlementBucket settlement_bucket = 6;
+  string settlement_date = 7;
+  ficant.core.v1.DecimalValue notional = 8;
+  ficant.core.v1.DecimalValue unreconciled_notional = 9;
+  QuoteTerms quote_terms = 10;
+  ficant.core.v1.DecimalValue locked_settlement_cash = 11;
+  ficant.core.v1.DecimalValue unreconciled_settlement_cash = 12;
+  FundingPrecision funding_precision = 13;
+  EarmarkState state = 14;
+  string created_by = 15;
+  ficant.core.v1.MarketTime created_at = 16;
+  ficant.core.v1.MarketTime expires_at = 17;
+  ficant.core.v1.MarketTime committed_at = 18;
+  bool overdue_alert = 19;
+  bool pre_close_alert = 20;
+  bool reopened_by_reversal = 21;
+  string note = 22;
+  uint64 created_seq = 23;
+  uint64 updated_seq = 24;
+  optional string confirmed_by_trader_id = 25;
+  optional string cancel_actor_id = 26;
+  optional string cancel_reason = 27;
+}
+
+message ReconcileAllocationView {
+  ficant.core.v1.Ulid allocation_id = 1;
+  string source_id = 2;
+  string external_trade_id = 3;
+  uint64 source_revision = 4;
+  ficant.core.v1.Ulid earmark_id = 5;
+  ficant.core.v1.Ulid pending_match_id = 6;
+  ficant.core.v1.DecimalValue allocated_notional = 7;
+  ficant.core.v1.DecimalValue allocated_fill_cash = 8;
+  optional uint64 reversed_by_revision = 9;
+  ficant.core.v1.DecimalValue released_earmark_cash = 10;
+  BaselineDelta baseline_delta = 11;
+  string actor_id = 12;
+}
+
+message PendingMatchRecord {
+  ficant.core.v1.Ulid pending_match_id = 1;
+  uint64 pending_revision = 2;
+  string account_id = 3;
+  string instrument_code = 4;
+  TradeSide side = 5;
+  SettlementBucket settlement_bucket = 6;
+  string settlement_date = 7;
+  string source_id = 8;
+  string external_trade_id = 9;
+  uint64 source_revision = 10;
+  ficant.core.v1.DecimalValue original_notional = 11;
+  ficant.core.v1.DecimalValue unresolved_notional = 12;
+  ficant.core.v1.DecimalValue prior_baseline_notional = 13;
+  QuoteTerms quote_terms = 14;
+  ficant.core.v1.MarketTime executed_at = 15;
+  PendingMatchState state = 16;
+  PendingMatchReason reason = 17;
+  repeated ficant.core.v1.Ulid candidate_earmark_ids = 18;
+  uint64 created_seq = 19;
+  uint64 updated_seq = 20;
+  ficant.core.v1.DecimalValue unresolved_signed_cash = 21;
+  BaseEvidence evidence = 22;
+  BaselineDelta applied_delta = 23;
+  optional string resolution_actor_id = 24;
+  optional string resolution_reason = 25;
+}
+
+message SourceTextAnchor {
+  string field_name = 1;
+  uint32 byte_start = 2;
+  uint32 byte_end = 3;
+  string span_text = 4;
+}
+
+message RuleLineage {
+  ficant.core.v1.Ulid pack_id = 1;
+  uint64 version = 2;
+  string source = 3;
+  ficant.core.v1.Sha256 content_hash = 4;
+  ficant.core.v1.Sha256 parsed_constraints_hash = 5;
+}
+
+message DraftEarmarkRecord {
+  ficant.core.v1.Ulid draft_id = 1;
+  uint64 draft_revision = 2;
+  string account_id = 3;
+  string instrument_code = 4;
+  TradeSide side = 5;
+  SettlementBucket settlement_bucket = 6;
+  ficant.core.v1.DecimalValue notional = 7;
+  QuoteTerms quote_terms = 8;
+  DraftTargetState target_state = 9;
+  DraftEarmarkStatus status = 10;
+  string raw_source_text = 11;
+  repeated SourceTextAnchor anchors = 12;
+  ficant.core.v1.DecimalValue confidence_score = 13;
+  string parser_source_id = 14;
+  CoverageStatus preview_coverage_status = 15;
+  ficant.core.v1.DecimalValue preview_delta_pre_tax_dv01 = 16;
+  UncoveredReason preview_uncovered_reason = 17;
+  ficant.core.v1.DecimalValue preview_delta_uncovered_notional = 18;
+  ficant.core.v1.DecimalValue preview_delta_cash_t0 = 19;
+  ficant.core.v1.DecimalValue preview_delta_cash_t1 = 20;
+  uint64 preview_at_seq = 21;
+  uint64 preview_quote_seq = 22;
+  ficant.core.v1.Sha256 confirmation_token = 23;
+  RuleLineage rule_lineage = 24;
+  string preview_quote_source_id = 25;
+  ficant.core.v1.Sha256 context_hash = 26;
+  optional string confirmed_by_trader_id = 27;
+  string valuation_settlement_date = 28;
+}
+
+message RiskAndCoverageSummary {
+  uint32 covered_instrument_count = 1;
+  uint32 uncovered_instrument_count = 2;
+  ficant.rates.v1.BondTaxBasis covered_tax_basis = 3;
+  ficant.core.v1.DecimalValue covered_net_pre_tax_dv01 = 4;
+  ficant.core.v1.DecimalValue covered_gross_notional = 5;
+  ficant.core.v1.DecimalValue uncovered_gross_notional = 6;
+  ficant.core.v1.DecimalValue uncovered_net_notional = 7;
+  bool whole_account_hedge_allowed = 8;
+}
+
+message FundingGapSummary {
+  ficant.core.v1.DecimalValue opening_cash_t0 = 1;
+  ficant.core.v1.DecimalValue opening_net_cash_delta_t1 = 2;
+  ficant.core.v1.DecimalValue net_settlement_flow_t0 = 3;
+  ficant.core.v1.DecimalValue net_settlement_flow_t1 = 4;
+  ficant.core.v1.DecimalValue projected_cash_t0 = 5;
+  ficant.core.v1.DecimalValue projected_cash_t1 = 6;
+  ficant.core.v1.DecimalValue funding_gap_t0 = 7;
+  ficant.core.v1.DecimalValue funding_gap_t1 = 8;
+  uint32 clean_price_estimated_funding_count = 9;
+  uint32 unpriced_funding_earmark_count = 10;
+  bool funding_is_complete_exact = 11;
+  ficant.core.v1.DecimalValue pending_match_cash_t0 = 12;
+  ficant.core.v1.DecimalValue pending_match_cash_t1 = 13;
+  uint32 pending_match_count = 14;
+  uint32 pending_unknown_cash_count = 15;
+  bool feed_incomplete = 16;
+}
+
+message SeqRange {
+  uint64 first = 1;
+  uint64 last = 2;
+}
+
+message FeedStatusView {
+  string source_id = 1;
+  uint64 feed_status_revision = 2;
+  FeedHealthState health_state = 3;
+  bool earmarks_paused = 4;
+  bool paused_by_gap = 5;
+  bool paused_by_staleness = 6;
+  bool paused_by_operator = 7;
+  ficant.core.v1.MarketTime last_heartbeat_at = 8;
+  uint64 contiguous_feed_seq = 9;
+  uint64 max_seen_feed_seq = 10;
+  repeated SeqRange missing_feed_ranges = 11;
+  uint32 open_pending_match_count = 12;
+  string status_reason = 13;
+}
+
+message AccountBlotterSnapshot {
+  uint64 snapshot_seq = 1;
+  string account_id = 2;
+  uint64 account_version = 3;
+  OpeningPositionBase opening_base = 4;
+  RiskAndCoverageSummary risk_summary = 5;
+  FundingGapSummary funding_summary = 6;
+  repeated FeedStatusView feed_statuses = 7;
+  repeated InstrumentPositionView positions = 8;
+  repeated EarmarkRecord active_earmarks = 9;
+  repeated PendingMatchRecord open_pending_matches = 10;
+  repeated DraftEarmarkRecord pending_drafts = 11;
+  repeated string allowed_hedge_product_codes = 12;
+}
+
+message AccountChange {
+  string account_id = 1;
+  AccountBlotterSnapshot replace_snapshot = 2;
+  repeated ReconcileAllocationView changed_allocations = 3;
+}
+
+message BlotterEventEnvelope {
+  uint64 seq = 1;
+  ficant.core.v1.MarketTime occurred_at = 2;
+  repeated AccountChange changes = 3;
+  string event_type = 4;
+}
+
+message SnapshotFallbackRequired {
+  uint64 requested_after_seq = 1;
+  uint64 oldest_retained_seq = 2;
+  uint64 current_head_seq = 3;
+  string reason = 4;
+}
+
+message StreamHeartbeat {
+  uint64 head_seq = 1;
+  ficant.core.v1.MarketTime server_time = 2;
+  uint64 scanned_through_seq = 3;
+}
+
+message PollEventsBatch {
+  repeated BlotterEventEnvelope events = 1;
+  uint64 scanned_through_seq = 2;
+  uint64 current_head_seq = 3;
+  bool has_more = 4;
+}

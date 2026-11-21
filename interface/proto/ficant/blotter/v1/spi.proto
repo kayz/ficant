@@ -1,0 +1,214 @@
+syntax = "proto3";
+
+package ficant.blotter.v1;
+
+import "ficant/blotter/v1/model.proto";
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+import "ficant/market/v1/fact.proto";
+
+enum TradeFillOutcomeKind {
+  TRADE_FILL_OUTCOME_KIND_UNSPECIFIED = 0;
+  TRADE_FILL_OUTCOME_KIND_PER_ITEM_DEDUPLICATED = 1;
+  TRADE_FILL_OUTCOME_KIND_PRE_WATERMARK_IGNORED = 2;
+  TRADE_FILL_OUTCOME_KIND_AUTO_MATCHED = 3;
+  TRADE_FILL_OUTCOME_KIND_PENDING_MATCH = 4;
+  TRADE_FILL_OUTCOME_KIND_BUFFERED_GAP = 5;
+  TRADE_FILL_OUTCOME_KIND_BUFFERED_REVISION = 6;
+  TRADE_FILL_OUTCOME_KIND_REVERSED = 7;
+  TRADE_FILL_OUTCOME_KIND_BASELINE_REVIEW = 8;
+  TRADE_FILL_OUTCOME_KIND_SUPERSEDED_IN_BATCH = 9;
+}
+
+message TradeFillRecord {
+  string source_id = 1;
+  string external_trade_id = 2;
+  uint64 source_revision = 3;
+  uint64 feed_seq = 4;
+  TradeFeedRecordAction action = 5;
+  string account_id = 6;
+  string instrument_code = 7;
+  TradeSide side = 8;
+  string settlement_date = 9;
+  ficant.core.v1.DecimalValue notional = 10;
+  QuoteTerms quote_terms = 11;
+  ficant.core.v1.MarketTime executed_at = 12;
+  uint64 batch_first_feed_seq = 13;
+  uint64 batch_last_feed_seq = 14;
+}
+
+message MarketQuoteTick {
+  string source_id = 1;
+  uint64 quote_seq = 2;
+  string instrument_code = 3;
+  ficant.market.v1.PriceSourceType source_type = 4;
+  ficant.core.v1.DecimalValue bid_clean_price = 5;
+  ficant.core.v1.DecimalValue ask_clean_price = 6;
+  ficant.core.v1.DecimalValue mid_clean_price = 7;
+  ficant.core.v1.DecimalValue mid_yield_to_maturity = 8;
+  ficant.core.v1.MarketTime observed_at = 9;
+  ficant.core.v1.MarketTime received_at = 10;
+}
+
+message NlpEarmarkProposal {
+  string parser_source_id = 1;
+  string model_version = 2;
+  string raw_source_text = 3;
+  repeated SourceTextAnchor anchors = 4;
+  ficant.core.v1.DecimalValue confidence_score = 5;
+  string account_id = 6;
+  string instrument_code = 7;
+  TradeSide side = 8;
+  SettlementBucket settlement_bucket = 9;
+  ficant.core.v1.DecimalValue notional = 10;
+  QuoteTerms quote_terms = 11;
+  DraftTargetState suggested_target_state = 12;
+}
+
+message TradeFillIngestOutcome {
+  string source_id = 1;
+  string external_trade_id = 2;
+  uint64 source_revision = 3;
+  uint64 feed_seq = 4;
+  TradeFillOutcomeKind kind = 5;
+  ficant.core.v1.Ulid pending_match_id = 6;
+  repeated ficant.core.v1.Ulid allocation_ids = 7;
+  optional uint64 effective_revision = 8;
+}
+
+message PullTradeFeedBatchResult {
+  repeated TradeFillRecord fills = 1;
+  uint64 scanned_through_feed_seq = 2;
+  bool has_more = 3;
+}
+
+message QuoteCursor {
+  string source_id = 1;
+  string instrument_code = 2;
+  uint64 after_quote_seq = 3;
+}
+
+message PullMarketQuotesResult {
+  repeated MarketQuoteTick ticks = 1;
+  QuoteCursor next_cursor = 2;
+  bool has_more = 3;
+}
+
+message FeedHeartbeat {
+  string source_id = 1;
+  uint64 contiguous_feed_seq = 2;
+  ficant.core.v1.MarketTime server_time = 3;
+}
+
+message QuoteHeartbeat {
+  QuoteCursor cursor = 1;
+  ficant.core.v1.MarketTime server_time = 2;
+}
+
+message FetchOpeningPositionBaseRequest {
+  string request_id = 1;
+  string account_id = 2;
+  string trading_date = 3;
+}
+
+message FetchOpeningPositionBaseResponse {
+  oneof result {
+    OpeningPositionBase value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message PullTradeFeedBatchRequest {
+  string source_id = 1;
+  uint64 after_feed_seq = 2;
+  uint32 max_records = 3;
+}
+
+message PullTradeFeedBatchResponse {
+  oneof result {
+    PullTradeFeedBatchResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message StreamTradeFeedRequest {
+  string source_id = 1;
+  uint64 after_feed_seq = 2;
+}
+
+message StreamTradeFeedResponse {
+  oneof payload {
+    TradeFillRecord fill = 1;
+    FeedHeartbeat heartbeat = 2;
+    ficant.core.v1.ErrorDetail error = 3;
+  }
+}
+
+message FetchTradeRevisionRequest {
+  string source_id = 1;
+  string external_trade_id = 2;
+  uint64 source_revision = 3;
+}
+
+message FetchTradeRevisionResponse {
+  oneof result {
+    TradeFillRecord value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message PullMarketQuotesRequest {
+  QuoteCursor cursor = 1;
+  uint32 max_ticks = 2;
+}
+
+message PullMarketQuotesResponse {
+  oneof result {
+    PullMarketQuotesResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message StreamMarketQuotesRequest {
+  QuoteCursor cursor = 1;
+}
+
+message StreamMarketQuotesResponse {
+  oneof payload {
+    MarketQuoteTick tick = 1;
+    QuoteHeartbeat heartbeat = 2;
+    ficant.core.v1.ErrorDetail error = 3;
+  }
+}
+
+message ParseNlpIntentRequest {
+  string request_id = 1;
+  string account_id = 2;
+  string raw_source_text = 3;
+}
+
+message ParseNlpIntentResponse {
+  oneof result {
+    NlpEarmarkProposal value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+service PositionBaseProviderService {
+  rpc FetchOpeningPositionBase(FetchOpeningPositionBaseRequest) returns (FetchOpeningPositionBaseResponse);
+}
+
+service TradeFeedReconcilerService {
+  rpc PullTradeFeedBatch(PullTradeFeedBatchRequest) returns (PullTradeFeedBatchResponse);
+  rpc StreamTradeFeed(StreamTradeFeedRequest) returns (stream StreamTradeFeedResponse);
+  rpc FetchTradeRevision(FetchTradeRevisionRequest) returns (FetchTradeRevisionResponse);
+}
+
+service MarketQuoteStreamService {
+  rpc PullMarketQuotes(PullMarketQuotesRequest) returns (PullMarketQuotesResponse);
+  rpc StreamMarketQuotes(StreamMarketQuotesRequest) returns (stream StreamMarketQuotesResponse);
+}
+
+service IntranetNlpIntentParserService {
+  rpc ParseNlpIntent(ParseNlpIntentRequest) returns (ParseNlpIntentResponse);
+}

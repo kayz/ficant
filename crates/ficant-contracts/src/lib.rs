@@ -4,6 +4,13 @@
 //! the version-and-revision-pinned plugins in `interface/buf.gen.yaml`.
 
 pub mod ficant {
+    pub mod blotter {
+        pub mod v1 {
+            include!("generated/ficant.blotter.v1.rs");
+            include!("generated/ficant.blotter.v1.tonic.rs");
+        }
+    }
+
     pub mod core {
         pub mod v1 {
             include!("generated/ficant.core.v1.rs");

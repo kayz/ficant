@@ -20,3 +20,8 @@ plugins:
     out: python/node-contracts/src/ficant_contracts/generated
     types:
       - ficant.rates.v1.RatesAnalyticsService
+      - ficant.blotter.v1.DeskBlotterService
+      - ficant.blotter.v1.PositionBaseProviderService
+      - ficant.blotter.v1.TradeFeedReconcilerService
+      - ficant.blotter.v1.MarketQuoteStreamService
+      - ficant.blotter.v1.IntranetNlpIntentParserService

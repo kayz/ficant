@@ -1,0 +1,444 @@
+syntax = "proto3";
+
+package ficant.blotter.v1;
+
+import "ficant/blotter/v1/model.proto";
+import "ficant/blotter/v1/spi.proto";
+import "ficant/core/v1/common.proto";
+import "ficant/core/v1/error.proto";
+import "ficant/market/v1/rule.proto";
+import "ficant/rates/v1/analytics.proto";
+
+message ImportOpeningBaseRequest {
+  string idempotency_key = 1;
+  OpeningPositionBase opening_base = 2;
+  uint64 expected_account_version = 3;
+  reserved 4, 5;
+}
+
+message ImportOpeningBaseResult {
+  uint64 committed_seq = 1;
+  bool replayed = 2;
+  AccountBlotterSnapshot snapshot = 3;
+}
+
+message ImportOpeningBaseResponse {
+  oneof result {
+    ImportOpeningBaseResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message IngestMarketQuotesRequest {
+  string idempotency_key = 1;
+  string account_id = 2;
+  repeated MarketQuoteTick ticks = 3;
+  string source_id = 4;
+}
+
+message IngestMarketQuotesResult {
+  uint64 committed_seq = 1;
+  bool replayed = 2;
+  uint32 applied_tick_count = 3;
+  uint32 skipped_stale_tick_count = 4;
+  RiskAndCoverageSummary risk_summary = 5;
+}
+
+message IngestMarketQuotesResponse {
+  oneof result {
+    IngestMarketQuotesResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message CreateHoldRequest {
+  string idempotency_key = 1;
+  string account_id = 2;
+  uint64 expected_position_version = 3;
+  string instrument_code = 4;
+  TradeSide side = 5;
+  SettlementBucket settlement_bucket = 6;
+  ficant.core.v1.DecimalValue notional = 7;
+  QuoteTerms quote_terms = 8;
+  uint32 ttl_seconds = 9;
+  string note = 10;
+}
+
+message CreateHoldResult {
+  uint64 committed_seq = 1;
+  bool replayed = 2;
+  EarmarkRecord earmark = 3;
+  InstrumentPositionView position = 4;
+}
+
+message CreateHoldResponse {
+  oneof result {
+    CreateHoldResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message ExtendHoldRequest {
+  string idempotency_key = 1;
+  string account_id = 2;
+  ficant.core.v1.Ulid earmark_id = 3;
+  uint64 expected_earmark_revision = 4;
+  uint32 ttl_seconds = 5;
+}
+
+message ExtendHoldResult {
+  uint64 committed_seq = 1;
+  bool replayed = 2;
+  EarmarkRecord earmark = 3;
+}
+
+message ExtendHoldResponse {
+  oneof result {
+    ExtendHoldResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message ConfirmHoldRequest {
+  string idempotency_key = 1;
+  string account_id = 2;
+  ficant.core.v1.Ulid earmark_id = 3;
+  uint64 expected_earmark_revision = 4;
+  uint64 expected_position_version = 5;
+  QuoteTerms quote_terms = 6;
+}
+
+message ConfirmHoldResult {
+  uint64 committed_seq = 1;
+  bool replayed = 2;
+  EarmarkRecord earmark = 3;
+  InstrumentPositionView position = 4;
+  RiskAndCoverageSummary risk_summary = 5;
+  FundingGapSummary funding_summary = 6;
+  ficant.core.v1.ErrorDetail reconfirmation_error = 7;
+}
+
+message ConfirmHoldResponse {
+  oneof result {
+    ConfirmHoldResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message ReleaseHoldRequest {
+  string idempotency_key = 1;
+  string account_id = 2;
+  ficant.core.v1.Ulid earmark_id = 3;
+  uint64 expected_earmark_revision = 4;
+  string reason = 5;
+}
+
+message ReleaseHoldResult {
+  uint64 committed_seq = 1;
+  bool replayed = 2;
+  EarmarkRecord earmark = 3;
+  InstrumentPositionView position = 4;
+}
+
+message ReleaseHoldResponse {
+  oneof result {
+    ReleaseHoldResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message CreateCommittedRequest {
+  string idempotency_key = 1;
+  string account_id = 2;
+  uint64 expected_position_version = 3;
+  string instrument_code = 4;
+  TradeSide side = 5;
+  SettlementBucket settlement_bucket = 6;
+  ficant.core.v1.DecimalValue notional = 7;
+  QuoteTerms quote_terms = 8;
+  string note = 9;
+}
+
+message CreateCommittedResult {
+  uint64 committed_seq = 1;
+  bool replayed = 2;
+  EarmarkRecord earmark = 3;
+  InstrumentPositionView position = 4;
+  RiskAndCoverageSummary risk_summary = 5;
+  FundingGapSummary funding_summary = 6;
+}
+
+message CreateCommittedResponse {
+  oneof result {
+    CreateCommittedResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message CancelCommittedRequest {
+  string idempotency_key = 1;
+  string account_id = 2;
+  ficant.core.v1.Ulid earmark_id = 3;
+  uint64 expected_earmark_revision = 4;
+  string reason = 5;
+}
+
+message CancelCommittedResult {
+  uint64 committed_seq = 1;
+  bool replayed = 2;
+  EarmarkRecord earmark = 3;
+  InstrumentPositionView position = 4;
+  RiskAndCoverageSummary risk_summary = 5;
+  FundingGapSummary funding_summary = 6;
+}
+
+message CancelCommittedResponse {
+  oneof result {
+    CancelCommittedResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message SubmitDraftEarmarkRequest {
+  string idempotency_key = 1;
+  string account_id = 2;
+  NlpEarmarkProposal proposal = 3;
+}
+
+message SubmitDraftEarmarkResult {
+  uint64 committed_seq = 1;
+  bool replayed = 2;
+  DraftEarmarkRecord draft = 3;
+}
+
+message SubmitDraftEarmarkResponse {
+  oneof result {
+    SubmitDraftEarmarkResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message ConfirmDraftEarmarkRequest {
+  string idempotency_key = 1;
+  string account_id = 2;
+  ficant.core.v1.Ulid draft_id = 3;
+  uint64 expected_draft_revision = 4;
+  uint64 expected_position_version = 5;
+  ficant.core.v1.Sha256 confirmation_token = 6;
+  bool acknowledge_uncovered_dv01 = 7;
+}
+
+message ConfirmDraftEarmarkResult {
+  uint64 committed_seq = 1;
+  bool replayed = 2;
+  DraftEarmarkRecord draft = 3;
+  EarmarkRecord earmark = 4;
+  InstrumentPositionView position = 5;
+  RiskAndCoverageSummary risk_summary = 6;
+  FundingGapSummary funding_summary = 7;
+}
+
+message ConfirmDraftEarmarkResponse {
+  oneof result {
+    ConfirmDraftEarmarkResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message IngestTradeFeedRequest {
+  string idempotency_key = 1;
+  string source_id = 2;
+  repeated TradeFillRecord fills = 3;
+  ficant.core.v1.MarketTime heartbeat_at = 4;
+}
+
+message IngestTradeFeedResult {
+  uint64 committed_seq = 1;
+  bool replayed = 2;
+  repeated TradeFillIngestOutcome item_outcomes = 3;
+  FeedStatusView feed_status = 4;
+}
+
+message IngestTradeFeedResponse {
+  oneof result {
+    IngestTradeFeedResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message ResolvePendingMatchRequest {
+  string idempotency_key = 1;
+  string account_id = 2;
+  ficant.core.v1.Ulid pending_match_id = 3;
+  uint64 expected_pending_revision = 4;
+  uint64 expected_position_version = 5;
+  PendingMatchResolutionAction action = 6;
+  optional uint64 expected_earmark_revision = 7;
+  ficant.core.v1.Ulid target_earmark_id = 8;
+  ficant.core.v1.DecimalValue offset_notional = 9;
+  string reason = 10;
+  BaselineDelta baseline_delta = 11;
+}
+
+message ResolvePendingMatchResult {
+  uint64 committed_seq = 1;
+  bool replayed = 2;
+  PendingMatchRecord pending_match = 3;
+  EarmarkRecord updated_earmark = 4;
+  InstrumentPositionView position = 5;
+  RiskAndCoverageSummary risk_summary = 6;
+  FundingGapSummary funding_summary = 7;
+}
+
+message ResolvePendingMatchResponse {
+  oneof result {
+    ResolvePendingMatchResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message SweepLifecycleRequest {
+  string idempotency_key = 1;
+  optional string account_id = 2;
+  optional string source_id = 3;
+}
+
+message SweepLifecycleResult {
+  uint64 head_seq = 1;
+  bool replayed = 2;
+  uint32 expired_hold_count = 3;
+  uint32 newly_alerted_committed_count = 4;
+  uint32 newly_stale_feed_count = 5;
+}
+
+message SweepLifecycleResponse {
+  oneof result {
+    SweepLifecycleResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message SetFeedControlRequest {
+  string idempotency_key = 1;
+  string source_id = 2;
+  uint64 expected_feed_status_revision = 3;
+  bool paused_by_operator = 4;
+  bool force_clear_gap_pause = 5;
+  string reason = 6;
+}
+
+message SetFeedControlResult {
+  uint64 committed_seq = 1;
+  bool replayed = 2;
+  FeedStatusView feed_status = 3;
+}
+
+message SetFeedControlResponse {
+  oneof result {
+    SetFeedControlResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message PreviewCoveredHedgeRequest {
+  string account_id = 1;
+  PreviewHedgeScope scope = 2;
+  string product_code = 3;
+  string contract_code = 4;
+  ficant.core.v1.DecimalValue ctd_dv01_per_100 = 5;
+  ficant.core.v1.DecimalValue conversion_factor = 6;
+  ficant.market.v1.MarketRulePack delivery_rule_pack = 7;
+  ficant.core.v1.MarketTime valuation_at = 8;
+  optional uint64 expected_snapshot_seq = 9;
+}
+
+message PreviewCoveredHedgeResult {
+  uint64 evaluated_at_seq = 1;
+  PreviewHedgeScope scope = 2;
+  string product_code = 3;
+  string contract_code = 4;
+  bool zero_net_exposure = 5;
+  ficant.rates.v1.BondTaxBasis covered_tax_basis = 6;
+  uint32 covered_instrument_count = 7;
+  uint32 uncovered_instrument_count = 8;
+  ficant.core.v1.DecimalValue covered_net_pre_tax_dv01 = 9;
+  ficant.core.v1.DecimalValue excluded_uncovered_gross_notional = 10;
+  ficant.rates.v1.FuturesHedgeMeasures measures = 11;
+}
+
+message PreviewCoveredHedgeResponse {
+  oneof result {
+    PreviewCoveredHedgeResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message GetAccountSnapshotRequest {
+  string account_id = 1;
+}
+
+message GetAccountSnapshotResult {
+  AccountBlotterSnapshot snapshot = 1;
+}
+
+message GetAccountSnapshotResponse {
+  oneof result {
+    GetAccountSnapshotResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message PollEventsRequest {
+  uint64 after_seq = 1;
+  uint32 max_events = 2;
+  optional string account_id = 3;
+}
+
+message PollEventsResult {
+  oneof outcome {
+    PollEventsBatch batch = 1;
+    SnapshotFallbackRequired snapshot_fallback = 2;
+  }
+}
+
+message PollEventsResponse {
+  oneof result {
+    PollEventsResult value = 1;
+    ficant.core.v1.ErrorDetail error = 2;
+  }
+}
+
+message SubscribeEventsRequest {
+  uint64 after_seq = 1;
+  optional string account_id = 2;
+}
+
+message SubscribeEventsResponse {
+  oneof payload {
+    BlotterEventEnvelope event = 1;
+    StreamHeartbeat heartbeat = 2;
+    SnapshotFallbackRequired snapshot_fallback = 3;
+    ficant.core.v1.ErrorDetail error = 4;
+  }
+}
+
+service DeskBlotterService {
+  rpc ImportOpeningBase(ImportOpeningBaseRequest) returns (ImportOpeningBaseResponse);
+  rpc IngestMarketQuotes(IngestMarketQuotesRequest) returns (IngestMarketQuotesResponse);
+  rpc CreateHold(CreateHoldRequest) returns (CreateHoldResponse);
+  rpc ExtendHold(ExtendHoldRequest) returns (ExtendHoldResponse);
+  rpc ConfirmHold(ConfirmHoldRequest) returns (ConfirmHoldResponse);
+  rpc ReleaseHold(ReleaseHoldRequest) returns (ReleaseHoldResponse);
+  rpc CreateCommitted(CreateCommittedRequest) returns (CreateCommittedResponse);
+  rpc CancelCommitted(CancelCommittedRequest) returns (CancelCommittedResponse);
+  rpc SubmitDraftEarmark(SubmitDraftEarmarkRequest) returns (SubmitDraftEarmarkResponse);
+  rpc ConfirmDraftEarmark(ConfirmDraftEarmarkRequest) returns (ConfirmDraftEarmarkResponse);
+  rpc IngestTradeFeed(IngestTradeFeedRequest) returns (IngestTradeFeedResponse);
+  rpc ResolvePendingMatch(ResolvePendingMatchRequest) returns (ResolvePendingMatchResponse);
+  rpc SweepLifecycle(SweepLifecycleRequest) returns (SweepLifecycleResponse);
+  rpc SetFeedControl(SetFeedControlRequest) returns (SetFeedControlResponse);
+  rpc PreviewCoveredHedge(PreviewCoveredHedgeRequest) returns (PreviewCoveredHedgeResponse);
+  rpc GetAccountSnapshot(GetAccountSnapshotRequest) returns (GetAccountSnapshotResponse);
+  rpc PollEvents(PollEventsRequest) returns (PollEventsResponse);
+  rpc SubscribeEvents(SubscribeEventsRequest) returns (stream SubscribeEventsResponse);
+}
