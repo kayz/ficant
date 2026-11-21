@@ -1596,3 +1596,813 @@ def test_generated_python_oneofs_presence_and_round_trip() -> None:
     sweep_req = service_pb2.SweepLifecycleRequest(idempotency_key="k1", account_id="")
     assert sweep_req.HasField("account_id")
     assert not sweep_req.HasField("source_id")
+
+
+# ======================================================================
+# BP-2 §7.1 — DeskBlotterClient, BlotterError & Fail-Closed Tamper Guards
+# ======================================================================
+
+from collections.abc import Callable, Iterator  # noqa: E402
+from concurrent import futures  # noqa: E402
+from contextlib import contextmanager  # noqa: E402
+
+import grpc  # noqa: E402
+import pytest  # noqa: E402
+
+SDK_ROOT = REPO_ROOT / "python" / "sdk" / "src"
+if str(SDK_ROOT) not in sys.path:
+    sys.path.insert(0, str(SDK_ROOT))
+
+from ficant.core.v1.error_pb2 import (  # noqa: E402
+    ERROR_CODE_FORBIDDEN,
+    ERROR_CODE_STORAGE_UNAVAILABLE,
+    ERROR_CODE_UNAUTHENTICATED,
+    FieldViolation,
+)
+from ficant.rates.v1 import analytics_pb2  # noqa: E402
+from ficant_sdk import (  # noqa: E402
+    BlotterError,
+    BlotterEventApplier,
+    DeskBlotterClient,
+    RatesClient,
+    RatesError,
+)
+
+
+_CURR_UNIT = UnitRef(unit_id=Ulid(value="01ARZ3NDEKTSV4RRFFQ69G5FA1"), version=1)
+_DV01_UNIT = UnitRef(unit_id=Ulid(value="01ARZ3NDEKTSV4RRFFQ69G5FA4"), version=1)
+_DV01_100_UNIT = UnitRef(unit_id=Ulid(value="01ARZ3NDEKTSV4RRFFQ69G5FA5"), version=1)
+_PCT_UNIT = UnitRef(unit_id=Ulid(value="01ARZ3NDEKTSV4RRFFQ69G5FA6"), version=1)
+_CNT_UNIT = UnitRef(unit_id=Ulid(value="01ARZ3NDEKTSV4RRFFQ69G5FA7"), version=1)
+_OTHER_UNIT = UnitRef(unit_id=Ulid(value="01ARZ3NDEKTSV4RRFFQ69G5FAZ"), version=1)
+_CURR_UNIT_V2 = UnitRef(unit_id=Ulid(value="01ARZ3NDEKTSV4RRFFQ69G5FA1"), version=2)
+
+
+@contextmanager
+def _raw_blotter_client(
+    *,
+    bearer_token: str | None = "test-trader-bearer-token",
+    blotter_unary: dict[str, Callable[[bytes, grpc.ServicerContext], bytes]] | None = None,
+    blotter_stream: dict[str, Callable[[bytes, grpc.ServicerContext], Iterator[bytes]]] | None = None,
+    quote_spi_unary: dict[str, Callable[[bytes, grpc.ServicerContext], bytes]] | None = None,
+    quote_spi_stream: dict[str, Callable[[bytes, grpc.ServicerContext], Iterator[bytes]]] | None = None,
+    rates_unary: dict[str, Callable[[bytes, grpc.ServicerContext], bytes]] | None = None,
+) -> Iterator[tuple[DeskBlotterClient, str]]:
+    """Starts an in-process raw-byte gRPC server for DeskBlotterClient tamper testing."""
+    generic_handlers: list[grpc.GenericRpcHandler] = []
+
+    blotter_handlers: dict[str, grpc.RpcMethodHandler] = {}
+    for method, fn in (blotter_unary or {}).items():
+        blotter_handlers[method] = grpc.unary_unary_rpc_method_handler(
+            fn,
+            request_deserializer=lambda data: data,
+            response_serializer=lambda data: data,
+        )
+    for method, fn in (blotter_stream or {}).items():
+        blotter_handlers[method] = grpc.unary_stream_rpc_method_handler(
+            fn,
+            request_deserializer=lambda data: data,
+            response_serializer=lambda data: data,
+        )
+    if blotter_handlers:
+        generic_handlers.append(
+            grpc.method_handlers_generic_handler(
+                "ficant.blotter.v1.DeskBlotterService", blotter_handlers
+            )
+        )
+
+    quote_handlers: dict[str, grpc.RpcMethodHandler] = {}
+    for method, fn in (quote_spi_unary or {}).items():
+        quote_handlers[method] = grpc.unary_unary_rpc_method_handler(
+            fn,
+            request_deserializer=lambda data: data,
+            response_serializer=lambda data: data,
+        )
+    for method, fn in (quote_spi_stream or {}).items():
+        quote_handlers[method] = grpc.unary_stream_rpc_method_handler(
+            fn,
+            request_deserializer=lambda data: data,
+            response_serializer=lambda data: data,
+        )
+    if quote_handlers:
+        generic_handlers.append(
+            grpc.method_handlers_generic_handler(
+                "ficant.blotter.v1.MarketQuoteStreamService", quote_handlers
+            )
+        )
+
+    if rates_unary:
+        rates_handlers = {
+            method: grpc.unary_unary_rpc_method_handler(
+                fn,
+                request_deserializer=lambda data: data,
+                response_serializer=lambda data: data,
+            )
+            for method, fn in rates_unary.items()
+        }
+        generic_handlers.append(
+            grpc.method_handlers_generic_handler(
+                "ficant.rates.v1.RatesAnalyticsService", rates_handlers
+            )
+        )
+
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
+    server.add_generic_rpc_handlers(tuple(generic_handlers))
+    port = server.add_insecure_port("127.0.0.1:0")
+    server.start()
+    endpoint = f"127.0.0.1:{port}"
+    client = DeskBlotterClient(
+        endpoint,
+        bearer_token=bearer_token,
+        insecure=True,
+        timeout_seconds=5.0,
+    )
+    try:
+        yield client, endpoint
+    finally:
+        client.close()
+        server.stop(grace=0).wait()
+
+
+def _valid_snapshot(
+    account_id: str,
+    snapshot_seq: int,
+    *,
+    account_version: int = 1,
+    tax_basis: int = analytics_pb2.BOND_TAX_BASIS_PRE_TAX,
+    covered_tax_basis: int = analytics_pb2.BOND_TAX_BASIS_PRE_TAX,
+    uncovered_count: int = 0,
+    whole_account_allowed: bool = True,
+) -> model_pb2.AccountBlotterSnapshot:
+    return model_pb2.AccountBlotterSnapshot(
+        snapshot_seq=snapshot_seq,
+        account_id=account_id,
+        account_version=account_version,
+        opening_base=model_pb2.OpeningPositionBase(
+            account_id=account_id,
+            units=analytics_pb2.AnalysisUnits(
+                currency_amount=_CURR_UNIT,
+                dv01=_DV01_UNIT,
+                dv01_per_100=_DV01_100_UNIT,
+                dimensionless=_PCT_UNIT,
+                contract_count=_CNT_UNIT,
+            ),
+        ),
+        risk_summary=model_pb2.RiskAndCoverageSummary(
+            covered_instrument_count=1,
+            uncovered_instrument_count=uncovered_count,
+            covered_tax_basis=covered_tax_basis,
+            covered_net_pre_tax_dv01=DecimalValue(
+                coefficient="5000", scale=0, unit=_DV01_UNIT
+            ),
+            whole_account_hedge_allowed=whole_account_allowed,
+        ),
+        positions=[
+            model_pb2.InstrumentPositionView(
+                account_id=account_id,
+                instrument_code="BOND_10Y",
+                position_version=account_version,
+                coverage_status=model_pb2.COVERAGE_STATUS_COVERED_PRE_TAX,
+                tax_basis=tax_basis,
+            )
+        ],
+    )
+
+
+def _valid_hedge_request(
+    scope: int = model_pb2.PREVIEW_HEDGE_SCOPE_WHOLE_ACCOUNT,
+) -> service_pb2.PreviewCoveredHedgeRequest:
+    return service_pb2.PreviewCoveredHedgeRequest(
+        account_id="acct-A",
+        scope=scope,
+        product_code="T",
+        contract_code="T2609",
+        ctd_dv01_per_100=DecimalValue(coefficient="75", scale=3, unit=_DV01_100_UNIT),
+        conversion_factor=DecimalValue(coefficient="985", scale=3, unit=_PCT_UNIT),
+    )
+
+
+def _valid_hedge_response(
+    scope: int = model_pb2.PREVIEW_HEDGE_SCOPE_WHOLE_ACCOUNT,
+) -> service_pb2.PreviewCoveredHedgeResponse:
+    return service_pb2.PreviewCoveredHedgeResponse(
+        value=service_pb2.PreviewCoveredHedgeResult(
+            evaluated_at_seq=5,
+            scope=scope,
+            product_code="T",
+            contract_code="T2609",
+            zero_net_exposure=False,
+            covered_tax_basis=analytics_pb2.BOND_TAX_BASIS_PRE_TAX,
+            covered_instrument_count=1,
+            uncovered_instrument_count=0,
+            covered_net_pre_tax_dv01=DecimalValue(
+                coefficient="5000", scale=0, unit=_DV01_UNIT
+            ),
+            excluded_uncovered_gross_notional=DecimalValue(
+                coefficient="0", scale=0, unit=_CURR_UNIT
+            ),
+            measures=analytics_pb2.FuturesHedgeMeasures(
+                futures_contract_dv01=DecimalValue(
+                    coefficient="7614", scale=2, unit=_DV01_UNIT
+                ),
+                raw_contracts=DecimalValue(
+                    coefficient="-656", scale=2, unit=_CNT_UNIT
+                ),
+                recommended_contracts=-7,
+                residual_dv01=DecimalValue(
+                    coefficient="-3298", scale=2, unit=_DV01_UNIT
+                ),
+                hedge_effectiveness=DecimalValue(
+                    coefficient="934", scale=3, unit=_PCT_UNIT
+                ),
+                contract_notional=DecimalValue(
+                    coefficient="1000000", scale=0, unit=_CURR_UNIT
+                ),
+            ),
+        )
+    )
+
+
+def test_sdk_bearer_token_forwarding_and_blotter_error_mapping() -> None:
+    captured_auth: list[str | None] = []
+
+    def _capture_meta(ctx: grpc.ServicerContext) -> None:
+        meta = dict(ctx.invocation_metadata())
+        captured_auth.append(meta.get("authorization"))
+
+    def _handle_snapshot(_raw: bytes, ctx: grpc.ServicerContext) -> bytes:
+        _capture_meta(ctx)
+        return service_pb2.GetAccountSnapshotResponse(
+            value=service_pb2.GetAccountSnapshotResult(
+                snapshot=_valid_snapshot("acct-A", 3)
+            )
+        ).SerializeToString()
+
+    def _handle_create_hold_err(_raw: bytes, ctx: grpc.ServicerContext) -> bytes:
+        _capture_meta(ctx)
+        return service_pb2.CreateHoldResponse(
+            error=ErrorDetail(
+                code=ERROR_CODE_FORBIDDEN,
+                message="forbidden",
+                retryable=False,
+                field_violations=[
+                    FieldViolation(field="account_id", description="not permitted")
+                ],
+            )
+        ).SerializeToString()
+
+    def _handle_confirm_hold_lazy_expiry(_raw: bytes, ctx: grpc.ServicerContext) -> bytes:
+        _capture_meta(ctx)
+        return service_pb2.ConfirmHoldResponse(
+            value=service_pb2.ConfirmHoldResult(
+                committed_seq=17,
+                replayed=True,
+                earmark=model_pb2.EarmarkRecord(
+                    earmark_id=Ulid(value="01ARZ3NDEKTSV4RRFFQ69G5FAA"),
+                    earmark_revision=2,
+                    account_id="acct-A",
+                    instrument_code="BOND_10Y",
+                    state=model_pb2.EARMARK_STATE_EXPIRED,
+                ),
+                position=model_pb2.InstrumentPositionView(
+                    account_id="acct-A",
+                    instrument_code="BOND_10Y",
+                    tax_basis=analytics_pb2.BOND_TAX_BASIS_PRE_TAX,
+                ),
+                risk_summary=model_pb2.RiskAndCoverageSummary(
+                    covered_tax_basis=analytics_pb2.BOND_TAX_BASIS_PRE_TAX
+                ),
+                funding_summary=model_pb2.FundingGapSummary(),
+                reconfirmation_error=ErrorDetail(
+                    code=ERROR_CODE_VALIDATION_FAILED,
+                    message="insufficient available notional after expiry",
+                    retryable=False,
+                    field_violations=[
+                        FieldViolation(
+                            field="notional",
+                            description="insufficient available notional",
+                        )
+                    ],
+                ),
+            )
+        ).SerializeToString()
+
+    def _handle_subscribe_err(_raw: bytes, ctx: grpc.ServicerContext) -> Iterator[bytes]:
+        _capture_meta(ctx)
+        yield service_pb2.SubscribeEventsResponse(
+            error=ErrorDetail(
+                code=ERROR_CODE_UNAUTHENTICATED,
+                message="unauthenticated",
+            )
+        ).SerializeToString()
+
+    def _handle_pull_quotes(_raw: bytes, ctx: grpc.ServicerContext) -> bytes:
+        _capture_meta(ctx)
+        return spi_pb2.PullMarketQuotesResponse(
+            value=spi_pb2.PullMarketQuotesResult(
+                ticks=[],
+                next_cursor=spi_pb2.QuoteCursor(
+                    source_id="SRC-A", instrument_code="BOND_10Y", after_quote_seq=5
+                ),
+                has_more=False,
+            )
+        ).SerializeToString()
+
+    token = "high-entropy-desk-bearer-123"
+    with _raw_blotter_client(
+        bearer_token=token,
+        blotter_unary={
+            "GetAccountSnapshot": _handle_snapshot,
+            "CreateHold": _handle_create_hold_err,
+            "ConfirmHold": _handle_confirm_hold_lazy_expiry,
+        },
+        blotter_stream={"SubscribeEvents": _handle_subscribe_err},
+        quote_spi_unary={"PullMarketQuotes": _handle_pull_quotes},
+    ) as (client, _endpoint):
+        snap_res = client.get_account_snapshot(
+            service_pb2.GetAccountSnapshotRequest(account_id="acct-A")
+        )
+        assert snap_res.snapshot.snapshot_seq == 3
+
+        with pytest.raises(BlotterError) as hold_exc:
+            client.create_hold(service_pb2.CreateHoldRequest(idempotency_key="k1"))
+        assert hold_exc.value.code == ERROR_CODE_FORBIDDEN
+        assert hold_exc.value.committed_seq is None
+        assert hold_exc.value.field_violations[0].field == "account_id"
+
+        with pytest.raises(BlotterError) as confirm_exc:
+            client.confirm_hold(service_pb2.ConfirmHoldRequest(idempotency_key="k2"))
+        assert confirm_exc.value.code == ERROR_CODE_VALIDATION_FAILED
+        assert confirm_exc.value.committed_seq == 17
+        assert confirm_exc.value.replayed is True
+        assert confirm_exc.value.earmark is not None
+        assert confirm_exc.value.earmark.state == model_pb2.EARMARK_STATE_EXPIRED
+        assert confirm_exc.value.position is not None
+        assert confirm_exc.value.risk_summary is not None
+        assert confirm_exc.value.funding_summary is not None
+
+        with pytest.raises(BlotterError) as sub_exc:
+            list(client.subscribe_events(service_pb2.SubscribeEventsRequest(after_seq=0)))
+        assert sub_exc.value.code == ERROR_CODE_UNAUTHENTICATED
+
+        q_res = client.pull_market_quotes(
+            spi_pb2.PullMarketQuotesRequest(
+                cursor=spi_pb2.QuoteCursor(
+                    source_id="SRC-A", instrument_code="BOND_10Y", after_quote_seq=5
+                ),
+                max_ticks=10,
+            )
+        )
+        assert q_res.next_cursor.after_quote_seq == 5
+
+    assert captured_auth == [f"Bearer {token}"] * 5
+
+    # Tampered ConfirmHold with reconfirmation_error but non-EXPIRED earmark -> RuntimeError.
+    bad_confirm = service_pb2.ConfirmHoldResponse(
+        value=service_pb2.ConfirmHoldResult(
+            committed_seq=18,
+            earmark=model_pb2.EarmarkRecord(state=model_pb2.EARMARK_STATE_HOLD),
+            reconfirmation_error=ErrorDetail(
+                code=ERROR_CODE_VALIDATION_FAILED, message="bad"
+            ),
+        )
+    )
+    with _raw_blotter_client(
+        blotter_unary={"ConfirmHold": lambda _r, _c: bad_confirm.SerializeToString()}
+    ) as (client, _):
+        with pytest.raises(RuntimeError, match="EXPIRED"):
+            client.confirm_hold(service_pb2.ConfirmHoldRequest(idempotency_key="k3"))
+
+
+def test_sdk_whole_transaction_cursor_commit_and_seq_monotonicity_guards() -> None:
+    persisted_cursors: list[int] = []
+    seen_versions_at_persist: list[tuple[int, int]] = []
+
+    applier = BlotterEventApplier(
+        {
+            "acct-A": _valid_snapshot("acct-A", 1, account_version=1),
+            "acct-B": _valid_snapshot("acct-B", 1, account_version=1),
+        },
+        cursor_sink=lambda seq: (
+            persisted_cursors.append(seq),
+            seen_versions_at_persist.append(
+                (
+                    applier.snapshot_for("acct-A").account_version,  # type: ignore[union-attr]
+                    applier.snapshot_for("acct-B").account_version,  # type: ignore[union-attr]
+                )
+            ),
+        ),
+    )
+    assert applier.cursor_seq == 1
+
+    # 1. Poisoned 2-account transaction (acct-A valid, acct-B tampered TAX_ADJUSTED):
+    #    MUST reject whole transaction without mutating acct-A or persisting cursor!
+    poisoned_env = model_pb2.BlotterEventEnvelope(
+        seq=2,
+        event_type="INGEST_TRADE_FEED",
+        changes=[
+            model_pb2.AccountChange(
+                account_id="acct-A",
+                replace_snapshot=_valid_snapshot("acct-A", 2, account_version=2),
+            ),
+            model_pb2.AccountChange(
+                account_id="acct-B",
+                replace_snapshot=_valid_snapshot(
+                    "acct-B",
+                    2,
+                    account_version=2,
+                    tax_basis=analytics_pb2.BOND_TAX_BASIS_TAX_ADJUSTED,
+                ),
+            ),
+        ],
+    )
+    with _raw_blotter_client(
+        blotter_unary={
+            "PollEvents": lambda _r, _c: service_pb2.PollEventsResponse(
+                value=service_pb2.PollEventsResult(
+                    batch=model_pb2.PollEventsBatch(
+                        events=[poisoned_env],
+                        scanned_through_seq=2,
+                        current_head_seq=2,
+                        has_more=False,
+                    )
+                )
+            ).SerializeToString()
+        }
+    ) as (client, _):
+        with pytest.raises(RuntimeError, match="tax_basis"):
+            client.poll_events(
+                service_pb2.PollEventsRequest(after_seq=1, max_events=10),
+                applier=applier,
+            )
+
+    assert applier.cursor_seq == 1
+    assert persisted_cursors == []
+    assert applier.snapshot_for("acct-A").account_version == 1  # type: ignore[union-attr]
+    assert applier.snapshot_for("acct-B").account_version == 1  # type: ignore[union-attr]
+
+    # 2. Valid 2-account transaction commits BOTH accounts BEFORE calling cursor_sink!
+    good_env = model_pb2.BlotterEventEnvelope(
+        seq=2,
+        event_type="INGEST_TRADE_FEED",
+        changes=[
+            model_pb2.AccountChange(
+                account_id="acct-A",
+                replace_snapshot=_valid_snapshot("acct-A", 2, account_version=2),
+            ),
+            model_pb2.AccountChange(
+                account_id="acct-B",
+                replace_snapshot=_valid_snapshot("acct-B", 2, account_version=3),
+            ),
+        ],
+    )
+    with _raw_blotter_client(
+        blotter_unary={
+            "PollEvents": lambda _r, _c: service_pb2.PollEventsResponse(
+                value=service_pb2.PollEventsResult(
+                    batch=model_pb2.PollEventsBatch(
+                        events=[good_env],
+                        scanned_through_seq=2,
+                        current_head_seq=2,
+                        has_more=False,
+                    )
+                )
+            ).SerializeToString()
+        }
+    ) as (client, _):
+        client.poll_events(
+            service_pb2.PollEventsRequest(after_seq=1, max_events=10),
+            applier=applier,
+        )
+
+    assert applier.cursor_seq == 2
+    assert persisted_cursors == [2]
+    assert seen_versions_at_persist == [(2, 3)]
+
+    # 3. Duplicate equal seq=2 and regressing seq=1 MUST raise RuntimeError on PollEvents & SubscribeEvents!
+    for bad_seq, expected_kw in ((2, "duplicate"), (1, "regressing")):
+        bad_env = model_pb2.BlotterEventEnvelope(
+            seq=bad_seq,
+            event_type="TEST",
+            changes=[
+                model_pb2.AccountChange(
+                    account_id="acct-A",
+                    replace_snapshot=_valid_snapshot("acct-A", bad_seq, account_version=9),
+                )
+            ],
+        )
+        with _raw_blotter_client(
+            blotter_unary={
+                "PollEvents": lambda _r, _c, env=bad_env: service_pb2.PollEventsResponse(
+                    value=service_pb2.PollEventsResult(
+                        batch=model_pb2.PollEventsBatch(
+                            events=[env],
+                            scanned_through_seq=max(2, env.seq),
+                            current_head_seq=2,
+                        )
+                    )
+                ).SerializeToString()
+            },
+            blotter_stream={
+                "SubscribeEvents": lambda _r, _c, env=bad_env: iter(
+                    [service_pb2.SubscribeEventsResponse(event=env).SerializeToString()]
+                )
+            },
+        ) as (client, _):
+            with pytest.raises(RuntimeError, match=expected_kw):
+                client.poll_events(
+                    service_pb2.PollEventsRequest(after_seq=2, max_events=10),
+                    applier=applier,
+                )
+            with pytest.raises(RuntimeError, match=expected_kw):
+                list(
+                    client.subscribe_events(
+                        service_pb2.SubscribeEventsRequest(after_seq=2),
+                        applier=applier,
+                    )
+                )
+
+    # Duplicate seq within the same SubscribeEvents stream (seq=3 then seq=3) -> RuntimeError!
+    env3 = model_pb2.BlotterEventEnvelope(
+        seq=3,
+        event_type="E3",
+        changes=[
+            model_pb2.AccountChange(
+                account_id="acct-A",
+                replace_snapshot=_valid_snapshot("acct-A", 3, account_version=4),
+            )
+        ],
+    )
+    with _raw_blotter_client(
+        blotter_stream={
+            "SubscribeEvents": lambda _r, _c: iter(
+                [
+                    service_pb2.SubscribeEventsResponse(event=env3).SerializeToString(),
+                    service_pb2.SubscribeEventsResponse(event=env3).SerializeToString(),
+                ]
+            )
+        }
+    ) as (client, _):
+        stream = client.subscribe_events(
+            service_pb2.SubscribeEventsRequest(after_seq=2), applier=applier
+        )
+        first = next(stream)
+        assert first.event.seq == 3
+        with pytest.raises(RuntimeError, match="duplicate"):
+            next(stream)
+    assert applier.cursor_seq == 3
+
+    # Regressing heartbeat scanned_through_seq=2 (< 3) -> RuntimeError!
+    with _raw_blotter_client(
+        blotter_stream={
+            "SubscribeEvents": lambda _r, _c: iter(
+                [
+                    service_pb2.SubscribeEventsResponse(
+                        heartbeat=model_pb2.StreamHeartbeat(
+                            head_seq=3, scanned_through_seq=2
+                        )
+                    ).SerializeToString()
+                ]
+            )
+        }
+    ) as (client, _):
+        with pytest.raises(RuntimeError, match="monotonicity"):
+            list(
+                client.subscribe_events(
+                    service_pb2.SubscribeEventsRequest(after_seq=3), applier=applier
+                )
+            )
+
+
+def test_sdk_cross_source_quote_cursor_tamper_guards() -> None:
+    req_cursor = spi_pb2.QuoteCursor(
+        source_id="SRC-A", instrument_code="BOND_10Y", after_quote_seq=10
+    )
+
+    # 1. PullMarketQuotes: cross-source next_cursor
+    bad_next_src = spi_pb2.PullMarketQuotesResponse(
+        value=spi_pb2.PullMarketQuotesResult(
+            ticks=[],
+            next_cursor=spi_pb2.QuoteCursor(
+                source_id="SRC-B", instrument_code="BOND_10Y", after_quote_seq=10
+            ),
+        )
+    )
+    # 2. PullMarketQuotes: cross-source tick
+    bad_tick_src = spi_pb2.PullMarketQuotesResponse(
+        value=spi_pb2.PullMarketQuotesResult(
+            ticks=[
+                spi_pb2.MarketQuoteTick(
+                    source_id="SRC-B", quote_seq=11, instrument_code="BOND_10Y"
+                )
+            ],
+            next_cursor=spi_pb2.QuoteCursor(
+                source_id="SRC-A", instrument_code="BOND_10Y", after_quote_seq=11
+            ),
+        )
+    )
+    # 3. PullMarketQuotes: regressing cursor
+    bad_regress = spi_pb2.PullMarketQuotesResponse(
+        value=spi_pb2.PullMarketQuotesResult(
+            ticks=[],
+            next_cursor=spi_pb2.QuoteCursor(
+                source_id="SRC-A", instrument_code="BOND_10Y", after_quote_seq=9
+            ),
+        )
+    )
+    for bad_resp, match_pat in (
+        (bad_next_src, "cross-source"),
+        (bad_tick_src, "cross-source"),
+        (bad_regress, "regressing"),
+    ):
+        with _raw_blotter_client(
+            quote_spi_unary={
+                "PullMarketQuotes": lambda _r, _c, r=bad_resp: r.SerializeToString()
+            }
+        ) as (client, _):
+            with pytest.raises(RuntimeError, match=match_pat):
+                client.pull_market_quotes(
+                    spi_pb2.PullMarketQuotesRequest(cursor=req_cursor, max_ticks=10)
+                )
+
+    # 4. StreamMarketQuotes: cross-source tick and cross-source heartbeat cursor
+    bad_stream_tick = spi_pb2.StreamMarketQuotesResponse(
+        tick=spi_pb2.MarketQuoteTick(
+            source_id="SRC-B", quote_seq=11, instrument_code="BOND_10Y"
+        )
+    )
+    bad_stream_hb = spi_pb2.StreamMarketQuotesResponse(
+        heartbeat=spi_pb2.QuoteHeartbeat(
+            cursor=spi_pb2.QuoteCursor(
+                source_id="SRC-B", instrument_code="BOND_10Y", after_quote_seq=10
+            )
+        )
+    )
+    for msg in (bad_stream_tick, bad_stream_hb):
+        with _raw_blotter_client(
+            quote_spi_stream={
+                "StreamMarketQuotes": lambda _r, _c, m=msg: iter([m.SerializeToString()])
+            }
+        ) as (client, _):
+            with pytest.raises(RuntimeError, match="cross-source"):
+                list(
+                    client.stream_market_quotes(
+                        spi_pb2.StreamMarketQuotesRequest(cursor=req_cursor)
+                    )
+                )
+
+
+def test_sdk_preview_covered_hedge_and_tax_basis_tamper_guards() -> None:
+    # Compliant response succeeds.
+    with _raw_blotter_client(
+        blotter_unary={
+            "PreviewCoveredHedge": lambda _r, _c: _valid_hedge_response().SerializeToString()
+        }
+    ) as (client, _):
+        ok = client.preview_covered_hedge(
+            _valid_hedge_request(), expected_currency_unit=_CURR_UNIT
+        )
+        assert ok.measures.contract_notional.coefficient == "1000000"
+
+    def _assert_hedge_rejected(
+        resp: service_pb2.PreviewCoveredHedgeResponse,
+        expected_substr: str,
+        *,
+        req: service_pb2.PreviewCoveredHedgeRequest | None = None,
+        expected_unit: UnitRef | None = _CURR_UNIT,
+    ) -> None:
+        with _raw_blotter_client(
+            blotter_unary={
+                "PreviewCoveredHedge": lambda _r, _c: resp.SerializeToString()
+            }
+        ) as (client, _):
+            with pytest.raises(RuntimeError) as exc_info:
+                client.preview_covered_hedge(
+                    req or _valid_hedge_request(), expected_currency_unit=expected_unit
+                )
+            assert expected_substr in str(exc_info.value)
+
+    # 1. Invalid / mismatched scope & uncovered > 0 returning WHOLE_ACCOUNT
+    for bad_scope in (
+        model_pb2.PREVIEW_HEDGE_SCOPE_UNSPECIFIED,
+        model_pb2.PREVIEW_HEDGE_SCOPE_COVERED_SUBSET_ONLY,
+        99,
+    ):
+        mut = _valid_hedge_response()
+        mut.value.scope = bad_scope
+        _assert_hedge_rejected(mut, "scope")
+
+    uncovered_whole = _valid_hedge_response(model_pb2.PREVIEW_HEDGE_SCOPE_WHOLE_ACCOUNT)
+    uncovered_whole.value.uncovered_instrument_count = 1
+    _assert_hedge_rejected(uncovered_whole, "WHOLE_ACCOUNT")
+
+    # 2. Non-PRE_TAX tax basis in PreviewCoveredHedge
+    for bad_basis in (
+        analytics_pb2.BOND_TAX_BASIS_UNSPECIFIED,
+        analytics_pb2.BOND_TAX_BASIS_TAX_ADJUSTED,
+        77,
+    ):
+        mut = _valid_hedge_response()
+        mut.value.covered_tax_basis = bad_basis
+        _assert_hedge_rejected(mut, "covered_tax_basis")
+
+    # 3. Missing / zero / negative / non-canonical contract_notional
+    no_measures = _valid_hedge_response()
+    no_measures.value.ClearField("measures")
+    _assert_hedge_rejected(no_measures, "measures")
+
+    no_notional = _valid_hedge_response()
+    no_notional.value.measures.ClearField("contract_notional")
+    _assert_hedge_rejected(no_notional, "contract_notional")
+
+    for coeff, scale in (("0", 0), ("-1000000", 0), ("10000000", 1), ("01000", 0), ("NaN", 0)):
+        mut = _valid_hedge_response()
+        mut.value.measures.contract_notional.CopyFrom(
+            DecimalValue(coefficient=coeff, scale=scale, unit=_CURR_UNIT)
+        )
+        _assert_hedge_rejected(mut, "contract_notional")
+
+    # 4. Missing / invalid / wrong-unit (including percentage/dimensionless unit) contract_notional
+    missing_unit = _valid_hedge_response()
+    missing_unit.value.measures.contract_notional.ClearField("unit")
+    _assert_hedge_rejected(missing_unit, "contract_notional.unit")
+
+    zero_ver_unit = _valid_hedge_response()
+    zero_ver_unit.value.measures.contract_notional.unit.version = 0
+    _assert_hedge_rejected(zero_ver_unit, "contract_notional.unit")
+
+    wrong_pct_unit = _valid_hedge_response()
+    wrong_pct_unit.value.measures.contract_notional.unit.CopyFrom(_PCT_UNIT)
+    _assert_hedge_rejected(wrong_pct_unit, "contract_notional.unit", expected_unit=None)
+
+    wrong_other_unit = _valid_hedge_response()
+    wrong_other_unit.value.measures.contract_notional.unit.CopyFrom(_OTHER_UNIT)
+    _assert_hedge_rejected(wrong_other_unit, "contract_notional.unit")
+
+    wrong_ver_unit = _valid_hedge_response()
+    wrong_ver_unit.value.measures.contract_notional.unit.CopyFrom(_CURR_UNIT_V2)
+    _assert_hedge_rejected(wrong_ver_unit, "contract_notional.unit")
+
+    # 5. Non-PRE_TAX tax basis on GetAccountSnapshot (risk_summary & positions) -> RuntimeError
+    bad_snap_risk = service_pb2.GetAccountSnapshotResponse(
+        value=service_pb2.GetAccountSnapshotResult(
+            snapshot=_valid_snapshot(
+                "acct-A",
+                4,
+                covered_tax_basis=analytics_pb2.BOND_TAX_BASIS_TAX_ADJUSTED,
+            )
+        )
+    )
+    bad_snap_pos = service_pb2.GetAccountSnapshotResponse(
+        value=service_pb2.GetAccountSnapshotResult(
+            snapshot=_valid_snapshot(
+                "acct-A",
+                4,
+                tax_basis=analytics_pb2.BOND_TAX_BASIS_UNSPECIFIED,
+            )
+        )
+    )
+    bad_snap_whole_flag = service_pb2.GetAccountSnapshotResponse(
+        value=service_pb2.GetAccountSnapshotResult(
+            snapshot=_valid_snapshot(
+                "acct-A",
+                4,
+                uncovered_count=1,
+                whole_account_allowed=True,
+            )
+        )
+    )
+    for bad_snap, substr in (
+        (bad_snap_risk, "covered_tax_basis"),
+        (bad_snap_pos, "tax_basis"),
+        (bad_snap_whole_flag, "whole_account_hedge_allowed"),
+    ):
+        with _raw_blotter_client(
+            blotter_unary={
+                "GetAccountSnapshot": lambda _r, _c, s=bad_snap: s.SerializeToString()
+            }
+        ) as (client, _):
+            with pytest.raises(RuntimeError, match=substr):
+                client.get_account_snapshot(
+                    service_pb2.GetAccountSnapshotRequest(account_id="acct-A")
+                )
+
+
+def test_rates_client_remains_untouched_and_green_alongside_desk_blotter_client() -> None:
+    rates_err = analytics_pb2.AnalyzeBondResponse(
+        error=ErrorDetail(
+            code=ERROR_CODE_STORAGE_UNAVAILABLE,
+            message="mock rates business error",
+        )
+    )
+    with _raw_blotter_client(
+        rates_unary={"AnalyzeBond": lambda _r, _c: rates_err.SerializeToString()}
+    ) as (_blotter_client, endpoint):
+        with RatesClient(endpoint, insecure=True, timeout_seconds=5.0) as rates_client:
+            with pytest.raises(RatesError) as exc_info:
+                rates_client.analyze_bond(
+                    analytics_pb2.AnalyzeBondRequest(
+                        execution_mode=analytics_pb2.BOND_TAX_BASIS_PRE_TAX
+                    )
+                )
+            assert exc_info.value.detail.code == ERROR_CODE_STORAGE_UNAVAILABLE

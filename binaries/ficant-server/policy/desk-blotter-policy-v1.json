@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "policy_version": 1,
+  "policy_profile": "A",
+  "allowed_hedge_product_codes": [
+    "T",
+    "TF",
+    "TL"
+  ],
+  "blotter_config": {
+    "clean_price_tolerance": "0.05",
+    "yield_tolerance": "0.0005",
+    "committed_overdue_seconds": 3600,
+    "pre_close_alert_time": "16:30:00",
+    "feed_staleness_seconds": 300
+  },
+  "default_account_policy": {
+    "default_quote_source_id": "primary-quote-feed",
+    "instrument_quote_sources": {},
+    "quote_staleness_seconds": 300,
+    "default_draft_hold_ttl_seconds": 1800,
+    "limit_ceilings": {},
+    "regulatory_rule_pack": null
+  },
+  "accounts": {}
+}

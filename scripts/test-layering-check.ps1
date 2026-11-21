@@ -95,6 +95,15 @@ try {
         }
     }
 
+    $blotterStoreFixtures = @($fixtures | Where-Object {
+        ([string]$_.relative_path).StartsWith('crates/ficant-blotter-store/src/', [System.StringComparison]::Ordinal)
+    })
+    $blotterStorePositive = @($blotterStoreFixtures | Where-Object { [int]$_.expected_exit_code -eq 0 })
+    $blotterStoreNegative = @($blotterStoreFixtures | Where-Object { [int]$_.expected_exit_code -eq 1 })
+    if ($blotterStorePositive.Count -lt 1 -or $blotterStoreNegative.Count -lt 3) {
+        throw "Shared layering fixture catalog must cover 8th production root crates/ficant-blotter-store/src with >=1 positive and >=3 negative cases (got positive=$($blotterStorePositive.Count), negative=$($blotterStoreNegative.Count))."
+    }
+
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
 
     $preparedFixtures = foreach ($fixture in $fixtures) {
@@ -187,8 +196,8 @@ try {
     $assertionCount++
 
     Write-Host (
-        "Layering gate shared fixture tests passed: fixtures={0} (positive={1}, negative={2}), assertions={3}." -f
-        $fixtures.Count, $positiveCount, $negativeCount, $assertionCount
+        "Layering gate shared fixture tests passed: fixtures={0} (positive={1}, negative={2}, blotter_store_8th_root={3}), assertions={4}." -f
+        $fixtures.Count, $positiveCount, $negativeCount, $blotterStoreFixtures.Count, $assertionCount
     )
     exit 0
 }
