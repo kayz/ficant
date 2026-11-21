@@ -1,4 +1,5 @@
 use ficant_domain::DomainErrorCode;
+use ficant_domain::blotter::{BlotterError, BlotterErrorKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ApplicationErrorCategory {
@@ -21,6 +22,19 @@ pub enum ApplicationErrorDetail {
     RulePackItemMissing { path: String },
     SubjectBindingInvalid,
     UnknownAccountingPositions { position_ids: Vec<String> },
+    BlotterFeedPaused,
+    BlotterInsufficientAvailable,
+    BlotterSellAmbiguityLocked,
+    BlotterInvalidStateTransition,
+    BlotterRulePackInvalid,
+    BlotterConstraintLimitMissing { limit_code: String },
+    BlotterConstraintLimitExceeded { limit_code: String },
+    BlotterUncoveredRiskAcknowledgementRequired,
+    BlotterWholeAccountHedgeBlocked,
+    BlotterEmptyCoveredBook,
+    BlotterHedgeProductNotAllowed,
+    BlotterCalendarCoverageMissing,
+    BlotterPayloadTooLarge,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -71,6 +85,129 @@ impl ApplicationError {
     }
 
     #[must_use]
+    pub const fn blotter_feed_paused() -> Self {
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: true,
+            detail: Some(ApplicationErrorDetail::BlotterFeedPaused),
+        }
+    }
+
+    #[must_use]
+    pub const fn blotter_insufficient_available() -> Self {
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail: Some(ApplicationErrorDetail::BlotterInsufficientAvailable),
+        }
+    }
+
+    #[must_use]
+    pub const fn blotter_sell_ambiguity_locked() -> Self {
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail: Some(ApplicationErrorDetail::BlotterSellAmbiguityLocked),
+        }
+    }
+
+    #[must_use]
+    pub const fn blotter_invalid_state_transition() -> Self {
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail: Some(ApplicationErrorDetail::BlotterInvalidStateTransition),
+        }
+    }
+
+    #[must_use]
+    pub const fn blotter_rule_pack_invalid() -> Self {
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail: Some(ApplicationErrorDetail::BlotterRulePackInvalid),
+        }
+    }
+
+    #[must_use]
+    pub fn blotter_constraint_limit_missing(limit_code: impl Into<String>) -> Self {
+        let limit_code = limit_code.into();
+        let detail = is_safe_rule_pack_path(&limit_code)
+            .then_some(ApplicationErrorDetail::BlotterConstraintLimitMissing { limit_code });
+        Self {
+            category: ApplicationErrorCategory::LineageIncomplete,
+            retryable: false,
+            detail,
+        }
+    }
+
+    #[must_use]
+    pub fn blotter_constraint_limit_exceeded(limit_code: impl Into<String>) -> Self {
+        let limit_code = limit_code.into();
+        let detail = is_safe_rule_pack_path(&limit_code)
+            .then_some(ApplicationErrorDetail::BlotterConstraintLimitExceeded { limit_code });
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail,
+        }
+    }
+
+    #[must_use]
+    pub const fn blotter_uncovered_risk_acknowledgement_required() -> Self {
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail: Some(ApplicationErrorDetail::BlotterUncoveredRiskAcknowledgementRequired),
+        }
+    }
+
+    #[must_use]
+    pub const fn blotter_whole_account_hedge_blocked() -> Self {
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail: Some(ApplicationErrorDetail::BlotterWholeAccountHedgeBlocked),
+        }
+    }
+
+    #[must_use]
+    pub const fn blotter_empty_covered_book() -> Self {
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail: Some(ApplicationErrorDetail::BlotterEmptyCoveredBook),
+        }
+    }
+
+    #[must_use]
+    pub const fn blotter_hedge_product_not_allowed() -> Self {
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail: Some(ApplicationErrorDetail::BlotterHedgeProductNotAllowed),
+        }
+    }
+
+    #[must_use]
+    pub const fn blotter_calendar_coverage_missing() -> Self {
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail: Some(ApplicationErrorDetail::BlotterCalendarCoverageMissing),
+        }
+    }
+
+    #[must_use]
+    pub const fn blotter_payload_too_large() -> Self {
+        Self {
+            category: ApplicationErrorCategory::ValidationFailed,
+            retryable: false,
+            detail: Some(ApplicationErrorDetail::BlotterPayloadTooLarge),
+        }
+    }
+
+    #[must_use]
     pub const fn category(&self) -> ApplicationErrorCategory {
         self.category
     }
@@ -110,4 +247,39 @@ pub const fn map_domain_error(error: DomainErrorCode) -> ApplicationError {
         }
     };
     ApplicationError::new(category, retryable)
+}
+
+#[must_use]
+pub fn map_blotter_error(error: &BlotterError) -> ApplicationError {
+    match error.kind() {
+        BlotterErrorKind::ValidationFailed => {
+            ApplicationError::new(ApplicationErrorCategory::ValidationFailed, false)
+        }
+        BlotterErrorKind::NotFound => {
+            ApplicationError::new(ApplicationErrorCategory::NotFound, false)
+        }
+        BlotterErrorKind::ConcurrencyConflict => {
+            ApplicationError::new(ApplicationErrorCategory::ConcurrencyConflict, true)
+        }
+        BlotterErrorKind::VersionConflict => {
+            ApplicationError::new(ApplicationErrorCategory::VersionConflict, true)
+        }
+        BlotterErrorKind::ImmutableViolation => {
+            ApplicationError::new(ApplicationErrorCategory::ImmutableViolation, false)
+        }
+        BlotterErrorKind::HashMismatch => {
+            ApplicationError::new(ApplicationErrorCategory::HashMismatch, false)
+        }
+        BlotterErrorKind::LineageIncomplete => {
+            ApplicationError::new(ApplicationErrorCategory::LineageIncomplete, false)
+        }
+        BlotterErrorKind::InvalidStateTransition => {
+            ApplicationError::blotter_invalid_state_transition()
+        }
+        BlotterErrorKind::FeedPaused => ApplicationError::blotter_feed_paused(),
+        BlotterErrorKind::InsufficientAvailable => {
+            ApplicationError::blotter_insufficient_available()
+        }
+        BlotterErrorKind::SellAmbiguityLocked => ApplicationError::blotter_sell_ambiguity_locked(),
+    }
 }

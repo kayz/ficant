@@ -14,13 +14,15 @@ pub mod ports;
 pub mod use_cases;
 
 pub use error::{
-    ApplicationError, ApplicationErrorCategory, ApplicationErrorDetail, map_domain_error,
+    ApplicationError, ApplicationErrorCategory, ApplicationErrorDetail, map_blotter_error,
+    map_domain_error,
 };
 pub use use_cases::{
     CalculateBondAnalytics, CalculateCarryRoll, CalculateFuturesDeliveryBasket,
-    CalculateFuturesHedge, CapitalUse, InterpolateYieldCurve, PositionView, PositionViews,
-    SubjectCandidateMeasures, TaxAdjustedBondAnalytics, calculate_capital_use,
-    parse_verified_delivery_rule, parse_verified_delivery_rule_for_per_100_hedge,
-    parse_verified_funding_rule, parse_verified_regulatory_rule, parse_verified_tax_rule,
-    project_position_views, subject_delivery_irr,
+    CalculateFuturesHedge, CapitalUse, DeskBlotterOrchestrator, DeskBlotterWorkspaceState,
+    InterpolateYieldCurve, PositionView, PositionViews, SubjectCandidateMeasures,
+    TaxAdjustedBondAnalytics, calculate_capital_use, parse_verified_delivery_rule,
+    parse_verified_delivery_rule_for_per_100_hedge, parse_verified_funding_rule,
+    parse_verified_regulatory_rule, parse_verified_tax_rule, project_position_views,
+    subject_delivery_irr,
 };
