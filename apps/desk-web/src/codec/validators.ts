@@ -32,6 +32,7 @@ import {
 import {
   SCALE_12_FACTOR,
   validateCanonicalDecimalValue,
+  validateWireDecimalValue,
   type ValidateDecimalOptions,
 } from './decimal';
 import {
@@ -83,7 +84,7 @@ function checkDecimal(
   options: ValidateDecimalOptions & { readonly field: string },
 ): bigint | null {
   try {
-    return validateCanonicalDecimalValue(value, options).scaledI128;
+    return validateWireDecimalValue(value, options).scaledI128;
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'invalid decimal value';
     issues.push({ field: options.field, message: msg });
