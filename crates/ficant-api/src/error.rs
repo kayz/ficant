@@ -1,5 +1,25 @@
 use ficant_application::{ApplicationError, ApplicationErrorCategory, ApplicationErrorDetail};
 use ficant_contracts::ficant::core::v1::{ErrorCode, ErrorDetail, FieldViolation};
+use tonic::{Code, Status};
+
+pub fn to_tonic_status(error: &ApplicationError) -> Status {
+    let detail = to_error_detail(error);
+    let code = match error.category() {
+        ApplicationErrorCategory::ValidationFailed => Code::InvalidArgument,
+        ApplicationErrorCategory::NotFound => Code::NotFound,
+        ApplicationErrorCategory::AlreadyExists => Code::AlreadyExists,
+        ApplicationErrorCategory::VersionConflict
+        | ApplicationErrorCategory::ConcurrencyConflict => Code::Aborted,
+        ApplicationErrorCategory::ImmutableViolation
+        | ApplicationErrorCategory::HashMismatch
+        | ApplicationErrorCategory::LineageIncomplete
+        | ApplicationErrorCategory::StateConflict => Code::FailedPrecondition,
+        ApplicationErrorCategory::Unauthenticated => Code::Unauthenticated,
+        ApplicationErrorCategory::Forbidden => Code::PermissionDenied,
+        ApplicationErrorCategory::StorageUnavailable => Code::Unavailable,
+    };
+    Status::new(code, detail.message)
+}
 
 pub fn to_error_detail(error: &ApplicationError) -> ErrorDetail {
     let (code, message) = match error.category() {
@@ -144,7 +164,51 @@ mod tests {
     use ficant_contracts::ficant::core::v1::ErrorCode;
     use ficant_domain::blotter::BlotterError;
 
-    use super::to_error_detail;
+    use super::{to_error_detail, to_tonic_status};
+
+    #[test]
+    fn maps_categories_to_expected_tonic_status_codes() {
+        use tonic::Code;
+        let cases = [
+            (
+                ApplicationErrorCategory::ValidationFailed,
+                Code::InvalidArgument,
+            ),
+            (ApplicationErrorCategory::NotFound, Code::NotFound),
+            (ApplicationErrorCategory::AlreadyExists, Code::AlreadyExists),
+            (ApplicationErrorCategory::VersionConflict, Code::Aborted),
+            (ApplicationErrorCategory::ConcurrencyConflict, Code::Aborted),
+            (
+                ApplicationErrorCategory::ImmutableViolation,
+                Code::FailedPrecondition,
+            ),
+            (
+                ApplicationErrorCategory::HashMismatch,
+                Code::FailedPrecondition,
+            ),
+            (
+                ApplicationErrorCategory::LineageIncomplete,
+                Code::FailedPrecondition,
+            ),
+            (
+                ApplicationErrorCategory::StateConflict,
+                Code::FailedPrecondition,
+            ),
+            (
+                ApplicationErrorCategory::Unauthenticated,
+                Code::Unauthenticated,
+            ),
+            (ApplicationErrorCategory::Forbidden, Code::PermissionDenied),
+            (
+                ApplicationErrorCategory::StorageUnavailable,
+                Code::Unavailable,
+            ),
+        ];
+        for (cat, expected) in cases {
+            let status = to_tonic_status(&ApplicationError::new(cat, false));
+            assert_eq!(status.code(), expected);
+        }
+    }
 
     #[test]
     fn maps_blotter_domain_errors_with_sanitized_messages() {

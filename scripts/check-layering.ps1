@@ -22,7 +22,8 @@ $script:Bp1ProductionRoots = @(
     'crates/ficant-fixed-income-native/src',
     'crates/ficant-domain/src',
     'crates/ficant-application/src',
-    'crates/ficant-api/src'
+    'crates/ficant-api/src',
+    'crates/ficant-blotter-store/src'
 )
 $script:Bp1ProductionExtensions = @(
     '.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx', '.rs'
@@ -529,12 +530,12 @@ try {
     $bp1ProductionViolations = @(Get-Bp1ProductionRuleViolations)
     if ($bp1ProductionViolations.Count -gt 0) {
         foreach ($violation in $bp1ProductionViolations) {
-            Write-Error ("BP-1 7-dir production rule violation at {0}:{1} ({2}): {3}" -f $violation.Path, $violation.Line, $violation.Category, $violation.Text)
+            Write-Error ("BP-1/BP-2 8-dir production rule violation at {0}:{1} ({2}): {3}" -f $violation.Path, $violation.Line, $violation.Category, $violation.Text)
         }
-        throw "Layering gate failed BP-1 7-dir production check with $($bp1ProductionViolations.Count) violation(s)."
+        throw "Layering gate failed BP-1/BP-2 8-dir production check with $($bp1ProductionViolations.Count) violation(s)."
     }
 
-    Write-Host ("Layering gate passed: AC03=0 market branches; AC01=0 domain rule values; Phase2C production C++/FFI rule values=0; R3a Funding rule values=0; R3b Tax rule values=0; BP-1 7-dir production rules=0; allowlist=$($allowlist.Count).")
+    Write-Host ("Layering gate passed: AC03=0 market branches; AC01=0 domain rule values; Phase2C production C++/FFI rule values=0; R3a Funding rule values=0; R3b Tax rule values=0; BP-1/BP-2 8-dir production rules=0; allowlist=$($allowlist.Count).")
     exit 0
 }
 catch {
