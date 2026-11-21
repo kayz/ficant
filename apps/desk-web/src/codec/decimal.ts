@@ -38,6 +38,7 @@ export interface ValidateDecimalOptions {
   readonly expectedUnit?: UnitRef;
   readonly sign?: 'any' | 'positive' | 'non-negative';
   readonly maxScale?: number;
+  readonly allowNonZeroScaleForZero?: boolean;
 }
 
 export interface FormatDecimalOptions {
@@ -215,6 +216,7 @@ export function validateCanonicalDecimalValue(
   const field = options.field ?? 'decimal';
   const requireUnit = options.requireUnit ?? true;
   const maxScale = options.maxScale ?? MAX_DECIMAL_SCALE;
+  const allowNonZeroScaleForZero = options.allowNonZeroScaleForZero ?? false;
 
   if (value === undefined) {
     throw new DecimalValidationError(field, 'is required');
@@ -243,10 +245,13 @@ export function validateCanonicalDecimalValue(
     );
   }
 
+  let normalizedScale = scale;
   if (coefficient === '0' && scale !== 0) {
-    throw new DecimalValidationError(field, 'zero value must have scale 0');
-  }
-  if (scale > 0 && unsigned.endsWith('0')) {
+    if (!allowNonZeroScaleForZero) {
+      throw new DecimalValidationError(field, 'zero value must have scale 0');
+    }
+    normalizedScale = 0;
+  } else if (scale > 0 && unsigned.endsWith('0')) {
     throw new DecimalValidationError(
       field,
       `non-canonical trailing zero in coefficient "${coefficient}" with scale ${scale}`,
@@ -279,9 +284,24 @@ export function validateCanonicalDecimalValue(
 
   return {
     coefficient,
-    scale,
+    scale: normalizedScale,
     scaledI128,
   };
+}
+
+/**
+ * Validates a protobuf `DecimalValue` received on the wire, tolerating zero values with
+ * non-zero `scale` in `0..=maxScale` (normalized to `{ coefficient: '0', scale: 0, scaledI128: 0n }`)
+ * while strictly rejecting all other non-canonical or corrupt encodings.
+ */
+export function validateWireDecimalValue(
+  value: DecimalValue | undefined,
+  options: ValidateDecimalOptions = {},
+): CanonicalDecimalParts {
+  return validateCanonicalDecimalValue(value, {
+    ...options,
+    allowNonZeroScaleForZero: options.allowNonZeroScaleForZero ?? true,
+  });
 }
 
 export function createDecimalValue(
@@ -312,7 +332,7 @@ export function isZeroDecimal(value: DecimalValue | undefined): boolean {
   if (value === undefined) {
     return false;
   }
-  const parts = validateCanonicalDecimalValue(value, { requireUnit: false });
+  const parts = validateWireDecimalValue(value, { requireUnit: false });
   return parts.scaledI128 === 0n;
 }
 
@@ -322,8 +342,8 @@ export function compareDecimalValues(
   options: { requireMatchingUnit?: boolean } = {},
 ): -1 | 0 | 1 {
   const requireMatchingUnit = options.requireMatchingUnit ?? true;
-  const left = validateCanonicalDecimalValue(lhs, { requireUnit: requireMatchingUnit });
-  const right = validateCanonicalDecimalValue(rhs, { requireUnit: requireMatchingUnit });
+  const left = validateWireDecimalValue(lhs, { requireUnit: requireMatchingUnit });
+  const right = validateWireDecimalValue(rhs, { requireUnit: requireMatchingUnit });
   if (requireMatchingUnit && !unitsEqual(lhs.unit, rhs.unit)) {
     throw new DecimalValidationError('unit', 'cannot compare decimals with differing UnitRef');
   }
@@ -352,7 +372,7 @@ export function formatDecimalValue(
   if (value === undefined) {
     return options.missingText ?? '未提供';
   }
-  const parts = validateCanonicalDecimalValue(value, { requireUnit: false });
+  const parts = validateWireDecimalValue(value, { requireUnit: false });
   const negative = parts.coefficient.startsWith('-');
   const digits = negative ? parts.coefficient.slice(1) : parts.coefficient;
 

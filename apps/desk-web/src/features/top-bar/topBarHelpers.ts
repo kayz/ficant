@@ -9,7 +9,7 @@ import type { DecimalValue } from '../../generated/ficant/core/v1/common_pb';
 import { BondTaxBasis } from '../../generated/ficant/rates/v1/analytics_pb';
 import {
   formatDecimalValue,
-  validateCanonicalDecimalValue,
+  validateWireDecimalValue,
 } from '../../codec/decimal';
 import { formatUnitRef } from '../../codec/primitives';
 import {
@@ -63,7 +63,7 @@ export function safeDecimalSign(value: DecimalValue | undefined): -1 | 0 | 1 | n
     return null;
   }
   try {
-    const parts = validateCanonicalDecimalValue(value, { requireUnit: false });
+    const parts = validateWireDecimalValue(value, { requireUnit: false });
     if (parts.scaledI128 > 0n) {
       return 1;
     }

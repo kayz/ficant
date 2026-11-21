@@ -25,7 +25,7 @@ import {
   createDecimalValue,
   formatDecimalValue,
   parseDecimalString,
-  validateCanonicalDecimalValue,
+  validateWireDecimalValue,
 } from '../../codec/decimal';
 import {
   isNonEmptyTrimmed,
@@ -210,7 +210,7 @@ export function tryReadScaledI128(value: DecimalValue | undefined): bigint | nul
     return null;
   }
   try {
-    return validateCanonicalDecimalValue(value, { requireUnit: false }).scaledI128;
+    return validateWireDecimalValue(value, { requireUnit: false }).scaledI128;
   } catch {
     return null;
   }

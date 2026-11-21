@@ -78,6 +78,7 @@ import {
   validateSetFeedControlRequest,
   validateSourceTextAnchors,
   validateUnitRef,
+  validateWireDecimalValue,
 } from './index';
 
 const ULID_A = '01JNB0G1000000000000000001';
@@ -1033,5 +1034,123 @@ describe('validatePreviewCoveredHedgeResult parity with blotter.py:1059-1170', (
         units.currencyAmount,
       ),
     ).toThrow(/unit/i);
+  });
+});
+
+describe('Wire DecimalValue interop for non-zero-scale zero values', () => {
+  const units = makeAnalysisUnits();
+  const ccy = units.currencyAmount!;
+
+  it('accepts zero with scale 0..=12 on wire helpers and normalizes to scale 0 without weakening outbound canonicalization', () => {
+    for (let scale = 0; scale <= 12; scale += 1) {
+      const wireZero = create(DecimalValueSchema, {
+        coefficient: '0',
+        scale,
+        unit: ccy,
+      });
+      expect(validateWireDecimalValue(wireZero)).toEqual({
+        coefficient: '0',
+        scale: 0,
+        scaledI128: 0n,
+      });
+      expect(validateWireDecimalValue(wireZero, { sign: 'non-negative' })).toEqual({
+        coefficient: '0',
+        scale: 0,
+        scaledI128: 0n,
+      });
+      expect(formatDecimalValue(wireZero)).toBe('0');
+      expect(isZeroDecimal(wireZero)).toBe(true);
+      expect(compareDecimalValues(wireZero, createDecimalValue('0', ccy))).toBe(0);
+      expect(decimalToPlotNumber(wireZero)).toBe(0);
+    }
+
+    const wireZeroScale11 = create(DecimalValueSchema, {
+      coefficient: '0',
+      scale: 11,
+      unit: units.dv01!,
+    });
+    const coveredZeroDeltaDraft = create(DraftEarmarkRecordSchema, {
+      draftId: createUlid(ULID_DRAFT),
+      draftRevision: 1n,
+      confirmationToken: create(Sha256Schema, { value: new Uint8Array(32).fill(9) }),
+      previewCoverageStatus: CoverageStatus.COVERED_PRE_TAX,
+      previewDeltaPreTaxDv01: wireZeroScale11,
+    });
+    expect(validateDraftReadyForConfirmation(coveredZeroDeltaDraft).ok).toBe(true);
+
+    // Outbound builders still strictly emit { coefficient: '0', scale: 0 }
+    expect(parseDecimalString('0.00000000000')).toEqual({
+      coefficient: '0',
+      scale: 0,
+      scaledI128: 0n,
+    });
+    const outboundZero = createDecimalValue('0.00', ccy);
+    expect(outboundZero.coefficient).toBe('0');
+    expect(outboundZero.scale).toBe(0);
+  });
+
+  it('still rejects out-of-range scale, negative/signed zero, leading zeros, trailing zeros, and non-positive constraints on wire decimals', () => {
+    const invalidCases: ReadonlyArray<{ readonly coefficient: string; readonly scale: number }> = [
+      { coefficient: '0', scale: 13 },
+      { coefficient: '0', scale: -1 },
+      { coefficient: '-0', scale: 11 },
+      { coefficient: '+0', scale: 0 },
+      { coefficient: '00', scale: 0 },
+      { coefficient: '01', scale: 0 },
+      { coefficient: '120', scale: 1 },
+    ];
+
+    for (const bad of invalidCases) {
+      const val = create(DecimalValueSchema, {
+        coefficient: bad.coefficient,
+        scale: bad.scale,
+        unit: ccy,
+      });
+      expect(() => validateWireDecimalValue(val)).toThrow();
+    }
+
+    // Strict positive sign constraint rejects wire zero { coefficient: '0', scale: 11 }
+    const wireZeroScale11 = create(DecimalValueSchema, {
+      coefficient: '0',
+      scale: 11,
+      unit: ccy,
+    });
+    expect(() => validateWireDecimalValue(wireZeroScale11, { sign: 'positive' })).toThrow(
+      /strictly positive/i,
+    );
+
+    // validatePreviewCoveredHedgeResult still rejects { coefficient: '0', scale: 11 } on contract_notional
+    const req = create(PreviewCoveredHedgeRequestSchema, {
+      accountId: 'acct-a',
+      scope: PreviewHedgeScope.COVERED_SUBSET_ONLY,
+      productCode: 'PROD1',
+      contractCode: 'PROD1-2609',
+      ctdDv01Per100: createDecimalValue('0.085', units.dv01Per100!),
+      conversionFactor: createDecimalValue('1.0123', units.dimensionless!),
+      expectedSnapshotSeq: 42n,
+    });
+    const resWithZeroContractNotional = create(PreviewCoveredHedgeResultSchema, {
+      evaluatedAtSeq: 42n,
+      scope: PreviewHedgeScope.COVERED_SUBSET_ONLY,
+      productCode: 'PROD1',
+      contractCode: 'PROD1-2609',
+      zeroNetExposure: false,
+      coveredTaxBasis: BondTaxBasis.PRE_TAX,
+      coveredInstrumentCount: 2,
+      uncoveredInstrumentCount: 1,
+      coveredNetPreTaxDv01: createDecimalValue('5000', units.dv01!),
+      excludedUncoveredGrossNotional: createDecimalValue('10000000', ccy),
+      measures: create(FuturesHedgeMeasuresSchema, {
+        futuresContractDv01: createDecimalValue('800', units.dv01!),
+        rawContracts: createDecimalValue('6.25', units.contractCount!),
+        recommendedContracts: 6n,
+        residualDv01: createDecimalValue('200', units.dv01!),
+        hedgeEffectiveness: createDecimalValue('0.96', units.dimensionless!),
+        contractNotional: wireZeroScale11,
+      }),
+    });
+    expect(() =>
+      validatePreviewCoveredHedgeResult(req, resWithZeroContractNotional, ccy),
+    ).toThrow(/contract_notional/i);
   });
 });
