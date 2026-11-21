@@ -37,6 +37,9 @@
 !/python/**
 !/tests/
 !/tests/**
+!/apps/
+!/apps/desk-web/
+!/apps/desk-web/**
 
 # Local agent/IDE directories and temporary workspaces.
 **/.[Qq][Oo][Dd][Ee][Rr]/
@@ -72,3 +75,7 @@
 **/.venv/
 **/__pycache__/
 **/*.py[cod]
+apps/desk-web/node_modules/
+apps/desk-web/dist/
+apps/desk-web/coverage/
+apps/desk-web/.vite/

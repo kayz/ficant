@@ -1,0 +1,28 @@
+{
+  "schema": "ficant.desk-web.rulepack-manifest.v1",
+  "approval_ref": "apv-20261121-01",
+  "rule_pack_id": "01JNB0G1CGBFV2RPACK0000001",
+  "version": 2,
+  "owner": {
+    "tenant_id": "01JNB0G1TENANTDESK00000001",
+    "owner_id": "01JNB0G1DESKREGSTR00000001"
+  },
+  "market": "CFFEX",
+  "rule_type": "cgb-futures",
+  "source": "ficant-g1-registry:cffex-cgb-futures-v2",
+  "verification_status": "VERIFIED",
+  "effective_from": {
+    "instant": "2019-12-31T16:00:00Z",
+    "market_timezone": "Asia/Shanghai",
+    "local_trading_date": "2020-01-01"
+  },
+  "effective_to": {
+    "instant": "2035-12-31T15:59:59Z",
+    "market_timezone": "Asia/Shanghai",
+    "local_trading_date": "2035-12-31"
+  },
+  "type_url": "type.googleapis.com/ficant.market.v1.CgbFuturesDeliveryRulePack",
+  "payload_asset_path": "/rulepacks/cgb-futures-v2.bin",
+  "payload_byte_length": 159,
+  "payload_sha256": "8d8a0b944557cf87ed3d1f598ab3e02fa7f0aec125c1c26c17280acbd24367c5"
+}
