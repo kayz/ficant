@@ -157,3 +157,52 @@ buf lint interface
 ```
 
 > **Strategy A `buf generate` 行为提示**：由于 [`interface/buf.gen.yaml`](../interface/buf.gen.yaml) 启用 `clean: true`，直接原地执行全量 `buf generate interface --template interface/buf.gen.yaml` 会重排既有 `ficant.market.v1.rs` 声明块并额外生成空存根 `fact_pb2_grpc.py`。本地检查与 CI 均以 `buf format --diff --exit-code`、`buf lint` 及 `buf build` 描述符镜像比对作为门禁，保持既有 `core`/`market`/`rates`/`research` 生成绑定零漂移；定向更新 `ficant.blotter.v1` 绑定及刷新 `ficant_descriptor.bin` 的操作步骤详见 [`interface/README.md`](../interface/README.md)。
+
+## 交易台盘中副屏 Web 应用（`apps/desk-web`）
+
+[`apps/desk-web`](../apps/desk-web/package.json) 是基于 React、严格 TypeScript 与 Vite 的盘中副屏单页应用，通过同源二进制 `gRPC-Web` 代理连接单进程 `ficant-server`（[`apps/desk-web/vite.config.ts`](../apps/desk-web/vite.config.ts)），访问凭证仅驻留内存，所有定价、税基、覆盖率、资金缺口、套保手数与核销分摊均由服务端计算。
+
+### 前端工具链最低要求
+
+- **Node.js `>= 22.13.0`**（含内置 `node:sqlite`，用于持久化 WAL 端到端回归测试）
+- **pnpm `>= 11.0.0`**（独立前端工作区锁文件 [`apps/desk-web/pnpm-lock.yaml`](../apps/desk-web/pnpm-lock.yaml)，通过 `--frozen-lockfile` 安装）
+- **Buf `>= 1.56.0`**（通过独立 Web 模板 [`apps/desk-web/buf.gen.web.yaml`](../apps/desk-web/buf.gen.web.yaml) 校验 `apps/desk-web/src/generated/**`）
+- **已安装的本机 Chromium / Chrome / Edge 浏览器**（完整端到端测试与生产包挂载冒烟直接复用本机浏览器，不自动下载浏览器二进制）
+
+### 前端环境变量
+
+| 环境变量 | 默认值 | 说明 |
+|---|---|---|
+| `FICANT_UPSTREAM_ORIGIN` | `http://127.0.0.1:50051` | Vite `dev` / `preview` 代理 `^/ficant\.` 请求转发的目标 `ficant-server` 上游地址 |
+| `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` | 自动探测本机浏览器 | 显式指定无头浏览器可执行文件路径；未设置时依次查找已有 Playwright 本地缓存、本机 Chrome 或 Edge，缺失时直接报错退出 |
+
+### 本地检查与端到端回归命令
+
+[`scripts/check-desk-web.ps1`](../scripts/check-desk-web.ps1) 提供前端与真实服务端联调的统一本地入口（Playwright 配置见 [`apps/desk-web/playwright.config.ts`](../apps/desk-web/playwright.config.ts)，结果输出固定在 `apps/desk-web/coverage/playwright-results`）：
+
+```powershell
+# 查看完整检查计划或跳过真实服务 E2E 的轻量检查计划（不实际执行）
+.\scripts\check-desk-web.ps1 -ListOnly
+.\scripts\check-desk-web.ps1 -ListOnly -SkipE2E
+
+# 轻量本地检查（冻结安装、代码生成校验、TypeScript、ESLint、Vitest 单元/组件测试、生产构建与路径范围校验；不探测 Rust，不启动浏览器）
+.\scripts\check-desk-web.ps1 -SkipE2E
+
+# 完整本地检查（额外执行生产包挂载冒烟、cargo check/build --locked -p ficant-server 与四组真实服务 Playwright E2E）
+.\scripts\check-desk-web.ps1
+```
+
+单独运行前端开发服务或查看测试收集清单：
+
+```powershell
+# 核对 Vitest 与 Playwright 各自的非空互斥测试清单
+pnpm --dir apps/desk-web exec vitest list --filesOnly
+pnpm --dir apps/desk-web exec playwright test --config playwright.config.ts --list
+
+# 启动生产构建预览（指向本地 ficant-server）
+$env:FICANT_UPSTREAM_ORIGIN = 'http://127.0.0.1:50051'
+pnpm --dir apps/desk-web run build
+pnpm --dir apps/desk-web exec vite preview --host 127.0.0.1 --port 4173 --strictPort
+```
+
+> **本地检查与远端 CI 边界**：`scripts/check-desk-web.ps1` 的本地执行结果仅代表当前开发机上的验证状态，不能替代或等同于远端 Linux GitHub CI 与正式版本发布工作流的结论（见 [`AGENTS.md`](../AGENTS.md)）。

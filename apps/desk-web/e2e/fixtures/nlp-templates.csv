@@ -1,0 +1,5 @@
+account_id,raw_source_text,parser_source_id,model_version,confidence_score,instrument_code,side,settlement_bucket,notional,clean_price_per_100,yield_to_maturity,settlement_amount,suggested_target_state,anchor_field,anchor_span
+acct-A,买入十年国债BOND_10Y面额一千万净价100.25,csv-nlp-desk,2.0.0,0.95,BOND_10Y,BUY,T_PLUS_0,10000000,100.25,,10025000,COMMITTED,notional,面额一千万
+acct-A,大额买入十年国债BOND_10Y面额六亿超限测试,csv-nlp-desk,2.0.0,0.92,BOND_10Y,BUY,T_PLUS_0,600000000,100.00,,600000000,COMMITTED,notional,面额六亿
+acct-A,买入未覆盖信用债UNCOV_BOND面额五百万仅结算金额,csv-nlp-desk,2.0.0,0.88,UNCOV_BOND,BUY,T_PLUS_0,5000000,,,5010000,HOLD,instrument_code,未覆盖信用债
+acct-A,无监管包测试买入BOND_10Y面额一千万,csv-nlp-desk,2.0.0,0.90,BOND_10Y,BUY,T_PLUS_0,10000000,100.00,,10000000,HOLD,instrument_code,无监管包测试
