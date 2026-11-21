@@ -1,0 +1,11 @@
+{
+  "rule_pack_id": "01ARZ3NDEKTSV4RRFFQ69G5F99",
+  "version": 1,
+  "market": "CN",
+  "rule_type": "regulatory",
+  "source": "desk-policy",
+  "effective_from_rfc3339": "2020-01-01T00:00:00Z",
+  "effective_to_rfc3339": "2035-01-01T00:00:00Z",
+  "verification_status": "VERIFIED",
+  "type_url": "type.googleapis.com/ficant.market.v1.RegulatoryRulePack"
+}
