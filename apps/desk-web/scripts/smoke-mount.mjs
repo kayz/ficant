@@ -229,19 +229,63 @@ async function main() {
     await page.goto(baseUrl, { waitUntil: 'networkidle', timeout: 20000 });
 
     if (mode === 'scaffold') {
-      const scaffold = page.locator('[data-testid="desk-web-scaffold"]');
-      await scaffold.waitFor({ state: 'visible', timeout: 10000 });
-      const heading = scaffold.locator('h1');
+      const root = page.locator('#root');
+      await root.waitFor({ state: 'visible', timeout: 10000 });
+      const heading = root.locator('h1').first();
       await heading.waitFor({ state: 'visible', timeout: 5000 });
       const headingText = (await heading.textContent())?.trim() || '';
       if (headingText.length === 0) {
-        throw new Error('Scaffold heading text is empty.');
+        throw new Error('Mounted heading text is empty.');
       }
       const rulepackBadge = page.locator('[data-testid="trusted-rulepack-id"]');
       await rulepackBadge.waitFor({ state: 'visible', timeout: 5000 });
+      const rulepackText = (await rulepackBadge.textContent())?.trim() || '';
+      if (rulepackText.length === 0) {
+        throw new Error('Trusted RulePack badge text is empty.');
+      }
     } else if (mode === 'desk') {
       const shell = page.locator('[data-testid="desk-app-shell"]');
       await shell.waitFor({ state: 'visible', timeout: 10000 });
+
+      const heading = shell.locator('h1').first();
+      await heading.waitFor({ state: 'visible', timeout: 5000 });
+      const headingText = (await heading.textContent())?.trim() || '';
+      if (headingText.length === 0) {
+        throw new Error('DeskApp heading text is empty.');
+      }
+
+      const rulepackBadge = shell.locator('[data-testid="trusted-rulepack-id"]');
+      await rulepackBadge.waitFor({ state: 'visible', timeout: 5000 });
+
+      // Assert credential entry form & input are visible in fresh unauthenticated session.
+      const authForm = shell.locator('[data-testid="auth-form"]');
+      await authForm.waitFor({ state: 'visible', timeout: 5000 });
+      const tokenInput = shell.locator('#session-token-input');
+      await tokenInput.waitFor({ state: 'visible', timeout: 5000 });
+      const loginBtn = shell.locator('[data-testid="login-submit-btn"]');
+      await loginBtn.waitFor({ state: 'visible', timeout: 5000 });
+
+      // Assert pre-auth account ID staging control is visible immediately on initial empty mount.
+      const preAuthAccountInput = shell.locator('[data-testid="cold-start-account-ids-input"]');
+      await preAuthAccountInput.waitFor({ state: 'visible', timeout: 5000 });
+
+      // Establish pure in-memory session (zero RPCs) to verify formal explicit account ID input
+      // renders cleanly without waiting for any backend snapshot or data-snapshot-seq.
+      await tokenInput.fill('smoke-inmemory-token');
+      await loginBtn.click();
+
+      const accountsForm = shell.locator('[data-testid="accounts-form"]');
+      await accountsForm.waitFor({ state: 'visible', timeout: 5000 });
+      const explicitAccountInput = shell.locator('#explicit-account-ids-input');
+      await explicitAccountInput.waitFor({ state: 'visible', timeout: 5000 });
+
+      const connBadge = shell.locator('[data-testid="connection-badge"]');
+      const rawConnState = await connBadge.getAttribute('data-raw-connection-state');
+      if (rawConnState !== 'idle_no_accounts') {
+        throw new Error(
+          `Expected connection state to remain "idle_no_accounts" without backend, got ${String(rawConnState)}.`,
+        );
+      }
     }
 
     if (consoleErrors.length > 0) {
