@@ -728,13 +728,158 @@ async fn mode_2_persistent_wal_anti_spoofing_pragmas_exclusive_lock_and_bad_conf
 async fn mode_3_ephemeral_and_policy_a_vs_policy_b_runtime_override() {
     let temp = TempDir::new().unwrap();
 
-    // 1. Embedded Policy A (["T", "TF", "TL"] -> rejects "TS")
-    let policy_a = DeskBlotterPolicyRuntime::from_embedded_default().unwrap();
-    assert_eq!(policy_a.policy_profile, "A");
+    // 1. Embedded Policy B (["T", "TF", "TL", "TS"] -> allows both "T" and "TS" with 2M notional!)
+    let policy_b_default = DeskBlotterPolicyRuntime::from_embedded_default().unwrap();
+    assert_eq!(policy_b_default.policy_profile, "B");
     assert_eq!(
-        policy_a.default_account_policy.allowed_hedge_product_codes,
-        vec!["T".to_owned(), "TF".to_owned(), "TL".to_owned()]
+        policy_b_default
+            .default_account_policy
+            .allowed_hedge_product_codes,
+        vec![
+            "T".to_owned(),
+            "TF".to_owned(),
+            "TL".to_owned(),
+            "TS".to_owned()
+        ]
     );
+
+    let srv_b = spawn_server(FicantServerConfig {
+        listen_addr: ephemeral_addr(),
+        storage_mode: BlotterStorageMode::EphemeralInMemory,
+        policy: policy_b_default,
+        credentials: Some(server_verifier()),
+        clock: Arc::new(ManualBlotterClock::new(shanghai_time(
+            2026, 6, 15, 10, 0, 0,
+        ))),
+        service_config: DeskBlotterServiceConfig::default(),
+        event_retention_window: DEFAULT_EVENT_RETENTION_WINDOW,
+        event_bus_capacity: DEFAULT_EVENT_BUS_CAPACITY,
+        watchdog_interval: None,
+        spi_backends: SpiBackends::default(),
+    })
+    .await
+    .unwrap();
+
+    let mut client_b = DeskBlotterServiceClient::connect(format!("http://{}", srv_b.addr()))
+        .await
+        .unwrap();
+    let _ = client_b
+        .import_opening_base(with_bearer(
+            pb::ImportOpeningBaseRequest {
+                idempotency_key: "imp-pb".to_owned(),
+                opening_base: Some(make_opening_base(0)),
+                expected_account_version: 0,
+            },
+            OPERATOR_TOK,
+        ))
+        .await
+        .unwrap();
+    let u = pb_units();
+    let _ = client_b
+        .ingest_market_quotes(with_bearer(
+            pb::IngestMarketQuotesRequest {
+                idempotency_key: "q-pb".to_owned(),
+                account_id: "acct-1".to_owned(),
+                ticks: vec![pb::MarketQuoteTick {
+                    source_id: "primary-quote-feed".to_owned(),
+                    quote_seq: 1,
+                    instrument_code: "BOND_10Y".to_owned(),
+                    source_type: market_pb::PriceSourceType::ActiveQuote as i32,
+                    bid_clean_price: None,
+                    ask_clean_price: None,
+                    mid_clean_price: None,
+                    mid_yield_to_maturity: Some(dec("0.025", u.rate.as_ref().unwrap())),
+                    observed_at: Some(pb_time(2026, 6, 15, 9, 59, 0)),
+                    received_at: Some(pb_time(2026, 6, 15, 9, 59, 5)),
+                }],
+                source_id: "primary-quote-feed".to_owned(),
+            },
+            TRADER_TOK,
+        ))
+        .await
+        .unwrap();
+
+    // Embedded Policy B allows both "T" (1M) and "TS" (2M from real cgb-futures-v2.bin)
+    let t_ok = client_b
+        .preview_covered_hedge(with_bearer(
+            pb::PreviewCoveredHedgeRequest {
+                account_id: "acct-1".to_owned(),
+                scope: pb::PreviewHedgeScope::WholeAccount as i32,
+                product_code: "T".to_owned(),
+                contract_code: "T2609".to_owned(),
+                ctd_dv01_per_100: Some(dec("0.075", u.dv01_per_100.as_ref().unwrap())),
+                conversion_factor: Some(dec("0.985", u.dimensionless.as_ref().unwrap())),
+                delivery_rule_pack: Some(futures_v2_pack()),
+                valuation_at: Some(pb_time(2026, 6, 15, 10, 0, 0)),
+                expected_snapshot_seq: None,
+            },
+            TRADER_TOK,
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(matches!(
+        t_ok.result,
+        Some(pb::preview_covered_hedge_response::Result::Value(_))
+    ));
+
+    let ts_ok = match client_b
+        .preview_covered_hedge(with_bearer(
+            pb::PreviewCoveredHedgeRequest {
+                account_id: "acct-1".to_owned(),
+                scope: pb::PreviewHedgeScope::WholeAccount as i32,
+                product_code: "TS".to_owned(),
+                contract_code: "TS2609".to_owned(),
+                ctd_dv01_per_100: Some(dec("0.0145", u.dv01_per_100.as_ref().unwrap())),
+                conversion_factor: Some(dec("0.9987", u.dimensionless.as_ref().unwrap())),
+                delivery_rule_pack: Some(futures_v2_pack()),
+                valuation_at: Some(pb_time(2026, 6, 15, 10, 0, 0)),
+                expected_snapshot_seq: None,
+            },
+            TRADER_TOK,
+        ))
+        .await
+        .unwrap()
+        .into_inner()
+        .result
+    {
+        Some(pb::preview_covered_hedge_response::Result::Value(v)) => v,
+        other => panic!("expected TS hedge ok under embedded Policy B, got {other:?}"),
+    };
+    let cn = ts_ok.measures.unwrap().contract_notional.unwrap();
+    let cn_val = Decimal::from_i128_with_scale(cn.coefficient.parse().unwrap(), cn.scale);
+    assert_eq!(cn_val, Decimal::from(2_000_000));
+    srv_b.shutdown().await.unwrap();
+
+    // 2. Runtime Policy A override from external JSON file (["T", "TF", "TL"] -> allows "T" and rejects "TS")
+    let policy_a_path = temp.path().join("policy-a.json");
+    fs::write(
+        &policy_a_path,
+        r#"{
+  "schema_version": 1,
+  "policy_version": 1,
+  "policy_profile": "A",
+  "allowed_hedge_product_codes": ["T", "TF", "TL"],
+  "blotter_config": {
+    "clean_price_tolerance": "0.05",
+    "yield_tolerance": "0.0005",
+    "committed_overdue_seconds": 3600,
+    "pre_close_alert_time": "16:30:00",
+    "feed_staleness_seconds": 300
+  },
+  "default_account_policy": {
+    "default_quote_source_id": "primary-quote-feed",
+    "instrument_quote_sources": {},
+    "quote_staleness_seconds": 300,
+    "default_draft_hold_ttl_seconds": 1800,
+    "limit_ceilings": {},
+    "regulatory_rule_pack": null
+  },
+  "accounts": {}
+}"#,
+    )
+    .unwrap();
+    let policy_a = DeskBlotterPolicyRuntime::from_file(&policy_a_path).unwrap();
 
     let srv_a = spawn_server(FicantServerConfig {
         listen_addr: ephemeral_addr(),
@@ -767,7 +912,6 @@ async fn mode_3_ephemeral_and_policy_a_vs_policy_b_runtime_override() {
         ))
         .await
         .unwrap();
-    let u = pb_units();
     let _ = client_a
         .ingest_market_quotes(with_bearer(
             pb::IngestMarketQuotesRequest {
@@ -792,8 +936,7 @@ async fn mode_3_ephemeral_and_policy_a_vs_policy_b_runtime_override() {
         .await
         .unwrap();
 
-    // Policy A allows "T" and rejects "TS"
-    let t_ok = client_a
+    let t_a_ok = client_a
         .preview_covered_hedge(with_bearer(
             pb::PreviewCoveredHedgeRequest {
                 account_id: "acct-1".to_owned(),
@@ -812,7 +955,7 @@ async fn mode_3_ephemeral_and_policy_a_vs_policy_b_runtime_override() {
         .unwrap()
         .into_inner();
     assert!(matches!(
-        t_ok.result,
+        t_a_ok.result,
         Some(pb::preview_covered_hedge_response::Result::Value(_))
     ));
 
@@ -841,119 +984,6 @@ async fn mode_3_ephemeral_and_policy_a_vs_policy_b_runtime_override() {
             && e.field_violations.iter().any(|fv| fv.field == "product_code")
     ));
     srv_a.shutdown().await.unwrap();
-
-    // 2. Runtime Policy B override from external JSON file (["TS", "T", "TF", "TL"] -> accepts "TS" with 2M notional!)
-    let policy_b_path = temp.path().join("policy-b.json");
-    fs::write(
-        &policy_b_path,
-        r#"{
-  "schema_version": 1,
-  "policy_version": 1,
-  "policy_profile": "B",
-  "allowed_hedge_product_codes": ["TS", "T", "TF", "TL"],
-  "blotter_config": {
-    "clean_price_tolerance": "0.05",
-    "yield_tolerance": "0.0005",
-    "committed_overdue_seconds": 3600,
-    "pre_close_alert_time": "16:30:00",
-    "feed_staleness_seconds": 300
-  },
-  "default_account_policy": {
-    "default_quote_source_id": "primary-quote-feed",
-    "instrument_quote_sources": {},
-    "quote_staleness_seconds": 300,
-    "default_draft_hold_ttl_seconds": 1800,
-    "limit_ceilings": {},
-    "regulatory_rule_pack": null
-  },
-  "accounts": {}
-}"#,
-    )
-    .unwrap();
-    let policy_b = DeskBlotterPolicyRuntime::from_file(&policy_b_path).unwrap();
-
-    let srv_b = spawn_server(FicantServerConfig {
-        listen_addr: ephemeral_addr(),
-        storage_mode: BlotterStorageMode::EphemeralInMemory,
-        policy: policy_b,
-        credentials: Some(server_verifier()),
-        clock: Arc::new(ManualBlotterClock::new(shanghai_time(
-            2026, 6, 15, 10, 0, 0,
-        ))),
-        service_config: DeskBlotterServiceConfig::default(),
-        event_retention_window: DEFAULT_EVENT_RETENTION_WINDOW,
-        event_bus_capacity: DEFAULT_EVENT_BUS_CAPACITY,
-        watchdog_interval: None,
-        spi_backends: SpiBackends::default(),
-    })
-    .await
-    .unwrap();
-
-    let mut client_b = DeskBlotterServiceClient::connect(format!("http://{}", srv_b.addr()))
-        .await
-        .unwrap();
-    let _ = client_b
-        .import_opening_base(with_bearer(
-            pb::ImportOpeningBaseRequest {
-                idempotency_key: "imp-pb".to_owned(),
-                opening_base: Some(make_opening_base(0)),
-                expected_account_version: 0,
-            },
-            OPERATOR_TOK,
-        ))
-        .await
-        .unwrap();
-    let _ = client_b
-        .ingest_market_quotes(with_bearer(
-            pb::IngestMarketQuotesRequest {
-                idempotency_key: "q-pb".to_owned(),
-                account_id: "acct-1".to_owned(),
-                ticks: vec![pb::MarketQuoteTick {
-                    source_id: "primary-quote-feed".to_owned(),
-                    quote_seq: 1,
-                    instrument_code: "BOND_10Y".to_owned(),
-                    source_type: market_pb::PriceSourceType::ActiveQuote as i32,
-                    bid_clean_price: None,
-                    ask_clean_price: None,
-                    mid_clean_price: None,
-                    mid_yield_to_maturity: Some(dec("0.025", u.rate.as_ref().unwrap())),
-                    observed_at: Some(pb_time(2026, 6, 15, 9, 59, 0)),
-                    received_at: Some(pb_time(2026, 6, 15, 9, 59, 5)),
-                }],
-                source_id: "primary-quote-feed".to_owned(),
-            },
-            TRADER_TOK,
-        ))
-        .await
-        .unwrap();
-
-    let ts_ok = match client_b
-        .preview_covered_hedge(with_bearer(
-            pb::PreviewCoveredHedgeRequest {
-                account_id: "acct-1".to_owned(),
-                scope: pb::PreviewHedgeScope::WholeAccount as i32,
-                product_code: "TS".to_owned(),
-                contract_code: "TS2609".to_owned(),
-                ctd_dv01_per_100: Some(dec("0.0145", u.dv01_per_100.as_ref().unwrap())),
-                conversion_factor: Some(dec("0.9987", u.dimensionless.as_ref().unwrap())),
-                delivery_rule_pack: Some(futures_v2_pack()),
-                valuation_at: Some(pb_time(2026, 6, 15, 10, 0, 0)),
-                expected_snapshot_seq: None,
-            },
-            TRADER_TOK,
-        ))
-        .await
-        .unwrap()
-        .into_inner()
-        .result
-    {
-        Some(pb::preview_covered_hedge_response::Result::Value(v)) => v,
-        other => panic!("expected TS hedge ok under Policy B, got {other:?}"),
-    };
-    let cn = ts_ok.measures.unwrap().contract_notional.unwrap();
-    let cn_val = Decimal::from_i128_with_scale(cn.coefficient.parse().unwrap(), cn.scale);
-    assert_eq!(cn_val, Decimal::from(2_000_000));
-    srv_b.shutdown().await.unwrap();
 }
 
 // ============================================================================

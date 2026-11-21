@@ -1,11 +1,12 @@
 {
   "schema_version": 1,
   "policy_version": 1,
-  "policy_profile": "A",
+  "policy_profile": "B",
   "allowed_hedge_product_codes": [
     "T",
     "TF",
-    "TL"
+    "TL",
+    "TS"
   ],
   "blotter_config": {
     "clean_price_tolerance": "0.05",

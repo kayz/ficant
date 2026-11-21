@@ -40,7 +40,7 @@
 | `FICANT_SERVER_ADDR` | `127.0.0.1:50051` | 单端口监听地址（原生 gRPC + gRPC-Web 共用）；`--health-check` 亦读取该地址（若绑定 `0.0.0.0` 等未指定地址则回环探测 `127.0.0.1:<port>`） |
 | `FICANT_BLOTTER_DB_PATH` | 未设置 | `PersistentWal` 模式的独占 WAL `SQLite` 文件路径（与 `FICANT_BLOTTER_EPHEMERAL_IN_MEMORY` 互斥） |
 | `FICANT_BLOTTER_EPHEMERAL_IN_MEMORY` | `false` | 显式启用 `EphemeralInMemory` 模式（接受 `1`/`true`/`TRUE` 或 `0`/`false`/`FALSE`/空串；与 `FICANT_BLOTTER_DB_PATH` 互斥） |
-| `FICANT_BLOTTER_POLICY_PATH` | 内嵌 Policy A | 外置盘中策略 JSON 文件路径（见下文「外置策略配置」） |
+| `FICANT_BLOTTER_POLICY_PATH` | 内嵌 Policy B | 外置盘中策略 JSON 文件路径（见下文「外置策略配置」） |
 | `FICANT_BLOTTER_CREDENTIALS_PATH` | 未设置 | 启动期凭证摘要 JSON 文件路径（`schema_version: 1`）；启用 `PersistentWal` 或 `EphemeralInMemory` 时必需 |
 | `FICANT_BLOTTER_EVENT_RETENTION_WINDOW` | `100000` | `blotter_event_journal` 保留的最近事件条数（`DEFAULT_EVENT_RETENTION_WINDOW`） |
 | `FICANT_BLOTTER_WATCHDOG_INTERVAL_MS` | `5000` | 后台生命周期看门狗扫描间隔（毫秒）；设为 `0` 关闭周期扫描，仅响应显式触发 |
@@ -59,12 +59,12 @@
 | `FICANT_LINUX_CXX` | `/usr/bin/clang++-18` | WSL Linux 侧 `clang++` 路径 |
 | `FICANT_REQUIRE_CROSS_CLANG` | 未设置 | 设为 `1` 时与 `-RequireCrossClang` 等效，Linux 编译器不可用时直接失败 |
 
-### 外置策略配置（Policy A 默认 vs Policy B 运行时覆盖）
+### 外置策略配置（Policy B 默认 vs Policy A 运行时覆盖）
 
 套保允许品种白名单、对账容差、预收盘告警时间、行情/回报陈旧阈值、账户限额上限与监管规则包绑定全部外置在严格模式（`deny_unknown_fields`、`schema_version: 1`）策略 JSON 中（加载器见 [`binaries/ficant-server/src/policy.rs`](../binaries/ficant-server/src/policy.rs)）：
 
-- **Policy A（默认内嵌）**：[`binaries/ficant-server/policy/desk-blotter-policy-v1.json`](../binaries/ficant-server/policy/desk-blotter-policy-v1.json) 定义 `policy_profile: "A"`，默认 `allowed_hedge_product_codes` 为 `["T", "TF", "TL"]`（不含 `TS`），`clean_price_tolerance: "0.05"`，`yield_tolerance: "0.0005"`，`committed_overdue_seconds: 3600`，`pre_close_alert_time: "16:30:00"`，`feed_staleness_seconds: 300`，`default_quote_source_id: "primary-quote-feed"`，`quote_staleness_seconds: 300`，`default_draft_hold_ttl_seconds: 1800`。
-- **Policy B（运行时覆盖）**：设置 `FICANT_BLOTTER_POLICY_PATH` 指向外部 JSON 文件即可无需改代码或重新编译切换策略（例如调整 `policy_profile`、按需扩展 `allowed_hedge_product_codes`、通过 `accounts.<account_id>` 配置单账户覆盖、`limit_ceilings` 及经 SHA-256 验签的 `regulatory_rule_pack` 绑定）。服务端启动时会自动通过 `reconcile_startup_policies` 对已持久化账户同步策略状态。
+- **Policy B（默认内嵌）**：[`binaries/ficant-server/policy/desk-blotter-policy-v1.json`](../binaries/ficant-server/policy/desk-blotter-policy-v1.json) 定义 `policy_profile: "B"`，默认 `allowed_hedge_product_codes` 为 `["T", "TF", "TL", "TS"]`（包含 `TS`），`clean_price_tolerance: "0.05"`，`yield_tolerance: "0.0005"`，`committed_overdue_seconds: 3600`，`pre_close_alert_time: "16:30:00"`，`feed_staleness_seconds: 300`，`default_quote_source_id: "primary-quote-feed"`，`quote_staleness_seconds: 300`，`default_draft_hold_ttl_seconds: 1800`。
+- **Policy A / 定制策略（运行时覆盖）**：设置 `FICANT_BLOTTER_POLICY_PATH` 指向外部 JSON 文件即可无需改代码或重新编译切换策略（例如切换回保守收缩为 `["T", "TF", "TL"]` 的 `policy_profile: "A"`、调整 `allowed_hedge_product_codes`、通过 `accounts.<account_id>` 配置单账户覆盖、`limit_ceilings` 及经 SHA-256 验签的 `regulatory_rule_pack` 绑定）。服务端启动时会自动通过 `reconcile_startup_policies` 对已持久化账户同步策略状态。
 
 ### 双协议凭证校验（Native gRPC & gRPC-Web）
 
