@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from decimal import Decimal, InvalidOperation
 import re
 from typing import TypeVar
@@ -32,6 +32,55 @@ _VALID_HEDGE_SCOPES = frozenset(
 _CANONICAL_POSITIVE_INT_RE = re.compile(r"\A[1-9][0-9]*\Z")
 _MAX_DECIMAL_PRECISION = 28
 _MAX_DECIMAL_SCALE = 28
+
+AUTHORIZATION_HEADER = "authorization"
+FICANT_CREDENTIAL_HEADER = "x-ficant-credential"
+EXPECTED_LEDGER_EPOCH_HEADER = "x-ficant-expected-ledger-epoch"
+EXPECTED_LEDGER_INSTANCE_HEADER = "x-ficant-expected-ledger-instance"
+_ULID_ALPHABET = frozenset("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
+_ULID_FIRST_CHARS = frozenset("01234567")
+_MAX_U64 = (1 << 64) - 1
+
+
+def _validate_raw_token(token: str, field_name: str) -> str:
+    if not isinstance(token, str) or not token:
+        raise ValueError(f"{field_name} must be a non-empty string")
+    if any(ord(ch) <= 0x20 or ord(ch) == 0x7F or ch.isspace() for ch in token):
+        raise ValueError(
+            f"{field_name} must not contain whitespace or ASCII control characters"
+        )
+    return token
+
+
+def _is_canonical_ulid_str(value: object) -> bool:
+    if not isinstance(value, str) or len(value) != 26 or not value.isascii():
+        return False
+    return value[0] in _ULID_FIRST_CHARS and all(ch in _ULID_ALPHABET for ch in value)
+
+
+def _validate_expected_ledger(expected_ledger: tuple[int, str]) -> tuple[int, str]:
+    if not isinstance(expected_ledger, tuple) or len(expected_ledger) != 2:
+        raise ValueError("expected_ledger must be a (ledger_epoch, ledger_instance_id) 2-tuple")
+    epoch, instance_id = expected_ledger
+    if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 1 or epoch > _MAX_U64:
+        raise ValueError("expected_ledger epoch must be a positive uint64 integer")
+    if not _is_canonical_ulid_str(instance_id):
+        raise ValueError(
+            "expected_ledger instance_id must be a canonical 26-character uppercase ULID"
+        )
+    return (epoch, instance_id)
+
+
+def _expected_ledger_metadata(
+    expected_ledger: tuple[int, str] | None,
+) -> tuple[tuple[str, str], ...]:
+    if expected_ledger is None:
+        return ()
+    epoch, instance_id = _validate_expected_ledger(expected_ledger)
+    return (
+        (EXPECTED_LEDGER_EPOCH_HEADER, str(epoch)),
+        (EXPECTED_LEDGER_INSTANCE_HEADER, instance_id),
+    )
 
 
 class BlotterError(Exception):
@@ -390,6 +439,9 @@ class DeskBlotterClient:
         endpoint: str,
         bearer_token: str | None = None,
         *,
+        x_ficant_credential: str | None = None,
+        header_mode: str | None = None,
+        expected_ledger: tuple[int, str] | None = None,
         insecure: bool = False,
         timeout_seconds: float = 30.0,
         root_certificates: bytes | None = None,
@@ -398,8 +450,58 @@ class DeskBlotterClient:
             raise ValueError("endpoint is required")
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
-        self._metadata = (
-            (("authorization", f"Bearer {bearer_token}"),) if bearer_token else ()
+        if header_mode is not None and header_mode not in (
+            "bearer",
+            "x-ficant-credential",
+        ):
+            raise ValueError(
+                "header_mode must be 'bearer' or 'x-ficant-credential'"
+            )
+        if bearer_token is not None:
+            _validate_raw_token(bearer_token, "bearer_token")
+        if x_ficant_credential is not None:
+            _validate_raw_token(x_ficant_credential, "x_ficant_credential")
+        if (
+            bearer_token is not None
+            and x_ficant_credential is not None
+            and bearer_token != x_ficant_credential
+        ):
+            raise ValueError(
+                "bearer_token and x_ficant_credential must match when both are set"
+            )
+        if bearer_token is None and x_ficant_credential is None:
+            self._metadata: tuple[tuple[str, str], ...] = ()
+        else:
+            raw_token = (
+                x_ficant_credential
+                if x_ficant_credential is not None
+                else bearer_token
+            )
+            assert raw_token is not None
+            if header_mode is None:
+                effective_mode = (
+                    "x-ficant-credential"
+                    if x_ficant_credential is not None and bearer_token is None
+                    else "bearer"
+                )
+            else:
+                if (
+                    header_mode == "bearer"
+                    and bearer_token is None
+                    and x_ficant_credential is not None
+                ):
+                    raise ValueError(
+                        "cannot use header_mode='bearer' when only x_ficant_credential is provided"
+                    )
+                effective_mode = header_mode
+            if effective_mode == "bearer":
+                self._metadata = ((AUTHORIZATION_HEADER, f"Bearer {raw_token}"),)
+            else:
+                self._metadata = ((FICANT_CREDENTIAL_HEADER, raw_token),)
+        self._expected_ledger: tuple[int, str] | None = (
+            _validate_expected_ledger(expected_ledger)
+            if expected_ledger is not None
+            else None
         )
         self._timeout = timeout_seconds
         if insecure:
@@ -423,6 +525,17 @@ class DeskBlotterClient:
             self._channel
         )
         self._account_currency_units: dict[str, UnitRef] = {}
+
+    @property
+    def expected_ledger(self) -> tuple[int, str] | None:
+        return self._expected_ledger
+
+    def set_expected_ledger(self, expected_ledger: tuple[int, str] | None) -> None:
+        self._expected_ledger = (
+            _validate_expected_ledger(expected_ledger)
+            if expected_ledger is not None
+            else None
+        )
 
     def close(self) -> None:
         self._channel.close()
@@ -450,10 +563,18 @@ class DeskBlotterClient:
         return result
 
     def ingest_market_quotes(
-        self, request: service_pb2.IngestMarketQuotesRequest
+        self,
+        request: service_pb2.IngestMarketQuotesRequest,
+        *,
+        expected_ledger: tuple[int, str] | None = None,
+        metadata: Sequence[tuple[str, str]] | None = None,
     ) -> service_pb2.IngestMarketQuotesResult:
         result: service_pb2.IngestMarketQuotesResult = self._call(
-            self._stub.IngestMarketQuotes, request
+            self._stub.IngestMarketQuotes,
+            request,
+            expected_ledger=expected_ledger,
+            use_default_expected_ledger=True,
+            extra_metadata=metadata,
         )
         if not result.HasField("risk_summary"):
             raise RuntimeError("IngestMarketQuotes response missing risk_summary")
@@ -555,9 +676,19 @@ class DeskBlotterClient:
         return result
 
     def submit_draft_earmark(
-        self, request: service_pb2.SubmitDraftEarmarkRequest
+        self,
+        request: service_pb2.SubmitDraftEarmarkRequest,
+        *,
+        expected_ledger: tuple[int, str] | None = None,
+        metadata: Sequence[tuple[str, str]] | None = None,
     ) -> service_pb2.SubmitDraftEarmarkResult:
-        return self._call(self._stub.SubmitDraftEarmark, request)
+        return self._call(
+            self._stub.SubmitDraftEarmark,
+            request,
+            expected_ledger=expected_ledger,
+            use_default_expected_ledger=True,
+            extra_metadata=metadata,
+        )
 
     def confirm_draft_earmark(
         self, request: service_pb2.ConfirmDraftEarmarkRequest
@@ -574,9 +705,19 @@ class DeskBlotterClient:
         return result
 
     def ingest_trade_feed(
-        self, request: service_pb2.IngestTradeFeedRequest
+        self,
+        request: service_pb2.IngestTradeFeedRequest,
+        *,
+        expected_ledger: tuple[int, str] | None = None,
+        metadata: Sequence[tuple[str, str]] | None = None,
     ) -> service_pb2.IngestTradeFeedResult:
-        return self._call(self._stub.IngestTradeFeed, request)
+        return self._call(
+            self._stub.IngestTradeFeed,
+            request,
+            expected_ledger=expected_ledger,
+            use_default_expected_ledger=True,
+            extra_metadata=metadata,
+        )
 
     def resolve_pending_match(
         self, request: service_pb2.ResolvePendingMatchRequest
@@ -781,12 +922,65 @@ class DeskBlotterClient:
     # Internals
     # ------------------------------------------------------------------
 
+    def _build_metadata(
+        self,
+        *,
+        expected_ledger: tuple[int, str] | None = None,
+        use_default_expected_ledger: bool = False,
+        extra_metadata: Sequence[tuple[str, str]] | None = None,
+    ) -> tuple[tuple[str, str], ...]:
+        merged: list[tuple[str, str]] = list(self._metadata)
+        extra_pairs: list[tuple[str, str]] = []
+        extra_has_ledger = False
+        if extra_metadata is not None:
+            for item in extra_metadata:
+                if (
+                    not isinstance(item, tuple)
+                    or len(item) != 2
+                    or not isinstance(item[0], str)
+                    or not isinstance(item[1], str)
+                ):
+                    raise ValueError("metadata entries must be (str, str) pairs")
+                key_lower = item[0].lower()
+                if key_lower in (
+                    EXPECTED_LEDGER_EPOCH_HEADER,
+                    EXPECTED_LEDGER_INSTANCE_HEADER,
+                ):
+                    extra_has_ledger = True
+                extra_pairs.append(item)
+        if expected_ledger is not None and extra_has_ledger:
+            raise ValueError(
+                "cannot pass both expected_ledger and explicit x-ficant-expected-ledger-* metadata"
+            )
+        effective_ledger = (
+            expected_ledger
+            if expected_ledger is not None
+            else (
+                self._expected_ledger
+                if (use_default_expected_ledger and not extra_has_ledger)
+                else None
+            )
+        )
+        if effective_ledger is not None:
+            merged.extend(_expected_ledger_metadata(effective_ledger))
+        merged.extend(extra_pairs)
+        return tuple(merged)
+
     def _call(
         self,
         operation: Callable[..., _Response],
         request: object,
+        *,
+        expected_ledger: tuple[int, str] | None = None,
+        use_default_expected_ledger: bool = False,
+        extra_metadata: Sequence[tuple[str, str]] | None = None,
     ) -> _Result:
-        response = operation(request, metadata=self._metadata, timeout=self._timeout)
+        call_metadata = self._build_metadata(
+            expected_ledger=expected_ledger,
+            use_default_expected_ledger=use_default_expected_ledger,
+            extra_metadata=extra_metadata,
+        )
+        response = operation(request, metadata=call_metadata, timeout=self._timeout)
         branch = response.WhichOneof("result")
         if branch == "error":
             raise BlotterError(response.error)
