@@ -5,8 +5,8 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use ficant_api::{
-    BlotterStorePort, BlotterWriteOutcome, SubscribeBarrierSnapshot, WriteAuthorizeFn,
-    WriteTransitionFn,
+    BlotterLedgerIdentity, BlotterStorePort, BlotterWriteOutcome, SubscribeBarrierSnapshot,
+    WriteAuthorizeFn, WriteAuthorizeWithIdentityFn, WriteTransitionFn,
 };
 use ficant_application::ports::{
     ApplicationResult, BlotterEventJournalPort, IdempotencyScopeKey, PollEventsOutcome,
@@ -62,6 +62,35 @@ impl BlotterStorePort for SqliteBlotterRuntime {
         let outcome = self
             .store
             .execute_write_authorized(idempotency, authorize, transition)?;
+        Ok(match outcome {
+            WriteExecutionOutcome::Committed {
+                value,
+                committed_seq,
+            } => BlotterWriteOutcome::Committed {
+                response_bytes: value,
+                committed_seq,
+            },
+            WriteExecutionOutcome::Replayed(receipt) => BlotterWriteOutcome::Replayed(receipt),
+        })
+    }
+
+    fn execute_write_authorized_with_identity_bytes(
+        &self,
+        idempotency: Option<(&IdempotencyScopeKey, &ContentHash)>,
+        authorize: WriteAuthorizeWithIdentityFn,
+        transition: WriteTransitionFn,
+    ) -> ApplicationResult<BlotterWriteOutcome> {
+        let outcome = self.store.execute_write_authorized_with_identity(
+            idempotency,
+            |state, id| {
+                let api_id = BlotterLedgerIdentity {
+                    ledger_epoch: id.ledger_epoch,
+                    ledger_instance_id: id.ledger_instance_id.clone(),
+                };
+                authorize(state, &api_id)
+            },
+            transition,
+        )?;
         Ok(match outcome {
             WriteExecutionOutcome::Committed {
                 value,

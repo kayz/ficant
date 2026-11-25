@@ -31,9 +31,14 @@ use crate::codec::{
     pending_state_to_str, serialize_json, side_to_str, sqlite_i64_to_u64, stored_quote_from_row,
     trade_lifecycle_from_str, trade_lifecycle_to_str, u64_to_sqlite_i64,
 };
+use crate::rollover::{
+    CompanionLock, RolloverError, ensure_no_unfinished_rollover_state,
+    verify_opened_source_identity,
+};
 use crate::schema::{
-    SqlitePragmaSnapshot, configure_and_verify_pragmas, initialize_or_verify_schema,
-    read_pragma_snapshot, validate_production_sqlite_path,
+    LedgerIdentity, SqlitePragmaSnapshot, StartupSchemaFault, configure_and_verify_pragmas,
+    initialize_or_verify_schema_with_identity, read_pragma_snapshot,
+    validate_production_sqlite_path,
 };
 
 /// Default number of most-recent event envelopes retained in `blotter_event_journal`.
@@ -103,11 +108,14 @@ impl SqliteBlotterOpenOptions {
 struct StoreInner {
     conn: Connection,
     state: DeskBlotterWorkspaceState,
+    ledger_identity: LedgerIdentity,
     oldest_retained_seq: u64,
     event_retention_window: u64,
     next_fault: StoreFaultInjection,
     halted: bool,
     event_hook: Option<EventCommitHook>,
+    // Declared last so `conn` closes before the companion lock is released on Drop.
+    _companion_lock: Option<CompanionLock>,
 }
 
 /// Single-writer exclusive WAL `SQLite` persistence engine for Desk Blotter.
@@ -124,7 +132,8 @@ impl std::fmt::Debug for SqliteBlotterStore {
 impl SqliteBlotterStore {
     /// Opens a production file-backed exclusive WAL store at `path`.
     ///
-    /// Rejects `:memory:`, all `file:` URIs, empty paths, directories, and concurrent instances.
+    /// Rejects `:memory:`, all `file:` URIs, empty paths, directories, symlinks/reparse points,
+    /// hardlink/physical aliases, unfinished rollover states, and concurrent instances.
     pub fn open_file(path: impl AsRef<Path>, config: BlotterConfig) -> ApplicationResult<Self> {
         Self::open(&SqliteBlotterOpenOptions::file(path.as_ref(), config))
     }
@@ -137,6 +146,14 @@ impl SqliteBlotterStore {
 
     /// Opens a store with explicit options, rejecting contradictory production/in-memory switches.
     pub fn open(options: &SqliteBlotterOpenOptions) -> ApplicationResult<Self> {
+        Self::open_with_startup_fault(options, StartupSchemaFault::None)
+    }
+
+    /// Opens a store with an optional deterministic startup schema/migration fault injection.
+    pub fn open_with_startup_fault(
+        options: &SqliteBlotterOpenOptions,
+        startup_fault: StartupSchemaFault,
+    ) -> ApplicationResult<Self> {
         options
             .config
             .validate()
@@ -158,29 +175,53 @@ impl SqliteBlotterStore {
             | OpenFlags::SQLITE_OPEN_CREATE
             | OpenFlags::SQLITE_OPEN_NO_MUTEX;
 
-        let conn = if options.ephemeral_in_memory {
-            Connection::open_in_memory_with_flags(flags).map_err(|_| storage_unavailable())?
+        let (conn, companion_lock, source_physical_id) = if options.ephemeral_in_memory {
+            let conn =
+                Connection::open_in_memory_with_flags(flags).map_err(|_| storage_unavailable())?;
+            (conn, None, None)
         } else {
             let path = options.path.as_deref().ok_or_else(validation_failed)?;
             validate_production_sqlite_path(path)?;
-            Connection::open_with_flags(path, flags).map_err(|_| storage_unavailable())?
+            let lock = CompanionLock::acquire(path).map_err(map_rollover_open_err)?;
+            ensure_no_unfinished_rollover_state(path).map_err(map_rollover_open_err)?;
+            let conn =
+                Connection::open_with_flags(path, flags).map_err(|_| storage_unavailable())?;
+            let phys_id =
+                verify_opened_source_identity(path, &lock).map_err(map_rollover_open_err)?;
+            (conn, Some(lock), Some(phys_id))
         };
 
         configure_and_verify_pragmas(&conn, options.ephemeral_in_memory)?;
-        initialize_or_verify_schema(&conn, &options.config)?;
+        let ledger_identity = initialize_or_verify_schema_with_identity(
+            &conn,
+            &options.config,
+            source_physical_id.as_ref(),
+            startup_fault,
+        )?;
         let (state, oldest_retained_seq) = hydrate_workspace_state(&conn)?;
 
         Ok(Self {
             inner: Mutex::new(StoreInner {
                 conn,
                 state,
+                ledger_identity,
                 oldest_retained_seq,
                 event_retention_window: options.event_retention_window,
                 next_fault: StoreFaultInjection::None,
                 halted: false,
                 event_hook: None,
+                _companion_lock: companion_lock,
             }),
         })
+    }
+
+    /// Returns the committed ledger identity bound to this open store instance.
+    pub fn ledger_identity(&self) -> ApplicationResult<LedgerIdentity> {
+        let guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        Ok(guard.ledger_identity.clone())
     }
 
     /// Inspects live `SQLite` PRAGMAs and explicit `blotter_meta.schema_version`.
@@ -270,9 +311,27 @@ impl SqliteBlotterStore {
             &DeskBlotterWorkspaceState,
         ) -> ApplicationResult<(T, ficant_application::ports::BlotterCommitPlan)>,
     {
+        self.execute_write_authorized_with_identity(idempotency, |state, _id| authorize(state), f)
+    }
+
+    /// Executes an atomic single-writer command with a state- and ledger-identity-aware
+    /// pre-idempotency authorization hook strictly inside the `StoreInner` mutex BEFORE
+    /// `query_idempotency_row` (`F-08`, `F-22(3)`).
+    pub fn execute_write_authorized_with_identity<T, A, F>(
+        &self,
+        idempotency: Option<(&IdempotencyScopeKey, &ContentHash)>,
+        authorize: A,
+        f: F,
+    ) -> ApplicationResult<WriteExecutionOutcome<T>>
+    where
+        A: FnOnce(&DeskBlotterWorkspaceState, &LedgerIdentity) -> ApplicationResult<()>,
+        F: FnOnce(
+            &DeskBlotterWorkspaceState,
+        ) -> ApplicationResult<(T, ficant_application::ports::BlotterCommitPlan)>,
+    {
         let mut guard = self.lock_healthy()?;
 
-        authorize(&guard.state)?;
+        authorize(&guard.state, &guard.ledger_identity)?;
 
         if let Some((key, request_hash)) = idempotency
             && let Some(receipt) = query_idempotency_row(&guard.conn, key)?
@@ -1956,6 +2015,22 @@ fn hydrate_workspace_state(
     };
 
     Ok((workspace, oldest_retained_seq))
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn map_rollover_open_err(err: RolloverError) -> ApplicationError {
+    match err {
+        RolloverError::Validation(_) => validation_failed(),
+        RolloverError::LockBusy(_)
+        | RolloverError::UnresolvedItemsBlocked { .. }
+        | RolloverError::ModeConflict(_)
+        | RolloverError::ArchiveConflict(_)
+        | RolloverError::StateConflict(_)
+        | RolloverError::AuditFailed(_)
+        | RolloverError::Sqlite(_)
+        | RolloverError::Io(_)
+        | RolloverError::FaultInjected(_) => storage_unavailable(),
+    }
 }
 
 const fn validation_failed() -> ApplicationError {

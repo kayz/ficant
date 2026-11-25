@@ -18,13 +18,25 @@
 )]
 
 pub mod codec;
+pub mod rollover;
 pub mod schema;
 pub mod spi;
 pub mod store;
 
 pub use codec::{format_fixed_decimal, parse_fixed_decimal};
+pub use rollover::{
+    ARCHIVE_MANIFEST_SCHEMA, ArchiveManifest, ArchiveManifestCounts, DatabaseAuditSummary,
+    FileIdentityInfo, ManifestAccountSummary, ManifestStatus, PhysicalFileId,
+    ROLLOVER_STATE_SCHEMA, RolloverError, RolloverFaultInjection, RolloverMode, RolloverPhase,
+    SqliteRolloverReport, SqliteRolloverRequest, VerifySqliteArchiveReport, audit_sqlite_database,
+    companion_lock_path, inspect_physical_file_identity, parse_single_hex_file_id,
+    rollover_state_path, sqlite_rollover, sqlite_rollover_with_fault, validate_archive_filename,
+    validate_archive_manifest, validate_archive_stem, verify_sqlite_archive,
+};
 pub use schema::{
-    BLOTTER_SCHEMA_DDL, BLOTTER_SCHEMA_VERSION, REQUIRED_TABLES, SqlitePragmaSnapshot,
+    BLOTTER_META_EXTENDED_COLUMNS, BLOTTER_META_LEGACY_COLUMNS, BLOTTER_SCHEMA_DDL,
+    BLOTTER_SCHEMA_VERSION, LedgerIdentity, MetaSchemaLayout, REQUIRED_TABLES,
+    SqlitePragmaSnapshot, StartupSchemaFault, generate_random_ulid, is_canonical_ulid,
     validate_production_sqlite_path,
 };
 pub use spi::{

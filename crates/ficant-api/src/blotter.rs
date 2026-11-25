@@ -31,7 +31,7 @@ use ficant_domain::primitives::{ContentHash, Ulid};
 use prost::Message;
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio_stream::Stream;
-use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::wrappers::{ReceiverStream, WatchStream};
 use tonic::metadata::MetadataMap;
 use tonic::{Request, Response, Status};
 
@@ -65,6 +65,91 @@ pub const DEFAULT_SUBSCRIBE_REPLAY_PAGE_SIZE: u32 = 256;
 pub const DEFAULT_SUBSCRIBE_STREAM_CHANNEL_CAPACITY: usize = 32;
 /// Default interval between `SubscribeEvents` stream heartbeats.
 pub const DEFAULT_STREAM_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
+/// gRPC metadata header carrying the caller's expected positive ledger epoch (`F-08`).
+pub const EXPECTED_LEDGER_EPOCH_HEADER: &str = "x-ficant-expected-ledger-epoch";
+/// gRPC metadata header carrying the caller's expected canonical 26-char uppercase ULID (`F-08`).
+pub const EXPECTED_LEDGER_INSTANCE_HEADER: &str = "x-ficant-expected-ledger-instance";
+
+/// Committed ledger identity `(ledger_epoch, ledger_instance_id)` exposed by [`BlotterStorePort`]
+/// strictly under the store's single-writer mutex for server-enforced write fencing (`F-08`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlotterLedgerIdentity {
+    pub ledger_epoch: u64,
+    pub ledger_instance_id: String,
+}
+
+/// Returns `true` iff `value` is a canonical 26-character uppercase Crockford Base32 ULID.
+#[must_use]
+pub fn is_canonical_ulid(value: &str) -> bool {
+    if value.len() != 26 || !value.is_ascii() {
+        return false;
+    }
+    ulid::Ulid::from_string(value).is_ok_and(|parsed| parsed.to_string() == value)
+}
+
+/// Parses and validates optional paired ledger-fence metadata headers (`F-08`).
+///
+/// - Both headers absent -> `Ok(None)` (legacy client compatibility).
+/// - Half-present, duplicate values, non-ASCII, non-canonical positive ASCII decimal epoch (`>= 1`,
+///   no leading `+` or `0`), or non-canonical 26-char uppercase ULID -> `Err(ValidationFailed)`.
+pub fn extract_expected_ledger_fence(
+    metadata: &MetadataMap,
+) -> ApplicationResult<Option<BlotterLedgerIdentity>> {
+    let epoch_values: Vec<_> = metadata
+        .get_all(EXPECTED_LEDGER_EPOCH_HEADER)
+        .iter()
+        .collect();
+    let instance_values: Vec<_> = metadata
+        .get_all(EXPECTED_LEDGER_INSTANCE_HEADER)
+        .iter()
+        .collect();
+
+    if epoch_values.is_empty() && instance_values.is_empty() {
+        return Ok(None);
+    }
+    if epoch_values.len() != 1 || instance_values.len() != 1 {
+        return Err(validation_failed());
+    }
+
+    let epoch_str = epoch_values[0].to_str().map_err(|_| validation_failed())?;
+    let instance_str = instance_values[0]
+        .to_str()
+        .map_err(|_| validation_failed())?;
+
+    let epoch_bytes = epoch_str.as_bytes();
+    if epoch_bytes.is_empty()
+        || epoch_bytes[0] == b'0'
+        || !epoch_bytes.iter().all(u8::is_ascii_digit)
+    {
+        return Err(validation_failed());
+    }
+    let ledger_epoch = epoch_str.parse::<u64>().map_err(|_| validation_failed())?;
+    if ledger_epoch == 0 {
+        return Err(validation_failed());
+    }
+
+    if !is_canonical_ulid(instance_str) {
+        return Err(validation_failed());
+    }
+
+    Ok(Some(BlotterLedgerIdentity {
+        ledger_epoch,
+        ledger_instance_id: instance_str.to_owned(),
+    }))
+}
+
+fn verify_expected_ledger_identity(
+    expected: Option<&BlotterLedgerIdentity>,
+    actual: &BlotterLedgerIdentity,
+) -> ApplicationResult<()> {
+    if let Some(expected_id) = expected
+        && (actual.ledger_epoch != expected_id.ledger_epoch
+            || actual.ledger_instance_id != expected_id.ledger_instance_id)
+    {
+        return Err(non_retryable_concurrency_conflict());
+    }
+    Ok(())
+}
 
 /// Result of an atomic authorized write against [`BlotterStorePort`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -87,6 +172,12 @@ pub struct SubscribeBarrierSnapshot {
 pub type WriteAuthorizeFn =
     Box<dyn FnOnce(&DeskBlotterWorkspaceState) -> ApplicationResult<()> + Send>;
 
+/// Pre-idempotency state- and ledger-identity-aware authorization callback executed strictly
+/// under the single-writer lock BEFORE idempotency receipt lookup (`F-08`, `F-22(3)`).
+pub type WriteAuthorizeWithIdentityFn = Box<
+    dyn FnOnce(&DeskBlotterWorkspaceState, &BlotterLedgerIdentity) -> ApplicationResult<()> + Send,
+>;
+
 /// Pure synchronous state transition callback executed under the single-writer lock.
 pub type WriteTransitionFn = Box<
     dyn FnOnce(&DeskBlotterWorkspaceState) -> ApplicationResult<(Vec<u8>, BlotterCommitPlan)>
@@ -102,6 +193,16 @@ pub trait BlotterStorePort: Send + Sync {
         &self,
         idempotency: Option<(&IdempotencyScopeKey, &ContentHash)>,
         authorize: WriteAuthorizeFn,
+        transition: WriteTransitionFn,
+    ) -> ApplicationResult<BlotterWriteOutcome>;
+
+    /// Executes an atomic single-writer command with state- and ledger-identity-aware
+    /// pre-idempotency authorization strictly inside the store's exclusive writer mutex BEFORE
+    /// idempotency receipt lookup (`F-08`, `F-22(3)`).
+    fn execute_write_authorized_with_identity_bytes(
+        &self,
+        idempotency: Option<(&IdempotencyScopeKey, &ContentHash)>,
+        authorize: WriteAuthorizeWithIdentityFn,
         transition: WriteTransitionFn,
     ) -> ApplicationResult<BlotterWriteOutcome>;
 
@@ -248,6 +349,8 @@ pub struct DeskBlotterGrpcService {
     clock: Arc<dyn BlotterClock>,
     engines: OwnedBlotterEngines,
     config: DeskBlotterServiceConfig,
+    shutdown_rx: Option<watch::Receiver<bool>>,
+    stream_drain_tx: Option<mpsc::Sender<()>>,
 }
 
 impl DeskBlotterGrpcService {
@@ -267,7 +370,25 @@ impl DeskBlotterGrpcService {
             clock,
             engines,
             config,
+            shutdown_rx: None,
+            stream_drain_tx: None,
         })
+    }
+
+    /// Attaches a server-owned shutdown watch signal to cancel active `SubscribeEvents` streams
+    /// cleanly across all stages (`F-09`).
+    #[must_use]
+    pub fn with_shutdown_signal(mut self, shutdown_rx: watch::Receiver<bool>) -> Self {
+        self.shutdown_rx = Some(shutdown_rx);
+        self
+    }
+
+    /// Attaches a drop-guard channel sender cloned into every spawned stream task so shutdown can
+    /// deterministically wait for all stream tasks to release their store handles.
+    #[must_use]
+    pub fn with_stream_drain_guard(mut self, drain_tx: mpsc::Sender<()>) -> Self {
+        self.stream_drain_tx = Some(drain_tx);
+        self
     }
 
     fn orchestrator(&self) -> DeskBlotterOrchestrator<'_> {
@@ -372,6 +493,7 @@ impl DeskBlotterGrpcService {
                 PrincipalRole::Trader,
             ],
         )?;
+        let expected_ledger = extract_expected_ledger_fence(metadata)?;
         let idempotency_key = parse_non_empty(&req.idempotency_key)?;
         let account_id = parse_non_empty(&req.account_id)?;
         let source_id = parse_non_empty(&req.source_id)?;
@@ -411,9 +533,13 @@ impl DeskBlotterGrpcService {
         let receipt_key = scope_key.clone();
         let receipt_hash = request_hash.clone();
 
-        let outcome = self.store.execute_write_authorized_bytes(
+        let outcome = self.store.execute_write_authorized_with_identity_bytes(
             Some((&scope_key, &request_hash)),
-            Box::new(move |state| {
+            Box::new(move |state, actual_identity| {
+                // Server-enforced metadata epoch/instance fence strictly inside the writer mutex
+                // BEFORE idempotency receipt lookup (F-08, F-22(3)).
+                verify_expected_ledger_identity(expected_ledger.as_ref(), actual_identity)?;
+
                 // State-dependent batch authorization under the exclusive writer mutex:
                 // EVERY account whose active quote source for any touched instrument is `source_id`
                 // MUST be authorized for the caller, strictly BEFORE idempotency receipt lookup!
@@ -1024,6 +1150,7 @@ impl DeskBlotterGrpcService {
             &principal,
             &[PrincipalRole::NlpParser, PrincipalRole::Trader],
         )?;
+        let expected_ledger = extract_expected_ledger_fence(metadata)?;
         let idempotency_key = parse_non_empty(&req.idempotency_key)?;
         let account_id = parse_non_empty(&req.account_id)?;
         if !principal.can_access_account(&account_id) {
@@ -1048,9 +1175,11 @@ impl DeskBlotterGrpcService {
         let receipt_key = scope_key.clone();
         let receipt_hash = request_hash.clone();
 
-        let outcome = self.store.execute_write_authorized_bytes(
+        let outcome = self.store.execute_write_authorized_with_identity_bytes(
             Some((&scope_key, &request_hash)),
-            Box::new(|_| Ok(())),
+            Box::new(move |_state, actual_identity| {
+                verify_expected_ledger_identity(expected_ledger.as_ref(), actual_identity)
+            }),
             Box::new(move |state| {
                 let meta = state.accounts_meta.get(&account_id).ok_or_else(not_found)?;
                 let proposal = parse_nlp_proposal(raw_proposal_cloned.as_ref(), &meta.units)?;
@@ -1193,6 +1322,7 @@ impl DeskBlotterGrpcService {
             &principal,
             &[PrincipalRole::FeedAdapter, PrincipalRole::Operator],
         )?;
+        let expected_ledger = extract_expected_ledger_fence(metadata)?;
         let idempotency_key = parse_non_empty(&req.idempotency_key)?;
         let source_id = parse_non_empty(&req.source_id)?;
         if !principal.can_access_source(&source_id) {
@@ -1243,9 +1373,13 @@ impl DeskBlotterGrpcService {
         let receipt_key = scope_key.clone();
         let receipt_hash = request_hash.clone();
 
-        let outcome = self.store.execute_write_authorized_bytes(
+        let outcome = self.store.execute_write_authorized_with_identity_bytes(
             Some((&scope_key, &request_hash)),
-            Box::new(move |state| {
+            Box::new(move |state, actual_identity| {
+                // Server-enforced metadata epoch/instance fence strictly inside the writer mutex
+                // BEFORE idempotency receipt lookup (F-08, F-22(3)).
+                verify_expected_ledger_identity(expected_ledger.as_ref(), actual_identity)?;
+
                 // If unreleased buffered packets exist on this source, verify the caller is also
                 // authorized for any account whose buffered packet could be released by this call.
                 if let Some(feed) = state.domain.feeds.get(&auth_source) {
@@ -2003,21 +2137,28 @@ impl DeskBlotterService for DeskBlotterGrpcService {
         let credentials = self.credentials.clone();
         let clock = self.clock.clone();
         let config = self.config.clone();
+        let mut producer_shutdown = self.shutdown_rx.clone();
+        let stream_shutdown = self.shutdown_rx.clone();
+        let _drain_guard_clone = self.stream_drain_tx.clone();
         let metadata = request.metadata().clone();
         let req = request.into_inner();
 
         tokio::spawn(async move {
+            let _drain_guard = _drain_guard_clone;
+            if is_shutting_down(producer_shutdown.as_ref()) {
+                return;
+            }
             let token = match extract_bearer_token(&metadata) {
                 Ok(t) => t,
                 Err(err) => {
-                    send_sub_error(&tx, &err).await;
+                    send_sub_error(&tx, &mut producer_shutdown, &err).await;
                     return;
                 }
             };
             let initial_principal = match credentials.verify_bearer(&token, &clock.now()) {
                 Ok(p) => p,
                 Err(err) => {
-                    send_sub_error(&tx, &err).await;
+                    send_sub_error(&tx, &mut producer_shutdown, &err).await;
                     return;
                 }
             };
@@ -2025,20 +2166,24 @@ impl DeskBlotterService for DeskBlotterGrpcService {
                 &initial_principal,
                 &[PrincipalRole::Trader, PrincipalRole::Operator],
             ) {
-                send_sub_error(&tx, &err).await;
+                send_sub_error(&tx, &mut producer_shutdown, &err).await;
                 return;
             }
             let account_filter = match req.account_id.as_deref().map(parse_non_empty).transpose() {
                 Ok(f) => f,
                 Err(err) => {
-                    send_sub_error(&tx, &err).await;
+                    send_sub_error(&tx, &mut producer_shutdown, &err).await;
                     return;
                 }
             };
             if let Some(ref acct) = account_filter
                 && !initial_principal.can_access_account(acct)
             {
-                send_sub_error(&tx, &forbidden()).await;
+                send_sub_error(&tx, &mut producer_shutdown, &forbidden()).await;
+                return;
+            }
+
+            if is_shutting_down(producer_shutdown.as_ref()) {
                 return;
             }
 
@@ -2047,7 +2192,7 @@ impl DeskBlotterService for DeskBlotterGrpcService {
             let barrier = match store.subscribe_with_barrier() {
                 Ok(b) => b,
                 Err(err) => {
-                    send_sub_error(&tx, &err).await;
+                    send_sub_error(&tx, &mut producer_shutdown, &err).await;
                     return;
                 }
             };
@@ -2055,14 +2200,19 @@ impl DeskBlotterService for DeskBlotterGrpcService {
                 hook(barrier.head_seq);
             }
 
+            if is_shutting_down(producer_shutdown.as_ref()) {
+                return;
+            }
+
             if req.after_seq > barrier.head_seq {
-                send_sub_error(&tx, &validation_failed()).await;
+                send_sub_error(&tx, &mut producer_shutdown, &validation_failed()).await;
                 return;
             }
             if barrier.head_seq > 0 && req.after_seq.saturating_add(1) < barrier.oldest_retained_seq
             {
                 send_sub_fallback(
                     &tx,
+                    &mut producer_shutdown,
                     &ficant_application::use_cases::blotter::SnapshotFallbackRequired {
                         requested_after_seq: req.after_seq,
                         oldest_retained_seq: barrier.oldest_retained_seq,
@@ -2089,6 +2239,7 @@ impl DeskBlotterService for DeskBlotterGrpcService {
                 &mut cursor,
                 barrier.head_seq,
                 &tx,
+                &mut producer_shutdown,
             )
             .await
             {
@@ -2099,8 +2250,10 @@ impl DeskBlotterService for DeskBlotterGrpcService {
             let init_head = store
                 .read_workspace_snapshot()
                 .map_or(cursor, |(_, h, _)| h.max(cursor));
-            if tx
-                .send(Ok(pb::SubscribeEventsResponse {
+            if !send_or_shutdown(
+                &tx,
+                &mut producer_shutdown,
+                Ok(pb::SubscribeEventsResponse {
                     payload: Some(pb::subscribe_events_response::Payload::Heartbeat(
                         pb::StreamHeartbeat {
                             head_seq: init_head,
@@ -2108,9 +2261,9 @@ impl DeskBlotterService for DeskBlotterGrpcService {
                             scanned_through_seq: cursor,
                         },
                     )),
-                }))
-                .await
-                .is_err()
+                }),
+            )
+            .await
             {
                 return;
             }
@@ -2123,7 +2276,14 @@ impl DeskBlotterService for DeskBlotterGrpcService {
             let _ = hb_interval.tick().await;
 
             loop {
+                if is_shutting_down(producer_shutdown.as_ref()) {
+                    break;
+                }
                 tokio::select! {
+                    biased;
+                    () = wait_for_shutdown_opt(&mut producer_shutdown) => {
+                        break;
+                    }
                     recv = live_rx.recv() => {
                         match recv {
                             Ok(mut event) => {
@@ -2139,7 +2299,7 @@ impl DeskBlotterService for DeskBlotterGrpcService {
                                 ) {
                                     Ok(p) => p,
                                     Err(err) => {
-                                        send_sub_error(&tx, &err).await;
+                                        send_sub_error(&tx, &mut producer_shutdown, &err).await;
                                         return;
                                     }
                                 };
@@ -2151,16 +2311,18 @@ impl DeskBlotterService for DeskBlotterGrpcService {
                                 });
                                 let seq = event.seq;
                                 if !event.changes.is_empty()
-                                    && tx
-                                        .send(Ok(pb::SubscribeEventsResponse {
+                                    && !send_or_shutdown(
+                                        &tx,
+                                        &mut producer_shutdown,
+                                        Ok(pb::SubscribeEventsResponse {
                                             payload: Some(
                                                 pb::subscribe_events_response::Payload::Event(
                                                     to_pb_event_envelope(&event),
                                                 ),
                                             ),
-                                        }))
-                                        .await
-                                        .is_err()
+                                        }),
+                                    )
+                                    .await
                                 {
                                     return;
                                 }
@@ -2170,10 +2332,13 @@ impl DeskBlotterService for DeskBlotterGrpcService {
                                 // Slow consumer fell behind broadcast buffer: re-establish atomic
                                 // barrier, replay missed events from `cursor`, or emit
                                 // SnapshotFallbackRequired if pruned beyond retention window.
+                                if is_shutting_down(producer_shutdown.as_ref()) {
+                                    return;
+                                }
                                 let next_barrier = match store.subscribe_with_barrier() {
                                     Ok(b) => b,
                                     Err(err) => {
-                                        send_sub_error(&tx, &err).await;
+                                        send_sub_error(&tx, &mut producer_shutdown, &err).await;
                                         return;
                                     }
                                 };
@@ -2187,6 +2352,7 @@ impl DeskBlotterService for DeskBlotterGrpcService {
                                     &mut cursor,
                                     next_barrier.head_seq,
                                     &tx,
+                                    &mut producer_shutdown,
                                 )
                                 .await
                                 {
@@ -2204,14 +2370,16 @@ impl DeskBlotterService for DeskBlotterGrpcService {
                             &token,
                             account_filter.as_deref(),
                         ) {
-                            send_sub_error(&tx, &err).await;
+                            send_sub_error(&tx, &mut producer_shutdown, &err).await;
                             return;
                         }
                         let head_seq = store
                             .read_workspace_snapshot()
                             .map_or(cursor, |(_, h, _)| h.max(cursor));
-                        if tx
-                            .send(Ok(pb::SubscribeEventsResponse {
+                        if !send_or_shutdown(
+                            &tx,
+                            &mut producer_shutdown,
+                            Ok(pb::SubscribeEventsResponse {
                                 payload: Some(
                                     pb::subscribe_events_response::Payload::Heartbeat(
                                         pb::StreamHeartbeat {
@@ -2221,9 +2389,9 @@ impl DeskBlotterService for DeskBlotterGrpcService {
                                         },
                                     ),
                                 ),
-                            }))
-                            .await
-                            .is_err()
+                            }),
+                        )
+                        .await
                         {
                             return;
                         }
@@ -2232,7 +2400,10 @@ impl DeskBlotterService for DeskBlotterGrpcService {
             }
         });
 
-        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+        Ok(Response::new(Box::pin(ShutdownAwareStream::new(
+            rx,
+            stream_shutdown,
+        ))))
     }
 }
 
@@ -2247,13 +2418,17 @@ async fn replay_until_target(
     cursor: &mut u64,
     target_head: u64,
     tx: &mpsc::Sender<Result<pb::SubscribeEventsResponse, Status>>,
+    shutdown_rx: &mut Option<watch::Receiver<bool>>,
 ) -> bool {
     while *cursor < target_head {
+        if is_shutting_down(shutdown_rx.as_ref()) {
+            return false;
+        }
         let live_principal = match verify_live_subscriber(credentials, clock, token, account_filter)
         {
             Ok(p) => p,
             Err(err) => {
-                send_sub_error(tx, &err).await;
+                send_sub_error(tx, shutdown_rx, &err).await;
                 return false;
             }
         };
@@ -2265,35 +2440,40 @@ async fn replay_until_target(
         ) {
             Ok(o) => o,
             Err(err) => {
-                send_sub_error(tx, &err).await;
+                send_sub_error(tx, shutdown_rx, &err).await;
                 return false;
             }
         };
         match poll {
             PollEventsOutcome::Fallback(fb) => {
-                send_sub_fallback(tx, &fb).await;
+                send_sub_fallback(tx, shutdown_rx, &fb).await;
                 return false;
             }
             PollEventsOutcome::Batch(batch) => {
                 for ev in batch.events {
+                    if is_shutting_down(shutdown_rx.as_ref()) {
+                        return false;
+                    }
                     if ev.seq <= *cursor {
                         continue;
                     }
                     if let Err(err) =
                         verify_live_subscriber(credentials, clock, token, account_filter)
                     {
-                        send_sub_error(tx, &err).await;
+                        send_sub_error(tx, shutdown_rx, &err).await;
                         return false;
                     }
                     let ev_seq = ev.seq;
-                    if tx
-                        .send(Ok(pb::SubscribeEventsResponse {
+                    if !send_or_shutdown(
+                        tx,
+                        shutdown_rx,
+                        Ok(pb::SubscribeEventsResponse {
                             payload: Some(pb::subscribe_events_response::Payload::Event(
                                 to_pb_event_envelope(&ev),
                             )),
-                        }))
-                        .await
-                        .is_err()
+                        }),
+                    )
+                    .await
                     {
                         return false;
                     }
@@ -2330,28 +2510,36 @@ fn verify_live_subscriber(
 
 async fn send_sub_error(
     tx: &mpsc::Sender<Result<pb::SubscribeEventsResponse, Status>>,
+    shutdown_rx: &mut Option<watch::Receiver<bool>>,
     err: &ApplicationError,
 ) {
-    let _ = tx
-        .send(Ok(pb::SubscribeEventsResponse {
+    let _ = send_or_shutdown(
+        tx,
+        shutdown_rx,
+        Ok(pb::SubscribeEventsResponse {
             payload: Some(pb::subscribe_events_response::Payload::Error(
                 to_error_detail(err),
             )),
-        }))
-        .await;
+        }),
+    )
+    .await;
 }
 
 async fn send_sub_fallback(
     tx: &mpsc::Sender<Result<pb::SubscribeEventsResponse, Status>>,
+    shutdown_rx: &mut Option<watch::Receiver<bool>>,
     fb: &ficant_application::use_cases::blotter::SnapshotFallbackRequired,
 ) {
-    let _ = tx
-        .send(Ok(pb::SubscribeEventsResponse {
+    let _ = send_or_shutdown(
+        tx,
+        shutdown_rx,
+        Ok(pb::SubscribeEventsResponse {
             payload: Some(pb::subscribe_events_response::Payload::SnapshotFallback(
                 to_pb_snapshot_fallback(fb),
             )),
-        }))
-        .await;
+        }),
+    )
+    .await;
 }
 
 // ============================================================================
@@ -2583,6 +2771,7 @@ impl DeskBlotterService for DisabledDeskBlotterGrpcService {
 pub struct WatchdogController {
     trigger_tx: mpsc::Sender<oneshot::Sender<ApplicationResult<OrchestratedSweepLifecycleOutput>>>,
     shutdown_tx: watch::Sender<bool>,
+    join_handle: Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl WatchdogController {
@@ -2602,6 +2791,19 @@ impl WatchdogController {
     pub fn shutdown(&self) {
         let _ = self.shutdown_tx.send(true);
     }
+
+    /// Signals shutdown and awaits full exit of the watchdog task so its store reference is
+    /// deterministically dropped (`F-09`).
+    pub async fn shutdown_and_wait(&self) {
+        self.shutdown();
+        let handle = {
+            let mut guard = self.join_handle.lock().await;
+            guard.take()
+        };
+        if let Some(jh) = handle {
+            let _ = jh.await;
+        }
+    }
 }
 
 /// Spawns the lifecycle watchdog task (hold expiration, committed alerts, feed staleness).
@@ -2620,7 +2822,7 @@ pub fn spawn_blotter_watchdog(
         mpsc::channel::<oneshot::Sender<ApplicationResult<OrchestratedSweepLifecycleOutput>>>(32);
     let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
 
-    tokio::spawn(async move {
+    let join_handle = tokio::spawn(async move {
         let mut interval = periodic_interval.map(|dur| {
             let mut iv = tokio::time::interval(dur);
             iv.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -2633,6 +2835,7 @@ pub fn spawn_blotter_watchdog(
 
         loop {
             tokio::select! {
+                biased;
                 changed = shutdown_rx.changed() => {
                     if changed.is_err() || *shutdown_rx.borrow() {
                         break;
@@ -2661,6 +2864,7 @@ pub fn spawn_blotter_watchdog(
     WatchdogController {
         trigger_tx,
         shutdown_tx,
+        join_handle: Arc::new(tokio::sync::Mutex::new(Some(join_handle))),
     }
 }
 
@@ -2715,6 +2919,107 @@ fn run_watchdog_sweep_once(
 }
 
 // ============================================================================
+// Bounded-Shutdown Stream Primitives (F-09)
+// ============================================================================
+
+pub(crate) fn is_shutting_down(shutdown_rx: Option<&watch::Receiver<bool>>) -> bool {
+    shutdown_rx.is_some_and(|rx| *rx.borrow())
+}
+
+pub(crate) async fn wait_for_shutdown_opt(shutdown_rx: &mut Option<watch::Receiver<bool>>) {
+    let Some(rx) = shutdown_rx.as_mut() else {
+        std::future::pending::<()>().await;
+        return;
+    };
+    if *rx.borrow() {
+        return;
+    }
+    while rx.changed().await.is_ok() {
+        if *rx.borrow() {
+            return;
+        }
+    }
+}
+
+pub(crate) async fn send_or_shutdown<T>(
+    tx: &mpsc::Sender<T>,
+    shutdown_rx: &mut Option<watch::Receiver<bool>>,
+    item: T,
+) -> bool {
+    if is_shutting_down(shutdown_rx.as_ref()) {
+        return false;
+    }
+    tokio::select! {
+        biased;
+        () = wait_for_shutdown_opt(shutdown_rx) => false,
+        res = tx.send(item) => res.is_ok(),
+    }
+}
+
+/// Server-streaming wrapper that immediately closes the underlying `mpsc::Receiver` and ends the
+/// stream cleanly when the server shutdown watch fires, preventing slow clients with full queues
+/// from blocking graceful server drain (`F-09`).
+pub(crate) struct ShutdownAwareStream<T> {
+    inner: mpsc::Receiver<T>,
+    shutdown: Option<WatchStream<bool>>,
+    terminated: bool,
+}
+
+impl<T> ShutdownAwareStream<T> {
+    pub(crate) fn new(
+        mut inner: mpsc::Receiver<T>,
+        shutdown_rx: Option<watch::Receiver<bool>>,
+    ) -> Self {
+        let terminated = shutdown_rx.as_ref().is_some_and(|rx| *rx.borrow());
+        let shutdown = if terminated {
+            inner.close();
+            None
+        } else {
+            shutdown_rx.map(WatchStream::new)
+        };
+        Self {
+            inner,
+            shutdown,
+            terminated,
+        }
+    }
+}
+
+impl<T> Stream for ShutdownAwareStream<T> {
+    type Item = T;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        if self.terminated {
+            return std::task::Poll::Ready(None);
+        }
+        if let Some(ws) = self.shutdown.as_mut() {
+            loop {
+                match Pin::new(&mut *ws).poll_next(cx) {
+                    std::task::Poll::Ready(Some(true) | None) => {
+                        self.terminated = true;
+                        self.inner.close();
+                        return std::task::Poll::Ready(None);
+                    }
+                    std::task::Poll::Ready(Some(false)) => {}
+                    std::task::Poll::Pending => break,
+                }
+            }
+        }
+        match self.inner.poll_recv(cx) {
+            std::task::Poll::Ready(Some(item)) => std::task::Poll::Ready(Some(item)),
+            std::task::Poll::Ready(None) => {
+                self.terminated = true;
+                std::task::Poll::Ready(None)
+            }
+            std::task::Poll::Pending => std::task::Poll::Pending,
+        }
+    }
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -2753,6 +3058,10 @@ const fn not_found() -> ApplicationError {
 
 const fn validation_failed() -> ApplicationError {
     ApplicationError::new(ApplicationErrorCategory::ValidationFailed, false)
+}
+
+const fn non_retryable_concurrency_conflict() -> ApplicationError {
+    ApplicationError::new(ApplicationErrorCategory::ConcurrencyConflict, false)
 }
 
 const fn storage_unavailable() -> ApplicationError {

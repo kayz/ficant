@@ -22,12 +22,12 @@ use ficant_contracts::ficant::blotter::v1::intranet_nlp_intent_parser_service_se
 use ficant_contracts::ficant::blotter::v1::market_quote_stream_service_server::MarketQuoteStreamService;
 use ficant_contracts::ficant::blotter::v1::position_base_provider_service_server::PositionBaseProviderService;
 use ficant_contracts::ficant::blotter::v1::trade_feed_reconciler_service_server::TradeFeedReconcilerService;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tokio_stream::Stream;
-use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
 use crate::auth::extract_bearer_token;
+use crate::blotter::{ShutdownAwareStream, is_shutting_down, send_or_shutdown};
 use crate::blotter_codec::{
     parse_date, parse_non_empty, parse_quote_cursor, to_pb_market_quote_tick, to_pb_market_time,
     to_pb_nlp_proposal, to_pb_opening_position_base, to_pb_pull_market_quotes_result,
@@ -124,6 +124,8 @@ pub struct TradeFeedReconcilerGrpcService {
     credentials: Option<Arc<dyn CredentialVerifier>>,
     clock: Arc<dyn BlotterClock>,
     units: AnalysisUnits,
+    shutdown_rx: Option<watch::Receiver<bool>>,
+    stream_drain_tx: Option<mpsc::Sender<()>>,
 }
 
 impl TradeFeedReconcilerGrpcService {
@@ -139,6 +141,8 @@ impl TradeFeedReconcilerGrpcService {
             credentials: Some(credentials),
             clock,
             units,
+            shutdown_rx: None,
+            stream_drain_tx: None,
         }
     }
 
@@ -149,7 +153,21 @@ impl TradeFeedReconcilerGrpcService {
             credentials: None,
             clock,
             units,
+            shutdown_rx: None,
+            stream_drain_tx: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_shutdown_signal(mut self, shutdown_rx: watch::Receiver<bool>) -> Self {
+        self.shutdown_rx = Some(shutdown_rx);
+        self
+    }
+
+    #[must_use]
+    pub fn with_stream_drain_guard(mut self, drain_tx: mpsc::Sender<()>) -> Self {
+        self.stream_drain_tx = Some(drain_tx);
+        self
     }
 
     fn execute_pull(
@@ -239,42 +257,37 @@ impl TradeFeedReconcilerService for TradeFeedReconcilerGrpcService {
         let credentials = self.credentials.clone();
         let clock = self.clock.clone();
         let units = self.units.clone();
+        let mut producer_shutdown = self.shutdown_rx.clone();
+        let stream_shutdown = self.shutdown_rx.clone();
+        let drain_guard_clone = self.stream_drain_tx.clone();
         let metadata = request.metadata().clone();
         let req = request.into_inner();
 
         tokio::spawn(async move {
+            let _drain_guard = drain_guard_clone;
+            if is_shutting_down(producer_shutdown.as_ref()) {
+                return;
+            }
             let Some(backend) = backend else {
-                let _ = tx
-                    .send(Ok(pb::StreamTradeFeedResponse {
-                        payload: Some(pb::stream_trade_feed_response::Payload::Error(
-                            to_error_detail(&storage_unavailable()),
-                        )),
-                    }))
-                    .await;
+                send_trade_stream_err(&tx, &mut producer_shutdown, &storage_unavailable()).await;
                 return;
             };
             let Some(verifier) = credentials else {
-                let _ = tx
-                    .send(Ok(pb::StreamTradeFeedResponse {
-                        payload: Some(pb::stream_trade_feed_response::Payload::Error(
-                            to_error_detail(&storage_unavailable()),
-                        )),
-                    }))
-                    .await;
+                send_trade_stream_err(&tx, &mut producer_shutdown, &storage_unavailable()).await;
                 return;
             };
 
             let token = match extract_bearer_token(&metadata) {
                 Ok(tok) => tok,
                 Err(err) => {
-                    send_trade_stream_err(&tx, &err).await;
+                    send_trade_stream_err(&tx, &mut producer_shutdown, &err).await;
                     return;
                 }
             };
             let principal = match verifier.verify_bearer(&token, &clock.now()) {
                 Ok(p) => p,
                 Err(err) => {
-                    send_trade_stream_err(&tx, &err).await;
+                    send_trade_stream_err(&tx, &mut producer_shutdown, &err).await;
                     return;
                 }
             };
@@ -282,53 +295,61 @@ impl TradeFeedReconcilerService for TradeFeedReconcilerGrpcService {
                 &principal,
                 &[PrincipalRole::FeedAdapter, PrincipalRole::Operator],
             ) {
-                send_trade_stream_err(&tx, &err).await;
+                send_trade_stream_err(&tx, &mut producer_shutdown, &err).await;
                 return;
             }
             let source_id = match parse_non_empty(&req.source_id) {
                 Ok(s) => s,
                 Err(err) => {
-                    send_trade_stream_err(&tx, &err).await;
+                    send_trade_stream_err(&tx, &mut producer_shutdown, &err).await;
                     return;
                 }
             };
             if !principal.can_access_source(&source_id) {
-                send_trade_stream_err(&tx, &forbidden()).await;
+                send_trade_stream_err(&tx, &mut producer_shutdown, &forbidden()).await;
                 return;
             }
 
             let mut cursor = req.after_feed_seq;
             loop {
+                if is_shutting_down(producer_shutdown.as_ref()) {
+                    return;
+                }
                 let batch =
                     match backend.pull_trade_feed_batch(&source_id, cursor, MAX_SPI_PAGE_SIZE) {
                         Ok(b) => b,
                         Err(err) => {
-                            send_trade_stream_err(&tx, &err).await;
+                            send_trade_stream_err(&tx, &mut producer_shutdown, &err).await;
                             return;
                         }
                     };
                 for fill in &batch.fills {
+                    if is_shutting_down(producer_shutdown.as_ref()) {
+                        return;
+                    }
                     let live_principal = match verifier.verify_bearer(&token, &clock.now()) {
                         Ok(p) => p,
                         Err(err) => {
-                            send_trade_stream_err(&tx, &err).await;
+                            send_trade_stream_err(&tx, &mut producer_shutdown, &err).await;
                             return;
                         }
                     };
                     if !live_principal.can_access_source(&source_id)
                         || !live_principal.can_access_account(&fill.account_id)
                     {
-                        send_trade_stream_err(&tx, &forbidden()).await;
+                        send_trade_stream_err(&tx, &mut producer_shutdown, &forbidden()).await;
                         return;
                     }
-                    if tx
-                        .send(Ok(pb::StreamTradeFeedResponse {
+                    if !send_or_shutdown(
+                        &tx,
+                        &mut producer_shutdown,
+                        Ok(pb::StreamTradeFeedResponse {
                             payload: Some(pb::stream_trade_feed_response::Payload::Fill(
                                 to_pb_trade_fill_record(fill, &units),
                             )),
-                        }))
-                        .await
-                        .is_err()
+                        }),
+                    )
+                    .await
                     {
                         return;
                     }
@@ -339,8 +360,10 @@ impl TradeFeedReconcilerService for TradeFeedReconcilerGrpcService {
                 }
             }
 
-            let _ = tx
-                .send(Ok(pb::StreamTradeFeedResponse {
+            let _ = send_or_shutdown(
+                &tx,
+                &mut producer_shutdown,
+                Ok(pb::StreamTradeFeedResponse {
                     payload: Some(pb::stream_trade_feed_response::Payload::Heartbeat(
                         pb::FeedHeartbeat {
                             source_id,
@@ -348,11 +371,15 @@ impl TradeFeedReconcilerService for TradeFeedReconcilerGrpcService {
                             server_time: Some(to_pb_market_time(&clock.now())),
                         },
                     )),
-                }))
-                .await;
+                }),
+            )
+            .await;
         });
 
-        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+        Ok(Response::new(Box::pin(ShutdownAwareStream::new(
+            rx,
+            stream_shutdown,
+        ))))
     }
 
     async fn fetch_trade_revision(
@@ -371,15 +398,19 @@ impl TradeFeedReconcilerService for TradeFeedReconcilerGrpcService {
 
 async fn send_trade_stream_err(
     tx: &mpsc::Sender<Result<pb::StreamTradeFeedResponse, Status>>,
+    shutdown_rx: &mut Option<watch::Receiver<bool>>,
     err: &ApplicationError,
 ) {
-    let _ = tx
-        .send(Ok(pb::StreamTradeFeedResponse {
+    let _ = send_or_shutdown(
+        tx,
+        shutdown_rx,
+        Ok(pb::StreamTradeFeedResponse {
             payload: Some(pb::stream_trade_feed_response::Payload::Error(
                 to_error_detail(err),
             )),
-        }))
-        .await;
+        }),
+    )
+    .await;
 }
 
 // ============================================================================
@@ -391,6 +422,8 @@ pub struct MarketQuoteStreamGrpcService {
     credentials: Option<Arc<dyn CredentialVerifier>>,
     clock: Arc<dyn BlotterClock>,
     units: AnalysisUnits,
+    shutdown_rx: Option<watch::Receiver<bool>>,
+    stream_drain_tx: Option<mpsc::Sender<()>>,
 }
 
 impl MarketQuoteStreamGrpcService {
@@ -406,6 +439,8 @@ impl MarketQuoteStreamGrpcService {
             credentials: Some(credentials),
             clock,
             units,
+            shutdown_rx: None,
+            stream_drain_tx: None,
         }
     }
 
@@ -416,7 +451,21 @@ impl MarketQuoteStreamGrpcService {
             credentials: None,
             clock,
             units,
+            shutdown_rx: None,
+            stream_drain_tx: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_shutdown_signal(mut self, shutdown_rx: watch::Receiver<bool>) -> Self {
+        self.shutdown_rx = Some(shutdown_rx);
+        self
+    }
+
+    #[must_use]
+    pub fn with_stream_drain_guard(mut self, drain_tx: mpsc::Sender<()>) -> Self {
+        self.stream_drain_tx = Some(drain_tx);
+        self
     }
 
     fn execute_pull(
@@ -461,6 +510,7 @@ impl MarketQuoteStreamService for MarketQuoteStreamGrpcService {
         }))
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn stream_market_quotes(
         &self,
         request: Request<pb::StreamMarketQuotesRequest>,
@@ -470,30 +520,37 @@ impl MarketQuoteStreamService for MarketQuoteStreamGrpcService {
         let credentials = self.credentials.clone();
         let clock = self.clock.clone();
         let units = self.units.clone();
+        let mut producer_shutdown = self.shutdown_rx.clone();
+        let stream_shutdown = self.shutdown_rx.clone();
+        let drain_guard_clone = self.stream_drain_tx.clone();
         let metadata = request.metadata().clone();
         let req = request.into_inner();
 
         tokio::spawn(async move {
+            let _drain_guard = drain_guard_clone;
+            if is_shutting_down(producer_shutdown.as_ref()) {
+                return;
+            }
             let Some(backend) = backend else {
-                send_quote_stream_err(&tx, &storage_unavailable()).await;
+                send_quote_stream_err(&tx, &mut producer_shutdown, &storage_unavailable()).await;
                 return;
             };
             let Some(verifier) = credentials else {
-                send_quote_stream_err(&tx, &storage_unavailable()).await;
+                send_quote_stream_err(&tx, &mut producer_shutdown, &storage_unavailable()).await;
                 return;
             };
 
             let token = match extract_bearer_token(&metadata) {
                 Ok(tok) => tok,
                 Err(err) => {
-                    send_quote_stream_err(&tx, &err).await;
+                    send_quote_stream_err(&tx, &mut producer_shutdown, &err).await;
                     return;
                 }
             };
             let principal = match verifier.verify_bearer(&token, &clock.now()) {
                 Ok(p) => p,
                 Err(err) => {
-                    send_quote_stream_err(&tx, &err).await;
+                    send_quote_stream_err(&tx, &mut producer_shutdown, &err).await;
                     return;
                 }
             };
@@ -501,49 +558,57 @@ impl MarketQuoteStreamService for MarketQuoteStreamGrpcService {
                 &principal,
                 &[PrincipalRole::FeedAdapter, PrincipalRole::Operator],
             ) {
-                send_quote_stream_err(&tx, &err).await;
+                send_quote_stream_err(&tx, &mut producer_shutdown, &err).await;
                 return;
             }
             let mut cursor = match parse_quote_cursor(req.cursor.as_ref()) {
                 Ok(c) => c,
                 Err(err) => {
-                    send_quote_stream_err(&tx, &err).await;
+                    send_quote_stream_err(&tx, &mut producer_shutdown, &err).await;
                     return;
                 }
             };
             if !principal.can_access_source(&cursor.source_id) {
-                send_quote_stream_err(&tx, &forbidden()).await;
+                send_quote_stream_err(&tx, &mut producer_shutdown, &forbidden()).await;
                 return;
             }
 
             loop {
+                if is_shutting_down(producer_shutdown.as_ref()) {
+                    return;
+                }
                 let page = match backend.pull_market_quotes(&cursor, MAX_SPI_PAGE_SIZE) {
                     Ok(p) => p,
                     Err(err) => {
-                        send_quote_stream_err(&tx, &err).await;
+                        send_quote_stream_err(&tx, &mut producer_shutdown, &err).await;
                         return;
                     }
                 };
                 for tick in &page.ticks {
+                    if is_shutting_down(producer_shutdown.as_ref()) {
+                        return;
+                    }
                     let live_principal = match verifier.verify_bearer(&token, &clock.now()) {
                         Ok(p) => p,
                         Err(err) => {
-                            send_quote_stream_err(&tx, &err).await;
+                            send_quote_stream_err(&tx, &mut producer_shutdown, &err).await;
                             return;
                         }
                     };
                     if !live_principal.can_access_source(&cursor.source_id) {
-                        send_quote_stream_err(&tx, &forbidden()).await;
+                        send_quote_stream_err(&tx, &mut producer_shutdown, &forbidden()).await;
                         return;
                     }
-                    if tx
-                        .send(Ok(pb::StreamMarketQuotesResponse {
+                    if !send_or_shutdown(
+                        &tx,
+                        &mut producer_shutdown,
+                        Ok(pb::StreamMarketQuotesResponse {
                             payload: Some(pb::stream_market_quotes_response::Payload::Tick(
                                 to_pb_market_quote_tick(tick, &units),
                             )),
-                        }))
-                        .await
-                        .is_err()
+                        }),
+                    )
+                    .await
                     {
                         return;
                     }
@@ -554,33 +619,43 @@ impl MarketQuoteStreamService for MarketQuoteStreamGrpcService {
                 }
             }
 
-            let _ = tx
-                .send(Ok(pb::StreamMarketQuotesResponse {
+            let _ = send_or_shutdown(
+                &tx,
+                &mut producer_shutdown,
+                Ok(pb::StreamMarketQuotesResponse {
                     payload: Some(pb::stream_market_quotes_response::Payload::Heartbeat(
                         pb::QuoteHeartbeat {
                             cursor: Some(to_pb_quote_cursor(&cursor)),
                             server_time: Some(to_pb_market_time(&clock.now())),
                         },
                     )),
-                }))
-                .await;
+                }),
+            )
+            .await;
         });
 
-        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+        Ok(Response::new(Box::pin(ShutdownAwareStream::new(
+            rx,
+            stream_shutdown,
+        ))))
     }
 }
 
 async fn send_quote_stream_err(
     tx: &mpsc::Sender<Result<pb::StreamMarketQuotesResponse, Status>>,
+    shutdown_rx: &mut Option<watch::Receiver<bool>>,
     err: &ApplicationError,
 ) {
-    let _ = tx
-        .send(Ok(pb::StreamMarketQuotesResponse {
+    let _ = send_or_shutdown(
+        tx,
+        shutdown_rx,
+        Ok(pb::StreamMarketQuotesResponse {
             payload: Some(pb::stream_market_quotes_response::Payload::Error(
                 to_error_detail(err),
             )),
-        }))
-        .await;
+        }),
+    )
+    .await;
 }
 
 // ============================================================================
