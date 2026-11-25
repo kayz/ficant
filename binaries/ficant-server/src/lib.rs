@@ -13,16 +13,19 @@
     clippy::module_name_repetitions
 )]
 
+pub mod cli;
 pub mod clock;
 pub mod policy;
 pub mod store_adapter;
+pub mod web_ui;
 
 use std::env;
 use std::fs;
-use std::net::{SocketAddr, TcpStream};
+use std::io::{BufRead, Read, Write};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ficant_api::{
     BlotterStorePort, DeskBlotterGrpcService, DeskBlotterServiceConfig,
@@ -57,19 +60,34 @@ use ficant_funding_pack::FundingRulePackV1Parser;
 use ficant_regulatory_pack::RegulatoryRulePackV1Parser;
 use ficant_tax_pack::TaxRulePackV2Parser;
 use tokio::net::TcpListener;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::Server;
 
+pub use cli::{
+    CliCommand, parse_cli_args, parse_cli_args_os, run_sqlite_rollover_json,
+    run_verify_sqlite_archive_json,
+};
 pub use clock::SystemBlotterClock;
 pub use policy::{
     AccountPolicyJson, AccountPolicyOverrideJson, BlotterConfigJson, DeskBlotterPolicyFile,
     DeskBlotterPolicyRuntime, EMBEDDED_DEFAULT_POLICY_JSON, RulePackBindingJson,
 };
 pub use store_adapter::{DEFAULT_EVENT_BUS_CAPACITY, SqliteBlotterRuntime};
+pub use web_ui::{
+    AssetLoadHookStage, HttpEdgeLayer, HttpEdgeState, MAX_WEB_ASSETS_FILE_COUNT,
+    MAX_WEB_ASSETS_TOTAL_BYTES, PINNED_RULEPACK_ASSET_PATH, PINNED_RULEPACK_PAYLOAD_BYTES,
+    PINNED_RULEPACK_PAYLOAD_SHA256, WebAsset, WebAssetCatalog, WebUiConfig, WebUiMode,
+    embedded_assets_count, load_web_asset_catalog_from_dir,
+    load_web_asset_catalog_from_dir_with_hook, parse_optional_bool_env, parse_web_ui_env_values,
+    resolve_web_ui, resolve_web_ui_with_embedded, sanitize_static_request_path,
+    web_ui_config_from_env,
+};
 
 pub const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:50051";
 pub const DEFAULT_WATCHDOG_INTERVAL: Duration = Duration::from_secs(5);
+pub const DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+pub const DEFAULT_HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Storage operating mode for Desk Blotter.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -82,6 +100,17 @@ pub enum BlotterStorageMode {
     PersistentWal { db_path: PathBuf },
     /// Explicit isolated ephemeral in-memory `SQLite` database (reusing identical DDL).
     EphemeralInMemory,
+}
+
+impl BlotterStorageMode {
+    #[must_use]
+    pub const fn as_healthz_str(&self) -> &'static str {
+        match self {
+            Self::Disabled => "disabled",
+            Self::PersistentWal { .. } => "persistent_wal",
+            Self::EphemeralInMemory => "ephemeral_in_memory",
+        }
+    }
 }
 
 /// Optional reference SPI backend implementations mounted alongside `DeskBlotterService`.
@@ -131,8 +160,11 @@ impl FicantServerConfig {
 /// Handle to a running single-port `ficant-server` instance.
 pub struct ServerHandle {
     addr: SocketAddr,
+    web_ui_mode: WebUiMode,
     runtime: Option<Arc<SqliteBlotterRuntime>>,
     watchdog: Option<WatchdogController>,
+    stream_shutdown_tx: Option<watch::Sender<bool>>,
+    stream_drain_rx: Option<mpsc::Receiver<()>>,
     shutdown_tx: Option<oneshot::Sender<()>>,
     join_handle: Option<tokio::task::JoinHandle<Result<(), String>>>,
 }
@@ -141,6 +173,11 @@ impl ServerHandle {
     #[must_use]
     pub const fn addr(&self) -> SocketAddr {
         self.addr
+    }
+
+    #[must_use]
+    pub const fn web_ui_mode(&self) -> WebUiMode {
+        self.web_ui_mode
     }
 
     #[must_use]
@@ -153,21 +190,67 @@ impl ServerHandle {
         self.watchdog.as_ref()
     }
 
-    /// Gracefully shuts down the gRPC server, background watchdog, and releases any exclusive WAL
-    /// file lock cleanly.
+    /// Gracefully shuts down active streams, background watchdog, and the gRPC/HTTP server within
+    /// a bounded 5-second drain budget, deterministically releasing any exclusive WAL and
+    /// companion rollover locks (`F-09`).
     pub async fn shutdown(mut self) -> Result<(), String> {
-        if let Some(wd) = self.watchdog.take() {
-            wd.shutdown();
+        let deadline = tokio::time::Instant::now() + DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
+
+        if let Some(tx) = self.stream_shutdown_tx.take() {
+            let _ = tx.send(true);
+        }
+        if let Some(wd) = self.watchdog.take()
+            && tokio::time::timeout_at(deadline, wd.shutdown_and_wait())
+                .await
+                .is_err()
+        {
+            return Err("watchdog shutdown timed out".to_owned());
         }
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(());
         }
-        if let Some(jh) = self.join_handle.take() {
-            jh.await
-                .map_err(|err| format!("server task join failed: {err}"))??;
+        if let Some(mut jh) = self.join_handle.take() {
+            if let Ok(joined) = tokio::time::timeout_at(deadline, &mut jh).await {
+                joined.map_err(|err| format!("server task join failed: {err}"))??;
+            } else {
+                jh.abort();
+                return Err("server graceful shutdown drain timed out".to_owned());
+            }
+        }
+        if let Some(mut rx) = self.stream_drain_rx.take()
+            && tokio::time::timeout_at(deadline, rx.recv()).await.is_err()
+        {
+            return Err("active stream task drain timed out".to_owned());
         }
         drop(self.runtime.take());
         Ok(())
+    }
+
+    async fn wait_until_shutdown_or_exit(
+        mut self,
+        shutdown_signal: oneshot::Receiver<()>,
+    ) -> Result<(), String> {
+        if let Some(mut jh) = self.join_handle.take() {
+            tokio::select! {
+                res = &mut jh => {
+                    if let Some(tx) = self.stream_shutdown_tx.take() {
+                        let _ = tx.send(true);
+                    }
+                    if let Some(wd) = self.watchdog.take() {
+                        wd.shutdown_and_wait().await;
+                    }
+                    drop(self.runtime.take());
+                    res.map_err(|err| format!("server task join failed: {err}"))??;
+                    Ok(())
+                }
+                _ = shutdown_signal => {
+                    self.join_handle = Some(jh);
+                    self.shutdown().await
+                }
+            }
+        } else {
+            self.shutdown().await
+        }
     }
 }
 
@@ -197,16 +280,29 @@ pub fn build_blotter_engines() -> OwnedBlotterEngines {
 
 /// Starts a server in background on `config.listen_addr` (supports `127.0.0.1:0` ephemeral port),
 /// performing fail-closed validation, WAL opening, and startup policy reconciliation BEFORE
-/// accepting any incoming requests.
-#[allow(clippy::too_many_lines)]
+/// accepting any incoming requests. Defaults static Web UI to [`WebUiConfig::Disabled`] for
+/// backward compatibility.
 pub async fn spawn_server(config: FicantServerConfig) -> Result<ServerHandle, String> {
+    spawn_server_with_web_ui(config, WebUiConfig::Disabled).await
+}
+
+/// Starts a single-port `ficant-server` with explicit [`WebUiConfig`] (`F-10`, `F-15`, `F-09`).
+#[allow(clippy::too_many_lines)]
+pub async fn spawn_server_with_web_ui(
+    config: FicantServerConfig,
+    web_ui: WebUiConfig,
+) -> Result<ServerHandle, String> {
     config.service_config.validate()?;
+    let (web_ui_mode, catalog) = resolve_web_ui(&web_ui)?;
     let reference_units = match config.spi_backends.spi_units.clone() {
         Some(u) => u,
         None => default_reference_analysis_units()
             .map_err(|_| "failed to construct default analysis units".to_owned())?,
     };
 
+    let (stream_shutdown_tx, stream_shutdown_rx) = watch::channel(false);
+    let (stream_drain_tx, stream_drain_rx) = mpsc::channel::<()>(1);
+    let storage_mode_str = config.storage_mode.as_healthz_str();
     let rates_svc = RatesAnalyticsServiceServer::new(build_rates_service());
 
     let (
@@ -229,14 +325,22 @@ pub async fn spawn_server(config: FicantServerConfig) -> Result<ServerHandle, St
             PositionBaseProviderServiceServer::new(PositionBaseProviderGrpcService::disabled(
                 config.clock.clone(),
             )),
-            TradeFeedReconcilerServiceServer::new(TradeFeedReconcilerGrpcService::disabled(
-                config.clock.clone(),
-                reference_units.clone(),
-            )),
-            MarketQuoteStreamServiceServer::new(MarketQuoteStreamGrpcService::disabled(
-                config.clock.clone(),
-                reference_units.clone(),
-            )),
+            TradeFeedReconcilerServiceServer::new(
+                TradeFeedReconcilerGrpcService::disabled(
+                    config.clock.clone(),
+                    reference_units.clone(),
+                )
+                .with_shutdown_signal(stream_shutdown_rx.clone())
+                .with_stream_drain_guard(stream_drain_tx.clone()),
+            ),
+            MarketQuoteStreamServiceServer::new(
+                MarketQuoteStreamGrpcService::disabled(
+                    config.clock.clone(),
+                    reference_units.clone(),
+                )
+                .with_shutdown_signal(stream_shutdown_rx.clone())
+                .with_stream_drain_guard(stream_drain_tx.clone()),
+            ),
             IntranetNlpIntentParserServiceServer::new(
                 IntranetNlpIntentParserGrpcService::disabled(
                     config.clock.clone(),
@@ -256,7 +360,14 @@ pub async fn spawn_server(config: FicantServerConfig) -> Result<ServerHandle, St
                 format!("failed to open blotter WAL store: {:?}", err.category())
             })?);
             let credentials_port: Arc<dyn CredentialVerifier> = credentials;
-            build_enabled_blotter_stack(store, credentials_port, &config, reference_units)?
+            build_enabled_blotter_stack(
+                store,
+                credentials_port,
+                &config,
+                reference_units,
+                &stream_shutdown_rx,
+                &stream_drain_tx,
+            )?
         }
         BlotterStorageMode::EphemeralInMemory => {
             let credentials = config.credentials.clone().ok_or_else(|| {
@@ -273,9 +384,17 @@ pub async fn spawn_server(config: FicantServerConfig) -> Result<ServerHandle, St
                 )
             })?);
             let credentials_port: Arc<dyn CredentialVerifier> = credentials;
-            build_enabled_blotter_stack(store, credentials_port, &config, reference_units)?
+            build_enabled_blotter_stack(
+                store,
+                credentials_port,
+                &config,
+                reference_units,
+                &stream_shutdown_rx,
+                &stream_drain_tx,
+            )?
         }
     };
+    drop(stream_drain_tx);
 
     let listener = TcpListener::bind(config.listen_addr)
         .await
@@ -287,8 +406,17 @@ pub async fn spawn_server(config: FicantServerConfig) -> Result<ServerHandle, St
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
+    let edge_state = HttpEdgeState {
+        storage_mode_str,
+        runtime: runtime_opt.clone(),
+        web_ui_mode,
+        catalog,
+        embedded_assets_count: embedded_assets_count(),
+    };
+
     let mut router = Server::builder()
         .accept_http1(true)
+        .layer(HttpEdgeLayer::new(edge_state))
         .layer(tonic_web::GrpcWebLayer::new())
         .add_service(rates_svc)
         .add_service(pos_svc)
@@ -313,8 +441,11 @@ pub async fn spawn_server(config: FicantServerConfig) -> Result<ServerHandle, St
 
     Ok(ServerHandle {
         addr: bound_addr,
+        web_ui_mode,
         runtime: runtime_opt,
         watchdog: watchdog_opt,
+        stream_shutdown_tx: Some(stream_shutdown_tx),
+        stream_drain_rx: Some(stream_drain_rx),
         shutdown_tx: Some(shutdown_tx),
         join_handle: Some(join_handle),
     })
@@ -336,6 +467,8 @@ fn build_enabled_blotter_stack(
     credentials: Arc<dyn CredentialVerifier>,
     config: &FicantServerConfig,
     reference_units: AnalysisUnits,
+    stream_shutdown_rx: &watch::Receiver<bool>,
+    stream_drain_tx: &mpsc::Sender<()>,
 ) -> Result<EnabledStackTuple, String> {
     let engines = build_blotter_engines();
     let runtime = Arc::new(SqliteBlotterRuntime::new(store, config.event_bus_capacity));
@@ -356,7 +489,9 @@ fn build_enabled_blotter_stack(
         config.clock.clone(),
         engines.clone(),
         config.service_config.clone(),
-    )?;
+    )?
+    .with_shutdown_signal(stream_shutdown_rx.clone())
+    .with_stream_drain_guard(stream_drain_tx.clone());
 
     let watchdog = spawn_blotter_watchdog(
         runtime.clone(),
@@ -396,18 +531,26 @@ fn build_enabled_blotter_stack(
             credentials.clone(),
             config.clock.clone(),
         )),
-        TradeFeedReconcilerServiceServer::new(TradeFeedReconcilerGrpcService::new(
-            feed_port,
-            credentials.clone(),
-            config.clock.clone(),
-            reference_units.clone(),
-        )),
-        MarketQuoteStreamServiceServer::new(MarketQuoteStreamGrpcService::new(
-            quote_port,
-            credentials.clone(),
-            config.clock.clone(),
-            reference_units.clone(),
-        )),
+        TradeFeedReconcilerServiceServer::new(
+            TradeFeedReconcilerGrpcService::new(
+                feed_port,
+                credentials.clone(),
+                config.clock.clone(),
+                reference_units.clone(),
+            )
+            .with_shutdown_signal(stream_shutdown_rx.clone())
+            .with_stream_drain_guard(stream_drain_tx.clone()),
+        ),
+        MarketQuoteStreamServiceServer::new(
+            MarketQuoteStreamGrpcService::new(
+                quote_port,
+                credentials.clone(),
+                config.clock.clone(),
+                reference_units.clone(),
+            )
+            .with_shutdown_signal(stream_shutdown_rx.clone())
+            .with_stream_drain_guard(stream_drain_tx.clone()),
+        ),
         IntranetNlpIntentParserServiceServer::new(IntranetNlpIntentParserGrpcService::new(
             nlp_port,
             credentials,
@@ -476,16 +619,137 @@ pub async fn serve_addr(addr: SocketAddr) -> Result<(), String> {
     Ok(())
 }
 
+/// Maps an unspecified listen address (`0.0.0.0:p` or `[::]:p`) to its corresponding loopback
+/// address (`127.0.0.1:p` or `[::1]:p`) for `--health-check` probing (`AC-004`).
+#[must_use]
+pub const fn map_health_check_addr(addr: SocketAddr) -> SocketAddr {
+    match addr {
+        SocketAddr::V4(v4) if v4.ip().is_unspecified() => {
+            SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::LOCALHOST), v4.port())
+        }
+        SocketAddr::V6(v6) if v6.ip().is_unspecified() => {
+            SocketAddr::new(std::net::IpAddr::V6(Ipv6Addr::LOCALHOST), v6.port())
+        }
+        other => other,
+    }
+}
+
+/// Sends a bounded HTTP/1.1 `GET /healthz` probe to `addr` and validates HTTP `200`,
+/// `status == "ok"`, `blotter_healthy == true`, and `service == "ficant-server"`.
+pub fn probe_healthz(addr: SocketAddr, timeout: Duration) -> Result<(), String> {
+    let probe = map_health_check_addr(addr);
+    let deadline = Instant::now() + timeout;
+    let remaining = || -> Result<Duration, String> {
+        deadline
+            .checked_duration_since(Instant::now())
+            .filter(|d| !d.is_zero())
+            .ok_or_else(|| format!("health check timed out for {probe}"))
+    };
+
+    let mut stream = TcpStream::connect_timeout(&probe, remaining()?)
+        .map_err(|err| format!("health check failed for {probe}: {err}"))?;
+    stream
+        .set_write_timeout(Some(remaining()?))
+        .map_err(|err| format!("health check failed to set write timeout: {err}"))?;
+    stream
+        .set_read_timeout(Some(remaining()?))
+        .map_err(|err| format!("health check failed to set read timeout: {err}"))?;
+
+    let req = format!("GET /healthz HTTP/1.1\r\nHost: {probe}\r\nConnection: close\r\n\r\n");
+    stream
+        .write_all(req.as_bytes())
+        .map_err(|err| format!("health check write failed for {probe}: {err}"))?;
+    stream
+        .flush()
+        .map_err(|err| format!("health check flush failed for {probe}: {err}"))?;
+
+    let mut raw = Vec::new();
+    let mut buf = [0_u8; 4096];
+    loop {
+        stream
+            .set_read_timeout(Some(remaining()?))
+            .map_err(|err| format!("health check failed to update read timeout: {err}"))?;
+        match stream.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                if raw.len().saturating_add(n) > 64 * 1024 {
+                    return Err("health check response exceeded 64 KiB limit".to_owned());
+                }
+                raw.extend_from_slice(&buf[..n]);
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(err) => return Err(format!("health check read failed for {probe}: {err}")),
+        }
+    }
+
+    let Some(sep) = raw.windows(4).position(|w| w == b"\r\n\r\n") else {
+        return Err(format!("malformed HTTP response from {probe}/healthz"));
+    };
+    let head = std::str::from_utf8(&raw[..sep])
+        .map_err(|_| format!("non-UTF-8 HTTP headers from {probe}/healthz"))?;
+    let status_line = head.lines().next().unwrap_or("");
+    let status_code = status_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse::<u16>().ok())
+        .ok_or_else(|| format!("invalid HTTP status line '{status_line}'"))?;
+    if status_code != 200 {
+        return Err(format!("healthz returned HTTP {status_code}"));
+    }
+
+    let body_raw = &raw[sep + 4..];
+    let body_bytes = if head
+        .to_ascii_lowercase()
+        .contains("transfer-encoding: chunked")
+    {
+        decode_chunked_body(body_raw)?
+    } else {
+        body_raw.to_vec()
+    };
+
+    let json: serde_json::Value = serde_json::from_slice(&body_bytes)
+        .map_err(|err| format!("invalid JSON from /healthz: {err}"))?;
+    let status = json.get("status").and_then(serde_json::Value::as_str);
+    let service = json.get("service").and_then(serde_json::Value::as_str);
+    let blotter_healthy = json
+        .get("blotter_healthy")
+        .and_then(serde_json::Value::as_bool);
+
+    if status != Some("ok") || service != Some("ficant-server") || blotter_healthy != Some(true) {
+        return Err(format!(
+            "unhealthy /healthz response: status={status:?}, service={service:?}, blotter_healthy={blotter_healthy:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn decode_chunked_body(mut slice: &[u8]) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    while let Some(pos) = slice.windows(2).position(|w| w == b"\r\n") {
+        let len_str = std::str::from_utf8(&slice[..pos])
+            .map_err(|_| "invalid chunk size encoding".to_owned())?
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim();
+        let sz =
+            usize::from_str_radix(len_str, 16).map_err(|_| "invalid hex chunk size".to_owned())?;
+        slice = &slice[pos + 2..];
+        if sz == 0 {
+            return Ok(out);
+        }
+        if slice.len() < sz + 2 {
+            return Err("truncated chunked body".to_owned());
+        }
+        out.extend_from_slice(&slice[..sz]);
+        slice = &slice[sz + 2..];
+    }
+    Err("unterminated chunked body".to_owned())
+}
+
 pub fn health_check_from_env() -> Result<(), String> {
     let addr = resolve_listen_addr()?;
-    let probe = if addr.ip().is_unspecified() {
-        SocketAddr::from(([127, 0, 0, 1], addr.port()))
-    } else {
-        addr
-    };
-    TcpStream::connect_timeout(&probe, Duration::from_secs(2))
-        .map(|_| ())
-        .map_err(|err| format!("health check failed for {probe}: {err}"))
+    probe_healthz(addr, DEFAULT_HEALTH_CHECK_TIMEOUT)
 }
 
 /// Parses server configuration from environment variables (fail-closed on any invalid or
@@ -577,7 +841,42 @@ pub fn config_from_env() -> Result<FicantServerConfig, String> {
 
 pub async fn entry_from_env() -> Result<(), String> {
     let config = config_from_env()?;
-    let handle = spawn_server(config).await?;
+    let web_ui = web_ui_config_from_env()?;
+    let stdin_shutdown_env = env::var("FICANT_ENABLE_STDIN_SHUTDOWN").ok();
+    let stdin_shutdown_enabled = parse_bool_env(
+        "FICANT_ENABLE_STDIN_SHUTDOWN",
+        stdin_shutdown_env.as_deref(),
+    )?;
+
+    let handle = spawn_server_with_web_ui(config, web_ui).await?;
+    if stdin_shutdown_enabled {
+        let (trigger_tx, trigger_rx) = oneshot::channel::<()>();
+        std::thread::Builder::new()
+            .name("ficant-stdin-shutdown".to_owned())
+            .spawn(move || {
+                let stdin = std::io::stdin();
+                let mut locked = stdin.lock();
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    match locked.read_line(&mut line) {
+                        Ok(0) | Err(_) => {
+                            let _ = trigger_tx.send(());
+                            break;
+                        }
+                        Ok(_) => {
+                            if line.trim_end_matches(['\r', '\n']) == "SHUTDOWN" {
+                                let _ = trigger_tx.send(());
+                                break;
+                            }
+                        }
+                    }
+                }
+            })
+            .map_err(|err| format!("failed to spawn stdin shutdown watcher: {err}"))?;
+        return handle.wait_until_shutdown_or_exit(trigger_rx).await;
+    }
+
     if let Some(jh) = handle.join_handle {
         jh.await
             .map_err(|err| format!("server task join failed: {err}"))??;
@@ -647,11 +946,7 @@ fn load_spi_backends_from_env() -> Result<SpiBackends, String> {
 }
 
 fn parse_bool_env(name: &str, raw: Option<&str>) -> Result<bool, String> {
-    match raw {
-        Some("1" | "true" | "TRUE") => Ok(true),
-        None | Some("0" | "false" | "FALSE" | "") => Ok(false),
-        Some(other) => Err(format!("invalid boolean value '{other}' for {name}")),
-    }
+    Ok(parse_optional_bool_env(name, raw)?.unwrap_or(false))
 }
 
 fn resolve_listen_addr() -> Result<SocketAddr, String> {

@@ -19,12 +19,14 @@ pub use auth::{
     encode_digest_hex, extract_bearer_token, sha256_token_digest,
 };
 pub use blotter::{
-    BlotterStorePort, BlotterWriteOutcome, DEFAULT_MAX_EVENT_ENVELOPE_BYTES,
+    BlotterLedgerIdentity, BlotterStorePort, BlotterWriteOutcome, DEFAULT_MAX_EVENT_ENVELOPE_BYTES,
     DEFAULT_REVERSAL_HEADROOM_BYTES, DEFAULT_STREAM_HEARTBEAT_INTERVAL,
     DEFAULT_SUBSCRIBE_REPLAY_PAGE_SIZE, DEFAULT_SUBSCRIBE_STREAM_CHANNEL_CAPACITY,
     DeskBlotterGrpcService, DeskBlotterServiceConfig, DisabledDeskBlotterGrpcService,
-    OwnedBlotterEngines, SubscribeBarrierSnapshot, SubscribeBarrierTestHook, TxUlidGenerator,
-    WatchdogController, WriteAuthorizeFn, WriteTransitionFn, spawn_blotter_watchdog,
+    EXPECTED_LEDGER_EPOCH_HEADER, EXPECTED_LEDGER_INSTANCE_HEADER, OwnedBlotterEngines,
+    SubscribeBarrierSnapshot, SubscribeBarrierTestHook, TxUlidGenerator, WatchdogController,
+    WriteAuthorizeFn, WriteAuthorizeWithIdentityFn, WriteTransitionFn,
+    extract_expected_ledger_fence, is_canonical_ulid, spawn_blotter_watchdog,
 };
 pub use blotter_spi::{
     IntranetNlpIntentParserGrpcService, MarketQuoteStreamGrpcService,

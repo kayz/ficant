@@ -20,6 +20,9 @@ ficant-fixed-income-native = { path = "../../crates/ficant-fixed-income-native" 
 ficant-funding-pack = { path = "../../crates/ficant-funding-pack" }
 ficant-regulatory-pack = { path = "../../crates/ficant-regulatory-pack" }
 ficant-tax-pack = { path = "../../crates/ficant-tax-pack" }
+http = { workspace = true }
+http-body = "=1.1.0"
+http-body-util = { workspace = true }
 prost = { workspace = true }
 prost-types = { workspace = true }
 serde = { workspace = true }
@@ -29,11 +32,14 @@ tokio = { workspace = true, features = ["net", "io-util"] }
 tokio-stream = { workspace = true }
 tonic = { workspace = true, features = ["router"] }
 tonic-web = { workspace = true }
+tower-layer = { workspace = true }
+tower-service = "=0.3.3"
 ulid = { workspace = true }
 
+[build-dependencies]
+sha2 = { workspace = true }
+
 [dev-dependencies]
-http = { workspace = true }
-http-body-util = { workspace = true }
 rust_decimal = { workspace = true }
 tempfile = { workspace = true }
 

@@ -16,11 +16,13 @@ use std::time::Duration;
 use chrono::{NaiveDate, TimeZone};
 use chrono_tz::Asia::Shanghai;
 use ficant_api::{
-    AUTHORIZATION_HEADER, BlotterStorePort, BlotterWriteOutcome, CredentialEntry,
-    DeskBlotterGrpcService, DeskBlotterServiceConfig, FICANT_CREDENTIAL_HEADER,
+    AUTHORIZATION_HEADER, BlotterLedgerIdentity, BlotterStorePort, BlotterWriteOutcome,
+    CredentialEntry, DeskBlotterGrpcService, DeskBlotterServiceConfig,
+    EXPECTED_LEDGER_EPOCH_HEADER, EXPECTED_LEDGER_INSTANCE_HEADER, FICANT_CREDENTIAL_HEADER,
     IntranetNlpIntentParserGrpcService, MarketQuoteStreamGrpcService, OwnedBlotterEngines,
     PositionBaseProviderGrpcService, StaticCredentialVerifier, SubscribeBarrierSnapshot,
-    TradeFeedReconcilerGrpcService, WriteAuthorizeFn, WriteTransitionFn,
+    TradeFeedReconcilerGrpcService, WriteAuthorizeFn, WriteAuthorizeWithIdentityFn,
+    WriteTransitionFn, extract_expected_ledger_fence, is_canonical_ulid,
 };
 use ficant_application::ports::{
     ApplicationResult, BlotterEventJournalPort, DeskBlotterPolicyProvider, IdempotencyScopeKey,
@@ -117,6 +119,35 @@ impl BlotterStorePort for TestStoreAdapter {
         let outcome = self
             .store
             .execute_write_authorized(idempotency, authorize, transition)?;
+        Ok(match outcome {
+            WriteExecutionOutcome::Committed {
+                value,
+                committed_seq,
+            } => BlotterWriteOutcome::Committed {
+                response_bytes: value,
+                committed_seq,
+            },
+            WriteExecutionOutcome::Replayed(r) => BlotterWriteOutcome::Replayed(r),
+        })
+    }
+
+    fn execute_write_authorized_with_identity_bytes(
+        &self,
+        idempotency: Option<(&IdempotencyScopeKey, &ContentHash)>,
+        authorize: WriteAuthorizeWithIdentityFn,
+        transition: WriteTransitionFn,
+    ) -> ApplicationResult<BlotterWriteOutcome> {
+        let outcome = self.store.execute_write_authorized_with_identity(
+            idempotency,
+            |state, id| {
+                let api_id = BlotterLedgerIdentity {
+                    ledger_epoch: id.ledger_epoch,
+                    ledger_instance_id: id.ledger_instance_id.clone(),
+                };
+                authorize(state, &api_id)
+            },
+            transition,
+        )?;
         Ok(match outcome {
             WriteExecutionOutcome::Committed {
                 value,
@@ -4293,4 +4324,485 @@ async fn set_feed_control_enforces_pre_idempotency_affected_account_rbac_on_shar
         Some(pb::set_feed_control_response::Result::Value(ref v))
         if !v.feed_status.as_ref().unwrap().paused_by_operator
     ));
+}
+
+// ============================================================================
+// BP-4 F-08 / F-22(3) / AC-008: Server-Enforced Ledger Epoch/Instance Fence
+// ============================================================================
+
+fn with_bearer_and_fence<T>(
+    msg: T,
+    token: &str,
+    epoch: Option<&str>,
+    instance: Option<&str>,
+) -> Request<T> {
+    let mut req = with_bearer(msg, token);
+    if let Some(e) = epoch {
+        req.metadata_mut().insert(
+            EXPECTED_LEDGER_EPOCH_HEADER,
+            MetadataValue::try_from(e).unwrap(),
+        );
+    }
+    if let Some(i) = instance {
+        req.metadata_mut().insert(
+            EXPECTED_LEDGER_INSTANCE_HEADER,
+            MetadataValue::try_from(i).unwrap(),
+        );
+    }
+    req
+}
+
+#[tokio::test]
+async fn bp4_f08_ledger_fence_enforced_across_all_three_sidecar_write_rpcs_with_zero_writes() {
+    // 1. Unit assertions on metadata parser
+    assert!(is_canonical_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+    assert!(!is_canonical_ulid("01arz3ndektsv4rrffq69g5fav")); // lowercase
+    assert!(!is_canonical_ulid("01ARZ3NDEKTSV4RRFFQ69G5FA")); // 25 chars
+    assert!(!is_canonical_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAI")); // 'I' invalid Crockford
+    assert!(!is_canonical_ulid("81ARZ3NDEKTSV4RRFFQ69G5FAV")); // overflow first char > '7'
+
+    let empty_meta = tonic::metadata::MetadataMap::new();
+    assert_eq!(extract_expected_ledger_fence(&empty_meta).unwrap(), None);
+
+    let mut dup_epoch = tonic::metadata::MetadataMap::new();
+    dup_epoch.append(
+        EXPECTED_LEDGER_EPOCH_HEADER,
+        MetadataValue::try_from("1").unwrap(),
+    );
+    dup_epoch.append(
+        EXPECTED_LEDGER_EPOCH_HEADER,
+        MetadataValue::try_from("1").unwrap(),
+    );
+    dup_epoch.insert(
+        EXPECTED_LEDGER_INSTANCE_HEADER,
+        MetadataValue::try_from("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap(),
+    );
+    assert_eq!(
+        extract_expected_ledger_fence(&dup_epoch)
+            .unwrap_err()
+            .category(),
+        ficant_application::ApplicationErrorCategory::ValidationFailed
+    );
+
+    // 2. Live server tests across IngestMarketQuotes, IngestTradeFeed, SubmitDraftEarmark
+    let policy = Arc::new(TestPolicyProvider::new(default_test_policy(true)));
+    let srv = LiveTestServer::start(policy, DeskBlotterServiceConfig::default(), 1000, 64).await;
+    let mut client = srv.client().await;
+
+    let actual_id = srv.store.ledger_identity().unwrap();
+    let actual_epoch_str = actual_id.ledger_epoch.to_string();
+    let wrong_epoch_str = (actual_id.ledger_epoch + 1).to_string();
+    let wrong_instance = if actual_id.ledger_instance_id == "01ARZ3NDEKTSV4RRFFQ69G5FAV" {
+        "01ARZ3NDEKTSV4RRFFQ69G5F00"
+    } else {
+        "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+    };
+
+    // Import opening base for acct-A so all 3 RPCs can execute cleanly on valid requests.
+    let imp = client
+        .import_opening_base(with_bearer(
+            pb::ImportOpeningBaseRequest {
+                idempotency_key: "f08-imp-a".to_owned(),
+                opening_base: Some(make_opening_base(
+                    "acct-A",
+                    "F8",
+                    "100000000",
+                    "100",
+                    "2030-01-15",
+                    rates_pb::CalendarRequirement::ReferenceReplay,
+                    "2032-12-31",
+                )),
+                expected_account_version: 0,
+            },
+            OPERATOR_TOKEN,
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(matches!(
+        imp.result,
+        Some(pb::import_opening_base_response::Result::Value(_))
+    ));
+
+    let u = pb_units();
+    let cur = u.currency_amount.as_ref().unwrap();
+    let rate = u.rate.as_ref().unwrap();
+
+    // --- RPC 1: IngestMarketQuotes ---
+    let make_quote_req = |idem: &str, seq: u64| pb::IngestMarketQuotesRequest {
+        idempotency_key: idem.to_owned(),
+        account_id: "acct-A".to_owned(),
+        source_id: "Q-SHARED".to_owned(),
+        ticks: vec![pb::MarketQuoteTick {
+            source_id: "Q-SHARED".to_owned(),
+            quote_seq: seq,
+            instrument_code: "BOND_10Y".to_owned(),
+            source_type: market_pb::PriceSourceType::ActiveQuote as i32,
+            bid_clean_price: None,
+            ask_clean_price: None,
+            mid_clean_price: None,
+            mid_yield_to_maturity: Some(dec("0.025", rate)),
+            observed_at: Some(pb_time(2026, 6, 15, 9, 59, 0)),
+            received_at: Some(pb_time(2026, 6, 15, 9, 59, 5)),
+        }],
+    };
+
+    let head_before_q = srv.store.head_seq().unwrap();
+    // Malformed / half-present headers -> VALIDATION_FAILED, zero writes
+    for (ep, inst) in [
+        (Some(actual_epoch_str.as_str()), None),
+        (None, Some(actual_id.ledger_instance_id.as_str())),
+        (Some("0"), Some(actual_id.ledger_instance_id.as_str())),
+        (Some("01"), Some(actual_id.ledger_instance_id.as_str())),
+        (Some("+1"), Some(actual_id.ledger_instance_id.as_str())),
+        (
+            Some(actual_epoch_str.as_str()),
+            Some("01arz3ndektsv4rrffq69g5fav"),
+        ),
+    ] {
+        let resp = client
+            .ingest_market_quotes(with_bearer_and_fence(
+                make_quote_req("f08-q-bad", 1),
+                FEED_A_ONLY_TOKEN,
+                ep,
+                inst,
+            ))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(matches!(
+            resp.result,
+            Some(pb::ingest_market_quotes_response::Result::Error(ref e))
+            if extract_err_code(Some(e)) == core_pb::ErrorCode::ValidationFailed && !e.retryable
+        ));
+    }
+    // Wrong epoch & wrong instance -> non-retryable CONCURRENCY_CONFLICT, zero writes
+    for (ep, inst) in [
+        (
+            wrong_epoch_str.as_str(),
+            actual_id.ledger_instance_id.as_str(),
+        ),
+        (actual_epoch_str.as_str(), wrong_instance),
+    ] {
+        let resp = client
+            .ingest_market_quotes(with_bearer_and_fence(
+                make_quote_req("f08-q-conflict", 1),
+                FEED_A_ONLY_TOKEN,
+                Some(ep),
+                Some(inst),
+            ))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(matches!(
+            resp.result,
+            Some(pb::ingest_market_quotes_response::Result::Error(ref e))
+            if extract_err_code(Some(e)) == core_pb::ErrorCode::ConcurrencyConflict && !e.retryable
+        ));
+    }
+    assert_eq!(srv.store.head_seq().unwrap(), head_before_q);
+    assert!(
+        srv.store
+            .with_read_barrier(|s, _, _| s.quotes.history.is_empty())
+            .unwrap()
+    );
+
+    // Same idempotency key with MATCHING fence succeeds with replayed=false (proving zero receipt saved on rejection!)
+    let q_ok = client
+        .ingest_market_quotes(with_bearer_and_fence(
+            make_quote_req("f08-q-conflict", 1),
+            FEED_A_ONLY_TOKEN,
+            Some(&actual_epoch_str),
+            Some(&actual_id.ledger_instance_id),
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(matches!(
+        q_ok.result,
+        Some(pb::ingest_market_quotes_response::Result::Value(ref v)) if !v.replayed && v.applied_tick_count == 1
+    ));
+
+    // Replaying an EXISTING committed idempotency key with STALE fence must STILL fail with
+    // non-retryable CONCURRENCY_CONFLICT (fence runs strictly BEFORE query_idempotency_row!).
+    let q_stale_replay = client
+        .ingest_market_quotes(with_bearer_and_fence(
+            make_quote_req("f08-q-conflict", 1),
+            FEED_A_ONLY_TOKEN,
+            Some(&wrong_epoch_str),
+            Some(&actual_id.ledger_instance_id),
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(matches!(
+        q_stale_replay.result,
+        Some(pb::ingest_market_quotes_response::Result::Error(ref e))
+        if extract_err_code(Some(e)) == core_pb::ErrorCode::ConcurrencyConflict && !e.retryable
+    ));
+
+    // Both headers absent -> legacy compatible
+    let q_legacy = client
+        .ingest_market_quotes(with_bearer(
+            make_quote_req("f08-q-legacy", 2),
+            FEED_A_ONLY_TOKEN,
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(matches!(
+        q_legacy.result,
+        Some(pb::ingest_market_quotes_response::Result::Value(ref v)) if !v.replayed && v.applied_tick_count == 1
+    ));
+
+    // --- RPC 2: IngestTradeFeed ---
+    let px = u.price_per_100.as_ref().unwrap();
+    let dim = u.dimensionless.as_ref().unwrap();
+    let make_trade_req = |idem: &str, feed_seq: u64, ext_id: &str| pb::IngestTradeFeedRequest {
+        idempotency_key: idem.to_owned(),
+        source_id: "SRC-SHARED".to_owned(),
+        fills: vec![pb::TradeFillRecord {
+            source_id: "SRC-SHARED".to_owned(),
+            external_trade_id: ext_id.to_owned(),
+            source_revision: 1,
+            feed_seq,
+            action: pb::TradeFeedRecordAction::NewFill as i32,
+            account_id: "acct-A".to_owned(),
+            instrument_code: "BOND_10Y".to_owned(),
+            side: pb::TradeSide::Buy as i32,
+            settlement_date: "2026-06-15".to_owned(),
+            notional: Some(dec("1000000", cur)),
+            quote_terms: Some(pb::QuoteTerms {
+                price_or_yield: Some(pb::quote_terms::PriceOrYield::CleanPricePer100(dec(
+                    "100.0", px,
+                ))),
+                settlement_amount: Some(dec("1000000", cur)),
+            }),
+            executed_at: Some(pb_time(2026, 6, 15, 9, 58, 0)),
+            batch_first_feed_seq: feed_seq,
+            batch_last_feed_seq: feed_seq,
+        }],
+        heartbeat_at: Some(pb_time(2026, 6, 15, 10, 0, 0)),
+    };
+
+    let head_before_t = srv.store.head_seq().unwrap();
+    // Duplicate instance header -> VALIDATION_FAILED
+    let mut dup_t = with_bearer(
+        make_trade_req("f08-t-bad", 1, "EXT-F08-1"),
+        FEED_A_ONLY_TOKEN,
+    );
+    dup_t.metadata_mut().insert(
+        EXPECTED_LEDGER_EPOCH_HEADER,
+        MetadataValue::try_from(actual_epoch_str.as_str()).unwrap(),
+    );
+    dup_t.metadata_mut().append(
+        EXPECTED_LEDGER_INSTANCE_HEADER,
+        MetadataValue::try_from(actual_id.ledger_instance_id.as_str()).unwrap(),
+    );
+    dup_t.metadata_mut().append(
+        EXPECTED_LEDGER_INSTANCE_HEADER,
+        MetadataValue::try_from(actual_id.ledger_instance_id.as_str()).unwrap(),
+    );
+    let t_dup_resp = client.ingest_trade_feed(dup_t).await.unwrap().into_inner();
+    assert!(matches!(
+        t_dup_resp.result,
+        Some(pb::ingest_trade_feed_response::Result::Error(ref e))
+        if extract_err_code(Some(e)) == core_pb::ErrorCode::ValidationFailed && !e.retryable
+    ));
+
+    // Wrong instance -> non-retryable CONCURRENCY_CONFLICT, zero rows / events / head_seq
+    let t_conflict = client
+        .ingest_trade_feed(with_bearer_and_fence(
+            make_trade_req("f08-t-conflict", 1, "EXT-F08-1"),
+            FEED_A_ONLY_TOKEN,
+            Some(&actual_epoch_str),
+            Some(wrong_instance),
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(matches!(
+        t_conflict.result,
+        Some(pb::ingest_trade_feed_response::Result::Error(ref e))
+        if extract_err_code(Some(e)) == core_pb::ErrorCode::ConcurrencyConflict && !e.retryable
+    ));
+    assert_eq!(srv.store.head_seq().unwrap(), head_before_t);
+    assert!(
+        srv.store
+            .with_read_barrier(|s, _, _| {
+                s.domain
+                    .feeds
+                    .get("SRC-SHARED")
+                    .is_none_or(|f| f.raw_packets.is_empty())
+            })
+            .unwrap()
+    );
+
+    // Matching fence with same idempotency_key commits cleanly with replayed=false
+    let t_ok = client
+        .ingest_trade_feed(with_bearer_and_fence(
+            make_trade_req("f08-t-conflict", 1, "EXT-F08-1"),
+            FEED_A_ONLY_TOKEN,
+            Some(&actual_epoch_str),
+            Some(&actual_id.ledger_instance_id),
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(matches!(
+        t_ok.result,
+        Some(pb::ingest_trade_feed_response::Result::Value(ref v)) if !v.replayed
+    ));
+
+    // --- RPC 3: SubmitDraftEarmark ---
+    let make_draft_req = |idem: &str| pb::SubmitDraftEarmarkRequest {
+        idempotency_key: idem.to_owned(),
+        account_id: "acct-A".to_owned(),
+        proposal: Some(pb::NlpEarmarkProposal {
+            parser_source_id: "test-nlp".to_owned(),
+            model_version: "1.0".to_owned(),
+            raw_source_text: "BUY BOND_10Y 10000000".to_owned(),
+            anchors: vec![pb::SourceTextAnchor {
+                field_name: "instrument_code".to_owned(),
+                byte_start: 4,
+                byte_end: 12,
+                span_text: "BOND_10Y".to_owned(),
+            }],
+            confidence_score: Some(dec("0.95", dim)),
+            account_id: "acct-A".to_owned(),
+            instrument_code: "BOND_10Y".to_owned(),
+            side: pb::TradeSide::Buy as i32,
+            settlement_bucket: pb::SettlementBucket::TPlus0 as i32,
+            notional: Some(dec("10000000", cur)),
+            quote_terms: Some(pb::QuoteTerms {
+                price_or_yield: Some(pb::quote_terms::PriceOrYield::CleanPricePer100(dec(
+                    "100.0", px,
+                ))),
+                settlement_amount: Some(dec("10000000", cur)),
+            }),
+            suggested_target_state: pb::DraftTargetState::Committed as i32,
+        }),
+    };
+
+    let head_before_d = srv.store.head_seq().unwrap();
+    // Half-present header -> VALIDATION_FAILED
+    let d_half = client
+        .submit_draft_earmark(with_bearer_and_fence(
+            make_draft_req("f08-d-bad"),
+            PARSER_TOKEN,
+            Some(&actual_epoch_str),
+            None,
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(matches!(
+        d_half.result,
+        Some(pb::submit_draft_earmark_response::Result::Error(ref e))
+        if extract_err_code(Some(e)) == core_pb::ErrorCode::ValidationFailed && !e.retryable
+    ));
+    // Stale epoch -> non-retryable CONCURRENCY_CONFLICT, zero drafts / receipts / events / head_seq
+    let d_conflict = client
+        .submit_draft_earmark(with_bearer_and_fence(
+            make_draft_req("f08-d-conflict"),
+            PARSER_TOKEN,
+            Some(&wrong_epoch_str),
+            Some(&actual_id.ledger_instance_id),
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(matches!(
+        d_conflict.result,
+        Some(pb::submit_draft_earmark_response::Result::Error(ref e))
+        if extract_err_code(Some(e)) == core_pb::ErrorCode::ConcurrencyConflict && !e.retryable
+    ));
+    assert_eq!(srv.store.head_seq().unwrap(), head_before_d);
+    assert!(
+        srv.store
+            .with_read_barrier(|s, _, _| {
+                s.accounts_meta
+                    .get("acct-A")
+                    .is_none_or(|m| m.drafts.is_empty())
+                    && s.domain
+                        .accounts
+                        .get("acct-A")
+                        .is_none_or(|a| a.drafts.is_empty())
+            })
+            .unwrap()
+    );
+
+    // Matching fence with same idempotency_key succeeds with replayed=false
+    let d_ok = client
+        .submit_draft_earmark(with_bearer_and_fence(
+            make_draft_req("f08-d-conflict"),
+            PARSER_TOKEN,
+            Some(&actual_epoch_str),
+            Some(&actual_id.ledger_instance_id),
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(matches!(
+        d_ok.result,
+        Some(pb::submit_draft_earmark_response::Result::Value(ref v)) if !v.replayed && v.draft.is_some()
+    ));
+}
+
+#[tokio::test]
+async fn bp4_f09_shutdown_watch_terminates_slow_subscriber_with_full_queue() {
+    let policy = Arc::new(TestPolicyProvider::new(default_test_policy(false)));
+    let clock = Arc::new(ManualBlotterClock::new(shanghai_time(
+        2026, 6, 15, 10, 0, 0,
+    )));
+    let verifier = Arc::new(build_test_verifier());
+    let opts = SqliteBlotterOpenOptions::ephemeral_in_memory(policy.blotter_config());
+    let store = Arc::new(SqliteBlotterStore::open(&opts).unwrap());
+    let adapter = Arc::new(TestStoreAdapter::new(store.clone(), 16));
+    let engines = OwnedBlotterEngines {
+        bond_engine: Arc::new(NativeBondAnalyticsEngine),
+        hedge_engine: Arc::new(NativeFuturesHedgeEngine),
+        delivery_rule_parser: Arc::new(CgbFuturesDeliveryRulePackParser),
+        regulatory_rule_parser: Arc::new(RegulatoryRulePackV1Parser),
+    };
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    let (drain_tx, mut drain_rx) = tokio::sync::mpsc::channel::<()>(1);
+    let svc_cfg = DeskBlotterServiceConfig {
+        subscribe_stream_channel_capacity: 1,
+        ..DeskBlotterServiceConfig::default()
+    };
+    let svc = DeskBlotterGrpcService::new(adapter, policy, verifier, clock, engines, svc_cfg)
+        .unwrap()
+        .with_shutdown_signal(shutdown_rx)
+        .with_stream_drain_guard(drain_tx);
+
+    // Open subscription with capacity=1 and intentionally DO NOT read from stream so mpsc fills.
+    let mut stream = svc
+        .subscribe_events(with_bearer(
+            pb::SubscribeEventsRequest {
+                account_id: None,
+                after_seq: 0,
+            },
+            TRADER_AB_TOKEN,
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+
+    // Give spawned producer a moment to push initial heartbeat into capacity=1 channel.
+    tokio::time::sleep(Duration::from_millis(20)).await;
+
+    // Signal shutdown while client has NOT drained the queued heartbeat.
+    let _ = shutdown_tx.send(true);
+    drop(svc);
+
+    // Response stream immediately ends cleanly with None (not hanging!) and drain_rx closes!
+    let next_item = tokio::time::timeout(Duration::from_secs(2), stream.next())
+        .await
+        .expect("stream must terminate promptly on shutdown");
+    assert!(next_item.is_none());
+    let drained = tokio::time::timeout(Duration::from_secs(2), drain_rx.recv())
+        .await
+        .expect("producer task must exit promptly on shutdown");
+    assert!(drained.is_none());
 }
