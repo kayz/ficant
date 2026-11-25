@@ -1,4 +1,4 @@
-"""Typed Python client for the ficant platform."""
+"""Typed Python client and reference intranet sidecars for the ficant platform."""
 
 from .blotter import (
     BlotterError,
@@ -9,14 +9,48 @@ from .blotter import (
     TradeFeedStream,
 )
 from .client import RatesClient, RatesError
+from .sidecar import (
+    AccountUnitsResolver,
+    BackoffPolicy,
+    JsonCheckpointStore,
+    NlpDraftBatchReport,
+    NlpDraftGatewayConfig,
+    NlpDraftGatewaySidecar,
+    NlpDraftOnlyClient,
+    QuoteBatchReport,
+    QuoteStreamConfig,
+    QuoteStreamSidecar,
+    TradeFeedBatchReport,
+    TradeFeedConfig,
+    TradeFeedSidecar,
+    decimal_to_pb,
+    default_reference_units,
+    parse_market_time,
+)
 
 __all__ = [
+    "AccountUnitsResolver",
+    "BackoffPolicy",
     "BlotterError",
     "BlotterEventApplier",
     "BlotterEventStream",
     "DeskBlotterClient",
+    "JsonCheckpointStore",
     "MarketQuoteStream",
+    "NlpDraftBatchReport",
+    "NlpDraftGatewayConfig",
+    "NlpDraftGatewaySidecar",
+    "NlpDraftOnlyClient",
+    "QuoteBatchReport",
+    "QuoteStreamConfig",
+    "QuoteStreamSidecar",
     "RatesClient",
     "RatesError",
+    "TradeFeedBatchReport",
+    "TradeFeedConfig",
+    "TradeFeedSidecar",
     "TradeFeedStream",
+    "decimal_to_pb",
+    "default_reference_units",
+    "parse_market_time",
 ]
