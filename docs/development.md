@@ -10,6 +10,8 @@
 - **Buf `>= 1.56.0`**（校验与构建 `interface/` Protobuf 契约及编码 `domain-packs/`）
 - **uv `>= 0.7`** 与 **Python `3.12`**（运行 `python/` SDK、`python/tests` 及 `tests/oracle/china-rates/` 独立数值对账）
 
+> **Windows Git 换行提示**：`apps/desk-web/vite.config.ts` 对 `apps/desk-web/src/assets/rulepacks/cgb-futures-v2.manifest.json` 校验仓库原始 LF SHA-256。Windows 开发机建议执行 `git config core.autocrlf false`，避免签出为 CRLF 导致前端构建与单文件打包验签失败（详见 [`docs/delivery/intranet-single-binary.md`](delivery/intranet-single-binary.md)）。
+
 ## BP-2 盘中实时簿记（Desk Blotter）架构与组件
 
 在保持 BP-1 利率估值底座零外置依赖的前提下，BP-2 新增以下模块共同构成单进程可运行的盘中实时簿记后端：
@@ -37,18 +39,29 @@
 
 | 环境变量 | 默认值 | 说明 |
 |---|---|---|
-| `FICANT_SERVER_ADDR` | `127.0.0.1:50051` | 单端口监听地址（原生 gRPC + gRPC-Web 共用）；`--health-check` 亦读取该地址（若绑定 `0.0.0.0` 等未指定地址则回环探测 `127.0.0.1:<port>`） |
-| `FICANT_BLOTTER_DB_PATH` | 未设置 | `PersistentWal` 模式的独占 WAL `SQLite` 文件路径（与 `FICANT_BLOTTER_EPHEMERAL_IN_MEMORY` 互斥） |
+| `FICANT_SERVER_ADDR` | `127.0.0.1:50051` | 单端口监听地址（原生 gRPC + gRPC-Web + `/healthz` + 静态 Web UI 共用）；`--health-check` 在 2 秒超时内对同端口发起 HTTP `GET /healthz`（自动将 `0.0.0.0` 映射至 `127.0.0.1`、`[::]` 映射至 `[::1]`） |
+| `FICANT_BLOTTER_DB_PATH` | 未设置 | `PersistentWal` 模式的独占 WAL `SQLite` 文件路径（与 `FICANT_BLOTTER_EPHEMERAL_IN_MEMORY` 互斥；运行时同步持有伴生锁 `<db>.rollover.lock`） |
 | `FICANT_BLOTTER_EPHEMERAL_IN_MEMORY` | `false` | 显式启用 `EphemeralInMemory` 模式（接受 `1`/`true`/`TRUE` 或 `0`/`false`/`FALSE`/空串；与 `FICANT_BLOTTER_DB_PATH` 互斥） |
 | `FICANT_BLOTTER_POLICY_PATH` | 内嵌 Policy B | 外置盘中策略 JSON 文件路径（见下文「外置策略配置」） |
 | `FICANT_BLOTTER_CREDENTIALS_PATH` | 未设置 | 启动期凭证摘要 JSON 文件路径（`schema_version: 1`）；启用 `PersistentWal` 或 `EphemeralInMemory` 时必需 |
 | `FICANT_BLOTTER_EVENT_RETENTION_WINDOW` | `100000` | `blotter_event_journal` 保留的最近事件条数（`DEFAULT_EVENT_RETENTION_WINDOW`） |
 | `FICANT_BLOTTER_WATCHDOG_INTERVAL_MS` | `5000` | 后台生命周期看门狗扫描间隔（毫秒）；设为 `0` 关闭周期扫描，仅响应显式触发 |
+| `FICANT_SERVE_WEB_UI` | 自动（空串） | 控制静态 Web UI 开关（`false`/`0` 最高优先强制禁用；`true`/`1` 要求必须存在外置或内嵌资产否则启动失败；见 [`binaries/ficant-server/src/web_ui.rs`](../binaries/ficant-server/src/web_ui.rs)） |
+| `FICANT_STATIC_WEB_DIR` | 未设置 | 外置静态前端目录（优先级高于内嵌资产，启动时一次性校验并装入只读内存 `WebAssetCatalog`，拒绝符号链接/重解析点） |
+| `FICANT_ENABLE_STDIN_SHUTDOWN` | `false` | 设为 `1`/`true` 时监听独占控制管道的 `SHUTDOWN` 行或 EOF，触发 5 秒有界流排空并释放伴生锁以退出码 `0` 停机 |
 | `FICANT_SPI_POSITIONS_ACCOUNTS_CSV` | 未设置 | 底仓账户 CSV 路径（**必须与 `FICANT_SPI_POSITIONS_BALANCES_CSV` 成对同时设置**，否则 fail-closed 报错；均未设置时回退内置 `MockPositionBaseProvider`） |
 | `FICANT_SPI_POSITIONS_BALANCES_CSV` | 未设置 | 底仓余额 CSV 路径（需与 `FICANT_SPI_POSITIONS_ACCOUNTS_CSV` 成对设置） |
 | `FICANT_SPI_TRADE_FEED_CSV` | 未设置 | 成交回报源 CSV 路径（未设置时使用 `MockTradeFeedReconciler`） |
 | `FICANT_SPI_QUOTES_CSV` | 未设置 | 行情流 CSV 路径（未设置时使用 `MockMarketQuoteStream`） |
 | `FICANT_SPI_NLP_CSV` | 未设置 | NLP 模板解析 CSV 路径（未设置时使用 `MockNlpIntentParser`） |
+
+编译期单文件内嵌环境变量（[`binaries/ficant-server/build.rs`](../binaries/ficant-server/build.rs) 与 [`scripts/package-intranet.ps1`](../scripts/package-intranet.ps1)）：
+
+| 环境变量 | 默认值 | 说明 |
+|---|---|---|
+| `FICANT_EMBED_WEB_DIST_DIR` | 未设置（空表） | 仅在非空时于编译期校验并嵌入前端 `dist`（含 `index.html` 与 159 字节 `/rulepacks/cgb-futures-v2.bin`）；未设置时生成空表以兼容无前端源码的 `RustService.Dockerfile` 构建 |
+| `FICANT_CODE_COMMIT_SHA` | 自动探测 `git` | 40 位小写十六进制提交 SHA（无 `.git` 隔离构建时显式注入） |
+| `FICANT_CODE_TREE_SHA` | 自动探测 `git` | 40 位小写十六进制树 SHA（无 `.git` 隔离构建时显式注入） |
 
 本地检查与跨编译器门禁环境变量（[`scripts/check.ps1`](../scripts/check.ps1) / [`scripts/check-cross-clang.ps1`](../scripts/check-cross-clang.ps1)）：
 
@@ -75,14 +88,33 @@
   - 备用自定义头：`x-ficant-credential: <token>` 或 `x-ficant-credential: Bearer <token>`。
 - **Fail-closed 拒绝条件**：缺少凭证头、同时携带两个头、同一请求头重复出现、令牌摘要不匹配、凭证已过期或被运行时吊销时，统一拒绝并返回 `UNAUTHENTICATED`。
 - **摘要存储与启动校验**：凭证文件仅存放 64 位十六进制 SHA-256 摘要（`token_sha256_hex`）、角色（`TRADER` / `NLP_PARSER` / `FEED_ADAPTER` / `OPERATOR`）、`allowed_accounts`、`allowed_sources`、`expires_at_rfc3339` 与 `revoked`；服务端内存不存明文令牌，采用无早退常量时间比较（`constant_time_eq_32`），启动时直接拒绝空表、重复摘要、已吊销或已过期（`expires_at <= now`）条目。
+- **服务端账本写围栏（Write Fence Metadata）**：`IngestMarketQuotes`、`IngestTradeFeed` 与 `SubmitDraftEarmark` 在鉴权后、且在单写者互斥锁内早于幂等回执查询校验成对 gRPC metadata 请求头 `x-ficant-expected-ledger-epoch`（正整数规范 ASCII 十进制）与 `x-ficant-expected-ledger-instance`（规范 26 位大写 ULID）。两头均缺省时兼容既有客户端；半对/重复/畸形返回 `VALIDATION_FAILED`，与绑定存储身份不符返回不可重试 `CONCURRENCY_CONFLICT` 且零写入、零回执。
 
-## Python SDK 与实时子进程 E2E 测试
+### 离线换库、独立归档复核与健康检查 CLI
 
-[`python/sdk/src/ficant_sdk/__init__.py`](../python/sdk/src/ficant_sdk/__init__.py) 导出同步客户端与事件归约工具：
+[`binaries/ficant-server/src/cli.rs`](../binaries/ficant-server/src/cli.rs) 提供四个互斥运行模式（离线子命令不启动 Tokio 运行时，成功输出格式化 JSON 并退出 `0`，失败输出诊断到 stderr 并退出 `1`）：
 
-- **`DeskBlotterClient`**：覆盖 `DeskBlotterService` 全部 18 个 RPC 与四个 SPI 服务，自动通过 `authorization: Bearer <token>` 附加凭证（支持 `insecure=True` 本地明文联调或 TLS `root_certificates`）；
+```powershell
+# 1. 同端口 HTTP /healthz 有界 2 秒探活
+.\ficant-server.exe --health-check
+
+# 2. 离线归档并重置 SQLite（支持 --archive-name <STEM> / --archive-only / --allow-unresolved；后两者互斥）
+.\ficant-server.exe --sqlite-rollover --db-path <DB_FILE> --archive-dir <ARCHIVE_DIR>
+
+# 3. 独立核验归档文件字节、17 表双源摘要与 ficant.blotter.archive-manifest.v1 矩阵
+.\ficant-server.exe --verify-sqlite-archive --manifest <ARCHIVE_DIR>\<STEM>.manifest.json
+```
+
+完整停机排空、未结清阻断、中断恢复（含 `RESET_COMMITTED_MAINTENANCE_PENDING`）、次日底仓衔接与历史归档恢复步骤见 [`docs/delivery/intranet-single-binary.md`](delivery/intranet-single-binary.md)。
+
+## Python SDK、参考 Sidecar 与实时子进程 E2E 测试
+
+[`python/sdk/src/ficant_sdk/__init__.py`](../python/sdk/src/ficant_sdk/__init__.py) 导出同步客户端、事件归约与可恢复参考 Sidecar 工具：
+
+- **`DeskBlotterClient`**：覆盖 `DeskBlotterService` 全部 18 个 RPC 与四个 SPI 服务，默认使用 `authorization: Bearer <token>`，支持可选 `x-ficant-credential` 头模式及成对 `expected_ledger` 写围栏 metadata（支持 `insecure=True` 本地明文联调或 TLS `root_certificates`）；
 - **`BlotterError`**：结构化业务错误封装（在 `ConfirmHold` 惰性过期提交返回 `reconfirmation_error` 时同步携带 `committed_seq` 及已提交状态视图）；
 - **`BlotterEventApplier`**：整事务原子校验并应用快照，严格单调推进游标（配合 `BlotterEventStream`、`MarketQuoteStream`、`TradeFeedStream`）；
+- **`ficant_sdk.sidecar` 与统一 CLI**：导出 `QuoteStreamSidecar`、`TradeFeedSidecar`、`NlpDraftGatewaySidecar`、`NlpDraftOnlyClient`（底层通道仅绑定 `ParseNlpIntent` 与 `SubmitDraftEarmark` 两条 unary RPC）及公共设施（`default_reference_units`、`AccountUnitsResolver`、`decimal_to_pb`、`parse_market_time`、`JsonCheckpointStore`、`BackoffPolicy`）。通过 `python -m ficant_sdk.sidecar` 或安装后的 `ficant-sidecar` 入口提供 `quotes`、`trade-feed`、`nlp-draft` 三个子命令（实现见 [`python/sdk/src/ficant_sdk/sidecar/cli.py`](../python/sdk/src/ficant_sdk/sidecar/cli.py)）；
 - **`RatesClient` / `RatesError`**：保持既有利率定价 SDK 兼容。
 
 常用 Python 验证命令（均通过 `--locked` 锁定环境执行）：
@@ -206,3 +238,26 @@ pnpm --dir apps/desk-web exec vite preview --host 127.0.0.1 --port 4173 --strict
 ```
 
 > **本地检查与远端 CI 边界**：`scripts/check-desk-web.ps1` 的本地执行结果仅代表当前开发机上的验证状态，不能替代或等同于远端 Linux GitHub CI 与正式版本发布工作流的结论（见 [`AGENTS.md`](../AGENTS.md)）。
+
+## 内网单文件打包与双构建端到端验证
+
+针对内网单二进制交付与跨日闭环，仓库提供两个原生 PowerShell 7 入口（锁定离线依赖，无发布、部署或工具安装行为）：
+
+```powershell
+# 查看打包与验证计划（不执行构建）
+.\scripts\package-intranet.ps1 -ListOnly
+.\scripts\check-bp4-intranet.ps1 -ListOnly
+
+# 打包内嵌 Desk Web 资产的单文件 ficant-server(.exe) 与 .sha256 清单
+.\scripts\package-intranet.ps1
+
+# 完整双构建隔离与无代理 Chromium 跨日 E2E 验证（Phase 1 八项 Dockerfile 子集无 UI 构建 + Phase 2 内嵌单文件零源码运行 + Phase 3 治理门禁）
+.\scripts\check-bp4-intranet.ps1
+
+# 仅跳过 Chromium 浏览器验证（输出 PARTIAL，不可计作完整浏览器验收通过）
+.\scripts\check-bp4-intranet.ps1 -SkipBrowserE2E
+```
+
+- 打包脚本：[`scripts/package-intranet.ps1`](../scripts/package-intranet.ps1)
+- 完整验收脚本：[`scripts/check-bp4-intranet.ps1`](../scripts/check-bp4-intranet.ps1)
+- 内网单文件运维、同源 HTTPS、四角色 ACL、离线换库恢复与次日开账手册：[`docs/delivery/intranet-single-binary.md`](delivery/intranet-single-binary.md)（正式 `v*` tag 与 GHCR 测试机发布合同仍由 [`docs/delivery/test-environment.md`](delivery/test-environment.md) 独立管理）。
